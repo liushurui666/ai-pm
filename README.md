@@ -50,6 +50,10 @@ http://localhost:3000/api/auth/feishu/callback
 - 文档表：`标题`、`类型`、`更新时间`、`AI摘要`
 - 洞察表：`内容`
 
+平台中的“新建项目 / 新建任务 / 登记风险 / 新建需求 / 新建文档”会调用 `/api/records`。如果配置了对应表 ID，会把记录写入飞书多维表格；如果未配置，会在当前页面临时创建，方便本地开发和演示。
+
+写入字段默认使用上述中文字段名。若你的多维表格字段名不同，需要同步调整 `src/data/feishu-dashboard.ts` 里的 `createFieldsForType`。
+
 如果未配置飞书登录，系统会保留本地演示模式；配置 `FEISHU_APP_ID` 和 `FEISHU_APP_SECRET` 后，首页会要求先使用飞书登录。
 
 ## 功能范围
@@ -61,3 +65,4 @@ http://localhost:3000/api/auth/feishu/callback
 - 需求、风险、文档、报表入口
 - 飞书 OAuth 登录
 - 飞书多维表格真实数据源适配
+- 飞书多维表格记录创建接口

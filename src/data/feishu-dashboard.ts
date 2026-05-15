@@ -12,6 +12,7 @@ import type {
   Task,
   TaskStage
 } from "@/types/dashboard";
+import type { CreateRecordResult, DashboardEntityMap, DashboardEntityType } from "@/types/records";
 
 type BitableRecord = {
   record_id: string;
@@ -25,6 +26,14 @@ type BitableSearchResponse = {
     items?: BitableRecord[];
     page_token?: string;
     has_more?: boolean;
+  };
+};
+
+type BitableCreateResponse = {
+  code: number;
+  msg?: string;
+  data?: {
+    record?: BitableRecord;
   };
 };
 
@@ -73,6 +82,10 @@ const fieldAliases = {
 
 function cloneMockData() {
   return JSON.parse(JSON.stringify(dashboardData)) as DashboardData;
+}
+
+function createLocalId(type: DashboardEntityType) {
+  return `${type}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export function isFeishuBitableConfigured() {
@@ -126,6 +139,37 @@ async function searchBitableRecords(tableId: string) {
   } while (pageToken);
 
   return records;
+}
+
+async function createBitableRecord(tableId: string, fields: Record<string, unknown>) {
+  const appToken = process.env.FEISHU_BITABLE_APP_TOKEN;
+
+  if (!appToken) {
+    throw new Error("请先配置 FEISHU_BITABLE_APP_TOKEN");
+  }
+
+  const accessToken = await getFeishuAppAccessToken();
+  const response = await fetch(
+    `https://open.feishu.cn/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/records`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        fields
+      }),
+      cache: "no-store"
+    }
+  );
+  const payload = (await response.json()) as BitableCreateResponse;
+
+  if (!response.ok || payload.code !== 0 || !payload.data?.record) {
+    throw new Error(payload.msg || `写入飞书多维表格 ${tableId} 失败`);
+  }
+
+  return payload.data.record;
 }
 
 function normalizeValue(value: unknown): string {
@@ -209,6 +253,38 @@ function readDateTime(fields: Record<string, unknown>, aliases: readonly string[
   const raw = normalizeValue(rawValue);
 
   return raw ? dayjs(raw).format("YYYY-MM-DD HH:mm") : fallback;
+}
+
+function asText(value: unknown, fallback = "") {
+  return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
+function asNumber(value: unknown, fallback: number) {
+  const nextValue = typeof value === "number" ? value : Number(value);
+
+  return Number.isFinite(nextValue) ? nextValue : fallback;
+}
+
+function asDateString(value: unknown, fallback = dayjs().format("YYYY-MM-DD")) {
+  if (typeof value !== "string" || !value) {
+    return fallback;
+  }
+
+  return dayjs(value).isValid() ? dayjs(value).format("YYYY-MM-DD") : fallback;
+}
+
+function asDateTimeString(value: unknown, fallback = dayjs().format("YYYY-MM-DD HH:mm")) {
+  if (typeof value !== "string" || !value) {
+    return fallback;
+  }
+
+  return dayjs(value).isValid() ? dayjs(value).format("YYYY-MM-DD HH:mm") : fallback;
+}
+
+function toDateTimestamp(value: unknown) {
+  const date = typeof value === "string" && value ? dayjs(value) : dayjs();
+
+  return date.isValid() ? date.valueOf() : Date.now();
 }
 
 function normalizeProjectStatus(value: string): ProjectStatus {
@@ -391,6 +467,200 @@ function mapDocuments(records: BitableRecord[]): DocumentItem[] {
   });
 }
 
+function normalizeCreateProject(values: Record<string, unknown>, id = createLocalId("project")): Project {
+  const progress = Math.min(100, Math.max(0, asNumber(values.progress, 0)));
+  const health = Math.min(100, Math.max(0, asNumber(values.health, 80)));
+
+  return {
+    id,
+    name: asText(values.name, "未命名项目"),
+    owner: asText(values.owner, "未分配"),
+    status: normalizeProjectStatus(asText(values.status, "进行中")),
+    progress,
+    health,
+    dueDate: asDateString(values.dueDate, dayjs().add(14, "day").format("YYYY-MM-DD")),
+    team: asNumber(values.team, 1),
+    riskCount: asNumber(values.riskCount, 0),
+    summary: asText(values.summary, "暂无项目摘要。")
+  };
+}
+
+function normalizeCreateTask(values: Record<string, unknown>, id = createLocalId("task")): Task {
+  return {
+    id,
+    title: asText(values.title, "未命名任务"),
+    stage: normalizeTaskStage(asText(values.stage, "待处理")),
+    owner: asText(values.owner, "未分配"),
+    project: asText(values.project, "未关联项目"),
+    priority: normalizeTaskPriority(asText(values.priority, "中")),
+    dueDate: asDateString(values.dueDate, dayjs().add(7, "day").format("YYYY-MM-DD")),
+    aiHint: asText(values.aiHint, "AI 暂未发现额外风险。")
+  };
+}
+
+function normalizeCreateRisk(values: Record<string, unknown>, id = createLocalId("risk")): Risk {
+  return {
+    id,
+    title: asText(values.title, "未命名风险"),
+    level: normalizeRiskLevel(asText(values.level, "中")),
+    owner: asText(values.owner, "未分配"),
+    project: asText(values.project, "未关联项目"),
+    mitigation: asText(values.mitigation, "暂无应对措施。")
+  };
+}
+
+function normalizeCreateRequirement(
+  values: Record<string, unknown>,
+  id = createLocalId("requirement")
+): Requirement {
+  return {
+    id,
+    title: asText(values.title, "未命名需求"),
+    priority: normalizeRequirementPriority(asText(values.priority, "P1")),
+    status: normalizeRequirementStatus(asText(values.status, "评审中")),
+    project: asText(values.project, "未关联项目"),
+    acceptance: asText(values.acceptance, "暂无验收标准。")
+  };
+}
+
+function normalizeCreateDocument(values: Record<string, unknown>, id = createLocalId("document")): DocumentItem {
+  return {
+    id,
+    title: asText(values.title, "未命名文档"),
+    type: normalizeDocumentType(asText(values.type, "PRD")),
+    updatedAt: asDateTimeString(values.updatedAt),
+    aiSummary: asText(values.aiSummary, "暂无 AI 摘要。")
+  };
+}
+
+function getTableIdForType(type: DashboardEntityType) {
+  const tableKeyByType: Record<DashboardEntityType, TableKey> = {
+    project: "projects",
+    task: "tasks",
+    risk: "risks",
+    requirement: "requirements",
+    document: "documents"
+  };
+  const key = tableKeyByType[type];
+
+  return {
+    key,
+    tableId: process.env[tableEnv[key]]
+  };
+}
+
+function createFieldsForType(type: DashboardEntityType, values: Record<string, unknown>) {
+  if (type === "project") {
+    const project = normalizeCreateProject(values);
+
+    return {
+      项目名称: project.name,
+      负责人: project.owner,
+      状态: project.status,
+      进度: project.progress,
+      健康度: project.health,
+      截止日期: toDateTimestamp(project.dueDate),
+      团队人数: project.team,
+      风险数: project.riskCount,
+      摘要: project.summary
+    };
+  }
+
+  if (type === "task") {
+    const task = normalizeCreateTask(values);
+
+    return {
+      标题: task.title,
+      阶段: task.stage,
+      负责人: task.owner,
+      项目名称: task.project,
+      优先级: task.priority,
+      截止日期: toDateTimestamp(task.dueDate),
+      AI提示: task.aiHint
+    };
+  }
+
+  if (type === "risk") {
+    const risk = normalizeCreateRisk(values);
+
+    return {
+      标题: risk.title,
+      等级: risk.level,
+      负责人: risk.owner,
+      项目名称: risk.project,
+      应对措施: risk.mitigation
+    };
+  }
+
+  if (type === "requirement") {
+    const requirement = normalizeCreateRequirement(values);
+
+    return {
+      标题: requirement.title,
+      优先级: requirement.priority,
+      状态: requirement.status,
+      项目名称: requirement.project,
+      验收标准: requirement.acceptance
+    };
+  }
+
+  const document = normalizeCreateDocument(values);
+
+  return {
+    标题: document.title,
+    类型: document.type,
+    更新时间: toDateTimestamp(document.updatedAt),
+    AI摘要: document.aiSummary
+  };
+}
+
+function createMockRecord<T extends DashboardEntityType>(
+  type: T,
+  values: Record<string, unknown>
+): DashboardEntityMap[T] {
+  if (type === "project") {
+    return normalizeCreateProject(values) as DashboardEntityMap[T];
+  }
+
+  if (type === "task") {
+    return normalizeCreateTask(values) as DashboardEntityMap[T];
+  }
+
+  if (type === "risk") {
+    return normalizeCreateRisk(values) as DashboardEntityMap[T];
+  }
+
+  if (type === "requirement") {
+    return normalizeCreateRequirement(values) as DashboardEntityMap[T];
+  }
+
+  return normalizeCreateDocument(values) as DashboardEntityMap[T];
+}
+
+function mapCreatedRecord<T extends DashboardEntityType>(
+  type: T,
+  record: BitableRecord,
+  values: Record<string, unknown>
+): DashboardEntityMap[T] {
+  if (type === "project") {
+    return { ...normalizeCreateProject(values), ...mapProjects([record])[0] } as DashboardEntityMap[T];
+  }
+
+  if (type === "task") {
+    return { ...normalizeCreateTask(values), ...mapTasks([record])[0] } as DashboardEntityMap[T];
+  }
+
+  if (type === "risk") {
+    return { ...normalizeCreateRisk(values), ...mapRisks([record])[0] } as DashboardEntityMap[T];
+  }
+
+  if (type === "requirement") {
+    return { ...normalizeCreateRequirement(values), ...mapRequirements([record])[0] } as DashboardEntityMap[T];
+  }
+
+  return { ...normalizeCreateDocument(values), ...mapDocuments([record])[0] } as DashboardEntityMap[T];
+}
+
 function mapInsights(records: BitableRecord[]) {
   return records
     .map((record) => readString(record.fields, fieldAliases.content))
@@ -496,4 +766,31 @@ export async function getDashboardData(user?: FeishuUser): Promise<DashboardData
   };
 
   return data;
+}
+
+export async function createDashboardRecord<T extends DashboardEntityType>(
+  type: T,
+  values: Record<string, unknown>,
+  user?: FeishuUser
+): Promise<CreateRecordResult<T>> {
+  const { key, tableId } = getTableIdForType(type);
+  const mockRecord = createMockRecord(type, values);
+
+  if (!process.env.FEISHU_BITABLE_APP_TOKEN || !tableId) {
+    return {
+      type,
+      record: mockRecord,
+      persisted: false,
+      message: `未配置${tableLabels[key]}表，已在当前页面临时创建。`
+    };
+  }
+
+  const createdRecord = await createBitableRecord(tableId, createFieldsForType(type, values));
+
+  return {
+    type,
+    record: mapCreatedRecord(type, createdRecord, values),
+    persisted: true,
+    message: `${user?.name ? `${user.name} 已` : "已"}写入飞书${tableLabels[key]}表。`
+  };
 }

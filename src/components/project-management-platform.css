@@ -303,6 +303,10 @@
   margin-top: 12px;
 }
 
+.pm-form-control {
+  width: 100%;
+}
+
 @media (max-width: 1200px) {
   .pm-hero {
     grid-template-columns: 1fr;

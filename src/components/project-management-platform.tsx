@@ -10,6 +10,7 @@ import {
   Card,
   Col,
   ConfigProvider,
+  DatePicker,
   Divider,
   Drawer,
   Empty,
@@ -17,12 +18,14 @@ import {
   Form,
   Grid,
   Input,
+  InputNumber,
   Layout,
   List,
   Menu,
   Progress,
   Row,
   Segmented,
+  Select,
   Space,
   Spin,
   Statistic,
@@ -31,6 +34,7 @@ import {
   Timeline,
   Tooltip,
   Typography,
+  message,
   theme
 } from "antd";
 import type { BadgeProps } from "antd";
@@ -57,6 +61,7 @@ import {
   ThunderboltOutlined
 } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
+import dayjs from "dayjs";
 import type {
   DashboardData,
   DocumentItem,
@@ -66,6 +71,7 @@ import type {
   Task,
   TaskStage
 } from "@/types/dashboard";
+import type { CreateRecordResult, DashboardEntityType } from "@/types/records";
 
 const { Header, Sider, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
@@ -77,6 +83,13 @@ type ChatMessage = {
 };
 
 const taskStages: TaskStage[] = ["待处理", "进行中", "评审中", "已完成"];
+const entityLabels: Record<DashboardEntityType, string> = {
+  project: "项目",
+  task: "任务",
+  risk: "风险",
+  requirement: "需求",
+  document: "文档"
+};
 
 const statusColor: Record<Project["status"], NonNullable<BadgeProps["status"]>> = {
   进行中: "processing",
@@ -106,6 +119,8 @@ export function ProjectManagementPlatform() {
   const [loadError, setLoadError] = useState("");
   const [collapsed, setCollapsed] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [createType, setCreateType] = useState<DashboardEntityType | null>(null);
+  const [createSubmitting, setCreateSubmitting] = useState(false);
   const [activeView, setActiveView] = useState("overview");
   const [projectFilter, setProjectFilter] = useState("全部");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
@@ -116,6 +131,7 @@ export function ProjectManagementPlatform() {
   ]);
   const [chatLoading, setChatLoading] = useState(false);
   const [form] = Form.useForm<{ message: string }>();
+  const [createForm] = Form.useForm<Record<string, unknown>>();
   const screens = useBreakpoint();
   const isMobile = !screens.md;
 
@@ -327,6 +343,59 @@ export function ProjectManagementPlatform() {
     }
   }
 
+  function openCreateDrawer(type: DashboardEntityType) {
+    setCreateType(type);
+    createForm.resetFields();
+    createForm.setFieldsValue(getCreateInitialValues(type));
+  }
+
+  async function handleCreateRecord(values: Record<string, unknown>) {
+    if (!createType) {
+      return;
+    }
+
+    setCreateSubmitting(true);
+
+    try {
+      const response = await fetch("/api/records", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          type: createType,
+          values: serializeCreateValues(values)
+        })
+      });
+      const payload = (await response.json()) as CreateRecordResult | { error?: string };
+
+      if (response.status === 401) {
+        window.location.href = "/login";
+
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error("error" in payload ? payload.error || "创建失败" : "创建失败");
+      }
+
+      if ("error" in payload) {
+        throw new Error(payload.error || "创建失败");
+      }
+
+      const result = payload as CreateRecordResult;
+
+      setData((current) => (current ? updateDashboardWithRecord(current, result) : current));
+      message[result.persisted ? "success" : "warning"](result.message);
+      setCreateType(null);
+      createForm.resetFields();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "创建失败");
+    } finally {
+      setCreateSubmitting(false);
+    }
+  }
+
   const menuItems = [
     { key: "overview", icon: <DashboardOutlined />, label: "工作台" },
     { key: "projects", icon: <ProjectOutlined />, label: "项目管理" },
@@ -338,6 +407,7 @@ export function ProjectManagementPlatform() {
   ];
   const userName = data?.meta?.user?.name ?? "苏";
   const userInitial = userName.slice(0, 1);
+  const projectOptions = data?.projects.map((project) => project.name) ?? [];
 
   return (
     <ConfigProvider
@@ -479,23 +549,36 @@ export function ProjectManagementPlatform() {
                 </div>
               ) : (
                 <>
-                  {activeView === "overview" ? <Overview data={data} /> : null}
+                  {activeView === "overview" ? (
+                    <Overview
+                      data={data}
+                      onOpenAssistant={() => setAssistantOpen(true)}
+                      onViewRisks={() => setActiveView("risks")}
+                    />
+                  ) : null}
                   {activeView === "projects" ? (
                     <ProjectsView
                       columns={projectColumns}
                       projects={filteredProjects}
                       projectFilter={projectFilter}
                       onFilterChange={setProjectFilter}
+                      onCreate={() => openCreateDrawer("project")}
                     />
                   ) : null}
-                  {activeView === "tasks" ? <TasksView tasks={data.tasks} /> : null}
+                  {activeView === "tasks" ? (
+                    <TasksView tasks={data.tasks} onCreate={() => openCreateDrawer("task")} />
+                  ) : null}
                   {activeView === "requirements" ? (
                     <TableView
                       title="需求管理"
                       subtitle="围绕优先级、验收标准和关联项目组织需求执行。"
                       icon={<NodeIndexOutlined />}
                       extra={
-                        <Button type="primary" icon={<PlusOutlined />}>
+                        <Button
+                          type="primary"
+                          icon={<PlusOutlined />}
+                          onClick={() => openCreateDrawer("requirement")}
+                        >
                           新建需求
                         </Button>
                       }
@@ -509,14 +592,20 @@ export function ProjectManagementPlatform() {
                       />
                     </TableView>
                   ) : null}
-                  {activeView === "risks" ? <RisksView risks={data.risks} /> : null}
+                  {activeView === "risks" ? (
+                    <RisksView risks={data.risks} onCreate={() => openCreateDrawer("risk")} />
+                  ) : null}
                   {activeView === "docs" ? (
                     <TableView
                       title="文档知识库"
                       subtitle="集中沉淀 PRD、会议纪要、技术方案和项目复盘。"
                       icon={<FileTextOutlined />}
                       extra={
-                        <Button type="primary" icon={<PlusOutlined />}>
+                        <Button
+                          type="primary"
+                          icon={<PlusOutlined />}
+                          onClick={() => openCreateDrawer("document")}
+                        >
                           新建文档
                         </Button>
                       }
@@ -585,6 +674,16 @@ export function ProjectManagementPlatform() {
               </Form>
             </div>
           </Drawer>
+
+          <CreateRecordDrawer
+            form={createForm}
+            open={Boolean(createType)}
+            type={createType}
+            submitting={createSubmitting}
+            projectOptions={projectOptions}
+            onClose={() => setCreateType(null)}
+            onSubmit={handleCreateRecord}
+          />
         </Layout>
       </App>
     </ConfigProvider>
@@ -607,7 +706,15 @@ function Brand({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-function Overview({ data }: { data: DashboardData }) {
+function Overview({
+  data,
+  onOpenAssistant,
+  onViewRisks
+}: {
+  data: DashboardData;
+  onOpenAssistant: () => void;
+  onViewRisks: () => void;
+}) {
   const topRiskProject = data.projects.reduce((current, project) =>
     project.health < current.health ? project : current
   );
@@ -629,10 +736,12 @@ function Overview({ data }: { data: DashboardData }) {
             系统已综合任务进度、会议待办、风险登记和文档变化，优先建议处理知识库增强项目的权限测试风险。
           </Paragraph>
           <Space wrap>
-            <Button type="primary" icon={<RobotOutlined />}>
+            <Button type="primary" icon={<RobotOutlined />} onClick={onOpenAssistant}>
               生成本周汇报
             </Button>
-            <Button icon={<AlertOutlined />}>查看风险清单</Button>
+            <Button icon={<AlertOutlined />} onClick={onViewRisks}>
+              查看风险清单
+            </Button>
           </Space>
         </div>
 
@@ -770,12 +879,14 @@ function ProjectsView({
   columns,
   projects,
   projectFilter,
-  onFilterChange
+  onFilterChange,
+  onCreate
 }: {
   columns: ColumnsType<Project>;
   projects: Project[];
   projectFilter: string;
   onFilterChange: (value: string) => void;
+  onCreate: () => void;
 }) {
   return (
     <TableView
@@ -789,7 +900,7 @@ function ProjectsView({
             onChange={(value) => onFilterChange(String(value))}
             options={["全部", "进行中", "有风险", "暂停"]}
           />
-          <Button type="primary" icon={<PlusOutlined />}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>
             新建项目
           </Button>
         </Space>
@@ -800,7 +911,7 @@ function ProjectsView({
   );
 }
 
-function TasksView({ tasks }: { tasks: Task[] }) {
+function TasksView({ tasks, onCreate }: { tasks: Task[]; onCreate: () => void }) {
   return (
     <Space orientation="vertical" size={18} className="pm-page-stack">
       <PageTitle
@@ -808,7 +919,7 @@ function TasksView({ tasks }: { tasks: Task[] }) {
         title="任务看板"
         subtitle="按状态推进任务，并让 AI 标记依赖、延期和补充动作。"
         extra={
-          <Button type="primary" icon={<PlusOutlined />}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>
             新建任务
           </Button>
         }
@@ -857,7 +968,7 @@ function TasksView({ tasks }: { tasks: Task[] }) {
   );
 }
 
-function RisksView({ risks }: { risks: Risk[] }) {
+function RisksView({ risks, onCreate }: { risks: Risk[]; onCreate: () => void }) {
   return (
     <Space orientation="vertical" size={18} className="pm-page-stack">
       <PageTitle
@@ -865,7 +976,7 @@ function RisksView({ risks }: { risks: Risk[] }) {
         title="风险中心"
         subtitle="集中管理 AI 自动发现和人工登记的项目风险。"
         extra={
-          <Button type="primary" icon={<PlusOutlined />}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>
             登记风险
           </Button>
         }
@@ -1003,5 +1114,348 @@ function PageTitle({
       </Space>
       {extra ? <div className="page-title-extra">{extra}</div> : null}
     </div>
+  );
+}
+
+function getCreateInitialValues(type: DashboardEntityType) {
+  if (type === "project") {
+    return {
+      status: "进行中",
+      progress: 0,
+      health: 80,
+      dueDate: dayjs().add(14, "day"),
+      team: 1,
+      riskCount: 0
+    };
+  }
+
+  if (type === "task") {
+    return {
+      stage: "待处理",
+      priority: "中",
+      dueDate: dayjs().add(7, "day")
+    };
+  }
+
+  if (type === "risk") {
+    return {
+      level: "中"
+    };
+  }
+
+  if (type === "requirement") {
+    return {
+      priority: "P1",
+      status: "评审中"
+    };
+  }
+
+  return {
+    type: "PRD",
+    updatedAt: dayjs()
+  };
+}
+
+function serializeCreateValues(values: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(values).map(([key, value]) => {
+      if (dayjs.isDayjs(value)) {
+        return [key, value.format(key === "updatedAt" ? "YYYY-MM-DD HH:mm" : "YYYY-MM-DD")];
+      }
+
+      return [key, value];
+    })
+  );
+}
+
+function recalculateMetrics(data: DashboardData) {
+  const activeProjects = data.projects.filter((project) => project.status !== "已完成").length;
+  const deliveryRate = data.projects.length
+    ? Math.round(data.projects.reduce((sum, project) => sum + project.progress, 0) / data.projects.length)
+    : 0;
+  const overdueTasks = data.tasks.filter(
+    (task) => task.stage !== "已完成" && dayjs(task.dueDate).isBefore(dayjs().startOf("day"))
+  ).length;
+
+  return {
+    activeProjects,
+    deliveryRate,
+    overdueTasks,
+    aiSavedHours: Math.max(0, data.requirements.length * 3 + data.documents.length * 2 + data.tasks.length)
+  };
+}
+
+function updateDashboardWithRecord(data: DashboardData, result: CreateRecordResult): DashboardData {
+  const nextData: DashboardData = {
+    ...data,
+    projects: [...data.projects],
+    tasks: [...data.tasks],
+    risks: [...data.risks],
+    requirements: [...data.requirements],
+    documents: [...data.documents],
+    meta: data.meta
+      ? {
+          ...data.meta,
+          message: result.message
+        }
+      : undefined
+  };
+
+  if (result.type === "project") {
+    nextData.projects = [result.record as Project, ...nextData.projects];
+  }
+
+  if (result.type === "task") {
+    nextData.tasks = [result.record as Task, ...nextData.tasks];
+  }
+
+  if (result.type === "risk") {
+    nextData.risks = [result.record as Risk, ...nextData.risks];
+  }
+
+  if (result.type === "requirement") {
+    nextData.requirements = [result.record as Requirement, ...nextData.requirements];
+  }
+
+  if (result.type === "document") {
+    nextData.documents = [result.record as DocumentItem, ...nextData.documents];
+  }
+
+  nextData.metrics = recalculateMetrics(nextData);
+
+  return nextData;
+}
+
+function CreateRecordDrawer({
+  form,
+  open,
+  type,
+  submitting,
+  projectOptions,
+  onClose,
+  onSubmit
+}: {
+  form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
+  open: boolean;
+  type: DashboardEntityType | null;
+  submitting: boolean;
+  projectOptions: string[];
+  onClose: () => void;
+  onSubmit: (values: Record<string, unknown>) => void;
+}) {
+  const label = type ? entityLabels[type] : "";
+
+  return (
+    <Drawer
+      title={type ? `新建${label}` : "新建"}
+      open={open}
+      onClose={onClose}
+      size="default"
+      extra={
+        <Space>
+          <Button onClick={onClose}>取消</Button>
+          <Button type="primary" loading={submitting} onClick={() => form.submit()}>
+            保存
+          </Button>
+        </Space>
+      }
+    >
+      {type ? (
+        <Form form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
+          {type === "project" ? <ProjectFields /> : null}
+          {type === "task" ? <TaskFields projectOptions={projectOptions} /> : null}
+          {type === "risk" ? <RiskFields projectOptions={projectOptions} /> : null}
+          {type === "requirement" ? <RequirementFields projectOptions={projectOptions} /> : null}
+          {type === "document" ? <DocumentFields /> : null}
+        </Form>
+      ) : null}
+    </Drawer>
+  );
+}
+
+function ProjectFields() {
+  return (
+    <>
+      <Form.Item label="项目名称" name="name" rules={[{ required: true, message: "请输入项目名称" }]}>
+        <Input placeholder="例如：智能项目驾驶舱二期" />
+      </Form.Item>
+      <Form.Item label="负责人" name="owner" rules={[{ required: true, message: "请输入负责人" }]}>
+        <Input placeholder="负责人姓名" />
+      </Form.Item>
+      <Row gutter={12}>
+        <Col span={12}>
+          <Form.Item label="状态" name="status">
+            <Select options={["进行中", "有风险", "已完成", "暂停"].map((value) => ({ value, label: value }))} />
+          </Form.Item>
+        </Col>
+        <Col span={12}>
+          <Form.Item label="截止日期" name="dueDate">
+            <DatePicker className="pm-form-control" />
+          </Form.Item>
+        </Col>
+      </Row>
+      <Row gutter={12}>
+        <Col span={12}>
+          <Form.Item label="进度" name="progress">
+            <InputNumber className="pm-form-control" min={0} max={100} addonAfter="%" />
+          </Form.Item>
+        </Col>
+        <Col span={12}>
+          <Form.Item label="健康度" name="health">
+            <InputNumber className="pm-form-control" min={0} max={100} />
+          </Form.Item>
+        </Col>
+      </Row>
+      <Row gutter={12}>
+        <Col span={12}>
+          <Form.Item label="团队人数" name="team">
+            <InputNumber className="pm-form-control" min={1} />
+          </Form.Item>
+        </Col>
+        <Col span={12}>
+          <Form.Item label="风险数" name="riskCount">
+            <InputNumber className="pm-form-control" min={0} />
+          </Form.Item>
+        </Col>
+      </Row>
+      <Form.Item label="摘要" name="summary">
+        <Input.TextArea rows={4} placeholder="项目当前进展、目标或风险说明" />
+      </Form.Item>
+    </>
+  );
+}
+
+function ProjectSelect({
+  projectOptions,
+  value,
+  onChange
+}: {
+  projectOptions: string[];
+  value?: string;
+  onChange?: (value: string) => void;
+}) {
+  const placeholder = projectOptions[0] ? `例如：${projectOptions[0]}` : "输入项目名称";
+
+  return <Input value={value} placeholder={placeholder} onChange={(event) => onChange?.(event.target.value)} />;
+}
+
+function TaskFields({ projectOptions }: { projectOptions: string[] }) {
+  return (
+    <>
+      <Form.Item label="任务标题" name="title" rules={[{ required: true, message: "请输入任务标题" }]}>
+        <Input placeholder="例如：补齐权限过滤测试" />
+      </Form.Item>
+      <Row gutter={12}>
+        <Col span={12}>
+          <Form.Item label="阶段" name="stage">
+            <Select options={taskStages.map((value) => ({ value, label: value }))} />
+          </Form.Item>
+        </Col>
+        <Col span={12}>
+          <Form.Item label="优先级" name="priority">
+            <Select options={["高", "中", "低"].map((value) => ({ value, label: value }))} />
+          </Form.Item>
+        </Col>
+      </Row>
+      <Form.Item label="关联项目" name="project" rules={[{ required: true, message: "请选择关联项目" }]}>
+        <ProjectSelect projectOptions={projectOptions} />
+      </Form.Item>
+      <Row gutter={12}>
+        <Col span={12}>
+          <Form.Item label="负责人" name="owner" rules={[{ required: true, message: "请输入负责人" }]}>
+            <Input placeholder="负责人姓名" />
+          </Form.Item>
+        </Col>
+        <Col span={12}>
+          <Form.Item label="截止日期" name="dueDate">
+            <DatePicker className="pm-form-control" />
+          </Form.Item>
+        </Col>
+      </Row>
+      <Form.Item label="AI 提示" name="aiHint">
+        <Input.TextArea rows={4} placeholder="可填写 AI 需要提醒的风险、依赖或建议" />
+      </Form.Item>
+    </>
+  );
+}
+
+function RiskFields({ projectOptions }: { projectOptions: string[] }) {
+  return (
+    <>
+      <Form.Item label="风险标题" name="title" rules={[{ required: true, message: "请输入风险标题" }]}>
+        <Input placeholder="例如：需求范围未冻结" />
+      </Form.Item>
+      <Row gutter={12}>
+        <Col span={12}>
+          <Form.Item label="风险等级" name="level">
+            <Select options={["高", "中", "低"].map((value) => ({ value, label: value }))} />
+          </Form.Item>
+        </Col>
+        <Col span={12}>
+          <Form.Item label="负责人" name="owner" rules={[{ required: true, message: "请输入负责人" }]}>
+            <Input placeholder="负责人姓名" />
+          </Form.Item>
+        </Col>
+      </Row>
+      <Form.Item label="关联项目" name="project" rules={[{ required: true, message: "请选择关联项目" }]}>
+        <ProjectSelect projectOptions={projectOptions} />
+      </Form.Item>
+      <Form.Item label="应对措施" name="mitigation">
+        <Input.TextArea rows={4} placeholder="处理策略、责任人和检查时间" />
+      </Form.Item>
+    </>
+  );
+}
+
+function RequirementFields({ projectOptions }: { projectOptions: string[] }) {
+  return (
+    <>
+      <Form.Item label="需求标题" name="title" rules={[{ required: true, message: "请输入需求标题" }]}>
+        <Input placeholder="例如：会议纪要自动转任务" />
+      </Form.Item>
+      <Row gutter={12}>
+        <Col span={12}>
+          <Form.Item label="优先级" name="priority">
+            <Select options={["P0", "P1", "P2"].map((value) => ({ value, label: value }))} />
+          </Form.Item>
+        </Col>
+        <Col span={12}>
+          <Form.Item label="状态" name="status">
+            <Select options={["评审中", "设计中", "开发中", "待上线"].map((value) => ({ value, label: value }))} />
+          </Form.Item>
+        </Col>
+      </Row>
+      <Form.Item label="关联项目" name="project" rules={[{ required: true, message: "请选择关联项目" }]}>
+        <ProjectSelect projectOptions={projectOptions} />
+      </Form.Item>
+      <Form.Item label="验收标准" name="acceptance">
+        <Input.TextArea rows={4} placeholder="可量化的验收条件和边界场景" />
+      </Form.Item>
+    </>
+  );
+}
+
+function DocumentFields() {
+  return (
+    <>
+      <Form.Item label="文档标题" name="title" rules={[{ required: true, message: "请输入文档标题" }]}>
+        <Input placeholder="例如：AI 项目助手 PRD v1.0" />
+      </Form.Item>
+      <Row gutter={12}>
+        <Col span={12}>
+          <Form.Item label="类型" name="type">
+            <Select options={["PRD", "会议纪要", "技术方案", "复盘"].map((value) => ({ value, label: value }))} />
+          </Form.Item>
+        </Col>
+        <Col span={12}>
+          <Form.Item label="更新时间" name="updatedAt">
+            <DatePicker className="pm-form-control" showTime />
+          </Form.Item>
+        </Col>
+      </Row>
+      <Form.Item label="AI 摘要" name="aiSummary">
+        <Input.TextArea rows={4} placeholder="文档重点、决策项或待办摘要" />
+      </Form.Item>
+    </>
   );
 }
