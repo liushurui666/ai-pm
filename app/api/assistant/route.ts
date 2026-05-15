@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAssistantReply } from "@/data/dashboard";
 import { getDashboardData } from "@/data/feishu-dashboard";
+import { createAiAssistantReply, isAiAssistantConfigured } from "@/lib/ai-client";
 import { isFeishuAuthConfigured } from "@/lib/feishu-auth";
 import { getSession } from "@/lib/session";
 
@@ -34,11 +35,33 @@ export async function POST(request: NextRequest) {
 
   try {
     const data = await getDashboardData(session?.user);
+    const fallbackReply = createAssistantReply(message, data);
 
-    return NextResponse.json({
-      reply: createAssistantReply(message, data),
-      generatedAt: new Date().toISOString()
-    });
+    if (!isAiAssistantConfigured()) {
+      return NextResponse.json({
+        reply: fallbackReply,
+        source: "fallback",
+        generatedAt: new Date().toISOString()
+      });
+    }
+
+    try {
+      return NextResponse.json({
+        reply: await createAiAssistantReply(message, data),
+        source: "ai",
+        generatedAt: new Date().toISOString()
+      });
+    } catch {
+      return NextResponse.json({
+        reply: [
+          fallbackReply,
+          "（模型接口暂时不可用，以上为本地规则分析结果。）"
+        ].join("\n\n"),
+        source: "fallback",
+        warning: "AI 模型接口暂时不可用，已使用本地分析兜底。",
+        generatedAt: new Date().toISOString()
+      });
+    }
   } catch (error) {
     return NextResponse.json(
       {
