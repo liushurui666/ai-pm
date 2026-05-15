@@ -1,0 +1,15 @@
+.next/
+node_modules/
+.pnpm-store/
+.playwright-mcp/
+
+.env
+.env.local
+.env.*.local
+
+ai-pm-*.png
+console-desktop.json
+
+*.log
+*.tsbuildinfo
+.DS_Store

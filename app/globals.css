@@ -1,0 +1,135 @@
+:root {
+  color-scheme: light;
+  --background: #f5f7fb;
+  --surface: #ffffff;
+  --surface-subtle: #f8fafc;
+  --text-primary: #172033;
+  --text-secondary: #667085;
+  --border: #e6eaf2;
+  --brand: #2563eb;
+  --brand-deep: #14357a;
+  --teal: #0f766e;
+  --violet: #7c3aed;
+  --amber: #b45309;
+  --danger: #dc2626;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--background);
+  color: var(--text-primary);
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.ant-layout {
+  background: transparent;
+}
+
+.ant-card {
+  border-color: var(--border);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+}
+
+.ant-table-wrapper .ant-table {
+  color: var(--text-primary);
+}
+
+.ant-segmented {
+  border: 1px solid var(--border);
+}
+
+.ant-progress-text {
+  font-weight: 650;
+}
+
+@media (max-width: 768px) {
+  body {
+    min-width: 320px;
+  }
+}
+
+.login-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 430px;
+  gap: 28px;
+  align-items: center;
+  min-height: 100vh;
+  padding: 40px;
+  background:
+    linear-gradient(120deg, rgba(20, 53, 122, 0.9), rgba(37, 99, 235, 0.72)),
+    url("https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=1800&q=80");
+  background-position: center;
+  background-size: cover;
+}
+
+.login-hero {
+  max-width: 680px;
+  color: #ffffff;
+}
+
+.login-hero .ant-typography {
+  color: #ffffff;
+}
+
+.login-hero h1 {
+  margin: 18px 0 12px;
+  max-width: 620px;
+  font-size: 44px;
+  line-height: 1.12;
+}
+
+.login-hero .ant-typography-secondary {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.login-brand-mark {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  margin-bottom: 22px;
+  place-items: center;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 24px;
+  box-shadow: 0 18px 34px rgba(37, 99, 235, 0.38);
+}
+
+.login-card {
+  border: 1px solid rgba(255, 255, 255, 0.54);
+}
+
+@media (max-width: 900px) {
+  .login-shell {
+    grid-template-columns: 1fr;
+    padding: 22px;
+  }
+
+  .login-hero h1 {
+    font-size: 34px;
+  }
+}
