@@ -22,6 +22,34 @@ type FeishuDepartment = {
   name?: string;
 };
 
+type FeishuScopeResponse = {
+  code: number;
+  msg?: string;
+  message?: string;
+  error?: {
+    message?: string;
+  };
+  data?: {
+    user_ids?: string[];
+    department_ids?: string[];
+    group_ids?: string[];
+    has_more?: boolean;
+    page_token?: string;
+  };
+};
+
+type FeishuUserResponse = {
+  code: number;
+  msg?: string;
+  message?: string;
+  error?: {
+    message?: string;
+  };
+  data?: {
+    user?: FeishuContactUser;
+  };
+};
+
 type FeishuListResponse<T> = {
   code: number;
   msg?: string;
@@ -61,15 +89,65 @@ function mapContactUser(user: FeishuContactUser): FeishuPerson | null {
   };
 }
 
-async function listAllVisibleDepartmentIds(accessToken: string) {
-  const departmentIds = new Set<string>(["0"]);
+async function listContactScopes(accessToken: string) {
+  const userIds = new Set<string>();
+  const departmentIds = new Set<string>();
   let pageToken = "";
 
   do {
-    const url = new URL("https://open.feishu.cn/open-apis/contact/v3/departments/0/children");
+    const url = new URL("https://open.feishu.cn/open-apis/contact/v3/scopes");
     url.searchParams.set("department_id_type", "open_department_id");
     url.searchParams.set("user_id_type", "open_id");
-    url.searchParams.set("fetch_child", "true");
+    url.searchParams.set("page_size", "100");
+
+    if (pageToken) {
+      url.searchParams.set("page_token", pageToken);
+    }
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      },
+      cache: "no-store"
+    });
+    const payload = (await response.json()) as FeishuScopeResponse;
+
+    if (!response.ok || payload.code !== 0) {
+      throw new Error(
+        getFeishuContactError(
+          payload,
+          "读取飞书通讯录授权范围失败，请确认应用已开通通讯录授权范围读取能力"
+        )
+      );
+    }
+
+    for (const userId of payload.data?.user_ids ?? []) {
+      userIds.add(userId);
+    }
+
+    for (const departmentId of payload.data?.department_ids ?? []) {
+      if (departmentId) {
+        departmentIds.add(departmentId);
+      }
+    }
+
+    pageToken = payload.data?.has_more ? payload.data.page_token ?? "" : "";
+  } while (pageToken && userIds.size + departmentIds.size < 2_000);
+
+  return {
+    departmentIds: [...departmentIds],
+    userIds: [...userIds]
+  };
+}
+
+async function listChildDepartmentIds(accessToken: string, departmentId: string) {
+  const departmentIds = new Set<string>();
+  let pageToken = "";
+
+  do {
+    const url = new URL(`https://open.feishu.cn/open-apis/contact/v3/departments/${departmentId}/children`);
+    url.searchParams.set("department_id_type", "open_department_id");
+    url.searchParams.set("user_id_type", "open_id");
     url.searchParams.set("page_size", "100");
 
     if (pageToken) {
@@ -85,19 +163,14 @@ async function listAllVisibleDepartmentIds(accessToken: string) {
     const payload = (await response.json()) as FeishuListResponse<FeishuDepartment>;
 
     if (!response.ok || payload.code !== 0) {
-      throw new Error(
-        getFeishuContactError(
-          payload,
-          "读取飞书部门失败，请在飞书开放平台把应用通讯录权限范围设置为全员或目标部门"
-        )
-      );
+      return [];
     }
 
     for (const department of payload.data?.items ?? []) {
-      const departmentId = department.open_department_id || department.department_id;
+      const childDepartmentId = department.open_department_id || department.department_id;
 
-      if (departmentId) {
-        departmentIds.add(departmentId);
+      if (childDepartmentId) {
+        departmentIds.add(childDepartmentId);
       }
     }
 
@@ -105,6 +178,30 @@ async function listAllVisibleDepartmentIds(accessToken: string) {
   } while (pageToken && departmentIds.size < 1_000);
 
   return [...departmentIds];
+}
+
+async function expandScopedDepartmentIds(accessToken: string, departmentIds: string[]) {
+  const expandedDepartmentIds = new Set(departmentIds);
+  const queue = [...departmentIds];
+
+  while (queue.length && expandedDepartmentIds.size < 1_000) {
+    const departmentId = queue.shift();
+
+    if (!departmentId) {
+      continue;
+    }
+
+    const childDepartmentIds = await listChildDepartmentIds(accessToken, departmentId);
+
+    for (const childDepartmentId of childDepartmentIds) {
+      if (!expandedDepartmentIds.has(childDepartmentId)) {
+        expandedDepartmentIds.add(childDepartmentId);
+        queue.push(childDepartmentId);
+      }
+    }
+  }
+
+  return [...expandedDepartmentIds];
 }
 
 async function listDepartmentPeople(accessToken: string, departmentId: string) {
@@ -146,13 +243,50 @@ async function listDepartmentPeople(accessToken: string, departmentId: string) {
   return people;
 }
 
+async function getUserDetail(accessToken: string, userId: string) {
+  const url = new URL(`https://open.feishu.cn/open-apis/contact/v3/users/${userId}`);
+  url.searchParams.set("department_id_type", "open_department_id");
+  url.searchParams.set("user_id_type", "open_id");
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    },
+    cache: "no-store"
+  });
+  const payload = (await response.json()) as FeishuUserResponse;
+
+  if (!response.ok || payload.code !== 0 || !payload.data?.user) {
+    throw new Error(getFeishuContactError(payload, "读取飞书成员详情失败"));
+  }
+
+  return mapContactUser(payload.data.user);
+}
+
 export async function listFeishuPeople(query = "") {
   const accessToken = await getFeishuTenantAccessToken();
   const peopleByOpenId = new Map<string, FeishuPerson>();
-  const departmentIds = await listAllVisibleDepartmentIds(accessToken);
+  const scopes = await listContactScopes(accessToken);
+  const departmentIds = await expandScopedDepartmentIds(accessToken, scopes.departmentIds);
+  const departmentErrors: Error[] = [];
+
+  for (const userId of scopes.userIds) {
+    const person = await getUserDetail(accessToken, userId);
+
+    if (person) {
+      peopleByOpenId.set(person.openId, person);
+    }
+  }
 
   for (const departmentId of departmentIds) {
-    const departmentPeople = await listDepartmentPeople(accessToken, departmentId);
+    let departmentPeople: FeishuPerson[] = [];
+
+    try {
+      departmentPeople = await listDepartmentPeople(accessToken, departmentId);
+    } catch (error) {
+      departmentErrors.push(error instanceof Error ? error : new Error("读取飞书部门成员失败"));
+      continue;
+    }
 
     for (const person of departmentPeople) {
       peopleByOpenId.set(person.openId, person);
@@ -161,6 +295,10 @@ export async function listFeishuPeople(query = "") {
     if (peopleByOpenId.size >= 1_000) {
       break;
     }
+  }
+
+  if (!peopleByOpenId.size && departmentErrors.length) {
+    throw departmentErrors[0];
   }
 
   const people = [...peopleByOpenId.values()].sort((left, right) =>
