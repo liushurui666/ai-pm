@@ -147,10 +147,22 @@ function ensureUsefulBreakdown(breakdown: DocumentTaskBreakdown) {
     ...breakdown,
     tasks: [
       {
-        title: "确认文档需求范围并拆分执行计划",
+        title: "【前端】确认文档涉及的页面范围与交互验收",
         priority: "中" as const,
         dueDate: dayjs().add(3, "day").format("YYYY-MM-DD"),
-        aiHint: "文档中没有识别到明确待办，已生成项目启动确认任务。"
+        aiHint: "文档中没有识别到明确前端待办，请确认页面、组件、表单、权限可见性和异常状态。"
+      },
+      {
+        title: "【后端】确认文档涉及的接口数据与权限规则",
+        priority: "中" as const,
+        dueDate: dayjs().add(4, "day").format("YYYY-MM-DD"),
+        aiHint: "文档中没有识别到明确后端待办，请确认接口、数据模型、鉴权、持久化和消息通知边界。"
+      },
+      {
+        title: "【测试】确认文档涉及的测试用例与回归范围",
+        priority: "中" as const,
+        dueDate: dayjs().add(5, "day").format("YYYY-MM-DD"),
+        aiHint: "文档中没有识别到明确测试待办，请补齐主流程、异常、权限边界和端到端验收用例。"
       }
     ]
   };
