@@ -65,6 +65,7 @@ import dayjs from "dayjs";
 import type {
   DashboardData,
   DocumentItem,
+  FeishuPerson,
   Project,
   Requirement,
   Risk,
@@ -113,6 +114,11 @@ const riskColor: Record<Risk["level"], string> = {
   低: "green"
 };
 
+type PeopleResponse = {
+  people?: FeishuPerson[];
+  error?: string;
+};
+
 export function ProjectManagementPlatform() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -123,6 +129,9 @@ export function ProjectManagementPlatform() {
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [activeView, setActiveView] = useState("overview");
   const [projectFilter, setProjectFilter] = useState("全部");
+  const [people, setPeople] = useState<FeishuPerson[]>([]);
+  const [peopleLoading, setPeopleLoading] = useState(false);
+  const [peopleError, setPeopleError] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
@@ -169,6 +178,48 @@ export function ProjectManagementPlatform() {
     }
 
     loadDashboard();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadPeople() {
+      setPeopleLoading(true);
+
+      try {
+        const response = await fetch("/api/feishu/users");
+        const payload = (await response.json()) as PeopleResponse;
+
+        if (response.status === 401) {
+          window.location.href = "/login";
+
+          return;
+        }
+
+        if (!response.ok) {
+          throw new Error(payload.error || "读取飞书通讯录失败");
+        }
+
+        if (mounted) {
+          setPeople(payload.people ?? []);
+          setPeopleError("");
+        }
+      } catch (error) {
+        if (mounted) {
+          setPeopleError(error instanceof Error ? error.message : "读取飞书通讯录失败");
+        }
+      } finally {
+        if (mounted) {
+          setPeopleLoading(false);
+        }
+      }
+    }
+
+    loadPeople();
 
     return () => {
       mounted = false;
@@ -681,6 +732,9 @@ export function ProjectManagementPlatform() {
             type={createType}
             submitting={createSubmitting}
             projectOptions={projectOptions}
+            people={people}
+            peopleLoading={peopleLoading}
+            peopleError={peopleError}
             onClose={() => setCreateType(null)}
             onSubmit={handleCreateRecord}
           />
@@ -723,9 +777,26 @@ function Overview({
     <Space orientation="vertical" size={18} className="pm-page-stack">
       {data.meta?.message ? (
         <Alert
-          type={data.meta.source === "feishu" ? "success" : "info"}
+          type={data.meta.missingConfig?.length ? "error" : data.meta.source === "feishu" ? "success" : "warning"}
           showIcon
           title={data.meta.message}
+          description={
+            <Space direction="vertical" size={4}>
+              {data.meta.missingConfig?.length ? (
+                <Text>
+                  缺少环境变量：{data.meta.missingConfig.join("、")}。未接入前创建的数据只会留在当前页面。
+                </Text>
+              ) : null}
+              {data.meta.missingTables?.length ? (
+                <Text>
+                  未识别到数据表：{data.meta.missingTables.join("、")}。系统会优先按表名自动创建或匹配。
+                </Text>
+              ) : null}
+              {data.meta.createdTables?.length ? (
+                <Text>本次自动创建：{data.meta.createdTables.join("、")}。</Text>
+              ) : null}
+            </Space>
+          }
         />
       ) : null}
       <section className="pm-hero">
@@ -1232,6 +1303,9 @@ function CreateRecordDrawer({
   type,
   submitting,
   projectOptions,
+  people,
+  peopleLoading,
+  peopleError,
   onClose,
   onSubmit
 }: {
@@ -1240,6 +1314,9 @@ function CreateRecordDrawer({
   type: DashboardEntityType | null;
   submitting: boolean;
   projectOptions: string[];
+  people: FeishuPerson[];
+  peopleLoading: boolean;
+  peopleError: string;
   onClose: () => void;
   onSubmit: (values: Record<string, unknown>) => void;
 }) {
@@ -1262,9 +1339,27 @@ function CreateRecordDrawer({
     >
       {type ? (
         <Form form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
-          {type === "project" ? <ProjectFields /> : null}
-          {type === "task" ? <TaskFields projectOptions={projectOptions} /> : null}
-          {type === "risk" ? <RiskFields projectOptions={projectOptions} /> : null}
+          {type === "project" ? (
+            <ProjectFields form={form} people={people} peopleLoading={peopleLoading} peopleError={peopleError} />
+          ) : null}
+          {type === "task" ? (
+            <TaskFields
+              form={form}
+              people={people}
+              peopleLoading={peopleLoading}
+              peopleError={peopleError}
+              projectOptions={projectOptions}
+            />
+          ) : null}
+          {type === "risk" ? (
+            <RiskFields
+              form={form}
+              people={people}
+              peopleLoading={peopleLoading}
+              peopleError={peopleError}
+              projectOptions={projectOptions}
+            />
+          ) : null}
           {type === "requirement" ? <RequirementFields projectOptions={projectOptions} /> : null}
           {type === "document" ? <DocumentFields /> : null}
         </Form>
@@ -1273,15 +1368,81 @@ function CreateRecordDrawer({
   );
 }
 
-function ProjectFields() {
+function OwnerSelect({
+  form,
+  people,
+  loading,
+  error
+}: {
+  form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
+  people: FeishuPerson[];
+  loading: boolean;
+  error: string;
+}) {
+  return (
+    <>
+      <Form.Item
+        label="负责人"
+        name="ownerOpenId"
+        rules={[{ required: true, message: "请选择飞书内部负责人" }]}
+      >
+        <Select
+          showSearch
+          loading={loading}
+          disabled={Boolean(error)}
+          placeholder="从飞书通讯录选择负责人"
+          optionFilterProp="label"
+          options={people.map((person) => ({
+            value: person.openId,
+            label: person.email ? `${person.name} · ${person.email}` : person.name
+          }))}
+          onChange={(value) => {
+            const selectedPerson = people.find((person) => person.openId === value);
+
+            form.setFieldsValue({
+              ownerOpenId: value,
+              owner: selectedPerson?.name ?? ""
+            });
+          }}
+        />
+      </Form.Item>
+      <Form.Item name="owner" hidden>
+        <Input />
+      </Form.Item>
+      {error ? (
+        <Alert
+          className="pm-form-alert"
+          type="error"
+          showIcon
+          title="无法读取飞书通讯录"
+          description={error}
+        />
+      ) : (
+        <Text className="pm-form-note" type="secondary">
+          负责人会写入飞书人员字段，并在创建成功后尝试通过机器人通知。
+        </Text>
+      )}
+    </>
+  );
+}
+
+function ProjectFields({
+  form,
+  people,
+  peopleLoading,
+  peopleError
+}: {
+  form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
+  people: FeishuPerson[];
+  peopleLoading: boolean;
+  peopleError: string;
+}) {
   return (
     <>
       <Form.Item label="项目名称" name="name" rules={[{ required: true, message: "请输入项目名称" }]}>
         <Input placeholder="例如：智能项目驾驶舱二期" />
       </Form.Item>
-      <Form.Item label="负责人" name="owner" rules={[{ required: true, message: "请输入负责人" }]}>
-        <Input placeholder="负责人姓名" />
-      </Form.Item>
+      <OwnerSelect form={form} people={people} loading={peopleLoading} error={peopleError} />
       <Row gutter={12}>
         <Col span={12}>
           <Form.Item label="状态" name="status">
@@ -1339,7 +1500,19 @@ function ProjectSelect({
   return <Input value={value} placeholder={placeholder} onChange={(event) => onChange?.(event.target.value)} />;
 }
 
-function TaskFields({ projectOptions }: { projectOptions: string[] }) {
+function TaskFields({
+  form,
+  projectOptions,
+  people,
+  peopleLoading,
+  peopleError
+}: {
+  form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
+  projectOptions: string[];
+  people: FeishuPerson[];
+  peopleLoading: boolean;
+  peopleError: string;
+}) {
   return (
     <>
       <Form.Item label="任务标题" name="title" rules={[{ required: true, message: "请输入任务标题" }]}>
@@ -1362,9 +1535,7 @@ function TaskFields({ projectOptions }: { projectOptions: string[] }) {
       </Form.Item>
       <Row gutter={12}>
         <Col span={12}>
-          <Form.Item label="负责人" name="owner" rules={[{ required: true, message: "请输入负责人" }]}>
-            <Input placeholder="负责人姓名" />
-          </Form.Item>
+          <OwnerSelect form={form} people={people} loading={peopleLoading} error={peopleError} />
         </Col>
         <Col span={12}>
           <Form.Item label="截止日期" name="dueDate">
@@ -1379,7 +1550,19 @@ function TaskFields({ projectOptions }: { projectOptions: string[] }) {
   );
 }
 
-function RiskFields({ projectOptions }: { projectOptions: string[] }) {
+function RiskFields({
+  form,
+  projectOptions,
+  people,
+  peopleLoading,
+  peopleError
+}: {
+  form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
+  projectOptions: string[];
+  people: FeishuPerson[];
+  peopleLoading: boolean;
+  peopleError: string;
+}) {
   return (
     <>
       <Form.Item label="风险标题" name="title" rules={[{ required: true, message: "请输入风险标题" }]}>
@@ -1392,9 +1575,7 @@ function RiskFields({ projectOptions }: { projectOptions: string[] }) {
           </Form.Item>
         </Col>
         <Col span={12}>
-          <Form.Item label="负责人" name="owner" rules={[{ required: true, message: "请输入负责人" }]}>
-            <Input placeholder="负责人姓名" />
-          </Form.Item>
+          <OwnerSelect form={form} people={people} loading={peopleLoading} error={peopleError} />
         </Col>
       </Row>
       <Form.Item label="关联项目" name="project" rules={[{ required: true, message: "请选择关联项目" }]}>

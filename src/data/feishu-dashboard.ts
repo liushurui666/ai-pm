@@ -1,5 +1,6 @@
 import dayjs from "dayjs";
 import { getFeishuAppAccessToken } from "@/lib/feishu-client";
+import { sendFeishuBotText } from "@/lib/feishu-message";
 import { dashboardData } from "@/data/dashboard";
 import type {
   DashboardData,
@@ -52,6 +53,31 @@ type BitableTableListResponse = {
   };
 };
 
+type BitableField = {
+  field_id: string;
+  field_name: string;
+  type: number;
+};
+
+type BitableFieldListResponse = {
+  code: number;
+  msg?: string;
+  data?: {
+    items?: BitableField[];
+    page_token?: string;
+    has_more?: boolean;
+  };
+};
+
+type BitableTableCreateResponse = {
+  code: number;
+  msg?: string;
+  data?: {
+    table_id?: string;
+    table?: BitableTable;
+  };
+};
+
 type TableKey = "projects" | "tasks" | "risks" | "requirements" | "documents" | "insights";
 
 const tableEnv: Record<TableKey, string> = {
@@ -79,6 +105,116 @@ const tableNameAliases: Record<TableKey, string[]> = {
   requirements: ["需求", "需求表", "需求管理", "Requirements", "Requirement"],
   documents: ["文档", "文档表", "文档知识库", "Documents", "Document"],
   insights: ["洞察", "洞察表", "AI洞察", "AI 洞察", "Insights", "Insight"]
+};
+
+const tableDefinitions: Record<
+  TableKey,
+  {
+    name: string;
+    fields: Array<{
+      field_name: string;
+      type: number;
+      ui_type?: string;
+      property?: Record<string, unknown>;
+    }>;
+  }
+> = {
+  projects: {
+    name: "项目",
+    fields: [
+      { field_name: "项目名称", type: 1, ui_type: "Text" },
+      { field_name: "负责人", type: 11, ui_type: "User", property: { multiple: false } },
+      {
+        field_name: "状态",
+        type: 3,
+        ui_type: "SingleSelect",
+        property: { options: ["进行中", "有风险", "已完成", "暂停"].map((name) => ({ name })) }
+      },
+      { field_name: "进度", type: 2, ui_type: "Number" },
+      { field_name: "健康度", type: 2, ui_type: "Number" },
+      { field_name: "截止日期", type: 5, ui_type: "DateTime", property: { date_formatter: "yyyy/MM/dd" } },
+      { field_name: "团队人数", type: 2, ui_type: "Number" },
+      { field_name: "风险数", type: 2, ui_type: "Number" },
+      { field_name: "摘要", type: 1, ui_type: "Text" }
+    ]
+  },
+  tasks: {
+    name: "任务",
+    fields: [
+      { field_name: "标题", type: 1, ui_type: "Text" },
+      {
+        field_name: "阶段",
+        type: 3,
+        ui_type: "SingleSelect",
+        property: { options: ["待处理", "进行中", "评审中", "已完成"].map((name) => ({ name })) }
+      },
+      { field_name: "负责人", type: 11, ui_type: "User", property: { multiple: false } },
+      { field_name: "项目名称", type: 1, ui_type: "Text" },
+      {
+        field_name: "优先级",
+        type: 3,
+        ui_type: "SingleSelect",
+        property: { options: ["高", "中", "低"].map((name) => ({ name })) }
+      },
+      { field_name: "截止日期", type: 5, ui_type: "DateTime", property: { date_formatter: "yyyy/MM/dd" } },
+      { field_name: "AI提示", type: 1, ui_type: "Text" }
+    ]
+  },
+  risks: {
+    name: "风险",
+    fields: [
+      { field_name: "标题", type: 1, ui_type: "Text" },
+      {
+        field_name: "等级",
+        type: 3,
+        ui_type: "SingleSelect",
+        property: { options: ["高", "中", "低"].map((name) => ({ name })) }
+      },
+      { field_name: "负责人", type: 11, ui_type: "User", property: { multiple: false } },
+      { field_name: "项目名称", type: 1, ui_type: "Text" },
+      { field_name: "应对措施", type: 1, ui_type: "Text" }
+    ]
+  },
+  requirements: {
+    name: "需求",
+    fields: [
+      { field_name: "标题", type: 1, ui_type: "Text" },
+      {
+        field_name: "优先级",
+        type: 3,
+        ui_type: "SingleSelect",
+        property: { options: ["P0", "P1", "P2"].map((name) => ({ name })) }
+      },
+      {
+        field_name: "状态",
+        type: 3,
+        ui_type: "SingleSelect",
+        property: { options: ["评审中", "设计中", "开发中", "待上线"].map((name) => ({ name })) }
+      },
+      { field_name: "项目名称", type: 1, ui_type: "Text" },
+      { field_name: "验收标准", type: 1, ui_type: "Text" }
+    ]
+  },
+  documents: {
+    name: "文档",
+    fields: [
+      { field_name: "标题", type: 1, ui_type: "Text" },
+      {
+        field_name: "类型",
+        type: 3,
+        ui_type: "SingleSelect",
+        property: { options: ["PRD", "会议纪要", "技术方案", "复盘"].map((name) => ({ name })) }
+      },
+      { field_name: "更新时间", type: 5, ui_type: "DateTime", property: { date_formatter: "yyyy/MM/dd HH:mm" } },
+      { field_name: "AI摘要", type: 1, ui_type: "Text" }
+    ]
+  },
+  insights: {
+    name: "洞察",
+    fields: [
+      { field_name: "内容", type: 1, ui_type: "Text" }
+    ]
+  }
 };
 
 const fieldAliases = {
@@ -158,8 +294,83 @@ async function listBitableTables() {
   return tables;
 }
 
-async function resolveTableIds() {
+async function createBitableTable(key: TableKey) {
+  const appToken = process.env.FEISHU_BITABLE_APP_TOKEN;
+
+  if (!appToken) {
+    throw new Error("请先配置 FEISHU_BITABLE_APP_TOKEN");
+  }
+
+  const accessToken = await getFeishuAppAccessToken();
+  const definition = tableDefinitions[key];
+  const response = await fetch(`https://open.feishu.cn/open-apis/bitable/v1/apps/${appToken}/tables`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      table: {
+        name: definition.name,
+        default_view_name: "默认视图",
+        fields: definition.fields
+      }
+    }),
+    cache: "no-store"
+  });
+  const payload = (await response.json()) as BitableTableCreateResponse;
+  const tableId = payload.data?.table?.table_id || payload.data?.table_id;
+
+  if (!response.ok || payload.code !== 0 || !tableId) {
+    throw new Error(payload.msg || `创建飞书${tableLabels[key]}表失败`);
+  }
+
+  return tableId;
+}
+
+async function listBitableFields(tableId: string) {
+  const appToken = process.env.FEISHU_BITABLE_APP_TOKEN;
+
+  if (!appToken) {
+    throw new Error("请先配置 FEISHU_BITABLE_APP_TOKEN");
+  }
+
+  const accessToken = await getFeishuAppAccessToken();
+  const fields: BitableField[] = [];
+  let pageToken = "";
+
+  do {
+    const url = new URL(
+      `https://open.feishu.cn/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/fields`
+    );
+    url.searchParams.set("page_size", "100");
+
+    if (pageToken) {
+      url.searchParams.set("page_token", pageToken);
+    }
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      },
+      cache: "no-store"
+    });
+    const payload = (await response.json()) as BitableFieldListResponse;
+
+    if (!response.ok || payload.code !== 0) {
+      throw new Error(payload.msg || `读取飞书多维表格字段 ${tableId} 失败`);
+    }
+
+    fields.push(...(payload.data?.items ?? []));
+    pageToken = payload.data?.has_more ? payload.data.page_token ?? "" : "";
+  } while (pageToken);
+
+  return fields;
+}
+
+async function resolveTableIds(options: { autoCreate?: boolean } = {}) {
   const resolved: Partial<Record<TableKey, string>> = {};
+  const createdTables: string[] = [];
 
   for (const key of Object.keys(tableEnv) as TableKey[]) {
     const tableId = process.env[tableEnv[key]]?.trim();
@@ -170,13 +381,19 @@ async function resolveTableIds() {
   }
 
   if (!process.env.FEISHU_BITABLE_APP_TOKEN) {
-    return resolved;
+    return {
+      tableIds: resolved,
+      createdTables
+    };
   }
 
   const unresolvedKeys = (Object.keys(tableEnv) as TableKey[]).filter((key) => !resolved[key]);
 
   if (!unresolvedKeys.length) {
-    return resolved;
+    return {
+      tableIds: resolved,
+      createdTables
+    };
   }
 
   const tables = await listBitableTables();
@@ -192,7 +409,17 @@ async function resolveTableIds() {
     }
   }
 
-  return resolved;
+  if (options.autoCreate !== false) {
+    for (const key of unresolvedKeys.filter((tableKey) => !resolved[tableKey])) {
+      resolved[key] = await createBitableTable(key);
+      createdTables.push(tableLabels[key]);
+    }
+  }
+
+  return {
+    tableIds: resolved,
+    createdTables
+  };
 }
 
 async function searchBitableRecords(tableId: string) {
@@ -248,8 +475,11 @@ async function createBitableRecord(tableId: string, fields: Record<string, unkno
   }
 
   const accessToken = await getFeishuAppAccessToken();
+  const url = new URL(`https://open.feishu.cn/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/records`);
+  url.searchParams.set("user_id_type", "open_id");
+
   const response = await fetch(
-    `https://open.feishu.cn/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/records`,
+    url,
     {
       method: "POST",
       headers: {
@@ -297,6 +527,10 @@ function normalizeValue(value: unknown): string {
 
     if (typeof record.value === "string" || typeof record.value === "number") {
       return String(record.value);
+    }
+
+    if (typeof record.id === "string") {
+      return record.id;
     }
 
     if (typeof record.link === "string") {
@@ -356,6 +590,14 @@ function readDateTime(fields: Record<string, unknown>, aliases: readonly string[
 
 function asText(value: unknown, fallback = "") {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
+function asOwnerName(values: Record<string, unknown>) {
+  return asText(values.owner, "未分配");
+}
+
+function asOwnerOpenId(values: Record<string, unknown>) {
+  return asText(values.ownerOpenId);
 }
 
 function asNumber(value: unknown, fallback: number) {
@@ -573,7 +815,7 @@ function normalizeCreateProject(values: Record<string, unknown>, id = createLoca
   return {
     id,
     name: asText(values.name, "未命名项目"),
-    owner: asText(values.owner, "未分配"),
+    owner: asOwnerName(values),
     status: normalizeProjectStatus(asText(values.status, "进行中")),
     progress,
     health,
@@ -589,7 +831,7 @@ function normalizeCreateTask(values: Record<string, unknown>, id = createLocalId
     id,
     title: asText(values.title, "未命名任务"),
     stage: normalizeTaskStage(asText(values.stage, "待处理")),
-    owner: asText(values.owner, "未分配"),
+    owner: asOwnerName(values),
     project: asText(values.project, "未关联项目"),
     priority: normalizeTaskPriority(asText(values.priority, "中")),
     dueDate: asDateString(values.dueDate, dayjs().add(7, "day").format("YYYY-MM-DD")),
@@ -602,7 +844,7 @@ function normalizeCreateRisk(values: Record<string, unknown>, id = createLocalId
     id,
     title: asText(values.title, "未命名风险"),
     level: normalizeRiskLevel(asText(values.level, "中")),
-    owner: asText(values.owner, "未分配"),
+    owner: asOwnerName(values),
     project: asText(values.project, "未关联项目"),
     mitigation: asText(values.mitigation, "暂无应对措施。")
   };
@@ -641,7 +883,7 @@ async function getTableIdForType(type: DashboardEntityType) {
     document: "documents"
   };
   const key = tableKeyByType[type];
-  const tableIds = await resolveTableIds();
+  const { tableIds } = await resolveTableIds();
 
   return {
     key,
@@ -649,13 +891,33 @@ async function getTableIdForType(type: DashboardEntityType) {
   };
 }
 
-function createFieldsForType(type: DashboardEntityType, values: Record<string, unknown>) {
+function getFieldType(fields: BitableField[], fieldName: string) {
+  return fields.find((field) => field.field_name === fieldName)?.type;
+}
+
+function createOwnerFieldValue(values: Record<string, unknown>, ownerFieldType?: number) {
+  const ownerOpenId = asOwnerOpenId(values);
+
+  if (ownerFieldType === 11 && ownerOpenId) {
+    return [
+      {
+        id: ownerOpenId
+      }
+    ];
+  }
+
+  return asOwnerName(values);
+}
+
+function createFieldsForType(type: DashboardEntityType, values: Record<string, unknown>, fields: BitableField[] = []) {
+  const ownerFieldType = getFieldType(fields, "负责人");
+
   if (type === "project") {
     const project = normalizeCreateProject(values);
 
     return {
       项目名称: project.name,
-      负责人: project.owner,
+      负责人: createOwnerFieldValue(values, ownerFieldType),
       状态: project.status,
       进度: project.progress,
       健康度: project.health,
@@ -672,7 +934,7 @@ function createFieldsForType(type: DashboardEntityType, values: Record<string, u
     return {
       标题: task.title,
       阶段: task.stage,
-      负责人: task.owner,
+      负责人: createOwnerFieldValue(values, ownerFieldType),
       项目名称: task.project,
       优先级: task.priority,
       截止日期: toDateTimestamp(task.dueDate),
@@ -686,7 +948,7 @@ function createFieldsForType(type: DashboardEntityType, values: Record<string, u
     return {
       标题: risk.title,
       等级: risk.level,
-      负责人: risk.owner,
+      负责人: createOwnerFieldValue(values, ownerFieldType),
       项目名称: risk.project,
       应对措施: risk.mitigation
     };
@@ -737,28 +999,48 @@ function createMockRecord<T extends DashboardEntityType>(
   return normalizeCreateDocument(values) as DashboardEntityMap[T];
 }
 
+function getRecordTitle(type: DashboardEntityType, values: Record<string, unknown>) {
+  if (type === "project") {
+    return asText(values.name, "未命名项目");
+  }
+
+  return asText(values.title, `未命名${entityLabelForType(type)}`);
+}
+
+function entityLabelForType(type: DashboardEntityType) {
+  const labels: Record<DashboardEntityType, string> = {
+    project: "项目",
+    task: "任务",
+    risk: "风险",
+    requirement: "需求",
+    document: "文档"
+  };
+
+  return labels[type];
+}
+
 function mapCreatedRecord<T extends DashboardEntityType>(
   type: T,
   record: BitableRecord,
   values: Record<string, unknown>
 ): DashboardEntityMap[T] {
   if (type === "project") {
-    return { ...normalizeCreateProject(values), ...mapProjects([record])[0] } as DashboardEntityMap[T];
+    return { ...mapProjects([record])[0], ...normalizeCreateProject(values), id: record.record_id } as DashboardEntityMap[T];
   }
 
   if (type === "task") {
-    return { ...normalizeCreateTask(values), ...mapTasks([record])[0] } as DashboardEntityMap[T];
+    return { ...mapTasks([record])[0], ...normalizeCreateTask(values), id: record.record_id } as DashboardEntityMap[T];
   }
 
   if (type === "risk") {
-    return { ...normalizeCreateRisk(values), ...mapRisks([record])[0] } as DashboardEntityMap[T];
+    return { ...mapRisks([record])[0], ...normalizeCreateRisk(values), id: record.record_id } as DashboardEntityMap[T];
   }
 
   if (type === "requirement") {
-    return { ...normalizeCreateRequirement(values), ...mapRequirements([record])[0] } as DashboardEntityMap[T];
+    return { ...mapRequirements([record])[0], ...normalizeCreateRequirement(values), id: record.record_id } as DashboardEntityMap[T];
   }
 
-  return { ...normalizeCreateDocument(values), ...mapDocuments([record])[0] } as DashboardEntityMap[T];
+  return { ...mapDocuments([record])[0], ...normalizeCreateDocument(values), id: record.record_id } as DashboardEntityMap[T];
 }
 
 function mapInsights(records: BitableRecord[]) {
@@ -802,12 +1084,13 @@ export async function getDashboardData(user?: FeishuUser): Promise<DashboardData
       meta: {
         source: "mock",
         user,
+        missingConfig: ["FEISHU_BITABLE_APP_TOKEN"],
         message: "未配置飞书多维表格，当前使用本地演示数据。"
       }
     };
   }
 
-  const tableIds = await resolveTableIds();
+  const { tableIds, createdTables } = await resolveTableIds();
   const loadedTables: string[] = [];
   const missingTables = (Object.keys(tableEnv) as TableKey[])
     .filter((key) => !tableIds[key])
@@ -858,6 +1141,7 @@ export async function getDashboardData(user?: FeishuUser): Promise<DashboardData
     user,
     loadedTables,
     missingTables,
+    createdTables,
     message: loadedTables.length
       ? `已接入飞书多维表格：${loadedTables.join("、")}`
       : "飞书多维表格未返回数据，当前使用本地演示数据。"
@@ -879,16 +1163,36 @@ export async function createDashboardRecord<T extends DashboardEntityType>(
       type,
       record: mockRecord,
       persisted: false,
-      message: `未配置${tableLabels[key]}表，已在当前页面临时创建。`
+      message: !process.env.FEISHU_BITABLE_APP_TOKEN
+        ? "缺少 FEISHU_BITABLE_APP_TOKEN，无法写入飞书。已在当前页面临时创建，刷新后会丢失。"
+        : `未识别到飞书${tableLabels[key]}表，已在当前页面临时创建。`
     };
   }
 
-  const createdRecord = await createBitableRecord(tableId, createFieldsForType(type, values));
+  const tableFields = await listBitableFields(tableId);
+  const createdRecord = await createBitableRecord(tableId, createFieldsForType(type, values, tableFields));
+  const ownerOpenId = asOwnerOpenId(values);
+  let notifyMessage = "";
+
+  if (ownerOpenId) {
+    try {
+      await sendFeishuBotText(
+        ownerOpenId,
+        `你被设置为${tableLabels[key]}负责人：${getRecordTitle(type, values)}。请在 AI PM 平台查看详情。`
+      );
+      notifyMessage = `已通过飞书机器人通知 ${asOwnerName(values)}。`;
+    } catch (error) {
+      notifyMessage = `机器人通知失败：${error instanceof Error ? error.message : "未知错误"}。`;
+    }
+  }
 
   return {
     type,
     record: mapCreatedRecord(type, createdRecord, values),
     persisted: true,
-    message: `${user?.name ? `${user.name} 已` : "已"}写入飞书${tableLabels[key]}表。`
+    message: [
+      `${user?.name ? `${user.name} 已` : "已"}写入飞书${tableLabels[key]}表。`,
+      notifyMessage
+    ].filter(Boolean).join(" ")
   };
 }

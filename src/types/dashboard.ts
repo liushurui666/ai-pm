@@ -62,6 +62,8 @@ export type FeishuUser = {
   email?: string;
 };
 
+export type FeishuPerson = FeishuUser;
+
 export type DashboardData = {
   metrics: {
     activeProjects: number;
@@ -80,6 +82,8 @@ export type DashboardData = {
     user?: FeishuUser;
     loadedTables?: string[];
     missingTables?: string[];
+    createdTables?: string[];
+    missingConfig?: string[];
     message?: string;
   };
 };

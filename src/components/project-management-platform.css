@@ -307,6 +307,16 @@
   width: 100%;
 }
 
+.pm-form-note {
+  display: block;
+  margin: -8px 0 16px;
+  font-size: 12px;
+}
+
+.pm-form-alert {
+  margin: -4px 0 16px;
+}
+
 @media (max-width: 1200px) {
   .pm-hero {
     grid-template-columns: 1fr;
