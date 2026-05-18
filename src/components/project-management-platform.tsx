@@ -910,6 +910,7 @@ export function ProjectManagementPlatform() {
                     <BugsView
                       bugs={data.bugs}
                       currentUser={data.meta?.user}
+                      projectOptions={projectOptions}
                       onCreate={() => openCreateDrawer("bug")}
                       onEdit={openEditBugDrawer}
                     />
@@ -1552,28 +1553,41 @@ function TasksView({
 function BugsView({
   bugs,
   currentUser,
+  projectOptions,
   onCreate,
   onEdit
 }: {
   bugs: BugReport[];
   currentUser?: FeishuUser;
+  projectOptions: string[];
   onCreate: () => void;
   onEdit: (bug: BugReport) => void;
 }) {
   const [statusFilter, setStatusFilter] = useState<"全部" | BugReport["status"]>("全部");
+  const [projectFilter, setProjectFilter] = useState("全部");
   const [onlyMine, setOnlyMine] = useState(false);
+  const bugProjectOptions = useMemo(() => {
+    return Array.from(new Set([...projectOptions, ...bugs.map((bug) => bug.project).filter(Boolean)]));
+  }, [bugs, projectOptions]);
   const scopedBugs = useMemo(() => {
     return onlyMine ? bugs.filter((bug) => isMyBug(bug, currentUser)) : bugs;
   }, [bugs, currentUser, onlyMine]);
-  const visibleBugs = useMemo(() => {
-    if (statusFilter === "全部") {
+  const projectScopedBugs = useMemo(() => {
+    if (projectFilter === "全部") {
       return scopedBugs;
     }
 
-    return scopedBugs.filter((bug) => bug.status === statusFilter);
-  }, [scopedBugs, statusFilter]);
-  const openBugCount = scopedBugs.filter((bug) => bug.status !== "已关闭").length;
-  const blockerCount = scopedBugs.filter((bug) => bug.severity === "阻塞" && bug.status !== "已关闭").length;
+    return scopedBugs.filter((bug) => bug.project === projectFilter);
+  }, [projectFilter, scopedBugs]);
+  const visibleBugs = useMemo(() => {
+    if (statusFilter === "全部") {
+      return projectScopedBugs;
+    }
+
+    return projectScopedBugs.filter((bug) => bug.status === statusFilter);
+  }, [projectScopedBugs, statusFilter]);
+  const openBugCount = projectScopedBugs.filter((bug) => bug.status !== "已关闭").length;
+  const blockerCount = projectScopedBugs.filter((bug) => bug.severity === "阻塞" && bug.status !== "已关闭").length;
   const bugColumns: ColumnsType<BugReport> = [
     {
       title: "Bug",
@@ -1676,6 +1690,20 @@ function BugsView({
               onChange={(value) => setStatusFilter(value as "全部" | BugReport["status"])}
               options={["全部", "新建", "定位中", "修复中", "待验证", "已关闭"]}
             />
+            <Select
+              className="bug-project-filter"
+              showSearch
+              value={projectFilter}
+              onChange={setProjectFilter}
+              optionFilterProp="label"
+              options={[
+                { value: "全部", label: "全部项目" },
+                ...bugProjectOptions.map((project) => ({
+                  value: project,
+                  label: project
+                }))
+              ]}
+            />
             <Tooltip title={currentUser ? `匹配提交人或修复负责人：${currentUser.name}` : "未获取到登录用户"}>
               <Space className="task-mine-filter">
                 <Text type="secondary">只看我的</Text>
@@ -1695,14 +1723,14 @@ function BugsView({
         <MetricCard
           icon={<CheckCircleOutlined />}
           title="待验证"
-          value={scopedBugs.filter((bug) => bug.status === "待验证").length}
+          value={projectScopedBugs.filter((bug) => bug.status === "待验证").length}
           suffix="个"
           tone="blue"
         />
         <MetricCard
           icon={<UserOutlined />}
           title="已关闭"
-          value={scopedBugs.filter((bug) => bug.status === "已关闭").length}
+          value={projectScopedBugs.filter((bug) => bug.status === "已关闭").length}
           suffix="个"
           tone="green"
         />
@@ -1713,7 +1741,7 @@ function BugsView({
           rowKey="id"
           columns={bugColumns}
           dataSource={visibleBugs}
-          locale={{ emptyText: onlyMine ? "暂无与你相关的 Bug" : "暂无 Bug，点击右上角提 Bug" }}
+          locale={{ emptyText: getBugEmptyText(onlyMine, projectFilter) }}
           pagination={{ pageSize: 12, showSizeChanger: true }}
           scroll={{ x: 1400 }}
           expandable={{
@@ -1951,6 +1979,22 @@ function getBugFormValues(bug: BugReport) {
     ...bug,
     dueDate: dayjs(bug.dueDate)
   };
+}
+
+function getBugEmptyText(onlyMine: boolean, projectFilter: string) {
+  if (onlyMine && projectFilter !== "全部") {
+    return "该项目暂无与你相关的 Bug";
+  }
+
+  if (onlyMine) {
+    return "暂无与你相关的 Bug";
+  }
+
+  if (projectFilter !== "全部") {
+    return "该项目暂无 Bug";
+  }
+
+  return "暂无 Bug，点击右上角提 Bug";
 }
 
 function serializeCreateValues(values: Record<string, unknown>) {
@@ -2534,6 +2578,31 @@ function ProjectSelect({
   return <Input value={value} placeholder={placeholder} onChange={(event) => onChange?.(event.target.value)} />;
 }
 
+function ProjectOptionSelect({
+  projectOptions,
+  value,
+  onChange
+}: {
+  projectOptions: string[];
+  value?: string;
+  onChange?: (value: string) => void;
+}) {
+  return (
+    <Select
+      showSearch
+      value={value}
+      onChange={onChange}
+      optionFilterProp="label"
+      placeholder="选择站内已有项目"
+      notFoundContent="请先在项目管理中新建项目"
+      options={projectOptions.map((project) => ({
+        value: project,
+        label: project
+      }))}
+    />
+  );
+}
+
 function TaskFields({
   form,
   projectOptions,
@@ -2635,7 +2704,7 @@ function BugFields({
         </Col>
       </Row>
       <Form.Item label="关联项目" name="project" rules={[{ required: true, message: "请选择关联项目" }]}>
-        <ProjectSelect projectOptions={projectOptions} />
+        <ProjectOptionSelect projectOptions={projectOptions} />
       </Form.Item>
       <Row gutter={12}>
         <Col span={12}>

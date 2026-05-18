@@ -262,6 +262,10 @@
   background: #ffffff;
 }
 
+.bug-project-filter {
+  min-width: 220px;
+}
+
 .task-ai-hint {
   margin-top: 2px;
 }
