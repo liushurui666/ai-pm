@@ -1,4 +1,4 @@
-import { getFeishuAppAccessToken } from "@/lib/feishu-client";
+import { getFeishuTenantAccessToken } from "@/lib/feishu-client";
 import type { FeishuPerson } from "@/types/dashboard";
 
 type FeishuContactUser = {
@@ -44,7 +44,7 @@ function mapContactUser(user: FeishuContactUser): FeishuPerson | null {
 }
 
 export async function listFeishuPeople(query = "") {
-  const accessToken = await getFeishuAppAccessToken();
+  const accessToken = await getFeishuTenantAccessToken();
   const people: FeishuPerson[] = [];
   let pageToken = "";
 

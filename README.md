@@ -32,7 +32,23 @@ cp .env.example .env.local
 http://localhost:3000/api/auth/feishu/callback
 ```
 
-真实项目数据通过飞书多维表格读取。通常只需要配置 `FEISHU_BITABLE_APP_TOKEN`，系统会自动在这个多维表格里查找这些数据表：
+真实项目数据通过飞书多维表格读取。默认不需要手动创建多维表格，也不需要手动填写 `FEISHU_BITABLE_APP_TOKEN`。
+
+首次启动时，系统会用飞书应用身份自动创建：
+
+- 一个名为 `AI PM 项目管理平台` 的飞书文件夹
+- 一个同名多维表格
+- 多维表格内的 `项目 / 任务 / 风险 / 需求 / 文档 / 洞察` 数据表
+
+创建结果会写入本地 `.ai-pm/feishu-workspace.json`，该文件已被 Git 忽略，不会提交到仓库。
+
+如果你希望把项目管理文件夹创建到某个指定飞书目录下，可以配置：
+
+```txt
+FEISHU_PARENT_FOLDER_TOKEN=fldxxxxxxxxxxxxxxxx
+```
+
+如果你已经有多维表格，也可以手动配置 `FEISHU_BITABLE_APP_TOKEN=base_xxx` 覆盖自动创建逻辑。系统会在这个多维表格里查找这些数据表：
 
 - `项目`
 - `任务`
@@ -67,12 +83,13 @@ http://localhost:3000/api/auth/feishu/callback
 
 飞书应用需要开通并发布这些能力：
 
+- 云空间创建文件夹
 - 多维表格应用与数据表读取、写入、创建
 - 多维表格字段读取
 - 通讯录用户读取
 - 机器人发送消息
 
-同时需要把飞书应用加入目标多维表格协作者，并给编辑权限。
+自动创建的文件夹和多维表格会由应用创建。若使用已有多维表格，则需要把飞书应用加入目标多维表格协作者，并给编辑权限。
 
 如果未配置飞书登录，系统会保留本地演示模式；配置 `FEISHU_APP_ID` 和 `FEISHU_APP_SECRET` 后，首页会要求先使用飞书登录。
 

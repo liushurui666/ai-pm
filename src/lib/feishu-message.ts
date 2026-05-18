@@ -1,4 +1,4 @@
-import { getFeishuAppAccessToken } from "@/lib/feishu-client";
+import { getFeishuTenantAccessToken } from "@/lib/feishu-client";
 
 type FeishuMessageResponse = {
   code: number;
@@ -7,7 +7,7 @@ type FeishuMessageResponse = {
 };
 
 export async function sendFeishuBotText(openId: string, text: string) {
-  const accessToken = await getFeishuAppAccessToken();
+  const accessToken = await getFeishuTenantAccessToken();
   const url = new URL("https://open.feishu.cn/open-apis/im/v1/messages");
   url.searchParams.set("receive_id_type", "open_id");
 

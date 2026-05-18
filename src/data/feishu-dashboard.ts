@@ -1,6 +1,7 @@
 import dayjs from "dayjs";
-import { getFeishuAppAccessToken } from "@/lib/feishu-client";
+import { getFeishuTenantAccessToken } from "@/lib/feishu-client";
 import { sendFeishuBotText } from "@/lib/feishu-message";
+import { canEnsureFeishuWorkspace, ensureFeishuWorkspace } from "@/lib/feishu-workspace";
 import { dashboardData } from "@/data/dashboard";
 import type {
   DashboardData,
@@ -249,21 +250,15 @@ function createLocalId(type: DashboardEntityType) {
 }
 
 export function isFeishuBitableConfigured() {
-  return Boolean(process.env.FEISHU_BITABLE_APP_TOKEN);
+  return canEnsureFeishuWorkspace();
 }
 
 function normalizeTableName(name: string) {
   return name.replace(/\s+/g, "").toLowerCase();
 }
 
-async function listBitableTables() {
-  const appToken = process.env.FEISHU_BITABLE_APP_TOKEN;
-
-  if (!appToken) {
-    throw new Error("请先配置 FEISHU_BITABLE_APP_TOKEN");
-  }
-
-  const accessToken = await getFeishuAppAccessToken();
+async function listBitableTables(appToken: string) {
+  const accessToken = await getFeishuTenantAccessToken();
   const tables: BitableTable[] = [];
   let pageToken = "";
 
@@ -294,14 +289,8 @@ async function listBitableTables() {
   return tables;
 }
 
-async function createBitableTable(key: TableKey) {
-  const appToken = process.env.FEISHU_BITABLE_APP_TOKEN;
-
-  if (!appToken) {
-    throw new Error("请先配置 FEISHU_BITABLE_APP_TOKEN");
-  }
-
-  const accessToken = await getFeishuAppAccessToken();
+async function createBitableTable(key: TableKey, appToken: string) {
+  const accessToken = await getFeishuTenantAccessToken();
   const definition = tableDefinitions[key];
   const response = await fetch(`https://open.feishu.cn/open-apis/bitable/v1/apps/${appToken}/tables`, {
     method: "POST",
@@ -328,14 +317,8 @@ async function createBitableTable(key: TableKey) {
   return tableId;
 }
 
-async function listBitableFields(tableId: string) {
-  const appToken = process.env.FEISHU_BITABLE_APP_TOKEN;
-
-  if (!appToken) {
-    throw new Error("请先配置 FEISHU_BITABLE_APP_TOKEN");
-  }
-
-  const accessToken = await getFeishuAppAccessToken();
+async function listBitableFields(tableId: string, appToken: string) {
+  const accessToken = await getFeishuTenantAccessToken();
   const fields: BitableField[] = [];
   let pageToken = "";
 
@@ -368,9 +351,11 @@ async function listBitableFields(tableId: string) {
   return fields;
 }
 
-async function resolveTableIds(options: { autoCreate?: boolean } = {}) {
+async function resolveTableIds(user?: FeishuUser, options: { autoCreate?: boolean } = {}) {
   const resolved: Partial<Record<TableKey, string>> = {};
   const createdTables: string[] = [];
+  const workspace = await ensureFeishuWorkspace(user);
+  const appToken = workspace.appToken;
 
   for (const key of Object.keys(tableEnv) as TableKey[]) {
     const tableId = process.env[tableEnv[key]]?.trim();
@@ -380,23 +365,18 @@ async function resolveTableIds(options: { autoCreate?: boolean } = {}) {
     }
   }
 
-  if (!process.env.FEISHU_BITABLE_APP_TOKEN) {
-    return {
-      tableIds: resolved,
-      createdTables
-    };
-  }
-
   const unresolvedKeys = (Object.keys(tableEnv) as TableKey[]).filter((key) => !resolved[key]);
 
   if (!unresolvedKeys.length) {
     return {
+      appToken,
       tableIds: resolved,
-      createdTables
+      createdTables,
+      workspaceCreated: workspace.created
     };
   }
 
-  const tables = await listBitableTables();
+  const tables = await listBitableTables(appToken);
   const tableByName = new Map(tables.map((table) => [normalizeTableName(table.name), table.table_id]));
 
   for (const key of unresolvedKeys) {
@@ -411,25 +391,21 @@ async function resolveTableIds(options: { autoCreate?: boolean } = {}) {
 
   if (options.autoCreate !== false) {
     for (const key of unresolvedKeys.filter((tableKey) => !resolved[tableKey])) {
-      resolved[key] = await createBitableTable(key);
+      resolved[key] = await createBitableTable(key, appToken);
       createdTables.push(tableLabels[key]);
     }
   }
 
   return {
+    appToken,
     tableIds: resolved,
-    createdTables
+    createdTables,
+    workspaceCreated: workspace.created
   };
 }
 
-async function searchBitableRecords(tableId: string) {
-  const appToken = process.env.FEISHU_BITABLE_APP_TOKEN;
-
-  if (!appToken) {
-    throw new Error("请先配置 FEISHU_BITABLE_APP_TOKEN");
-  }
-
-  const accessToken = await getFeishuAppAccessToken();
+async function searchBitableRecords(tableId: string, appToken: string) {
+  const accessToken = await getFeishuTenantAccessToken();
   const records: BitableRecord[] = [];
   let pageToken = "";
 
@@ -467,14 +443,8 @@ async function searchBitableRecords(tableId: string) {
   return records;
 }
 
-async function createBitableRecord(tableId: string, fields: Record<string, unknown>) {
-  const appToken = process.env.FEISHU_BITABLE_APP_TOKEN;
-
-  if (!appToken) {
-    throw new Error("请先配置 FEISHU_BITABLE_APP_TOKEN");
-  }
-
-  const accessToken = await getFeishuAppAccessToken();
+async function createBitableRecord(tableId: string, fields: Record<string, unknown>, appToken: string) {
+  const accessToken = await getFeishuTenantAccessToken();
   const url = new URL(`https://open.feishu.cn/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/records`);
   url.searchParams.set("user_id_type", "open_id");
 
@@ -874,7 +844,7 @@ function normalizeCreateDocument(values: Record<string, unknown>, id = createLoc
   };
 }
 
-async function getTableIdForType(type: DashboardEntityType) {
+async function getTableIdForType(type: DashboardEntityType, user?: FeishuUser) {
   const tableKeyByType: Record<DashboardEntityType, TableKey> = {
     project: "projects",
     task: "tasks",
@@ -883,9 +853,10 @@ async function getTableIdForType(type: DashboardEntityType) {
     document: "documents"
   };
   const key = tableKeyByType[type];
-  const { tableIds } = await resolveTableIds();
+  const { appToken, tableIds } = await resolveTableIds(user);
 
   return {
+    appToken,
     key,
     tableId: tableIds[key]
   };
@@ -1050,12 +1021,16 @@ function mapInsights(records: BitableRecord[]) {
     .slice(0, 5);
 }
 
-async function loadTable<T>(tableId: string | undefined, mapper: (records: BitableRecord[]) => T[]) {
+async function loadTable<T>(
+  appToken: string,
+  tableId: string | undefined,
+  mapper: (records: BitableRecord[]) => T[]
+) {
   if (!tableId) {
     return null;
   }
 
-  return mapper(await searchBitableRecords(tableId));
+  return mapper(await searchBitableRecords(tableId, appToken));
 }
 
 function createMetrics(data: DashboardData) {
@@ -1078,31 +1053,31 @@ function createMetrics(data: DashboardData) {
 export async function getDashboardData(user?: FeishuUser): Promise<DashboardData> {
   const data = cloneMockData();
 
-  if (!process.env.FEISHU_BITABLE_APP_TOKEN) {
+  if (!canEnsureFeishuWorkspace()) {
     return {
       ...data,
       meta: {
         source: "mock",
         user,
-        missingConfig: ["FEISHU_BITABLE_APP_TOKEN"],
-        message: "未配置飞书多维表格，当前使用本地演示数据。"
+        missingConfig: ["FEISHU_APP_ID", "FEISHU_APP_SECRET"],
+        message: "未配置飞书应用身份，当前使用本地演示数据。"
       }
     };
   }
 
-  const { tableIds, createdTables } = await resolveTableIds();
+  const { appToken, tableIds, createdTables, workspaceCreated } = await resolveTableIds(user);
   const loadedTables: string[] = [];
   const missingTables = (Object.keys(tableEnv) as TableKey[])
     .filter((key) => !tableIds[key])
     .map((key) => tableLabels[key]);
 
   const [projects, tasks, risks, requirements, documents, insights] = await Promise.all([
-    loadTable(tableIds.projects, mapProjects),
-    loadTable(tableIds.tasks, mapTasks),
-    loadTable(tableIds.risks, mapRisks),
-    loadTable(tableIds.requirements, mapRequirements),
-    loadTable(tableIds.documents, mapDocuments),
-    loadTable(tableIds.insights, mapInsights)
+    loadTable(appToken, tableIds.projects, mapProjects),
+    loadTable(appToken, tableIds.tasks, mapTasks),
+    loadTable(appToken, tableIds.risks, mapRisks),
+    loadTable(appToken, tableIds.requirements, mapRequirements),
+    loadTable(appToken, tableIds.documents, mapDocuments),
+    loadTable(appToken, tableIds.insights, mapInsights)
   ]);
 
   if (projects) {
@@ -1142,8 +1117,9 @@ export async function getDashboardData(user?: FeishuUser): Promise<DashboardData
     loadedTables,
     missingTables,
     createdTables,
+    missingConfig: [],
     message: loadedTables.length
-      ? `已接入飞书多维表格：${loadedTables.join("、")}`
+      ? `${workspaceCreated ? "已自动创建飞书项目管理工作区，并" : "已"}接入飞书多维表格：${loadedTables.join("、")}`
       : "飞书多维表格未返回数据，当前使用本地演示数据。"
   };
 
@@ -1155,22 +1131,30 @@ export async function createDashboardRecord<T extends DashboardEntityType>(
   values: Record<string, unknown>,
   user?: FeishuUser
 ): Promise<CreateRecordResult<T>> {
-  const { key, tableId } = await getTableIdForType(type);
   const mockRecord = createMockRecord(type, values);
 
-  if (!process.env.FEISHU_BITABLE_APP_TOKEN || !tableId) {
+  if (!canEnsureFeishuWorkspace()) {
     return {
       type,
       record: mockRecord,
       persisted: false,
-      message: !process.env.FEISHU_BITABLE_APP_TOKEN
-        ? "缺少 FEISHU_BITABLE_APP_TOKEN，无法写入飞书。已在当前页面临时创建，刷新后会丢失。"
-        : `未识别到飞书${tableLabels[key]}表，已在当前页面临时创建。`
+      message: "缺少 FEISHU_APP_ID 或 FEISHU_APP_SECRET，无法创建飞书工作区。已在当前页面临时创建，刷新后会丢失。"
     };
   }
 
-  const tableFields = await listBitableFields(tableId);
-  const createdRecord = await createBitableRecord(tableId, createFieldsForType(type, values, tableFields));
+  const { appToken, key, tableId } = await getTableIdForType(type, user);
+
+  if (!tableId) {
+    return {
+      type,
+      record: mockRecord,
+      persisted: false,
+      message: `未识别到飞书${tableLabels[key]}表，已在当前页面临时创建。`
+    };
+  }
+
+  const tableFields = await listBitableFields(tableId, appToken);
+  const createdRecord = await createBitableRecord(tableId, createFieldsForType(type, values, tableFields), appToken);
   const ownerOpenId = asOwnerOpenId(values);
   let notifyMessage = "";
 

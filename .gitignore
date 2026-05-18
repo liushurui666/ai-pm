@@ -2,6 +2,7 @@
 node_modules/
 .pnpm-store/
 .playwright-mcp/
+.ai-pm/
 
 .env
 .env.local
