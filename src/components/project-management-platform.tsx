@@ -239,15 +239,8 @@ export function ProjectManagementPlatform() {
   }, [data, projectFilter]);
 
   const ownerOptions = useMemo(() => {
-    const currentUser = data?.meta?.user;
-    const mergedPeople = [...people];
-
-    if (currentUser?.openId && !mergedPeople.some((person) => person.openId === currentUser.openId)) {
-      mergedPeople.unshift(currentUser);
-    }
-
-    return mergedPeople;
-  }, [data?.meta?.user, people]);
+    return people;
+  }, [people]);
 
   const projectColumns: ColumnsType<Project> = [
     {
@@ -1400,7 +1393,7 @@ function OwnerSelect({
         <Select
           showSearch
           loading={loading}
-          disabled={Boolean(error) && !people.length}
+          disabled={Boolean(error) || !people.length}
           placeholder="从飞书通讯录选择负责人"
           optionFilterProp="label"
           options={people.map((person) => ({
@@ -1420,21 +1413,21 @@ function OwnerSelect({
       <Form.Item name="owner" hidden>
         <Input />
       </Form.Item>
-      {error && !people.length ? (
+      {error ? (
         <Alert
           className="pm-form-alert"
           type="error"
           showIcon
-          title="无法读取飞书通讯录"
-          description={error}
+          title="通讯录权限不足，无法选择负责人"
+          description={`请在飞书开放平台把应用通讯录权限范围设置为全员或目标部门，并开通通讯录用户读取权限。原始错误：${error}`}
         />
-      ) : error ? (
+      ) : !people.length && !loading ? (
         <Alert
           className="pm-form-alert"
           type="warning"
           showIcon
-          title="通讯录权限不足"
-          description={`已保留当前登录用户可选。若要选择其他负责人，请在飞书开放平台补充通讯录用户读取权限。原始错误：${error}`}
+          title="通讯录暂无可选成员"
+          description="飞书接口没有返回成员。请确认应用通讯录权限范围包含需要选择的部门成员。"
         />
       ) : (
         <Text className="pm-form-note" type="secondary">

@@ -16,16 +16,34 @@ type FeishuContactUser = {
   avatar_url?: string;
 };
 
-type FeishuUserListResponse = {
+type FeishuDepartment = {
+  department_id?: string;
+  open_department_id?: string;
+  name?: string;
+};
+
+type FeishuListResponse<T> = {
   code: number;
   msg?: string;
   message?: string;
+  error?: {
+    message?: string;
+  };
   data?: {
-    items?: FeishuContactUser[];
+    items?: T[];
     has_more?: boolean;
     page_token?: string;
   };
 };
+
+function getFeishuContactError(
+  payload: { code?: number; msg?: string; message?: string; error?: { message?: string } },
+  fallback: string
+) {
+  const message = payload.msg || payload.message || payload.error?.message || fallback;
+
+  return payload.code === undefined ? message : `${message}（code: ${payload.code}）`;
+}
 
 function mapContactUser(user: FeishuContactUser): FeishuPerson | null {
   if (!user.open_id || !user.name) {
@@ -43,14 +61,59 @@ function mapContactUser(user: FeishuContactUser): FeishuPerson | null {
   };
 }
 
-export async function listFeishuPeople(query = "") {
-  const accessToken = await getFeishuTenantAccessToken();
+async function listAllVisibleDepartmentIds(accessToken: string) {
+  const departmentIds = new Set<string>(["0"]);
+  let pageToken = "";
+
+  do {
+    const url = new URL("https://open.feishu.cn/open-apis/contact/v3/departments/0/children");
+    url.searchParams.set("department_id_type", "open_department_id");
+    url.searchParams.set("user_id_type", "open_id");
+    url.searchParams.set("fetch_child", "true");
+    url.searchParams.set("page_size", "100");
+
+    if (pageToken) {
+      url.searchParams.set("page_token", pageToken);
+    }
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      },
+      cache: "no-store"
+    });
+    const payload = (await response.json()) as FeishuListResponse<FeishuDepartment>;
+
+    if (!response.ok || payload.code !== 0) {
+      throw new Error(
+        getFeishuContactError(
+          payload,
+          "读取飞书部门失败，请在飞书开放平台把应用通讯录权限范围设置为全员或目标部门"
+        )
+      );
+    }
+
+    for (const department of payload.data?.items ?? []) {
+      const departmentId = department.open_department_id || department.department_id;
+
+      if (departmentId) {
+        departmentIds.add(departmentId);
+      }
+    }
+
+    pageToken = payload.data?.has_more ? payload.data.page_token ?? "" : "";
+  } while (pageToken && departmentIds.size < 1_000);
+
+  return [...departmentIds];
+}
+
+async function listDepartmentPeople(accessToken: string, departmentId: string) {
   const people: FeishuPerson[] = [];
   let pageToken = "";
 
   do {
-    const url = new URL("https://open.feishu.cn/open-apis/contact/v3/users");
-    url.searchParams.set("department_id", "0");
+    const url = new URL("https://open.feishu.cn/open-apis/contact/v3/users/find_by_department");
+    url.searchParams.set("department_id", departmentId);
     url.searchParams.set("department_id_type", "open_department_id");
     url.searchParams.set("user_id_type", "open_id");
     url.searchParams.set("page_size", "50");
@@ -65,17 +128,44 @@ export async function listFeishuPeople(query = "") {
       },
       cache: "no-store"
     });
-    const payload = (await response.json()) as FeishuUserListResponse;
+    const payload = (await response.json()) as FeishuListResponse<FeishuContactUser>;
 
     if (!response.ok || payload.code !== 0) {
       throw new Error(
-        payload.msg || payload.message || "读取飞书通讯录失败，请确认应用已开通通讯录用户读取权限"
+        getFeishuContactError(
+          payload,
+          "读取飞书部门成员失败，请确认应用已开通通讯录用户读取权限"
+        )
       );
     }
 
     people.push(...(payload.data?.items ?? []).map(mapContactUser).filter((user): user is FeishuPerson => Boolean(user)));
     pageToken = payload.data?.has_more ? payload.data.page_token ?? "" : "";
-  } while (pageToken && people.length < 200);
+  } while (pageToken && people.length < 500);
+
+  return people;
+}
+
+export async function listFeishuPeople(query = "") {
+  const accessToken = await getFeishuTenantAccessToken();
+  const peopleByOpenId = new Map<string, FeishuPerson>();
+  const departmentIds = await listAllVisibleDepartmentIds(accessToken);
+
+  for (const departmentId of departmentIds) {
+    const departmentPeople = await listDepartmentPeople(accessToken, departmentId);
+
+    for (const person of departmentPeople) {
+      peopleByOpenId.set(person.openId, person);
+    }
+
+    if (peopleByOpenId.size >= 1_000) {
+      break;
+    }
+  }
+
+  const people = [...peopleByOpenId.values()].sort((left, right) =>
+    left.name.localeCompare(right.name, "zh-Hans-CN")
+  );
 
   const keyword = query.trim().toLowerCase();
 
