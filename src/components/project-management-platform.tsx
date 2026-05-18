@@ -34,11 +34,13 @@ import {
   Timeline,
   Tooltip,
   Typography,
+  Upload,
   message,
   theme
 } from "antd";
 import type { BadgeProps } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import type { UploadFile } from "antd/es/upload/interface";
 import {
   AlertOutlined,
   ApiOutlined,
@@ -49,6 +51,7 @@ import {
   DashboardOutlined,
   FileTextOutlined,
   FolderOpenOutlined,
+  InboxOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -58,7 +61,8 @@ import {
   RobotOutlined,
   SearchOutlined,
   SendOutlined,
-  ThunderboltOutlined
+  ThunderboltOutlined,
+  UploadOutlined
 } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import dayjs from "dayjs";
@@ -72,7 +76,7 @@ import type {
   Task,
   TaskStage
 } from "@/types/dashboard";
-import type { CreateRecordResult, DashboardEntityType } from "@/types/records";
+import type { CreateRecordResult, DashboardEntityType, DocumentAnalyzeResult } from "@/types/records";
 
 const { Header, Sider, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
@@ -127,6 +131,8 @@ export function ProjectManagementPlatform() {
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [createType, setCreateType] = useState<DashboardEntityType | null>(null);
   const [createSubmitting, setCreateSubmitting] = useState(false);
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
+  const [breakdownSubmitting, setBreakdownSubmitting] = useState(false);
   const [activeView, setActiveView] = useState("overview");
   const [projectFilter, setProjectFilter] = useState("全部");
   const [people, setPeople] = useState<FeishuPerson[]>([]);
@@ -141,6 +147,8 @@ export function ProjectManagementPlatform() {
   const [chatLoading, setChatLoading] = useState(false);
   const [form] = Form.useForm<{ message: string }>();
   const [createForm] = Form.useForm<Record<string, unknown>>();
+  const [breakdownForm] = Form.useForm<Record<string, unknown>>();
+  const [messageApi, messageContextHolder] = message.useMessage();
   const screens = useBreakpoint();
   const isMobile = !screens.md;
 
@@ -153,7 +161,7 @@ export function ProjectManagementPlatform() {
         const nextData = (await response.json()) as DashboardData & { error?: string };
 
         if (response.status === 401) {
-          window.location.href = "/login";
+          window.location.assign("/login");
 
           return;
         }
@@ -195,7 +203,7 @@ export function ProjectManagementPlatform() {
         const payload = (await response.json()) as PeopleResponse;
 
         if (response.status === 401) {
-          window.location.href = "/login";
+          window.location.assign("/login");
 
           return;
         }
@@ -381,7 +389,7 @@ export function ProjectManagementPlatform() {
       const payload = (await response.json()) as { reply?: string; error?: string };
 
       if (response.status === 401) {
-        window.location.href = "/login";
+        window.location.assign("/login");
 
         return;
       }
@@ -404,11 +412,23 @@ export function ProjectManagementPlatform() {
     createForm.setFieldsValue(getCreateInitialValues(type));
   }
 
+  function openDocumentBreakdownDrawer(project?: string) {
+    setBreakdownOpen(true);
+    breakdownForm.resetFields();
+
+    if (project) {
+      breakdownForm.setFieldsValue({
+        project
+      });
+    }
+  }
+
   async function handleCreateRecord(values: Record<string, unknown>) {
     if (!createType) {
       return;
     }
 
+    const submittedType = createType;
     setCreateSubmitting(true);
 
     try {
@@ -425,7 +445,7 @@ export function ProjectManagementPlatform() {
       const payload = (await response.json()) as CreateRecordResult | { error?: string };
 
       if (response.status === 401) {
-        window.location.href = "/login";
+        window.location.assign("/login");
 
         return;
       }
@@ -441,13 +461,79 @@ export function ProjectManagementPlatform() {
       const result = payload as CreateRecordResult;
 
       setData((current) => (current ? updateDashboardWithRecord(current, result) : current));
-      message.success(result.message);
+      messageApi.success(result.message);
       setCreateType(null);
       createForm.resetFields();
+
+      if (submittedType === "project") {
+        const project = result.record as Project;
+
+        setActiveView("docs");
+        openDocumentBreakdownDrawer(project.name);
+      }
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "创建失败");
+      messageApi.error(error instanceof Error ? error.message : "创建失败");
     } finally {
       setCreateSubmitting(false);
+    }
+  }
+
+  async function handleAnalyzeDocument(values: Record<string, unknown>) {
+    const file = getSelectedUploadFile(values.fileList);
+
+    if (!file) {
+      messageApi.error("请先上传要拆解的文档");
+
+      return;
+    }
+
+    setBreakdownSubmitting(true);
+
+    try {
+      const formData = new FormData();
+
+      formData.append("file", file);
+      for (const key of ["project", "owner", "ownerOpenId", "ownerUnionId", "ownerUserId", "ownerEmail"]) {
+        const value = values[key];
+
+        if (typeof value === "string") {
+          formData.append(key, value);
+        }
+      }
+
+      const response = await fetch("/api/documents/analyze", {
+        method: "POST",
+        body: formData
+      });
+      const payload = (await response.json()) as DocumentAnalyzeResult & { error?: string };
+
+      if (response.status === 401) {
+        window.location.assign("/login");
+
+        return;
+      }
+
+      if (!response.ok || payload.error) {
+        throw new Error(payload.error || "文档拆解失败");
+      }
+
+      setData((current) => (current ? updateDashboardWithDocumentAnalysis(current, payload) : current));
+      setBreakdownOpen(false);
+      breakdownForm.resetFields();
+      setActiveView("tasks");
+      if (payload.warning) {
+        messageApi.warning(payload.warning);
+      }
+
+      if (payload.source === "ai") {
+        messageApi.success(payload.message);
+      } else {
+        messageApi.warning(payload.message);
+      }
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "文档拆解失败");
+    } finally {
+      setBreakdownSubmitting(false);
     }
   }
 
@@ -504,6 +590,7 @@ export function ProjectManagementPlatform() {
       }}
     >
       <App>
+        {messageContextHolder}
         <Layout className="pm-shell">
           {!isMobile ? (
             <Sider
@@ -653,16 +740,21 @@ export function ProjectManagementPlatform() {
                   {activeView === "docs" ? (
                     <TableView
                       title="文档知识库"
-                      subtitle="集中沉淀 PRD、会议纪要、技术方案和项目复盘。"
+                      subtitle="上传 PRD、会议纪要或技术方案，自动沉淀摘要并拆解任务。"
                       icon={<FileTextOutlined />}
                       extra={
-                        <Button
-                          type="primary"
-                          icon={<PlusOutlined />}
-                          onClick={() => openCreateDrawer("document")}
-                        >
-                          新建文档
-                        </Button>
+                        <Space wrap>
+                          <Button icon={<UploadOutlined />} onClick={() => openDocumentBreakdownDrawer()}>
+                            上传文档拆任务
+                          </Button>
+                          <Button
+                            type="primary"
+                            icon={<PlusOutlined />}
+                            onClick={() => openCreateDrawer("document")}
+                          >
+                            新建文档
+                          </Button>
+                        </Space>
                       }
                     >
                       <Table
@@ -742,6 +834,18 @@ export function ProjectManagementPlatform() {
             onClose={() => setCreateType(null)}
             onSubmit={handleCreateRecord}
           />
+
+          <DocumentBreakdownDrawer
+            form={breakdownForm}
+            open={breakdownOpen}
+            submitting={breakdownSubmitting}
+            projectOptions={projectOptions}
+            people={ownerOptions}
+            peopleLoading={peopleLoading}
+            peopleError={peopleError}
+            onClose={() => setBreakdownOpen(false)}
+            onSubmit={handleAnalyzeDocument}
+          />
         </Layout>
       </App>
     </ConfigProvider>
@@ -785,7 +889,7 @@ function Overview({
           showIcon
           title={data.meta.message}
           description={
-            <Space direction="vertical" size={4}>
+            <Space orientation="vertical" size={4}>
               {data.meta.storage ? (
                 <Text>数据存储：{data.meta.storage}</Text>
               ) : null}
@@ -1292,6 +1396,39 @@ function updateDashboardWithRecord(data: DashboardData, result: CreateRecordResu
   return nextData;
 }
 
+function updateDashboardWithDocumentAnalysis(data: DashboardData, result: DocumentAnalyzeResult): DashboardData {
+  const nextData: DashboardData = {
+    ...data,
+    tasks: [...result.tasks, ...data.tasks],
+    documents: [result.document, ...data.documents],
+    meta: data.meta
+      ? {
+          ...data.meta,
+          message: result.message
+        }
+      : undefined
+  };
+
+  nextData.metrics = recalculateMetrics(nextData);
+
+  return nextData;
+}
+
+function getUploadFileList(event: unknown) {
+  if (Array.isArray(event)) {
+    return event;
+  }
+
+  return (event as { fileList?: UploadFile[] })?.fileList;
+}
+
+function getSelectedUploadFile(value: unknown) {
+  const fileList = Array.isArray(value) ? (value as UploadFile[]) : [];
+  const file = fileList[0]?.originFileObj;
+
+  return file instanceof File ? file : null;
+}
+
 function CreateRecordDrawer({
   form,
   open,
@@ -1363,29 +1500,125 @@ function CreateRecordDrawer({
   );
 }
 
+function DocumentBreakdownDrawer({
+  form,
+  open,
+  submitting,
+  projectOptions,
+  people,
+  peopleLoading,
+  peopleError,
+  onClose,
+  onSubmit
+}: {
+  form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
+  open: boolean;
+  submitting: boolean;
+  projectOptions: string[];
+  people: FeishuPerson[];
+  peopleLoading: boolean;
+  peopleError: string;
+  onClose: () => void;
+  onSubmit: (values: Record<string, unknown>) => void;
+}) {
+  return (
+    <Drawer
+      title={
+        <Space>
+          <UploadOutlined />
+          <span>上传文档拆任务</span>
+        </Space>
+      }
+      open={open}
+      onClose={onClose}
+      size="default"
+      extra={
+        <Space>
+          <Button onClick={onClose}>取消</Button>
+          <Button type="primary" loading={submitting} onClick={() => form.submit()}>
+            AI 拆解并入库
+          </Button>
+        </Space>
+      }
+    >
+      <Form form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
+        <Alert
+          className="pm-form-alert"
+          type="info"
+          showIcon
+          title="上传后会自动生成任务"
+          description="系统会读取文档内容，调用 AI 拆解执行任务，并保存到任务看板。AI 识别到的负责人会优先匹配飞书通讯录，未匹配时使用默认负责人。"
+        />
+        <Form.Item label="所属项目" name="project" rules={[{ required: true, message: "请选择所属项目" }]}>
+          <Select
+            showSearch
+            placeholder="选择项目"
+            options={projectOptions.map((project) => ({
+              value: project,
+              label: project
+            }))}
+          />
+        </Form.Item>
+        <OwnerSelect
+          form={form}
+          people={people}
+          loading={peopleLoading}
+          error={peopleError}
+          required={false}
+          label="默认负责人"
+        />
+        <Form.Item
+          label="文档"
+          name="fileList"
+          valuePropName="fileList"
+          getValueFromEvent={getUploadFileList}
+          rules={[{ required: true, message: "请上传文档" }]}
+        >
+          <Upload.Dragger
+            accept=".docx,.txt,.md,.markdown,.csv,.json"
+            beforeUpload={() => false}
+            maxCount={1}
+            multiple={false}
+          >
+            <p className="ant-upload-drag-icon">
+              <InboxOutlined />
+            </p>
+            <p className="ant-upload-text">点击或拖拽文档到这里</p>
+            <p className="ant-upload-hint">支持 DOCX、Markdown、TXT、CSV、JSON，单个文件不超过 4MB。</p>
+          </Upload.Dragger>
+        </Form.Item>
+      </Form>
+    </Drawer>
+  );
+}
+
 function OwnerSelect({
   form,
   people,
   loading,
-  error
+  error,
+  required = true,
+  label = "负责人"
 }: {
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   people: FeishuPerson[];
   loading: boolean;
   error: string;
+  required?: boolean;
+  label?: string;
 }) {
   return (
     <>
       <Form.Item
-        label="负责人"
+        label={label}
         name="ownerOpenId"
-        rules={[{ required: true, message: "请选择飞书内部负责人" }]}
+        rules={required ? [{ required: true, message: "请选择飞书内部负责人" }] : undefined}
       >
         <Select
           showSearch
           loading={loading}
           disabled={Boolean(error) || !people.length}
-          placeholder="从飞书通讯录选择负责人"
+          placeholder={required ? "从飞书通讯录选择负责人" : "可选，未匹配负责人时使用"}
           optionFilterProp="label"
           options={people.map((person) => ({
             value: person.openId,

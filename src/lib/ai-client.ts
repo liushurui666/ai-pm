@@ -1,4 +1,5 @@
 import type { DashboardData } from "@/types/dashboard";
+import type { DocumentTaskBreakdown } from "@/types/records";
 
 const DEFAULT_AI_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_AI_MODEL = "deepseek-chat";
@@ -83,11 +84,7 @@ function createSystemPrompt() {
   ].join("\n");
 }
 
-export function isAiAssistantConfigured() {
-  return Boolean(getAiApiKey());
-}
-
-export async function createAiAssistantReply(message: string, data: DashboardData) {
+async function createChatCompletion(messages: Array<{ role: "system" | "user"; content: string }>) {
   const apiKey = getAiApiKey();
 
   if (!apiKey) {
@@ -107,20 +104,7 @@ export async function createAiAssistantReply(message: string, data: DashboardDat
       body: JSON.stringify({
         model: getAiModel(),
         temperature: 0.2,
-        messages: [
-          {
-            role: "system",
-            content: createSystemPrompt()
-          },
-          {
-            role: "user",
-            content: [
-              `用户问题：${message}`,
-              "当前项目上下文：",
-              JSON.stringify(compactDashboardContext(data), null, 2)
-            ].join("\n")
-          }
-        ]
+        messages
       }),
       cache: "no-store",
       signal: controller.signal
@@ -141,4 +125,104 @@ export async function createAiAssistantReply(message: string, data: DashboardDat
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export function isAiAssistantConfigured() {
+  return Boolean(getAiApiKey());
+}
+
+export async function createAiAssistantReply(message: string, data: DashboardData) {
+  return createChatCompletion([
+    {
+      role: "system",
+      content: createSystemPrompt()
+    },
+    {
+      role: "user",
+      content: [
+        `用户问题：${message}`,
+        "当前项目上下文：",
+        JSON.stringify(compactDashboardContext(data), null, 2)
+      ].join("\n")
+    }
+  ]);
+}
+
+function extractJsonObject(content: string) {
+  const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced?.[1] ?? content;
+  const start = candidate.indexOf("{");
+  const end = candidate.lastIndexOf("}");
+
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error("AI 没有返回可解析的任务 JSON");
+  }
+
+  return JSON.parse(candidate.slice(start, end + 1)) as Partial<DocumentTaskBreakdown>;
+}
+
+function normalizeBreakdown(payload: Partial<DocumentTaskBreakdown>, fallbackTitle: string): DocumentTaskBreakdown {
+  const allowedTypes = new Set(["PRD", "会议纪要", "技术方案", "复盘"]);
+  const allowedPriorities = new Set(["高", "中", "低"]);
+  const tasks = Array.isArray(payload.tasks) ? payload.tasks : [];
+
+  return {
+    documentTitle: typeof payload.documentTitle === "string" && payload.documentTitle.trim()
+      ? payload.documentTitle.trim()
+      : fallbackTitle,
+    documentType: allowedTypes.has(String(payload.documentType)) ? payload.documentType! : "PRD",
+    summary: typeof payload.summary === "string" && payload.summary.trim()
+      ? payload.summary.trim().slice(0, 260)
+      : "AI 已读取文档并生成任务拆解。",
+    tasks: tasks
+      .map((task) => ({
+        title: typeof task.title === "string" ? task.title.trim() : "",
+        owner: typeof task.owner === "string" ? task.owner.trim() : "",
+        priority: allowedPriorities.has(String(task.priority)) ? task.priority : "中",
+        dueDate: typeof task.dueDate === "string" ? task.dueDate.trim() : "",
+        aiHint: typeof task.aiHint === "string" && task.aiHint.trim()
+          ? task.aiHint.trim().slice(0, 180)
+          : "由上传文档自动拆解生成。"
+      }))
+      .filter((task) => task.title)
+      .slice(0, 12)
+  };
+}
+
+export async function createAiDocumentTaskBreakdown({
+  documentText,
+  fileName,
+  projectName,
+  peopleNames
+}: {
+  documentText: string;
+  fileName: string;
+  projectName: string;
+  peopleNames: string[];
+}) {
+  const reply = await createChatCompletion([
+    {
+      role: "system",
+      content: [
+        "你是 AI 项目管理平台的文档拆解助手。",
+        "你只基于用户上传的文档内容拆解项目任务，不要编造文档之外的事实。",
+        "请输出严格 JSON，不要 Markdown，不要解释。",
+        "JSON 结构：{ \"documentTitle\": string, \"documentType\": \"PRD\"|\"会议纪要\"|\"技术方案\"|\"复盘\", \"summary\": string, \"tasks\": [{ \"title\": string, \"owner\": string, \"priority\": \"高\"|\"中\"|\"低\", \"dueDate\": \"YYYY-MM-DD\", \"aiHint\": string }] }。",
+        "任务 title 应该可执行，owner 优先从可选负责人里选择；如果文档没有负责人，owner 留空。",
+        "最多输出 12 个任务，优先保留明确有交付物、截止时间、依赖或风险的事项。"
+      ].join("\n")
+    },
+    {
+      role: "user",
+      content: [
+        `项目：${projectName}`,
+        `文件名：${fileName}`,
+        `可选负责人：${peopleNames.length ? peopleNames.join("、") : "暂无"}`,
+        "文档内容：",
+        documentText.slice(0, 16_000)
+      ].join("\n")
+    }
+  ]);
+
+  return normalizeBreakdown(extractJsonObject(reply), fileName.replace(/\.[^.]+$/, ""));
 }

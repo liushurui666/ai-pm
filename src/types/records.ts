@@ -16,3 +16,27 @@ export type CreateRecordResult<T extends DashboardEntityType = DashboardEntityTy
   persisted: boolean;
   message: string;
 };
+
+export type DocumentTaskDraft = {
+  title: string;
+  owner?: string;
+  priority: Task["priority"];
+  dueDate?: string;
+  aiHint: string;
+};
+
+export type DocumentTaskBreakdown = {
+  documentTitle: string;
+  documentType: DocumentItem["type"];
+  summary: string;
+  tasks: DocumentTaskDraft[];
+};
+
+export type DocumentAnalyzeResult = {
+  document: DocumentItem;
+  tasks: Task[];
+  source: "ai" | "fallback";
+  extractedChars: number;
+  message: string;
+  warning?: string;
+};
