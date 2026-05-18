@@ -29,6 +29,7 @@ import {
   Space,
   Spin,
   Statistic,
+  Switch,
   Table,
   Tag,
   Timeline,
@@ -73,6 +74,7 @@ import type {
   DashboardData,
   DocumentItem,
   FeishuPerson,
+  FeishuUser,
   Project,
   Requirement,
   Risk,
@@ -125,6 +127,31 @@ type PeopleResponse = {
   people?: FeishuPerson[];
   error?: string;
 };
+
+function normalizeIdentity(value?: string) {
+  return value?.trim().toLowerCase() ?? "";
+}
+
+function isMyTask(task: Task, currentUser?: FeishuUser) {
+  if (!currentUser) {
+    return false;
+  }
+
+  const strictMatches = [
+    [task.ownerOpenId, currentUser.openId],
+    [task.ownerUnionId, currentUser.unionId],
+    [task.ownerUserId, currentUser.userId],
+    [task.ownerEmail, currentUser.email]
+  ];
+
+  if (strictMatches.some(([left, right]) => normalizeIdentity(left) && normalizeIdentity(left) === normalizeIdentity(right))) {
+    return true;
+  }
+
+  const owner = normalizeIdentity(task.owner);
+
+  return [currentUser.name, currentUser.enName, currentUser.email].some((value) => owner && owner === normalizeIdentity(value));
+}
 
 export function ProjectManagementPlatform() {
   const [data, setData] = useState<DashboardData | null>(null);
@@ -768,7 +795,12 @@ export function ProjectManagementPlatform() {
                     />
                   ) : null}
                   {activeView === "tasks" ? (
-                    <TasksView tasks={data.tasks} onCreate={() => openCreateDrawer("task")} onEdit={openEditTaskDrawer} />
+                    <TasksView
+                      tasks={data.tasks}
+                      currentUser={data.meta?.user}
+                      onCreate={() => openCreateDrawer("task")}
+                      onEdit={openEditTaskDrawer}
+                    />
                   ) : null}
                   {activeView === "requirements" ? (
                     <TableView
@@ -1153,12 +1185,26 @@ function ProjectsView({
   );
 }
 
-function TasksView({ tasks, onCreate, onEdit }: { tasks: Task[]; onCreate: () => void; onEdit: (task: Task) => void }) {
+function TasksView({
+  tasks,
+  currentUser,
+  onCreate,
+  onEdit
+}: {
+  tasks: Task[];
+  currentUser?: FeishuUser;
+  onCreate: () => void;
+  onEdit: (task: Task) => void;
+}) {
   const [viewMode, setViewMode] = useState<"table" | "owner">("table");
+  const [onlyMine, setOnlyMine] = useState(false);
+  const visibleTasks = useMemo(() => {
+    return onlyMine ? tasks.filter((task) => isMyTask(task, currentUser)) : tasks;
+  }, [currentUser, onlyMine, tasks]);
   const ownerGroups = useMemo(() => {
     const groups = new Map<string, Task[]>();
 
-    for (const task of tasks) {
+    for (const task of visibleTasks) {
       const owner = task.owner?.trim() || "未分配";
       groups.set(owner, [...(groups.get(owner) ?? []), task]);
     }
@@ -1177,7 +1223,7 @@ function TasksView({ tasks, onCreate, onEdit }: { tasks: Task[]; onCreate: () =>
         })
       }))
       .sort((left, right) => right.tasks.length - left.tasks.length || left.owner.localeCompare(right.owner, "zh-CN"));
-  }, [tasks]);
+  }, [visibleTasks]);
   const taskColumns: ColumnsType<Task> = [
     {
       title: "任务",
@@ -1287,6 +1333,12 @@ function TasksView({ tasks, onCreate, onEdit }: { tasks: Task[]; onCreate: () =>
                 { label: "按负责人", value: "owner", icon: <UserOutlined /> }
               ]}
             />
+            <Tooltip title={currentUser ? `当前登录：${currentUser.name}` : "未获取到登录用户"}>
+              <Space className="task-mine-filter">
+                <Text type="secondary">只看我的</Text>
+                <Switch checked={onlyMine} disabled={!currentUser} onChange={setOnlyMine} />
+              </Space>
+            </Tooltip>
             <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>
               新建任务
             </Button>
@@ -1299,7 +1351,10 @@ function TasksView({ tasks, onCreate, onEdit }: { tasks: Task[]; onCreate: () =>
           <Table
             rowKey="id"
             columns={taskColumns}
-            dataSource={tasks}
+            dataSource={visibleTasks}
+            locale={{
+              emptyText: onlyMine ? "暂无分配给你的任务" : "暂无任务"
+            }}
             pagination={{ pageSize: 12, showSizeChanger: true }}
             scroll={{ x: 1320 }}
             size="middle"
@@ -1358,7 +1413,10 @@ function TasksView({ tasks, onCreate, onEdit }: { tasks: Task[]; onCreate: () =>
             ))
           ) : (
             <Card className="pm-wide">
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无任务，上传文档后会自动生成" />
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={onlyMine ? "暂无分配给你的任务" : "暂无任务，上传文档后会自动生成"}
+              />
             </Card>
           )}
         </div>
