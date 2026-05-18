@@ -2,7 +2,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import dayjs from "dayjs";
 import { dashboardData } from "@/data/dashboard";
-import { sendFeishuBotText } from "@/lib/feishu-message";
+import { sendFeishuBotTaskCard } from "@/lib/feishu-message";
 import type {
   BugReport,
   DashboardData,
@@ -131,7 +131,8 @@ function createOwnerLink(values: Record<string, unknown>) {
     ownerOpenId: asText(values.ownerOpenId) || undefined,
     ownerUnionId: asText(values.ownerUnionId) || undefined,
     ownerUserId: asText(values.ownerUserId) || undefined,
-    ownerEmail: asText(values.ownerEmail) || undefined
+    ownerEmail: asText(values.ownerEmail) || undefined,
+    ownerAvatarUrl: asText(values.ownerAvatarUrl) || undefined
   };
 }
 
@@ -312,11 +313,21 @@ function normalizeDocumentType(value: string): DocumentItem["type"] {
 function createFallbackMilestones({
   dueDate,
   owner,
+  ownerAvatarUrl,
+  ownerEmail,
+  ownerOpenId,
+  ownerUnionId,
+  ownerUserId,
   progress,
   projectName
 }: {
   dueDate: string;
   owner: string;
+  ownerAvatarUrl?: string;
+  ownerEmail?: string;
+  ownerOpenId?: string;
+  ownerUnionId?: string;
+  ownerUserId?: string;
   progress: number;
   projectName: string;
 }): ProjectMilestone[] {
@@ -327,6 +338,11 @@ function createFallbackMilestones({
       status: progress > 0 ? "已完成" : "未开始",
       dueDate: asDateString(dayjs(dueDate).subtract(14, "day").format("YYYY-MM-DD")),
       owner,
+      ownerOpenId,
+      ownerUnionId,
+      ownerUserId,
+      ownerEmail,
+      ownerAvatarUrl,
       note: `${projectName} 立项、目标和成员范围确认。`
     },
     {
@@ -335,6 +351,11 @@ function createFallbackMilestones({
       status: progress >= 100 ? "已完成" : progress >= 60 ? "进行中" : "未开始",
       dueDate,
       owner,
+      ownerOpenId,
+      ownerUnionId,
+      ownerUserId,
+      ownerEmail,
+      ownerAvatarUrl,
       note: "按里程碑确认交付范围、风险和下一步行动。"
     }
   ];
@@ -353,6 +374,11 @@ function normalizeProjectMilestone(
     status: normalizeMilestoneStatus(asText(milestone.status, index === 0 ? "进行中" : "未开始")),
     dueDate: asDateString(milestone.dueDate, fallback.dueDate),
     owner: asText(milestone.owner, fallback.owner),
+    ownerOpenId: asText(milestone.ownerOpenId) || undefined,
+    ownerUnionId: asText(milestone.ownerUnionId) || undefined,
+    ownerUserId: asText(milestone.ownerUserId) || undefined,
+    ownerEmail: asText(milestone.ownerEmail) || undefined,
+    ownerAvatarUrl: asText(milestone.ownerAvatarUrl) || undefined,
     note: asText(milestone.note, "暂无说明。")
   };
 }
@@ -362,6 +388,11 @@ function normalizeProjectMilestones(
   fallback: {
     dueDate: string;
     owner: string;
+    ownerAvatarUrl?: string;
+    ownerEmail?: string;
+    ownerOpenId?: string;
+    ownerUnionId?: string;
+    ownerUserId?: string;
     progress: number;
     projectName: string;
   }
@@ -381,13 +412,14 @@ function normalizeCreateProject(values: Record<string, unknown>, id = createLoca
   const health = Math.min(100, Math.max(0, asNumber(values.health, 80)));
   const name = asText(values.name, "未命名项目");
   const owner = asOwnerName(values);
+  const ownerLink = createOwnerLink(values);
   const dueDate = asDateString(values.dueDate, dayjs().add(14, "day").format("YYYY-MM-DD"));
 
   return {
     id,
     name,
     owner,
-    ...createOwnerLink(values),
+    ...ownerLink,
     status: normalizeProjectStatus(asText(values.status, "进行中")),
     progress,
     health,
@@ -398,6 +430,11 @@ function normalizeCreateProject(values: Record<string, unknown>, id = createLoca
     milestones: normalizeProjectMilestones(values.milestones, {
       dueDate,
       owner,
+      ownerAvatarUrl: ownerLink.ownerAvatarUrl,
+      ownerEmail: ownerLink.ownerEmail,
+      ownerOpenId: ownerLink.ownerOpenId,
+      ownerUnionId: ownerLink.ownerUnionId,
+      ownerUserId: ownerLink.ownerUserId,
       progress,
       projectName: name
     })
@@ -799,10 +836,12 @@ async function notifyOwner(type: DashboardEntityType, values: Record<string, unk
   }
 
   try {
-    await sendFeishuBotText(
-      ownerOpenId,
-      `你被设置为${getEntityLabel(type)}负责人：${getRecordTitle(type, values)}。请在 AI PM 平台查看详情。`
-    );
+    await sendFeishuBotTaskCard({
+      openId: ownerOpenId,
+      title: `你被设置为${getEntityLabel(type)}负责人`,
+      text: `**${getRecordTitle(type, values)}**\n\n请在 AI PM 平台查看详情并确认下一步动作。`,
+      view: type === "project" ? "projects" : type === "bug" ? "bugs" : type === "task" ? "tasks" : "overview"
+    });
 
     return `已通过飞书机器人通知 ${asOwnerName(values)}。`;
   } catch (error) {

@@ -91,6 +91,44 @@
   width: 100%;
 }
 
+.pm-source-alert {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.overview-command {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 16px;
+  align-items: stretch;
+}
+
+.overview-command-main,
+.overview-risk-panel {
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.overview-command-main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.overview-command-main h2 {
+  margin: 12px 0 8px;
+}
+
+.overview-command-main .ant-typography {
+  max-width: 720px;
+}
+
+.overview-risk-panel .ant-divider {
+  margin: 8px 0;
+}
+
 .pm-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 380px;
@@ -150,6 +188,13 @@
 
 .metric-card {
   min-height: 126px;
+}
+
+.metric-description {
+  display: block;
+  max-width: 220px;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .metric-icon {
@@ -329,6 +374,10 @@
   margin-bottom: 4px;
 }
 
+.search-result-item {
+  padding-inline: 0;
+}
+
 .risk-card {
   height: 100%;
 }
@@ -397,6 +446,14 @@
 }
 
 @media (max-width: 1200px) {
+  .overview-command {
+    grid-template-columns: 1fr;
+  }
+
+  .overview-risk-panel {
+    max-width: 560px;
+  }
+
   .pm-hero {
     grid-template-columns: 1fr;
   }

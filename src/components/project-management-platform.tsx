@@ -44,7 +44,6 @@ import type { ColumnsType } from "antd/es/table";
 import type { UploadFile } from "antd/es/upload/interface";
 import {
   AlertOutlined,
-  ApiOutlined,
   BarChartOutlined,
   BugOutlined,
   CalendarOutlined,
@@ -57,6 +56,7 @@ import {
   FileTextOutlined,
   FolderOpenOutlined,
   InboxOutlined,
+  InfoCircleOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -92,6 +92,8 @@ const { Header, Sider, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
 const { useBreakpoint } = Grid;
 
+type AppView = "overview" | "projects" | "tasks" | "bugs" | "requirements" | "risks" | "docs" | "reports";
+
 type ChatMessage = {
   role: "assistant" | "user";
   content: string;
@@ -106,6 +108,7 @@ const entityLabels: Record<DashboardEntityType, string> = {
   requirement: "需求",
   document: "文档"
 };
+const validViews = new Set<AppView>(["overview", "projects", "tasks", "bugs", "requirements", "risks", "docs", "reports"]);
 
 const statusColor: Record<Project["status"], NonNullable<BadgeProps["status"]>> = {
   进行中: "processing",
@@ -164,8 +167,24 @@ type ScheduleItem = {
   project: string;
   date: string;
   owner: string;
+  ownerAvatarUrl?: string;
+  ownerEmail?: string;
+  ownerOpenId?: string;
+  ownerUnionId?: string;
+  ownerUserId?: string;
   status: string;
   color: string;
+};
+
+type SearchResult = {
+  id: string;
+  title: string;
+  description: string;
+  meta: string;
+  owner?: string;
+  ownerAvatarUrl?: string;
+  type: string;
+  view: AppView;
 };
 
 async function fetchDashboardFromApi() {
@@ -183,6 +202,16 @@ async function fetchDashboardFromApi() {
   }
 
   return nextData;
+}
+
+function getInitialView(): AppView {
+  if (typeof window === "undefined") {
+    return "overview";
+  }
+
+  const view = new URLSearchParams(window.location.search).get("view");
+
+  return view && validViews.has(view as AppView) ? (view as AppView) : "overview";
 }
 
 function normalizeIdentity(value?: string) {
@@ -233,6 +262,36 @@ function isMyBug(bug: BugReport, currentUser?: FeishuUser) {
   return userIdentities.some((identity) => owner === identity || reporter === identity);
 }
 
+function isMyOwnerRecord(
+  record: {
+    owner?: string;
+    ownerEmail?: string;
+    ownerOpenId?: string;
+    ownerUnionId?: string;
+    ownerUserId?: string;
+  },
+  currentUser?: FeishuUser
+) {
+  if (!currentUser) {
+    return false;
+  }
+
+  const strictMatches = [
+    [record.ownerOpenId, currentUser.openId],
+    [record.ownerUnionId, currentUser.unionId],
+    [record.ownerUserId, currentUser.userId],
+    [record.ownerEmail, currentUser.email]
+  ];
+
+  if (strictMatches.some(([left, right]) => normalizeIdentity(left) && normalizeIdentity(left) === normalizeIdentity(right))) {
+    return true;
+  }
+
+  const owner = normalizeIdentity(record.owner);
+
+  return [currentUser.name, currentUser.enName, currentUser.email].some((value) => owner && owner === normalizeIdentity(value));
+}
+
 export function ProjectManagementPlatform() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -248,9 +307,11 @@ export function ProjectManagementPlatform() {
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [bugEditSubmitting, setBugEditSubmitting] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const [breakdownSubmitting, setBreakdownSubmitting] = useState(false);
-  const [activeView, setActiveView] = useState("overview");
+  const [activeView, setActiveView] = useState<AppView>(() => getInitialView());
   const [projectFilter, setProjectFilter] = useState("全部");
   const [people, setPeople] = useState<FeishuPerson[]>([]);
   const [peopleLoading, setPeopleLoading] = useState(false);
@@ -389,12 +450,7 @@ export function ProjectManagementPlatform() {
       dataIndex: "owner",
       key: "owner",
       width: 110,
-      render: (owner: string) => (
-        <Space>
-          <Avatar size="small">{owner.slice(0, 1)}</Avatar>
-          <Text>{owner}</Text>
-        </Space>
-      )
+      render: (_, project) => <OwnerInline name={project.owner} avatarUrl={project.ownerAvatarUrl} />
     },
     {
       title: "状态",
@@ -522,9 +578,20 @@ export function ProjectManagementPlatform() {
       return;
     }
 
-    setChatMessages((messages) => [...messages, { role: "user", content: message }]);
+    await submitAssistantQuestion(message);
     form.resetFields();
+  }
+
+  async function submitAssistantQuestion(message: string) {
+    if (chatLoading) {
+      messageApi.warning("AI 助手正在分析上一条问题");
+
+      return;
+    }
+
+    setChatMessages((messages) => [...messages, { role: "user", content: message }]);
     setChatLoading(true);
+    setAssistantOpen(true);
 
     try {
       const response = await fetch("/api/assistant", {
@@ -552,6 +619,10 @@ export function ProjectManagementPlatform() {
     } finally {
       setChatLoading(false);
     }
+  }
+
+  function handleGenerateWeeklyReport() {
+    void submitAssistantQuestion("请基于当前项目、任务、Bug、风险和文档数据，生成一份本周项目汇报，包含总体结论、关键风险、负责人和下周动作。");
   }
 
   function openCreateDrawer(type: DashboardEntityType) {
@@ -635,12 +706,12 @@ export function ProjectManagementPlatform() {
       if (submittedType === "project") {
         const project = result.record as Project;
 
-        setActiveView("docs");
+        switchView("docs");
         openDocumentBreakdownDrawer(project.name);
       }
 
       if (submittedType === "bug") {
-        setActiveView("bugs");
+        switchView("bugs");
       }
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : "创建失败");
@@ -811,7 +882,7 @@ export function ProjectManagementPlatform() {
       const formData = new FormData();
 
       formData.append("file", file);
-      for (const key of ["project", "owner", "ownerOpenId", "ownerUnionId", "ownerUserId", "ownerEmail"]) {
+      for (const key of ["project", "owner", "ownerOpenId", "ownerUnionId", "ownerUserId", "ownerEmail", "ownerAvatarUrl"]) {
         const value = values[key];
 
         if (typeof value === "string") {
@@ -839,7 +910,7 @@ export function ProjectManagementPlatform() {
       void refreshDashboardState();
       setBreakdownOpen(false);
       breakdownForm.resetFields();
-      setActiveView("tasks");
+      switchView("tasks");
       if (payload.warning) {
         messageApi.warning(payload.warning);
       }
@@ -869,6 +940,17 @@ export function ProjectManagementPlatform() {
   const userName = data?.meta?.user?.name ?? "苏";
   const userInitial = userName.slice(0, 1);
   const projectOptions = data?.projects.map((project) => project.name) ?? [];
+  const globalSearchResults = useMemo(() => (data ? createSearchResults(data, searchQuery) : []), [data, searchQuery]);
+
+  function switchView(view: AppView) {
+    setActiveView(view);
+
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("view", view);
+      window.history.replaceState(null, "", url.toString());
+    }
+  }
 
   return (
     <ConfigProvider
@@ -926,7 +1008,7 @@ export function ProjectManagementPlatform() {
                 mode="inline"
                 selectedKeys={[activeView]}
                 items={menuItems}
-                onClick={(item) => setActiveView(item.key)}
+                onClick={(item) => switchView(item.key as AppView)}
               />
             </Sider>
           ) : null}
@@ -948,6 +1030,26 @@ export function ProjectManagementPlatform() {
                   prefix={<SearchOutlined />}
                   placeholder="搜索项目、任务、文档"
                   aria-label="搜索项目、任务、文档"
+                  allowClear
+                  value={searchQuery}
+                  onChange={(event) => {
+                    const value = event.target.value;
+
+                    setSearchQuery(value);
+                    if (!value.trim()) {
+                      setSearchOpen(false);
+                    }
+                  }}
+                  onFocus={() => {
+                    if (searchQuery.trim()) {
+                      setSearchOpen(true);
+                    }
+                  }}
+                  onPressEnter={() => {
+                    if (searchQuery.trim()) {
+                      setSearchOpen(true);
+                    }
+                  }}
                 />
               </Space>
 
@@ -989,7 +1091,7 @@ export function ProjectManagementPlatform() {
                 <Segmented
                   block
                   value={activeView}
-                  onChange={(value) => setActiveView(String(value))}
+                  onChange={(value) => switchView(String(value) as AppView)}
                   options={[
                     { label: "工作台", value: "overview" },
                     { label: "项目", value: "projects" },
@@ -1015,8 +1117,10 @@ export function ProjectManagementPlatform() {
                   {activeView === "overview" ? (
                     <Overview
                       data={data}
+                      onGenerateReport={handleGenerateWeeklyReport}
                       onOpenAssistant={() => setAssistantOpen(true)}
-                      onViewRisks={() => setActiveView("risks")}
+                      onViewProjects={() => switchView("projects")}
+                      onViewRisks={() => switchView("risks")}
                     />
                   ) : null}
                   {activeView === "projects" ? (
@@ -1101,7 +1205,9 @@ export function ProjectManagementPlatform() {
                       />
                     </TableView>
                   ) : null}
-                  {activeView === "reports" ? <ReportsView data={data} /> : null}
+                  {activeView === "reports" ? (
+                    <ReportsView data={data} onGenerateReport={handleGenerateWeeklyReport} />
+                  ) : null}
                 </>
               )}
             </Content>
@@ -1208,8 +1314,23 @@ export function ProjectManagementPlatform() {
           {data ? (
             <ScheduleDrawer
               data={data}
+              currentUser={data.meta?.user}
               open={scheduleOpen}
               onClose={() => setScheduleOpen(false)}
+            />
+          ) : null}
+
+          {data ? (
+            <SearchDrawer
+              open={searchOpen}
+              query={searchQuery}
+              results={globalSearchResults}
+              onClose={() => setSearchOpen(false)}
+              onOpenView={(view) => {
+                switchView(view);
+                setSearchOpen(false);
+              }}
+              onQueryChange={setSearchQuery}
             />
           ) : null}
 
@@ -1246,23 +1367,103 @@ function Brand({ collapsed }: { collapsed: boolean }) {
   );
 }
 
+function getOwnerInitial(name?: string) {
+  return (name?.trim() || "未").slice(0, 1);
+}
+
+function OwnerAvatar({
+  avatarUrl,
+  name,
+  size = "small"
+}: {
+  avatarUrl?: string;
+  name?: string;
+  size?: "small" | "default";
+}) {
+  return (
+    <Avatar size={size} src={avatarUrl}>
+      {getOwnerInitial(name)}
+    </Avatar>
+  );
+}
+
+function OwnerInline({
+  avatarUrl,
+  name,
+  secondary
+}: {
+  avatarUrl?: string;
+  name?: string;
+  secondary?: string;
+}) {
+  return (
+    <Space>
+      <OwnerAvatar name={name} avatarUrl={avatarUrl} />
+      <Space orientation="vertical" size={0}>
+        <Text>{name || "未分配"}</Text>
+        {secondary ? <Text type="secondary">{secondary}</Text> : null}
+      </Space>
+    </Space>
+  );
+}
+
+function OwnerOption({ person }: { person: FeishuPerson }) {
+  return (
+    <OwnerInline
+      name={person.name}
+      avatarUrl={person.avatarUrl}
+      secondary={person.email || person.enName}
+    />
+  );
+}
+
+function getPersonSearchText(person: FeishuPerson) {
+  return [person.name, person.enName, person.email, person.openId].filter(Boolean).join(" ");
+}
+
+function getOwnerSelectOptions(people: FeishuPerson[]) {
+  return people.map((person) => ({
+    value: person.openId,
+    displayName: person.name,
+    label: <OwnerOption person={person} />,
+    searchText: getPersonSearchText(person)
+  }));
+}
+
+function filterOwnerOption(input: string, option?: { searchText?: string }) {
+  return (option?.searchText ?? "").toLowerCase().includes(input.trim().toLowerCase());
+}
+
 function Overview({
   data,
+  onGenerateReport,
   onOpenAssistant,
+  onViewProjects,
   onViewRisks
 }: {
   data: DashboardData;
+  onGenerateReport: () => void;
   onOpenAssistant: () => void;
+  onViewProjects: () => void;
   onViewRisks: () => void;
 }) {
-  const topRiskProject = data.projects.reduce((current, project) =>
-    project.health < current.health ? project : current
-  );
+  const topRiskProject = data.projects.length
+    ? [...data.projects].sort((left, right) => left.health - right.health || right.riskCount - left.riskCount)[0]
+    : null;
+  const focusProjects = [...data.projects]
+    .sort((left, right) => left.health - right.health || right.riskCount - left.riskCount)
+    .slice(0, 3);
+  const urgentTasks = data.tasks
+    .filter((task) => task.stage !== "已完成")
+    .sort((left, right) => dayjs(left.dueDate).valueOf() - dayjs(right.dueDate).valueOf())
+    .slice(0, 4);
+  const aiSavedFormula = `估算口径：需求 ${data.requirements.length} 条 × 3h + 文档 ${data.documents.length} 份 × 2h + 任务 ${data.tasks.length} 条 × 1h + Bug ${data.bugs.length} 条 × 1h。`;
 
   return (
     <Space orientation="vertical" size={18} className="pm-page-stack">
       {data.meta?.message ? (
         <Alert
+          className="pm-source-alert"
           type={data.meta.source === "local" ? "success" : "warning"}
           showIcon
           title={data.meta.message}
@@ -1276,41 +1477,49 @@ function Overview({
           }
         />
       ) : null}
-      <section className="pm-hero">
-        <div className="pm-hero-copy">
+      <section className="overview-command">
+        <div className="overview-command-main">
           <Tag color="blue">AI 项目运营中枢</Tag>
-          <Title level={1}>今天有 3 个项目需要你关注</Title>
+          <Title level={2}>今天优先关注 {focusProjects.filter((project) => project.status === "有风险").length} 个风险项目</Title>
           <Paragraph>
-            系统已综合任务进度、会议待办、风险登记和文档变化，优先建议处理知识库增强项目的权限测试风险。
+            系统已按项目健康度、逾期任务、Bug 严重程度和里程碑状态重新排序，优先处理健康度最低的项目。
           </Paragraph>
           <Space wrap>
-            <Button type="primary" icon={<RobotOutlined />} onClick={onOpenAssistant}>
+            <Button type="primary" icon={<RobotOutlined />} onClick={onGenerateReport}>
               生成本周汇报
             </Button>
             <Button icon={<AlertOutlined />} onClick={onViewRisks}>
               查看风险清单
             </Button>
+            <Button icon={<RobotOutlined />} onClick={onOpenAssistant}>
+              询问 AI 助手
+            </Button>
           </Space>
         </div>
 
-        <div className="pm-hero-panel">
-          <Space orientation="vertical" size={12}>
-            <Flex justify="space-between" align="center">
-              <Text strong>AI 风险判断</Text>
-              <Tag color="red">需要处理</Tag>
-            </Flex>
-            <Title level={4}>{topRiskProject.name}</Title>
-            <Text type="secondary">{topRiskProject.summary}</Text>
-            <Divider />
-            <Row gutter={12}>
-              <Col span={12}>
-                <Statistic title="健康度" value={topRiskProject.health} suffix="/ 100" />
-              </Col>
-              <Col span={12}>
-                <Statistic title="风险数" value={topRiskProject.riskCount} />
-              </Col>
-            </Row>
-          </Space>
+        <div className="overview-risk-panel">
+          {topRiskProject ? (
+            <Space orientation="vertical" size={12} className="pm-wide">
+              <Flex justify="space-between" align="center">
+                <Text strong>最高风险项目</Text>
+                <Tag color={topRiskProject.health < 70 ? "red" : "gold"}>{topRiskProject.status}</Tag>
+              </Flex>
+              <Title level={4}>{topRiskProject.name}</Title>
+              <OwnerInline name={topRiskProject.owner} avatarUrl={topRiskProject.ownerAvatarUrl} />
+              <Text type="secondary">{topRiskProject.summary}</Text>
+              <Divider />
+              <Row gutter={12}>
+                <Col span={12}>
+                  <Statistic title="健康度" value={topRiskProject.health} suffix="/ 100" />
+                </Col>
+                <Col span={12}>
+                  <Statistic title="风险数" value={topRiskProject.riskCount} />
+                </Col>
+              </Row>
+            </Space>
+          ) : (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无项目" />
+          )}
         </div>
       </section>
 
@@ -1342,6 +1551,8 @@ function Overview({
           value={data.metrics.aiSavedHours}
           suffix="小时"
           tone="violet"
+          description={aiSavedFormula}
+          help={aiSavedFormula}
         />
       </Row>
 
@@ -1354,15 +1565,18 @@ function Overview({
                 项目健康度
               </Space>
             }
-            extra={<Button type="link">查看全部</Button>}
+            extra={<Button type="link" onClick={onViewProjects}>查看全部</Button>}
           >
             <Space orientation="vertical" size={16} className="pm-wide">
-              {data.projects.slice(0, 3).map((project) => (
+              {focusProjects.map((project) => (
                 <div className="project-health-row" key={project.id}>
                   <div>
                     <Text strong>{project.name}</Text>
                     <div>
-                      <Text type="secondary">{project.owner} · 截止 {project.dueDate}</Text>
+                      <Space size={6}>
+                        <OwnerAvatar name={project.owner} avatarUrl={project.ownerAvatarUrl} size="small" />
+                        <Text type="secondary">{project.owner} · 截止 {project.dueDate}</Text>
+                      </Space>
                     </div>
                   </div>
                   <div className="project-health-progress">
@@ -1380,17 +1594,31 @@ function Overview({
           <Card
             title={
               <Space>
-                <ApiOutlined />
-                AI 本周洞察
+                <ClockCircleOutlined />
+                近期任务
               </Space>
             }
           >
-            <Timeline
-              items={data.weeklyInsight.map((insight) => ({
-                color: insight.includes("风险") ? "red" : "blue",
-                content: <Text>{insight}</Text>
-              }))}
-            />
+            {urgentTasks.length ? (
+              <List
+                dataSource={urgentTasks}
+                renderItem={(task) => (
+                  <List.Item>
+                    <Space orientation="vertical" size={4} className="pm-wide">
+                      <Flex justify="space-between" align="start" gap={12}>
+                        <Text strong>{task.title}</Text>
+                        <Tag color={priorityColor[task.priority]}>{task.priority}</Tag>
+                      </Flex>
+                      <Text type="secondary">
+                        {task.project} · {task.owner || "未分配"} · {task.dueDate}
+                      </Text>
+                    </Space>
+                  </List.Item>
+                )}
+              />
+            ) : (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无待办任务" />
+            )}
           </Card>
         </Col>
       </Row>
@@ -1399,12 +1627,16 @@ function Overview({
 }
 
 function MetricCard({
+  description,
+  help,
   icon,
   title,
   value,
   suffix,
   tone
 }: {
+  description?: string;
+  help?: string;
   icon: React.ReactNode;
   title: string;
   value: number;
@@ -1415,7 +1647,29 @@ function MetricCard({
     <Col xs={24} sm={12} xl={6}>
       <Card className={`metric-card metric-card-${tone}`}>
         <Flex justify="space-between" align="center">
-          <Statistic title={title} value={value} suffix={suffix} />
+          <Space orientation="vertical" size={4}>
+            <Statistic
+              title={
+                help ? (
+                  <Space size={4}>
+                    <span>{title}</span>
+                    <Tooltip title={help}>
+                      <InfoCircleOutlined />
+                    </Tooltip>
+                  </Space>
+                ) : (
+                  title
+                )
+              }
+              value={value}
+              suffix={suffix}
+            />
+            {description ? (
+              <Text className="metric-description" type="secondary">
+                {description}
+              </Text>
+            ) : null}
+          </Space>
           <div className="metric-icon">{icon}</div>
         </Flex>
       </Card>
@@ -1508,6 +1762,11 @@ function createScheduleItems(data: DashboardData): ScheduleItem[] {
       project: project.name,
       date: milestone.dueDate,
       owner: milestone.owner || project.owner,
+      ownerAvatarUrl: milestone.ownerAvatarUrl || project.ownerAvatarUrl,
+      ownerEmail: milestone.ownerEmail || project.ownerEmail,
+      ownerOpenId: milestone.ownerOpenId || project.ownerOpenId,
+      ownerUnionId: milestone.ownerUnionId || project.ownerUnionId,
+      ownerUserId: milestone.ownerUserId || project.ownerUserId,
       status: milestone.status,
       color: milestoneColor[milestone.status] === "default" ? "gray" : milestoneColor[milestone.status]
     }))
@@ -1519,6 +1778,11 @@ function createScheduleItems(data: DashboardData): ScheduleItem[] {
     project: task.project,
     date: task.dueDate,
     owner: task.owner,
+    ownerAvatarUrl: task.ownerAvatarUrl,
+    ownerEmail: task.ownerEmail,
+    ownerOpenId: task.ownerOpenId,
+    ownerUnionId: task.ownerUnionId,
+    ownerUserId: task.ownerUserId,
     status: task.stage,
     color: task.stage === "已完成" ? "green" : task.stage === "评审中" ? "purple" : task.stage === "进行中" ? "blue" : "gray"
   }));
@@ -1529,6 +1793,11 @@ function createScheduleItems(data: DashboardData): ScheduleItem[] {
     project: bug.project,
     date: bug.dueDate,
     owner: bug.owner || bug.reporter,
+    ownerAvatarUrl: bug.ownerAvatarUrl,
+    ownerEmail: bug.ownerEmail,
+    ownerOpenId: bug.ownerOpenId,
+    ownerUnionId: bug.ownerUnionId,
+    ownerUserId: bug.ownerUserId,
     status: bug.status,
     color: bug.status === "已关闭" ? "green" : bug.severity === "阻塞" || bug.severity === "严重" ? "red" : "gold"
   }));
@@ -1543,19 +1812,26 @@ function getWeekdayLabel(date: string) {
 }
 
 function ScheduleDrawer({
+  currentUser,
   data,
   open,
   onClose
 }: {
+  currentUser?: FeishuUser;
   data: DashboardData;
   open: boolean;
   onClose: () => void;
 }) {
   const [filter, setFilter] = useState<ScheduleItem["type"] | "全部">("全部");
+  const [onlyMine, setOnlyMine] = useState(true);
   const scheduleItems = useMemo(() => createScheduleItems(data), [data]);
+  const scopedItems = useMemo(
+    () => (onlyMine && currentUser ? scheduleItems.filter((item) => isMyOwnerRecord(item, currentUser)) : scheduleItems),
+    [currentUser, onlyMine, scheduleItems]
+  );
   const visibleItems = useMemo(
-    () => (filter === "全部" ? scheduleItems : scheduleItems.filter((item) => item.type === filter)),
-    [filter, scheduleItems]
+    () => (filter === "全部" ? scopedItems : scopedItems.filter((item) => item.type === filter)),
+    [filter, scopedItems]
   );
   const groups = useMemo(() => {
     const groupMap = new Map<string, ScheduleItem[]>();
@@ -1583,11 +1859,19 @@ function ScheduleDrawer({
       onClose={onClose}
       size="large"
       extra={
-        <Segmented
-          value={filter}
-          onChange={(value) => setFilter(value as ScheduleItem["type"] | "全部")}
-          options={["全部", "里程碑", "任务", "Bug"]}
-        />
+        <Space wrap>
+          <Tooltip title={currentUser ? `当前登录：${currentUser.name}` : "未获取到登录用户"}>
+            <Space className="task-mine-filter">
+              <Text type="secondary">只看我的</Text>
+              <Switch checked={onlyMine} disabled={!currentUser} onChange={setOnlyMine} />
+            </Space>
+          </Tooltip>
+          <Segmented
+            value={filter}
+            onChange={(value) => setFilter(value as ScheduleItem["type"] | "全部")}
+            options={["全部", "里程碑", "任务", "Bug"]}
+          />
+        </Space>
       }
     >
       {groups.length ? (
@@ -1613,9 +1897,11 @@ function ScheduleDrawer({
                         <Text strong>{item.title}</Text>
                         <Tag color={item.color}>{item.status}</Tag>
                       </Space>
-                      <Text type="secondary">
-                        {item.project} · {item.owner || "未分配"}
-                      </Text>
+                      <OwnerInline
+                        name={item.owner}
+                        avatarUrl={item.ownerAvatarUrl}
+                        secondary={item.project}
+                      />
                     </Space>
                   )
                 }))}
@@ -1624,8 +1910,167 @@ function ScheduleDrawer({
           ))}
         </Space>
       ) : (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无日程" />
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description={onlyMine ? "暂无与你相关的日程" : "暂无日程"}
+        />
       )}
+    </Drawer>
+  );
+}
+
+function createSearchResults(data: DashboardData, query: string): SearchResult[] {
+  const keyword = query.trim().toLowerCase();
+
+  if (!keyword) {
+    return [];
+  }
+
+  const matches = (values: Array<string | undefined>) =>
+    values.filter(Boolean).some((value) => String(value).toLowerCase().includes(keyword));
+
+  const projectResults = data.projects
+    .filter((project) => matches([project.name, project.owner, project.summary, project.status]))
+    .map((project) => ({
+      id: project.id,
+      title: project.name,
+      description: project.summary,
+      meta: `项目 · ${project.status} · 健康度 ${project.health}`,
+      owner: project.owner,
+      ownerAvatarUrl: project.ownerAvatarUrl,
+      type: "项目",
+      view: "projects" as const
+    }));
+  const taskResults = data.tasks
+    .filter((task) => matches([task.title, task.owner, task.project, task.stage, task.aiHint]))
+    .map((task) => ({
+      id: task.id,
+      title: task.title,
+      description: task.aiHint,
+      meta: `任务 · ${task.stage} · ${task.dueDate}`,
+      owner: task.owner,
+      ownerAvatarUrl: task.ownerAvatarUrl,
+      type: "任务",
+      view: "tasks" as const
+    }));
+  const bugResults = data.bugs
+    .filter((bug) => matches([bug.title, bug.owner, bug.reporter, bug.project, bug.reproduction, bug.actual]))
+    .map((bug) => ({
+      id: bug.id,
+      title: bug.title,
+      description: bug.reproduction,
+      meta: `Bug · ${bug.status} · ${bug.severity}`,
+      owner: bug.owner,
+      ownerAvatarUrl: bug.ownerAvatarUrl,
+      type: "Bug",
+      view: "bugs" as const
+    }));
+  const documentResults = data.documents
+    .filter((document) => matches([document.title, document.type, document.aiSummary]))
+    .map((document) => ({
+      id: document.id,
+      title: document.title,
+      description: document.aiSummary,
+      meta: `文档 · ${document.type} · ${document.updatedAt}`,
+      type: "文档",
+      view: "docs" as const
+    }));
+  const riskResults = data.risks
+    .filter((risk) => matches([risk.title, risk.owner, risk.project, risk.mitigation, risk.level]))
+    .map((risk) => ({
+      id: risk.id,
+      title: risk.title,
+      description: risk.mitigation,
+      meta: `风险 · ${risk.level} · ${risk.project}`,
+      owner: risk.owner,
+      ownerAvatarUrl: risk.ownerAvatarUrl,
+      type: "风险",
+      view: "risks" as const
+    }));
+  const requirementResults = data.requirements
+    .filter((requirement) => matches([requirement.title, requirement.project, requirement.acceptance, requirement.status]))
+    .map((requirement) => ({
+      id: requirement.id,
+      title: requirement.title,
+      description: requirement.acceptance,
+      meta: `需求 · ${requirement.priority} · ${requirement.status}`,
+      type: "需求",
+      view: "requirements" as const
+    }));
+
+  return [...projectResults, ...taskResults, ...bugResults, ...documentResults, ...riskResults, ...requirementResults].slice(0, 30);
+}
+
+function SearchDrawer({
+  onClose,
+  onOpenView,
+  onQueryChange,
+  open,
+  query,
+  results
+}: {
+  onClose: () => void;
+  onOpenView: (view: AppView) => void;
+  onQueryChange: (query: string) => void;
+  open: boolean;
+  query: string;
+  results: SearchResult[];
+}) {
+  return (
+    <Drawer
+      title={
+        <Space>
+          <SearchOutlined />
+          <span>全局搜索</span>
+        </Space>
+      }
+      open={open}
+      onClose={onClose}
+      size="default"
+    >
+      <Space orientation="vertical" size={16} className="pm-wide">
+        <Input.Search
+          allowClear
+          value={query}
+          onChange={(event) => onQueryChange(event.target.value)}
+          placeholder="搜索项目、任务、Bug、文档、风险"
+        />
+        {results.length ? (
+          <List
+            dataSource={results}
+            renderItem={(result) => (
+              <List.Item
+                className="search-result-item"
+                actions={[
+                  <Button type="link" key="open" onClick={() => onOpenView(result.view)}>
+                    打开
+                  </Button>
+                ]}
+              >
+                <List.Item.Meta
+                  avatar={result.owner ? <OwnerAvatar name={result.owner} avatarUrl={result.ownerAvatarUrl} /> : null}
+                  title={
+                    <Space wrap>
+                      <Tag>{result.type}</Tag>
+                      <Text strong>{result.title}</Text>
+                    </Space>
+                  }
+                  description={
+                    <Space orientation="vertical" size={2}>
+                      <Text type="secondary">{result.meta}</Text>
+                      <Text type="secondary" ellipsis>
+                        {result.description}
+                      </Text>
+                    </Space>
+                  }
+                />
+              </List.Item>
+            )}
+          />
+        ) : (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={query.trim() ? "没有匹配结果" : "输入关键词开始搜索"} />
+        )}
+      </Space>
     </Drawer>
   );
 }
@@ -1647,17 +2092,22 @@ function TasksView({
     return onlyMine ? tasks.filter((task) => isMyTask(task, currentUser)) : tasks;
   }, [currentUser, onlyMine, tasks]);
   const ownerGroups = useMemo(() => {
-    const groups = new Map<string, Task[]>();
+    const groups = new Map<string, { avatarUrl?: string; tasks: Task[] }>();
 
     for (const task of visibleTasks) {
       const owner = task.owner?.trim() || "未分配";
-      groups.set(owner, [...(groups.get(owner) ?? []), task]);
+      const current = groups.get(owner) ?? { avatarUrl: task.ownerAvatarUrl, tasks: [] };
+      groups.set(owner, {
+        avatarUrl: current.avatarUrl || task.ownerAvatarUrl,
+        tasks: [...current.tasks, task]
+      });
     }
 
     return Array.from(groups.entries())
-      .map(([owner, ownerTasks]) => ({
+      .map(([owner, group]) => ({
+        avatarUrl: group.avatarUrl,
         owner,
-        tasks: ownerTasks.sort((left, right) => {
+        tasks: group.tasks.sort((left, right) => {
           const stageDelta = taskStages.indexOf(left.stage) - taskStages.indexOf(right.stage);
 
           if (stageDelta !== 0) {
@@ -1695,12 +2145,7 @@ function TasksView({
       dataIndex: "owner",
       key: "owner",
       width: 140,
-      render: (owner: string) => (
-        <Space>
-          <Avatar size="small">{(owner || "未").slice(0, 1)}</Avatar>
-          <Text>{owner || "未分配"}</Text>
-        </Space>
-      )
+      render: (_, task) => <OwnerInline name={task.owner} avatarUrl={task.ownerAvatarUrl} />
     },
     {
       title: "阶段",
@@ -1815,7 +2260,7 @@ function TasksView({
                 title={
                   <Flex justify="space-between" align="center">
                     <Space>
-                      <Avatar size="small">{group.owner.slice(0, 1)}</Avatar>
+                      <OwnerAvatar name={group.owner} avatarUrl={group.avatarUrl} />
                       <Text strong>{group.owner}</Text>
                     </Space>
                     <Badge count={group.tasks.length} color="#2563eb" />
@@ -1959,12 +2404,7 @@ function BugsView({
       dataIndex: "owner",
       key: "owner",
       width: 140,
-      render: (owner: string) => (
-        <Space>
-          <Avatar size="small">{(owner || "未").slice(0, 1)}</Avatar>
-          <Text>{owner || "未分配"}</Text>
-        </Space>
-      )
+      render: (_, bug) => <OwnerInline name={bug.owner} avatarUrl={bug.ownerAvatarUrl} />
     },
     {
       title: "环境",
@@ -2109,7 +2549,7 @@ function RisksView({ risks, onCreate }: { risks: Risk[]; onCreate: () => void })
               <Space orientation="vertical" size={12} className="pm-wide">
                 <Flex justify="space-between" align="center">
                   <Tag color={riskColor[risk.level]}>{risk.level}风险</Tag>
-                  <Text type="secondary">{risk.owner}</Text>
+                  <OwnerInline name={risk.owner} avatarUrl={risk.ownerAvatarUrl} />
                 </Flex>
                 <Title level={4}>{risk.title}</Title>
                 <Text type="secondary">{risk.project}</Text>
@@ -2123,7 +2563,7 @@ function RisksView({ risks, onCreate }: { risks: Risk[]; onCreate: () => void })
   );
 }
 
-function ReportsView({ data }: { data: DashboardData }) {
+function ReportsView({ data, onGenerateReport }: { data: DashboardData; onGenerateReport: () => void }) {
   return (
     <Space orientation="vertical" size={18} className="pm-page-stack">
       <PageTitle
@@ -2131,7 +2571,7 @@ function ReportsView({ data }: { data: DashboardData }) {
         title="报表驾驶舱"
         subtitle="为管理层提供进度、质量、风险和 AI 解释。"
         extra={
-          <Button type="primary" icon={<FileTextOutlined />}>
+          <Button type="primary" icon={<FileTextOutlined />} onClick={onGenerateReport}>
             生成汇报
           </Button>
         }
@@ -2870,11 +3310,10 @@ function OwnerSelect({
           loading={loading}
           disabled={Boolean(error) || !people.length}
           placeholder={required ? "从飞书通讯录选择负责人" : "可选，未匹配负责人时使用"}
-          optionFilterProp="label"
-          options={people.map((person) => ({
-            value: person.openId,
-            label: person.email ? `${person.name} · ${person.email}` : person.name
-          }))}
+          optionFilterProp="displayName"
+          optionLabelProp="displayName"
+          filterOption={(input, option) => filterOwnerOption(input, option as { searchText?: string })}
+          options={getOwnerSelectOptions(people)}
           onChange={(value) => {
             const selectedPerson = people.find((person) => person.openId === value);
 
@@ -2883,6 +3322,7 @@ function OwnerSelect({
               ownerUnionId: selectedPerson?.unionId ?? "",
               ownerUserId: selectedPerson?.userId ?? "",
               ownerEmail: selectedPerson?.email ?? "",
+              ownerAvatarUrl: selectedPerson?.avatarUrl ?? "",
               owner: selectedPerson?.name ?? ""
             });
           }}
@@ -2898,6 +3338,9 @@ function OwnerSelect({
         <Input />
       </Form.Item>
       <Form.Item name="ownerEmail" hidden>
+        <Input />
+      </Form.Item>
+      <Form.Item name="ownerAvatarUrl" hidden>
         <Input />
       </Form.Item>
       {error ? (
@@ -2921,6 +3364,76 @@ function OwnerSelect({
           负责人会保存飞书身份关联，并在创建成功后尝试通过机器人通知。
         </Text>
       )}
+    </>
+  );
+}
+
+function MilestoneOwnerSelect({
+  form,
+  name,
+  people,
+  peopleError,
+  peopleLoading,
+  restField
+}: {
+  form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
+  name: number;
+  people: FeishuPerson[];
+  peopleError: string;
+  peopleLoading: boolean;
+  restField: Record<string, unknown>;
+}) {
+  return (
+    <>
+      <Form.Item
+        {...restField}
+        label="负责人"
+        name={[name, "ownerOpenId"]}
+        rules={!peopleError && people.length ? [{ required: true, message: "请选择飞书成员" }] : undefined}
+      >
+        <Select
+          showSearch
+          loading={peopleLoading}
+          disabled={Boolean(peopleError) || !people.length}
+          placeholder="从飞书通讯录选择"
+          optionFilterProp="displayName"
+          optionLabelProp="displayName"
+          filterOption={(input, option) => filterOwnerOption(input, option as { searchText?: string })}
+          options={getOwnerSelectOptions(people)}
+          onChange={(value) => {
+            const selectedPerson = people.find((person) => person.openId === value);
+            const milestones = [...((form.getFieldValue("milestones") as ProjectMilestone[]) ?? [])];
+
+            milestones[name] = {
+              ...milestones[name],
+              owner: selectedPerson?.name ?? "",
+              ownerOpenId: value,
+              ownerUnionId: selectedPerson?.unionId ?? "",
+              ownerUserId: selectedPerson?.userId ?? "",
+              ownerEmail: selectedPerson?.email ?? "",
+              ownerAvatarUrl: selectedPerson?.avatarUrl ?? ""
+            };
+            form.setFieldsValue({
+              milestones
+            });
+          }}
+        />
+      </Form.Item>
+      <Form.Item {...restField} name={[name, "owner"]} hidden>
+        <Input />
+      </Form.Item>
+      <Form.Item {...restField} name={[name, "ownerUnionId"]} hidden>
+        <Input />
+      </Form.Item>
+      <Form.Item {...restField} name={[name, "ownerUserId"]} hidden>
+        <Input />
+      </Form.Item>
+      <Form.Item {...restField} name={[name, "ownerEmail"]} hidden>
+        <Input />
+      </Form.Item>
+      <Form.Item {...restField} name={[name, "ownerAvatarUrl"]} hidden>
+        <Input />
+      </Form.Item>
     </>
   );
 }
@@ -2996,7 +3509,12 @@ function ProjectFields({
                     title: "",
                     status: "未开始",
                     dueDate: dayjs().add(7, "day"),
-                    owner: "",
+                    owner: form.getFieldValue("owner") || "",
+                    ownerOpenId: form.getFieldValue("ownerOpenId") || "",
+                    ownerUnionId: form.getFieldValue("ownerUnionId") || "",
+                    ownerUserId: form.getFieldValue("ownerUserId") || "",
+                    ownerEmail: form.getFieldValue("ownerEmail") || "",
+                    ownerAvatarUrl: form.getFieldValue("ownerAvatarUrl") || "",
                     note: ""
                   })
                 }
@@ -3038,9 +3556,14 @@ function ProjectFields({
                     <Form.Item {...restField} label="日期" name={[name, "dueDate"]}>
                       <DatePicker className="pm-form-control" />
                     </Form.Item>
-                    <Form.Item {...restField} label="负责人" name={[name, "owner"]}>
-                      <Input placeholder="里程碑负责人" />
-                    </Form.Item>
+                    <MilestoneOwnerSelect
+                      form={form}
+                      name={name}
+                      people={people}
+                      peopleError={peopleError}
+                      peopleLoading={peopleLoading}
+                      restField={restField}
+                    />
                   </div>
                   <Form.Item {...restField} label="说明" name={[name, "note"]} className="project-milestone-note">
                     <Input.TextArea rows={2} placeholder="交付范围、检查点或风险说明" />
@@ -3053,20 +3576,6 @@ function ProjectFields({
       </Form.List>
     </>
   );
-}
-
-function ProjectSelect({
-  projectOptions,
-  value,
-  onChange
-}: {
-  projectOptions: string[];
-  value?: string;
-  onChange?: (value: string) => void;
-}) {
-  const placeholder = projectOptions[0] ? `例如：${projectOptions[0]}` : "输入项目名称";
-
-  return <Input value={value} placeholder={placeholder} onChange={(event) => onChange?.(event.target.value)} />;
 }
 
 function ProjectOptionSelect({
@@ -3125,7 +3634,7 @@ function TaskFields({
         </Col>
       </Row>
       <Form.Item label="关联项目" name="project" rules={[{ required: true, message: "请选择关联项目" }]}>
-        <ProjectSelect projectOptions={projectOptions} />
+        <ProjectOptionSelect projectOptions={projectOptions} />
       </Form.Item>
       <OwnerSelect form={form} people={people} loading={peopleLoading} error={peopleError} />
       <Row gutter={12}>
@@ -3218,7 +3727,6 @@ function BugFields({
         people={people}
         loading={peopleLoading}
         error={peopleError}
-        required={false}
         label="修复负责人"
       />
       <Form.Item label="环境" name="environment" rules={[{ required: true, message: "请输入复现环境" }]}>
@@ -3266,7 +3774,7 @@ function RiskFields({
         </Col>
       </Row>
       <Form.Item label="关联项目" name="project" rules={[{ required: true, message: "请选择关联项目" }]}>
-        <ProjectSelect projectOptions={projectOptions} />
+        <ProjectOptionSelect projectOptions={projectOptions} />
       </Form.Item>
       <Form.Item label="应对措施" name="mitigation">
         <Input.TextArea rows={4} placeholder="处理策略、责任人和检查时间" />
@@ -3294,7 +3802,7 @@ function RequirementFields({ projectOptions }: { projectOptions: string[] }) {
         </Col>
       </Row>
       <Form.Item label="关联项目" name="project" rules={[{ required: true, message: "请选择关联项目" }]}>
-        <ProjectSelect projectOptions={projectOptions} />
+        <ProjectOptionSelect projectOptions={projectOptions} />
       </Form.Item>
       <Form.Item label="验收标准" name="acceptance">
         <Input.TextArea rows={4} placeholder="可量化的验收条件和边界场景" />

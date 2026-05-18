@@ -7,6 +7,11 @@ export type ProjectMilestone = {
   status: ProjectMilestoneStatus;
   dueDate: string;
   owner: string;
+  ownerOpenId?: string;
+  ownerUnionId?: string;
+  ownerUserId?: string;
+  ownerEmail?: string;
+  ownerAvatarUrl?: string;
   note: string;
 };
 
@@ -18,6 +23,7 @@ export type Project = {
   ownerUnionId?: string;
   ownerUserId?: string;
   ownerEmail?: string;
+  ownerAvatarUrl?: string;
   status: ProjectStatus;
   progress: number;
   health: number;
@@ -41,6 +47,7 @@ export type Task = {
   ownerUnionId?: string;
   ownerUserId?: string;
   ownerEmail?: string;
+  ownerAvatarUrl?: string;
   project: string;
   priority: "高" | "中" | "低";
   startDate: string;
@@ -57,6 +64,7 @@ export type Risk = {
   ownerUnionId?: string;
   ownerUserId?: string;
   ownerEmail?: string;
+  ownerAvatarUrl?: string;
   project: string;
   mitigation: string;
 };
@@ -73,6 +81,7 @@ export type BugReport = {
   ownerUnionId?: string;
   ownerUserId?: string;
   ownerEmail?: string;
+  ownerAvatarUrl?: string;
   environment: string;
   reproduction: string;
   expected: string;

@@ -86,7 +86,8 @@ function getFallbackOwner(formData: FormData) {
     ownerOpenId: getFormText(formData, "ownerOpenId"),
     ownerUnionId: getFormText(formData, "ownerUnionId"),
     ownerUserId: getFormText(formData, "ownerUserId"),
-    ownerEmail: getFormText(formData, "ownerEmail")
+    ownerEmail: getFormText(formData, "ownerEmail"),
+    ownerAvatarUrl: getFormText(formData, "ownerAvatarUrl")
   };
 }
 
@@ -99,7 +100,8 @@ function resolveTaskOwner(task: DocumentTaskDraft, people: FeishuPerson[], fallb
       ownerOpenId: matchedOwner.openId,
       ownerUnionId: matchedOwner.unionId ?? "",
       ownerUserId: matchedOwner.userId ?? "",
-      ownerEmail: matchedOwner.email ?? ""
+      ownerEmail: matchedOwner.email ?? "",
+      ownerAvatarUrl: matchedOwner.avatarUrl ?? ""
     };
   }
 
@@ -110,7 +112,8 @@ function resolveTaskOwner(task: DocumentTaskDraft, people: FeishuPerson[], fallb
         ownerOpenId: "",
         ownerUnionId: "",
         ownerUserId: "",
-        ownerEmail: ""
+        ownerEmail: "",
+        ownerAvatarUrl: ""
       };
 }
 
@@ -264,6 +267,7 @@ export async function POST(request: NextRequest) {
         ownerUnionId: owner.ownerUnionId,
         ownerUserId: owner.ownerUserId,
         ownerEmail: owner.ownerEmail,
+        ownerAvatarUrl: owner.ownerAvatarUrl,
         project: projectName,
         priority: task.priority,
         startDate: normalizeStartDate(task.startDate, task.dueDate),
