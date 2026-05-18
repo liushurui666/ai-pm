@@ -21,6 +21,7 @@ export type DocumentTaskDraft = {
   title: string;
   owner?: string;
   priority: Task["priority"];
+  startDate?: string;
   dueDate?: string;
   aiHint: string;
 };

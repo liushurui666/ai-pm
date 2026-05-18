@@ -57,11 +57,14 @@ async function readDatabase() {
 
   try {
     const data = JSON.parse(raw) as LocalDatabase;
+    const migratedData = migrateLocalDatabase({
+      ...cloneSeedData(),
+      ...data
+    });
 
     return {
-      ...cloneSeedData(),
-      ...data,
-      metrics: createMetrics(data)
+      ...migratedData,
+      metrics: createMetrics(migratedData)
     };
   } catch {
     await writeFile(`${DATABASE_FILE}.corrupt-${Date.now()}`, raw, {
@@ -258,6 +261,8 @@ function normalizeCreateProject(values: Record<string, unknown>, id = createLoca
 }
 
 function normalizeCreateTask(values: Record<string, unknown>, id = createLocalId("task")): Task {
+  const dueDate = asDateString(values.dueDate, dayjs().add(7, "day").format("YYYY-MM-DD"));
+
   return {
     id,
     title: asText(values.title, "未命名任务"),
@@ -266,8 +271,29 @@ function normalizeCreateTask(values: Record<string, unknown>, id = createLocalId
     ...createOwnerLink(values),
     project: asText(values.project, "未关联项目"),
     priority: normalizeTaskPriority(asText(values.priority, "中")),
-    dueDate: asDateString(values.dueDate, dayjs().add(7, "day").format("YYYY-MM-DD")),
+    startDate: asDateString(values.startDate, dayjs(dueDate).subtract(3, "day").format("YYYY-MM-DD")),
+    dueDate,
     aiHint: asText(values.aiHint, "AI 暂未发现额外风险。")
+  };
+}
+
+function normalizeExistingTask(task: Task): Task {
+  const dueDate = asDateString(task.dueDate, dayjs().add(7, "day").format("YYYY-MM-DD"));
+
+  return {
+    ...task,
+    dueDate,
+    startDate: asDateString(
+      (task as Task & { startDate?: unknown }).startDate,
+      dayjs(dueDate).subtract(3, "day").format("YYYY-MM-DD")
+    )
+  };
+}
+
+function migrateLocalDatabase(data: LocalDatabase): LocalDatabase {
+  return {
+    ...data,
+    tasks: data.tasks.map(normalizeExistingTask)
   };
 }
 
@@ -437,5 +463,60 @@ export async function createDashboardRecord<T extends DashboardEntityType>(
     record,
     persisted: true,
     message: [`已保存到 AI PM 项目管理平台。`, notifyMessage].filter(Boolean).join(" ")
+  };
+}
+
+export async function updateDashboardRecord<T extends DashboardEntityType>(
+  type: T,
+  id: string,
+  values: Record<string, unknown>
+): Promise<CreateRecordResult<T>> {
+  const data = await readDatabase();
+  const record = createRecord(type, values);
+  const typedRecord = {
+    ...record,
+    id
+  } as DashboardEntityMap[T];
+  let updated = false;
+
+  if (type === "project") {
+    data.projects = data.projects.map((project) => project.id === id ? (typedRecord as Project) : project);
+    updated = data.projects.some((project) => project.id === id);
+  }
+
+  if (type === "task") {
+    data.tasks = data.tasks.map((task) => task.id === id ? (typedRecord as Task) : task);
+    updated = data.tasks.some((task) => task.id === id);
+  }
+
+  if (type === "risk") {
+    data.risks = data.risks.map((risk) => risk.id === id ? (typedRecord as Risk) : risk);
+    updated = data.risks.some((risk) => risk.id === id);
+  }
+
+  if (type === "requirement") {
+    data.requirements = data.requirements.map((requirement) =>
+      requirement.id === id ? (typedRecord as Requirement) : requirement
+    );
+    updated = data.requirements.some((requirement) => requirement.id === id);
+  }
+
+  if (type === "document") {
+    data.documents = data.documents.map((document) => document.id === id ? (typedRecord as DocumentItem) : document);
+    updated = data.documents.some((document) => document.id === id);
+  }
+
+  if (!updated) {
+    throw new Error("记录不存在或已被删除");
+  }
+
+  data.metrics = createMetrics(data);
+  await writeDatabase(data);
+
+  return {
+    type,
+    record: typedRecord,
+    persisted: true,
+    message: `已更新${getEntityLabel(type)}：${getRecordTitle(type, values)}。`
   };
 }

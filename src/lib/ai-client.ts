@@ -233,6 +233,7 @@ function normalizeBreakdown(
         title: typeof task.title === "string" ? sanitizeGeneratedTaskText(task.title, sourceText).trim() : "",
         owner: typeof task.owner === "string" ? task.owner.trim() : "",
         priority: allowedPriorities.has(String(task.priority)) ? task.priority : "中",
+        startDate: typeof task.startDate === "string" ? task.startDate.trim() : "",
         dueDate: typeof task.dueDate === "string" ? task.dueDate.trim() : "",
         aiHint: typeof task.aiHint === "string" && task.aiHint.trim()
           ? sanitizeGeneratedTaskText(task.aiHint, sourceText).trim().slice(0, 180)
@@ -264,7 +265,7 @@ export async function createAiDocumentTaskBreakdown({
           "当前平台技术约束：前端为 Next.js/React/Ant Design；项目管理主数据保存在平台站内数据源；飞书只用于登录、负责人选择和机器人通知；文档上传暂支持 .docx、.txt、.md、.csv、.json 且 4MB 以内。",
           "禁止编造文档没有提到的数据库、接口路径、表名、字段名、缓存表、定时任务、文件格式、文件大小、性能阈值、鉴权协议、权限 scope、第三方系统或组织流程；如果信息不明确，请输出确认/澄清任务。",
           "请输出严格 JSON，不要 Markdown，不要解释。",
-          "JSON 结构：{ \"documentTitle\": string, \"documentType\": \"PRD\"|\"会议纪要\"|\"技术方案\"|\"复盘\", \"summary\": string, \"tasks\": [{ \"title\": string, \"owner\": string, \"priority\": \"高\"|\"中\"|\"低\", \"dueDate\": \"YYYY-MM-DD\", \"aiHint\": string }] }。",
+          "JSON 结构：{ \"documentTitle\": string, \"documentType\": \"PRD\"|\"会议纪要\"|\"技术方案\"|\"复盘\", \"summary\": string, \"tasks\": [{ \"title\": string, \"owner\": string, \"priority\": \"高\"|\"中\"|\"低\", \"startDate\": \"YYYY-MM-DD\", \"dueDate\": \"YYYY-MM-DD\", \"aiHint\": string }] }。",
           "拆解必须按工程交付视角覆盖【前端】【后端】【测试】三类任务；每个明确需求点尽量拆成前端实现、后端支撑、测试验证三个角度。",
           "如果文档没有明确写前端、后端或测试，也必须补出对应的确认/澄清/验收任务，避免遗漏。",
           "前端任务关注页面、组件、交互、状态、表单校验、权限可见性、异常/空状态和响应式体验。",
@@ -273,6 +274,7 @@ export async function createAiDocumentTaskBreakdown({
           "任务标题必须以【前端】、【后端】或【测试】开头，不能只写“开发”“测试”“处理”等笼统标题。",
           "aiHint 必须写清交付物、验收点、依赖或边界，不能少于 20 个中文字符。",
           "任务 title 应该可执行，owner 优先从可选负责人里选择；如果文档没有负责人，owner 留空。",
+          "startDate 和 dueDate 优先使用文档中的时间；如果文档没有开始日期，按任务复杂度给出合理开始日期，不要晚于 dueDate。",
           `输出 ${Math.min(6, DOCUMENT_BREAKDOWN_TASK_LIMIT)}-${DOCUMENT_BREAKDOWN_TASK_LIMIT} 个任务，优先保留明确有交付物、截止时间、依赖或风险的事项。`
         ].join("\n")
       },

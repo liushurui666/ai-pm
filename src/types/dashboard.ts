@@ -30,6 +30,7 @@ export type Task = {
   ownerEmail?: string;
   project: string;
   priority: "高" | "中" | "低";
+  startDate: string;
   dueDate: string;
   aiHint: string;
 };

@@ -52,6 +52,20 @@ function normalizeDueDate(value?: string) {
   return dayjs().add(5, "day").format("YYYY-MM-DD");
 }
 
+function normalizeStartDate(value?: string, dueDate?: string) {
+  const normalizedDueDate = normalizeDueDate(dueDate);
+
+  if (value && dayjs(value).isValid()) {
+    const normalizedStartDate = dayjs(value).format("YYYY-MM-DD");
+
+    return dayjs(normalizedStartDate).isAfter(normalizedDueDate, "day")
+      ? dayjs(normalizedDueDate).subtract(1, "day").format("YYYY-MM-DD")
+      : normalizedStartDate;
+  }
+
+  return dayjs(normalizedDueDate).subtract(3, "day").format("YYYY-MM-DD");
+}
+
 function findMatchedOwner(ownerName: string, people: FeishuPerson[]) {
   const keyword = ownerName.trim().toLowerCase();
 
@@ -252,6 +266,7 @@ export async function POST(request: NextRequest) {
         ownerEmail: owner.ownerEmail,
         project: projectName,
         priority: task.priority,
+        startDate: normalizeStartDate(task.startDate, task.dueDate),
         dueDate: normalizeDueDate(task.dueDate),
         aiHint: task.aiHint
       });

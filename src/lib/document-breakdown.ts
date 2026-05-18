@@ -46,6 +46,13 @@ function inferDueDate(line: string, index: number) {
   return dayjs().add(days, "day").format("YYYY-MM-DD");
 }
 
+function inferStartDate(line: string, index: number) {
+  const dueDate = inferDueDate(line, index);
+  const leadDays = inferPriority(line) === "高" ? 1 : 3;
+
+  return dayjs(dueDate).subtract(leadDays, "day").format("YYYY-MM-DD");
+}
+
 function cleanTaskTitle(line: string) {
   return line
     .replace(/^[-*•\d.、\s]+/, "")
@@ -62,18 +69,21 @@ function createRoleTasks(line: string, index: number) {
     {
       title: `【前端】实现${baseTitle}的页面交互与状态反馈`,
       priority,
+      startDate: inferStartDate(line, index),
       dueDate: inferDueDate(line, index),
       aiHint: `从前端视角拆解：补齐页面/组件、表单校验、权限可见性、异常空状态和响应式体验。原文依据：${line.slice(0, 80)}`
     },
     {
       title: `【后端】支撑${baseTitle}的数据接口与业务规则`,
       priority,
+      startDate: inferStartDate(line, index + 1),
       dueDate: inferDueDate(line, index + 1),
       aiHint: `从后端视角拆解：确认接口、数据模型、鉴权权限、持久化、通知、幂等、日志和异常处理。原文依据：${line.slice(0, 80)}`
     },
     {
       title: `【测试】验证${baseTitle}的主流程与边界场景`,
       priority,
+      startDate: inferStartDate(line, index + 2),
       dueDate: inferDueDate(line, index + 2),
       aiHint: `从测试视角拆解：覆盖测试用例、接口联调、端到端流程、权限边界、异常场景和回归验收。原文依据：${line.slice(0, 80)}`
     }

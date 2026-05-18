@@ -65,6 +65,7 @@ export const dashboardData: DashboardData = {
       owner: "韩越",
       project: "智能项目驾驶舱一期",
       priority: "高",
+      startDate: "2026-05-16",
       dueDate: "2026-05-19",
       aiHint: "依赖任务延期会影响报表可信度，建议今日完成规则确认。"
     },
@@ -75,6 +76,7 @@ export const dashboardData: DashboardData = {
       owner: "许诺",
       project: "AI 周报自动化",
       priority: "中",
+      startDate: "2026-05-15",
       dueDate: "2026-05-20",
       aiHint: "字段稳定后可以复用到月报与复盘报告。"
     },
@@ -85,6 +87,7 @@ export const dashboardData: DashboardData = {
       owner: "阿齐",
       project: "企业知识库增强",
       priority: "高",
+      startDate: "2026-05-14",
       dueDate: "2026-05-17",
       aiHint: "存在越权查询风险，建议提前联合法务和安全复核。"
     },
@@ -95,6 +98,7 @@ export const dashboardData: DashboardData = {
       owner: "李闻",
       project: "智能项目驾驶舱一期",
       priority: "低",
+      startDate: "2026-05-08",
       dueDate: "2026-05-12",
       aiHint: "组件可以沉淀为全站通用 AI 面板。"
     },
@@ -105,6 +109,7 @@ export const dashboardData: DashboardData = {
       owner: "陈澈",
       project: "需求智能拆解",
       priority: "中",
+      startDate: "2026-05-20",
       dueDate: "2026-05-24",
       aiHint: "建议拆分为用户故事、研发任务、测试用例三类输出。"
     }

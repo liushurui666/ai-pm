@@ -49,6 +49,7 @@ import {
   CheckCircleOutlined,
   ClockCircleOutlined,
   DashboardOutlined,
+  EditOutlined,
   FileTextOutlined,
   FolderOpenOutlined,
   InboxOutlined,
@@ -133,6 +134,8 @@ export function ProjectManagementPlatform() {
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [createType, setCreateType] = useState<DashboardEntityType | null>(null);
   const [createSubmitting, setCreateSubmitting] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editSubmitting, setEditSubmitting] = useState(false);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const [breakdownSubmitting, setBreakdownSubmitting] = useState(false);
   const [activeView, setActiveView] = useState("overview");
@@ -149,6 +152,7 @@ export function ProjectManagementPlatform() {
   const [chatLoading, setChatLoading] = useState(false);
   const [form] = Form.useForm<{ message: string }>();
   const [createForm] = Form.useForm<Record<string, unknown>>();
+  const [editForm] = Form.useForm<Record<string, unknown>>();
   const [breakdownForm] = Form.useForm<Record<string, unknown>>();
   const [messageApi, messageContextHolder] = message.useMessage();
   const screens = useBreakpoint();
@@ -414,6 +418,12 @@ export function ProjectManagementPlatform() {
     createForm.setFieldsValue(getCreateInitialValues(type));
   }
 
+  function openEditTaskDrawer(task: Task) {
+    setEditingTask(task);
+    editForm.resetFields();
+    editForm.setFieldsValue(getTaskFormValues(task));
+  }
+
   function openDocumentBreakdownDrawer(project?: string) {
     setBreakdownOpen(true);
     breakdownForm.resetFields();
@@ -477,6 +487,54 @@ export function ProjectManagementPlatform() {
       messageApi.error(error instanceof Error ? error.message : "创建失败");
     } finally {
       setCreateSubmitting(false);
+    }
+  }
+
+  async function handleUpdateTask(values: Record<string, unknown>) {
+    if (!editingTask) {
+      return;
+    }
+
+    setEditSubmitting(true);
+
+    try {
+      const response = await fetch("/api/records", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          type: "task",
+          id: editingTask.id,
+          values: serializeCreateValues(values)
+        })
+      });
+      const payload = (await response.json()) as CreateRecordResult | { error?: string };
+
+      if (response.status === 401) {
+        window.location.assign("/login");
+
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error("error" in payload ? payload.error || "更新任务失败" : "更新任务失败");
+      }
+
+      if ("error" in payload) {
+        throw new Error(payload.error || "更新任务失败");
+      }
+
+      const result = payload as CreateRecordResult;
+
+      setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
+      messageApi.success(result.message);
+      setEditingTask(null);
+      editForm.resetFields();
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "更新任务失败");
+    } finally {
+      setEditSubmitting(false);
     }
   }
 
@@ -710,7 +768,7 @@ export function ProjectManagementPlatform() {
                     />
                   ) : null}
                   {activeView === "tasks" ? (
-                    <TasksView tasks={data.tasks} onCreate={() => openCreateDrawer("task")} />
+                    <TasksView tasks={data.tasks} onCreate={() => openCreateDrawer("task")} onEdit={openEditTaskDrawer} />
                   ) : null}
                   {activeView === "requirements" ? (
                     <TableView
@@ -835,6 +893,18 @@ export function ProjectManagementPlatform() {
             peopleError={peopleError}
             onClose={() => setCreateType(null)}
             onSubmit={handleCreateRecord}
+          />
+
+          <TaskEditDrawer
+            form={editForm}
+            task={editingTask}
+            submitting={editSubmitting}
+            projectOptions={projectOptions}
+            people={ownerOptions}
+            peopleLoading={peopleLoading}
+            peopleError={peopleError}
+            onClose={() => setEditingTask(null)}
+            onSubmit={handleUpdateTask}
           />
 
           <DocumentBreakdownDrawer
@@ -1083,7 +1153,7 @@ function ProjectsView({
   );
 }
 
-function TasksView({ tasks, onCreate }: { tasks: Task[]; onCreate: () => void }) {
+function TasksView({ tasks, onCreate, onEdit }: { tasks: Task[]; onCreate: () => void; onEdit: (task: Task) => void }) {
   const [viewMode, setViewMode] = useState<"table" | "owner">("table");
   const ownerGroups = useMemo(() => {
     const groups = new Map<string, Task[]>();
@@ -1160,6 +1230,14 @@ function TasksView({ tasks, onCreate }: { tasks: Task[]; onCreate: () => void })
       render: (priority: Task["priority"]) => <Tag color={priorityColor[priority]}>{priority}</Tag>
     },
     {
+      title: "开始日期",
+      dataIndex: "startDate",
+      key: "startDate",
+      width: 130,
+      sorter: (left, right) => dayjs(left.startDate).valueOf() - dayjs(right.startDate).valueOf(),
+      render: (startDate: string) => <Text type="secondary">{startDate}</Text>
+    },
+    {
       title: "截止日期",
       dataIndex: "dueDate",
       key: "dueDate",
@@ -1178,6 +1256,17 @@ function TasksView({ tasks, onCreate }: { tasks: Task[]; onCreate: () => void })
       width: 120,
       render: (ownerOpenId?: string) => (
         <Tag color={ownerOpenId ? "green" : "default"}>{ownerOpenId ? "已关联" : "未关联"}</Tag>
+      )
+    },
+    {
+      title: "操作",
+      key: "action",
+      fixed: "right",
+      width: 90,
+      render: (_, task) => (
+        <Button type="link" icon={<EditOutlined />} onClick={() => onEdit(task)}>
+          编辑
+        </Button>
       )
     }
   ];
@@ -1212,7 +1301,7 @@ function TasksView({ tasks, onCreate }: { tasks: Task[]; onCreate: () => void })
             columns={taskColumns}
             dataSource={tasks}
             pagination={{ pageSize: 12, showSizeChanger: true }}
-            scroll={{ x: 1160 }}
+            scroll={{ x: 1320 }}
             size="middle"
           />
         </Card>
@@ -1238,11 +1327,22 @@ function TasksView({ tasks, onCreate }: { tasks: Task[]; onCreate: () => void })
                     <div className="task-card" key={task.id}>
                       <Flex justify="space-between" align="start" gap={12}>
                         <Text strong>{task.title}</Text>
-                        <Tag color={priorityColor[task.priority]}>{task.priority}</Tag>
+                        <Space size={4}>
+                          <Tag color={priorityColor[task.priority]}>{task.priority}</Tag>
+                          <Tooltip title="编辑任务">
+                            <Button
+                              size="small"
+                              type="text"
+                              icon={<EditOutlined />}
+                              onClick={() => onEdit(task)}
+                            />
+                          </Tooltip>
+                        </Space>
                       </Flex>
                       <Space wrap size={[6, 6]} className="task-meta-tags">
                         <Tag>{task.stage}</Tag>
                         <Tag color="blue">{task.project}</Tag>
+                        <Tag>开始 {task.startDate}</Tag>
                         <Tag icon={<CalendarOutlined />}>{task.dueDate}</Tag>
                       </Space>
                       <Alert
@@ -1432,6 +1532,7 @@ function getCreateInitialValues(type: DashboardEntityType) {
     return {
       stage: "待处理",
       priority: "中",
+      startDate: dayjs(),
       dueDate: dayjs().add(7, "day")
     };
   }
@@ -1452,6 +1553,14 @@ function getCreateInitialValues(type: DashboardEntityType) {
   return {
     type: "PRD",
     updatedAt: dayjs()
+  };
+}
+
+function getTaskFormValues(task: Task) {
+  return {
+    ...task,
+    startDate: dayjs(task.startDate),
+    dueDate: dayjs(task.dueDate)
   };
 }
 
@@ -1518,6 +1627,32 @@ function updateDashboardWithRecord(data: DashboardData, result: CreateRecordResu
 
   if (result.type === "document") {
     nextData.documents = [result.record as DocumentItem, ...nextData.documents];
+  }
+
+  nextData.metrics = recalculateMetrics(nextData);
+
+  return nextData;
+}
+
+function updateDashboardWithRecordUpdate(data: DashboardData, result: CreateRecordResult): DashboardData {
+  const nextData: DashboardData = {
+    ...data,
+    projects: [...data.projects],
+    tasks: [...data.tasks],
+    risks: [...data.risks],
+    requirements: [...data.requirements],
+    documents: [...data.documents],
+    meta: data.meta
+      ? {
+          ...data.meta,
+          message: result.message
+        }
+      : undefined
+  };
+
+  if (result.type === "task") {
+    const task = result.record as Task;
+    nextData.tasks = nextData.tasks.map((item) => item.id === task.id ? task : item);
   }
 
   nextData.metrics = recalculateMetrics(nextData);
@@ -1623,6 +1758,62 @@ function CreateRecordDrawer({
           ) : null}
           {type === "requirement" ? <RequirementFields projectOptions={projectOptions} /> : null}
           {type === "document" ? <DocumentFields /> : null}
+        </Form>
+      ) : null}
+    </Drawer>
+  );
+}
+
+function TaskEditDrawer({
+  form,
+  task,
+  submitting,
+  projectOptions,
+  people,
+  peopleLoading,
+  peopleError,
+  onClose,
+  onSubmit
+}: {
+  form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
+  task: Task | null;
+  submitting: boolean;
+  projectOptions: string[];
+  people: FeishuPerson[];
+  peopleLoading: boolean;
+  peopleError: string;
+  onClose: () => void;
+  onSubmit: (values: Record<string, unknown>) => void;
+}) {
+  return (
+    <Drawer
+      title={
+        <Space>
+          <EditOutlined />
+          <span>编辑任务</span>
+        </Space>
+      }
+      open={Boolean(task)}
+      onClose={onClose}
+      size="default"
+      extra={
+        <Space>
+          <Button onClick={onClose}>取消</Button>
+          <Button type="primary" loading={submitting} onClick={() => form.submit()}>
+            保存修改
+          </Button>
+        </Space>
+      }
+    >
+      {task ? (
+        <Form form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
+          <TaskFields
+            form={form}
+            people={people}
+            peopleLoading={peopleLoading}
+            peopleError={peopleError}
+            projectOptions={projectOptions}
+          />
         </Form>
       ) : null}
     </Drawer>
@@ -1910,12 +2101,32 @@ function TaskFields({
       <Form.Item label="关联项目" name="project" rules={[{ required: true, message: "请选择关联项目" }]}>
         <ProjectSelect projectOptions={projectOptions} />
       </Form.Item>
+      <OwnerSelect form={form} people={people} loading={peopleLoading} error={peopleError} />
       <Row gutter={12}>
         <Col span={12}>
-          <OwnerSelect form={form} people={people} loading={peopleLoading} error={peopleError} />
+          <Form.Item label="开始日期" name="startDate">
+            <DatePicker className="pm-form-control" />
+          </Form.Item>
         </Col>
         <Col span={12}>
-          <Form.Item label="截止日期" name="dueDate">
+          <Form.Item
+            label="截止日期"
+            name="dueDate"
+            dependencies={["startDate"]}
+            rules={[
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  const startDate = getFieldValue("startDate");
+
+                  if (!value || !startDate || !dayjs(value).isBefore(dayjs(startDate), "day")) {
+                    return Promise.resolve();
+                  }
+
+                  return Promise.reject(new Error("截止日期不能早于开始日期"));
+                }
+              })
+            ]}
+          >
             <DatePicker className="pm-form-control" />
           </Form.Item>
         </Col>
