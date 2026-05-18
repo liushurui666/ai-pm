@@ -150,11 +150,40 @@ const bugStatusColor: Record<BugReport["status"], string> = {
   待验证: "purple",
   已关闭: "green"
 };
+const weekdayLabels = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 
 type PeopleResponse = {
   people?: FeishuPerson[];
   error?: string;
 };
+
+type ScheduleItem = {
+  id: string;
+  type: "里程碑" | "任务" | "Bug";
+  title: string;
+  project: string;
+  date: string;
+  owner: string;
+  status: string;
+  color: string;
+};
+
+async function fetchDashboardFromApi() {
+  const response = await fetch("/api/dashboard");
+  const nextData = (await response.json()) as DashboardData & { error?: string };
+
+  if (response.status === 401) {
+    window.location.assign("/login");
+
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error(nextData.error || "读取项目数据失败");
+  }
+
+  return nextData;
+}
 
 function normalizeIdentity(value?: string) {
   return value?.trim().toLowerCase() ?? "";
@@ -218,6 +247,7 @@ export function ProjectManagementPlatform() {
   const [projectEditSubmitting, setProjectEditSubmitting] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [bugEditSubmitting, setBugEditSubmitting] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const [breakdownSubmitting, setBreakdownSubmitting] = useState(false);
   const [activeView, setActiveView] = useState("overview");
@@ -242,25 +272,27 @@ export function ProjectManagementPlatform() {
   const screens = useBreakpoint();
   const isMobile = !screens.md;
 
+  async function refreshDashboardState() {
+    try {
+      const nextData = await fetchDashboardFromApi();
+
+      if (nextData) {
+        setData(nextData);
+        setLoadError("");
+      }
+    } catch {
+      // Keep the optimistic UI if a silent refresh fails; the next page load will re-sync.
+    }
+  }
+
   useEffect(() => {
     let mounted = true;
 
     async function loadDashboard() {
       try {
-        const response = await fetch("/api/dashboard");
-        const nextData = (await response.json()) as DashboardData & { error?: string };
+        const nextData = await fetchDashboardFromApi();
 
-        if (response.status === 401) {
-          window.location.assign("/login");
-
-          return;
-        }
-
-        if (!response.ok) {
-          throw new Error(nextData.error || "读取项目数据失败");
-        }
-
-        if (mounted) {
+        if (mounted && nextData) {
           setData(nextData);
           setLoadError("");
         }
@@ -595,6 +627,7 @@ export function ProjectManagementPlatform() {
       const result = payload as CreateRecordResult;
 
       setData((current) => (current ? updateDashboardWithRecord(current, result) : current));
+      void refreshDashboardState();
       messageApi.success(result.message);
       setCreateType(null);
       createForm.resetFields();
@@ -654,6 +687,7 @@ export function ProjectManagementPlatform() {
       const result = payload as CreateRecordResult;
 
       setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
+      void refreshDashboardState();
       messageApi.success(result.message);
       setEditingProject(null);
       projectEditForm.resetFields();
@@ -702,6 +736,7 @@ export function ProjectManagementPlatform() {
       const result = payload as CreateRecordResult;
 
       setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
+      void refreshDashboardState();
       messageApi.success(result.message);
       setEditingTask(null);
       editForm.resetFields();
@@ -750,6 +785,7 @@ export function ProjectManagementPlatform() {
       const result = payload as CreateRecordResult;
 
       setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
+      void refreshDashboardState();
       messageApi.success(result.message);
       setEditingBug(null);
       bugEditForm.resetFields();
@@ -800,6 +836,7 @@ export function ProjectManagementPlatform() {
       }
 
       setData((current) => (current ? updateDashboardWithDocumentAnalysis(current, payload) : current));
+      void refreshDashboardState();
       setBreakdownOpen(false);
       breakdownForm.resetFields();
       setActiveView("tasks");
@@ -921,7 +958,7 @@ export function ProjectManagementPlatform() {
                   </Tag>
                 ) : null}
                 <Tooltip title="查看日程">
-                  <Button icon={<CalendarOutlined />} />
+                  <Button icon={<CalendarOutlined />} onClick={() => setScheduleOpen(true)} />
                 </Tooltip>
                 <Tooltip title="打开 AI 项目助手">
                   <Button
@@ -1167,6 +1204,14 @@ export function ProjectManagementPlatform() {
             onClose={() => setEditingBug(null)}
             onSubmit={handleUpdateBug}
           />
+
+          {data ? (
+            <ScheduleDrawer
+              data={data}
+              open={scheduleOpen}
+              onClose={() => setScheduleOpen(false)}
+            />
+          ) : null}
 
           <DocumentBreakdownDrawer
             form={breakdownForm}
@@ -1451,6 +1496,137 @@ function ProjectMilestoneTimeline({ project }: { project: Project }) {
         }))}
       />
     </div>
+  );
+}
+
+function createScheduleItems(data: DashboardData): ScheduleItem[] {
+  const milestoneItems = data.projects.flatMap((project) =>
+    project.milestones.map((milestone) => ({
+      id: `${project.id}-${milestone.id}`,
+      type: "里程碑" as const,
+      title: milestone.title,
+      project: project.name,
+      date: milestone.dueDate,
+      owner: milestone.owner || project.owner,
+      status: milestone.status,
+      color: milestoneColor[milestone.status] === "default" ? "gray" : milestoneColor[milestone.status]
+    }))
+  );
+  const taskItems = data.tasks.map((task) => ({
+    id: task.id,
+    type: "任务" as const,
+    title: task.title,
+    project: task.project,
+    date: task.dueDate,
+    owner: task.owner,
+    status: task.stage,
+    color: task.stage === "已完成" ? "green" : task.stage === "评审中" ? "purple" : task.stage === "进行中" ? "blue" : "gray"
+  }));
+  const bugItems = data.bugs.map((bug) => ({
+    id: bug.id,
+    type: "Bug" as const,
+    title: bug.title,
+    project: bug.project,
+    date: bug.dueDate,
+    owner: bug.owner || bug.reporter,
+    status: bug.status,
+    color: bug.status === "已关闭" ? "green" : bug.severity === "阻塞" || bug.severity === "严重" ? "red" : "gold"
+  }));
+
+  return [...milestoneItems, ...taskItems, ...bugItems].sort(
+    (left, right) => dayjs(left.date).valueOf() - dayjs(right.date).valueOf()
+  );
+}
+
+function getWeekdayLabel(date: string) {
+  return weekdayLabels[dayjs(date).day()] ?? "";
+}
+
+function ScheduleDrawer({
+  data,
+  open,
+  onClose
+}: {
+  data: DashboardData;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const [filter, setFilter] = useState<ScheduleItem["type"] | "全部">("全部");
+  const scheduleItems = useMemo(() => createScheduleItems(data), [data]);
+  const visibleItems = useMemo(
+    () => (filter === "全部" ? scheduleItems : scheduleItems.filter((item) => item.type === filter)),
+    [filter, scheduleItems]
+  );
+  const groups = useMemo(() => {
+    const groupMap = new Map<string, ScheduleItem[]>();
+
+    for (const item of visibleItems) {
+      const date = dayjs(item.date).format("YYYY-MM-DD");
+      groupMap.set(date, [...(groupMap.get(date) ?? []), item]);
+    }
+
+    return Array.from(groupMap.entries()).map(([date, items]) => ({
+      date,
+      items
+    }));
+  }, [visibleItems]);
+
+  return (
+    <Drawer
+      title={
+        <Space>
+          <CalendarOutlined />
+          <span>项目日程</span>
+        </Space>
+      }
+      open={open}
+      onClose={onClose}
+      size="large"
+      extra={
+        <Segmented
+          value={filter}
+          onChange={(value) => setFilter(value as ScheduleItem["type"] | "全部")}
+          options={["全部", "里程碑", "任务", "Bug"]}
+        />
+      }
+    >
+      {groups.length ? (
+        <Space orientation="vertical" size={16} className="pm-wide schedule-list">
+          {groups.map((group) => (
+            <div className="schedule-day-group" key={group.date}>
+              <Flex justify="space-between" align="center" className="schedule-day-header">
+                <Space>
+                  <Text strong>{group.date}</Text>
+                  <Text type="secondary">{getWeekdayLabel(group.date)}</Text>
+                </Space>
+                <Tag>{group.items.length} 项</Tag>
+              </Flex>
+              <Timeline
+                items={group.items.map((item) => ({
+                  color: item.color,
+                  content: (
+                    <Space orientation="vertical" size={4} className="pm-wide">
+                      <Space wrap>
+                        <Tag color={item.type === "Bug" ? "red" : item.type === "任务" ? "blue" : "cyan"}>
+                          {item.type}
+                        </Tag>
+                        <Text strong>{item.title}</Text>
+                        <Tag color={item.color}>{item.status}</Tag>
+                      </Space>
+                      <Text type="secondary">
+                        {item.project} · {item.owner || "未分配"}
+                      </Text>
+                    </Space>
+                  )
+                }))}
+              />
+            </div>
+          ))}
+        </Space>
+      ) : (
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无日程" />
+      )}
+    </Drawer>
   );
 }
 
@@ -2782,13 +2958,13 @@ function ProjectFields({
       </Row>
       <Row gutter={12}>
         <Col span={12}>
-          <Form.Item label="进度" name="progress">
-            <InputNumber className="pm-form-control" min={0} max={100} addonAfter="%" />
+          <Form.Item label="进度（自动）" name="progress">
+            <InputNumber className="pm-form-control" min={0} max={100} addonAfter="%" disabled />
           </Form.Item>
         </Col>
         <Col span={12}>
-          <Form.Item label="健康度" name="health">
-            <InputNumber className="pm-form-control" min={0} max={100} />
+          <Form.Item label="健康度（自动）" name="health">
+            <InputNumber className="pm-form-control" min={0} max={100} disabled />
           </Form.Item>
         </Col>
       </Row>
@@ -2799,8 +2975,8 @@ function ProjectFields({
           </Form.Item>
         </Col>
         <Col span={12}>
-          <Form.Item label="风险数" name="riskCount">
-            <InputNumber className="pm-form-control" min={0} />
+          <Form.Item label="风险数（自动）" name="riskCount">
+            <InputNumber className="pm-form-control" min={0} disabled />
           </Form.Item>
         </Col>
       </Row>
@@ -2847,36 +3023,26 @@ function ProjectFields({
                   <Form.Item {...restField} name={[name, "id"]} hidden>
                     <Input />
                   </Form.Item>
-                  <Row gutter={12}>
-                    <Col span={12}>
-                      <Form.Item
-                        {...restField}
-                        label="标题"
-                        name={[name, "title"]}
-                        rules={[{ required: true, message: "请输入里程碑标题" }]}
-                      >
-                        <Input placeholder="例如：需求评审完成" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={12}>
-                      <Form.Item {...restField} label="状态" name={[name, "status"]}>
-                        <Select options={["未开始", "进行中", "已完成", "延期"].map((value) => ({ value, label: value }))} />
-                      </Form.Item>
-                    </Col>
-                  </Row>
-                  <Row gutter={12}>
-                    <Col span={12}>
-                      <Form.Item {...restField} label="日期" name={[name, "dueDate"]}>
-                        <DatePicker className="pm-form-control" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={12}>
-                      <Form.Item {...restField} label="负责人" name={[name, "owner"]}>
-                        <Input placeholder="里程碑负责人" />
-                      </Form.Item>
-                    </Col>
-                  </Row>
-                  <Form.Item {...restField} label="说明" name={[name, "note"]}>
+                  <div className="project-milestone-form-grid">
+                    <Form.Item
+                      {...restField}
+                      label="标题"
+                      name={[name, "title"]}
+                      rules={[{ required: true, message: "请输入里程碑标题" }]}
+                    >
+                      <Input placeholder="例如：需求评审完成" />
+                    </Form.Item>
+                    <Form.Item {...restField} label="状态" name={[name, "status"]}>
+                      <Select options={["未开始", "进行中", "已完成", "延期"].map((value) => ({ value, label: value }))} />
+                    </Form.Item>
+                    <Form.Item {...restField} label="日期" name={[name, "dueDate"]}>
+                      <DatePicker className="pm-form-control" />
+                    </Form.Item>
+                    <Form.Item {...restField} label="负责人" name={[name, "owner"]}>
+                      <Input placeholder="里程碑负责人" />
+                    </Form.Item>
+                  </div>
+                  <Form.Item {...restField} label="说明" name={[name, "note"]} className="project-milestone-note">
                     <Input.TextArea rows={2} placeholder="交付范围、检查点或风险说明" />
                   </Form.Item>
                 </div>

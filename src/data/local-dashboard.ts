@@ -51,7 +51,7 @@ async function readDatabase() {
       throw error;
     }
 
-    const seed = cloneSeedData();
+    const seed = applyProjectMetrics(cloneSeedData());
 
     await writeDatabase(seed);
 
@@ -75,16 +75,18 @@ async function readDatabase() {
       updatedAt: asText(data.updatedAt, seed.updatedAt)
     });
 
+    const derivedData = applyProjectMetrics(migratedData);
+
     return {
-      ...migratedData,
-      metrics: createMetrics(migratedData)
+      ...derivedData,
+      metrics: createMetrics(derivedData)
     };
   } catch {
     await writeFile(`${DATABASE_FILE}.corrupt-${Date.now()}`, raw, {
       mode: 0o600
     });
 
-    const seed = cloneSeedData();
+    const seed = applyProjectMetrics(cloneSeedData());
 
     await writeDatabase(seed);
 
@@ -95,10 +97,11 @@ async function readDatabase() {
 async function writeDatabase(data: LocalDatabase) {
   await ensureDatabaseDir();
   const tempFile = `${DATABASE_FILE}.${process.pid}.${Date.now()}.tmp`;
+  const derivedData = applyProjectMetrics(data);
   const payload = `${JSON.stringify(
     {
-      ...data,
-      metrics: createMetrics(data),
+      ...derivedData,
+      metrics: createMetrics(derivedData),
       updatedAt: new Date().toISOString()
     },
     null,
@@ -542,6 +545,211 @@ function createRecord<T extends DashboardEntityType>(
   return normalizeCreateDocument(values) as DashboardEntityMap[T];
 }
 
+function normalizeProjectName(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function isLinkedToProject(project: Project, value?: string) {
+  return Boolean(value && normalizeProjectName(project.name) === normalizeProjectName(value));
+}
+
+function clampScore(value: number) {
+  return Math.min(100, Math.max(0, Math.round(value)));
+}
+
+function getMilestoneProgress(status: ProjectMilestoneStatus) {
+  const progressByStatus: Record<ProjectMilestoneStatus, number> = {
+    未开始: 0,
+    进行中: 50,
+    已完成: 100,
+    延期: 30
+  };
+
+  return progressByStatus[status];
+}
+
+function getTaskStageProgress(stage: TaskStage) {
+  const progressByStage: Record<TaskStage, number> = {
+    待处理: 0,
+    进行中: 50,
+    评审中: 80,
+    已完成: 100
+  };
+
+  return progressByStage[stage];
+}
+
+function average(values: number[]) {
+  if (!values.length) {
+    return 0;
+  }
+
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function calculateProjectProgress(project: Project, tasks: Task[]) {
+  const milestoneScore = project.milestones.length
+    ? average(project.milestones.map((milestone) => getMilestoneProgress(milestone.status)))
+    : null;
+  const taskScore = tasks.length ? average(tasks.map((task) => getTaskStageProgress(task.stage))) : null;
+
+  if (milestoneScore !== null && taskScore !== null) {
+    return clampScore(milestoneScore * 0.65 + taskScore * 0.35);
+  }
+
+  if (milestoneScore !== null) {
+    return clampScore(milestoneScore);
+  }
+
+  if (taskScore !== null) {
+    return clampScore(taskScore);
+  }
+
+  return clampScore(project.progress);
+}
+
+function calculateProjectHealth({
+  bugs,
+  progress,
+  project,
+  risks,
+  tasks
+}: {
+  bugs: BugReport[];
+  progress: number;
+  project: Project;
+  risks: Risk[];
+  tasks: Task[];
+}) {
+  const today = dayjs().startOf("day");
+  const overdueTasks = tasks.filter((task) => task.stage !== "已完成" && dayjs(task.dueDate).isBefore(today));
+  const delayedMilestones = project.milestones.filter((milestone) => milestone.status === "延期");
+  const openBugs = bugs.filter((bug) => bug.status !== "已关闭");
+  const dueDate = dayjs(project.dueDate).startOf("day");
+  let health = 100;
+
+  for (const risk of risks) {
+    health -= risk.level === "高" ? 18 : risk.level === "中" ? 10 : 4;
+  }
+
+  for (const bug of openBugs) {
+    health -= bug.severity === "阻塞" ? 14 : bug.severity === "严重" ? 10 : bug.severity === "一般" ? 5 : 2;
+  }
+
+  health -= overdueTasks.length * 8;
+  health -= delayedMilestones.length * 12;
+
+  if (project.status !== "已完成" && dueDate.isBefore(today) && progress < 100) {
+    health -= 18;
+  } else if (project.status !== "已完成" && dueDate.diff(today, "day") <= 7 && progress < 70) {
+    health -= 10;
+  }
+
+  if (progress < 30 && project.status === "进行中") {
+    health -= 4;
+  }
+
+  return clampScore(health);
+}
+
+function calculateProjectRiskCount({
+  bugs,
+  health,
+  progress,
+  project,
+  risks,
+  tasks
+}: {
+  bugs: BugReport[];
+  health: number;
+  progress: number;
+  project: Project;
+  risks: Risk[];
+  tasks: Task[];
+}) {
+  const today = dayjs().startOf("day");
+  const criticalBugs = bugs.filter((bug) => bug.status !== "已关闭" && ["阻塞", "严重"].includes(bug.severity));
+  const overdueTasks = tasks.filter((task) => task.stage !== "已完成" && dayjs(task.dueDate).isBefore(today));
+  const delayedMilestones = project.milestones.filter((milestone) => milestone.status === "延期");
+  const scheduleRisk =
+    project.status !== "已完成" && dayjs(project.dueDate).isBefore(today) && progress < 100 ? 1 : 0;
+  const healthRisk = health < 70 ? 1 : 0;
+
+  return risks.length + criticalBugs.length + overdueTasks.length + delayedMilestones.length + scheduleRisk + healthRisk;
+}
+
+function deriveProjectStatus(project: Project, progress: number, health: number, riskCount: number): ProjectStatus {
+  if (project.status === "暂停") {
+    return "暂停";
+  }
+
+  if (progress >= 100 && riskCount === 0) {
+    return "已完成";
+  }
+
+  if (riskCount > 0 || health < 75) {
+    return "有风险";
+  }
+
+  return "进行中";
+}
+
+function applyProjectMetrics(data: LocalDatabase): LocalDatabase {
+  const projects = data.projects.map((project) => {
+    const tasks = data.tasks.filter((task) => isLinkedToProject(project, task.project));
+    const bugs = data.bugs.filter((bug) => isLinkedToProject(project, bug.project));
+    const risks = data.risks.filter((risk) => isLinkedToProject(project, risk.project));
+    const progress = calculateProjectProgress(project, tasks);
+    const health = calculateProjectHealth({ bugs, progress, project, risks, tasks });
+    const riskCount = calculateProjectRiskCount({ bugs, health, progress, project, risks, tasks });
+
+    return {
+      ...project,
+      progress,
+      health,
+      riskCount,
+      status: deriveProjectStatus(project, progress, health, riskCount)
+    };
+  });
+
+  return {
+    ...data,
+    projects,
+    metrics: createMetrics({
+      ...data,
+      projects
+    })
+  };
+}
+
+function findRecord<T extends DashboardEntityType>(
+  data: LocalDatabase,
+  type: T,
+  id: string
+): DashboardEntityMap[T] | undefined {
+  if (type === "project") {
+    return data.projects.find((project) => project.id === id) as DashboardEntityMap[T] | undefined;
+  }
+
+  if (type === "task") {
+    return data.tasks.find((task) => task.id === id) as DashboardEntityMap[T] | undefined;
+  }
+
+  if (type === "bug") {
+    return data.bugs.find((bug) => bug.id === id) as DashboardEntityMap[T] | undefined;
+  }
+
+  if (type === "risk") {
+    return data.risks.find((risk) => risk.id === id) as DashboardEntityMap[T] | undefined;
+  }
+
+  if (type === "requirement") {
+    return data.requirements.find((requirement) => requirement.id === id) as DashboardEntityMap[T] | undefined;
+  }
+
+  return data.documents.find((document) => document.id === id) as DashboardEntityMap[T] | undefined;
+}
+
 function createMetrics(data: Pick<DashboardData, "projects" | "tasks" | "bugs" | "requirements" | "documents">) {
   const activeProjects = data.projects.filter((project) => project.status !== "已完成").length;
   const deliveryRate = data.projects.length
@@ -649,12 +857,14 @@ export async function createDashboardRecord<T extends DashboardEntityType>(
     data.documents = [record as DocumentItem, ...data.documents];
   }
 
-  data.metrics = createMetrics(data);
-  await writeDatabase(data);
+  const savedData = applyProjectMetrics(data);
+  const savedRecord = findRecord(savedData, type, record.id) ?? record;
+
+  await writeDatabase(savedData);
 
   return {
     type,
-    record,
+    record: savedRecord,
     persisted: true,
     message: [`已保存到 AI PM 项目管理平台。`, notifyMessage].filter(Boolean).join(" ")
   };
@@ -709,12 +919,14 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
     throw new Error("记录不存在或已被删除");
   }
 
-  data.metrics = createMetrics(data);
-  await writeDatabase(data);
+  const savedData = applyProjectMetrics(data);
+  const savedRecord = findRecord(savedData, type, id) ?? typedRecord;
+
+  await writeDatabase(savedData);
 
   return {
     type,
-    record: typedRecord,
+    record: savedRecord,
     persisted: true,
     message: `已更新${getEntityLabel(type)}：${getRecordTitle(type, values)}。`
   };
