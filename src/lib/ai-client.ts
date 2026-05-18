@@ -29,7 +29,7 @@ function getAiModel() {
 
 function compactDashboardContext(data: DashboardData) {
   return {
-    数据源: data.meta?.source === "feishu" ? "飞书多维表格" : "演示数据",
+    数据源: data.meta?.source === "local" ? "AI PM 站内数据源" : "演示数据",
     指标: data.metrics,
     项目: data.projects.slice(0, 8).map((project) => ({
       名称: project.name,

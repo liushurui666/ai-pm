@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDashboardData } from "@/data/feishu-dashboard";
+import { getDashboardData } from "@/data/local-dashboard";
 import { isFeishuAuthConfigured } from "@/lib/feishu-auth";
 import { getSession } from "@/lib/session";
 
@@ -22,7 +22,7 @@ export async function GET() {
   } catch (error) {
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : "读取飞书数据失败"
+        error: error instanceof Error ? error.message : "读取项目数据失败"
       },
       {
         status: 502

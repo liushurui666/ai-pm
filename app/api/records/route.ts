@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createDashboardRecord } from "@/data/feishu-dashboard";
+import { createDashboardRecord } from "@/data/local-dashboard";
 import { isFeishuAuthConfigured } from "@/lib/feishu-auth";
 import { getSession } from "@/lib/session";
 import type { DashboardEntityType } from "@/types/records";
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    return NextResponse.json(await createDashboardRecord(body.type, body.values, session?.user));
+    return NextResponse.json(await createDashboardRecord(body.type, body.values));
   } catch (error) {
     return NextResponse.json(
       {

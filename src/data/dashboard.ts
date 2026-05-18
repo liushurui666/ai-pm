@@ -218,7 +218,7 @@ export function createAssistantReply(message: string, data: DashboardData = dash
 
   if (normalized.includes("风险") || normalized.includes("延期")) {
     if (!topRiskProject) {
-      return "当前没有可分析的项目数据。请先确认飞书多维表格是否已同步项目记录。";
+      return "当前没有可分析的项目数据。请先在 AI PM 平台创建项目记录。";
     }
 
     return [

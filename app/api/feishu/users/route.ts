@@ -5,8 +5,9 @@ import { getSession } from "@/lib/session";
 
 export async function GET(request: NextRequest) {
   const session = await getSession();
+  const configured = isFeishuAuthConfigured();
 
-  if (isFeishuAuthConfigured() && !session) {
+  if (configured && !session) {
     return NextResponse.json(
       {
         error: "未登录"
@@ -15,6 +16,12 @@ export async function GET(request: NextRequest) {
         status: 401
       }
     );
+  }
+
+  if (!configured) {
+    return NextResponse.json({
+      people: []
+    });
   }
 
   const query = request.nextUrl.searchParams.get("query") ?? "";

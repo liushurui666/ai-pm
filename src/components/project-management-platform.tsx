@@ -441,7 +441,7 @@ export function ProjectManagementPlatform() {
       const result = payload as CreateRecordResult;
 
       setData((current) => (current ? updateDashboardWithRecord(current, result) : current));
-      message[result.persisted ? "success" : "warning"](result.message);
+      message.success(result.message);
       setCreateType(null);
       createForm.resetFields();
     } catch (error) {
@@ -546,8 +546,8 @@ export function ProjectManagementPlatform() {
 
               <Space size={10}>
                 {data?.meta ? (
-                  <Tag color={data.meta.source === "feishu" ? "green" : "default"}>
-                    {data.meta.source === "feishu" ? "飞书数据" : "演示数据"}
+                  <Tag color={data.meta.source === "local" ? "green" : "default"}>
+                    {data.meta.source === "local" ? "站内数据" : "演示数据"}
                   </Tag>
                 ) : null}
                 <Tooltip title="查看日程">
@@ -781,24 +781,15 @@ function Overview({
     <Space orientation="vertical" size={18} className="pm-page-stack">
       {data.meta?.message ? (
         <Alert
-          type={data.meta.missingConfig?.length ? "error" : data.meta.source === "feishu" ? "success" : "warning"}
+          type={data.meta.source === "local" ? "success" : "warning"}
           showIcon
           title={data.meta.message}
           description={
             <Space direction="vertical" size={4}>
-              {data.meta.missingConfig?.length ? (
-                <Text>
-                  缺少环境变量：{data.meta.missingConfig.join("、")}。未接入前创建的数据只会留在当前页面。
-                </Text>
+              {data.meta.storage ? (
+                <Text>数据存储：{data.meta.storage}</Text>
               ) : null}
-              {data.meta.missingTables?.length ? (
-                <Text>
-                  未识别到数据表：{data.meta.missingTables.join("、")}。系统会优先按表名自动创建或匹配。
-                </Text>
-              ) : null}
-              {data.meta.createdTables?.length ? (
-                <Text>本次自动创建：{data.meta.createdTables.join("、")}。</Text>
-              ) : null}
+              <Text>飞书用于登录、负责人选择和机器人通知，不作为项目主数据源。</Text>
             </Space>
           }
         />
@@ -1405,12 +1396,24 @@ function OwnerSelect({
 
             form.setFieldsValue({
               ownerOpenId: value,
+              ownerUnionId: selectedPerson?.unionId ?? "",
+              ownerUserId: selectedPerson?.userId ?? "",
+              ownerEmail: selectedPerson?.email ?? "",
               owner: selectedPerson?.name ?? ""
             });
           }}
         />
       </Form.Item>
       <Form.Item name="owner" hidden>
+        <Input />
+      </Form.Item>
+      <Form.Item name="ownerUnionId" hidden>
+        <Input />
+      </Form.Item>
+      <Form.Item name="ownerUserId" hidden>
+        <Input />
+      </Form.Item>
+      <Form.Item name="ownerEmail" hidden>
         <Input />
       </Form.Item>
       {error ? (
@@ -1431,7 +1434,7 @@ function OwnerSelect({
         />
       ) : (
         <Text className="pm-form-note" type="secondary">
-          负责人会写入飞书人员字段，并在创建成功后尝试通过机器人通知。
+          负责人会保存飞书身份关联，并在创建成功后尝试通过机器人通知。
         </Text>
       )}
     </>

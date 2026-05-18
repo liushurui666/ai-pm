@@ -4,6 +4,10 @@ export type Project = {
   id: string;
   name: string;
   owner: string;
+  ownerOpenId?: string;
+  ownerUnionId?: string;
+  ownerUserId?: string;
+  ownerEmail?: string;
   status: ProjectStatus;
   progress: number;
   health: number;
@@ -20,6 +24,10 @@ export type Task = {
   title: string;
   stage: TaskStage;
   owner: string;
+  ownerOpenId?: string;
+  ownerUnionId?: string;
+  ownerUserId?: string;
+  ownerEmail?: string;
   project: string;
   priority: "高" | "中" | "低";
   dueDate: string;
@@ -31,6 +39,10 @@ export type Risk = {
   title: string;
   level: "高" | "中" | "低";
   owner: string;
+  ownerOpenId?: string;
+  ownerUnionId?: string;
+  ownerUserId?: string;
+  ownerEmail?: string;
   project: string;
   mitigation: string;
 };
@@ -78,12 +90,9 @@ export type DashboardData = {
   documents: DocumentItem[];
   weeklyInsight: string[];
   meta?: {
-    source: "feishu" | "mock";
+    source: "local" | "mock";
     user?: FeishuUser;
-    loadedTables?: string[];
-    missingTables?: string[];
-    createdTables?: string[];
-    missingConfig?: string[];
+    storage?: string;
     message?: string;
   };
 };

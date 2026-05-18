@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAssistantReply } from "@/data/dashboard";
-import { getDashboardData } from "@/data/feishu-dashboard";
+import { getDashboardData } from "@/data/local-dashboard";
 import { createAiAssistantReply, isAiAssistantConfigured } from "@/lib/ai-client";
 import { isFeishuAuthConfigured } from "@/lib/feishu-auth";
 import { getSession } from "@/lib/session";

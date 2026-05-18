@@ -32,7 +32,7 @@ export function FeishuLoginPage({ configured, error }: { configured: boolean; er
           <Tag color="blue">AI 项目管理平台</Tag>
           <Title>用飞书账号安全登录</Title>
           <Paragraph>
-            登录后系统会根据你的飞书身份读取已授权的项目数据源，并在项目驾驶舱中展示真实项目、任务和风险。
+            登录后系统会使用你的飞书身份完成企业访问控制、负责人选择和机器人通知；项目、任务和风险数据由 AI PM 平台站内持久化管理。
           </Paragraph>
         </section>
 
