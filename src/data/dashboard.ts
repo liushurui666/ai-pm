@@ -18,7 +18,25 @@ export const dashboardData: DashboardData = {
       dueDate: "2026-06-18",
       team: 9,
       riskCount: 2,
-      summary: "指标体系已完成，AI 风险解释与报表生成进入联调。"
+      summary: "指标体系已完成，AI 风险解释与报表生成进入联调。",
+      milestones: [
+        {
+          id: "m-001-1",
+          title: "指标口径冻结",
+          status: "已完成",
+          dueDate: "2026-05-20",
+          owner: "林夏",
+          note: "完成健康度、风险分和延期预测口径确认。"
+        },
+        {
+          id: "m-001-2",
+          title: "管理层驾驶舱验收",
+          status: "进行中",
+          dueDate: "2026-06-18",
+          owner: "韩越",
+          note: "联调 AI 风险解释、报表生成和权限展示。"
+        }
+      ]
     },
     {
       id: "p-002",
@@ -30,7 +48,25 @@ export const dashboardData: DashboardData = {
       dueDate: "2026-06-05",
       team: 6,
       riskCount: 4,
-      summary: "文档解析质量不稳定，检索召回和权限过滤需要重点跟进。"
+      summary: "文档解析质量不稳定，检索召回和权限过滤需要重点跟进。",
+      milestones: [
+        {
+          id: "m-002-1",
+          title: "解析链路稳定性修复",
+          status: "延期",
+          dueDate: "2026-05-28",
+          owner: "周铭",
+          note: "补充失败重试、格式兜底和异常告警。"
+        },
+        {
+          id: "m-002-2",
+          title: "权限过滤测试完成",
+          status: "进行中",
+          dueDate: "2026-06-05",
+          owner: "阿齐",
+          note: "覆盖租户隔离、部门权限和越权查询场景。"
+        }
+      ]
     },
     {
       id: "p-003",
@@ -42,7 +78,25 @@ export const dashboardData: DashboardData = {
       dueDate: "2026-05-29",
       team: 5,
       riskCount: 1,
-      summary: "日报聚合、会议待办提取已上线灰度，等待管理层模板确认。"
+      summary: "日报聚合、会议待办提取已上线灰度，等待管理层模板确认。",
+      milestones: [
+        {
+          id: "m-003-1",
+          title: "周报模板冻结",
+          status: "进行中",
+          dueDate: "2026-05-22",
+          owner: "许诺",
+          note: "确认管理层字段、风险摘要和行动项格式。"
+        },
+        {
+          id: "m-003-2",
+          title: "灰度试运行",
+          status: "未开始",
+          dueDate: "2026-05-29",
+          owner: "许诺",
+          note: "选择两个项目验证自动周报采纳率。"
+        }
+      ]
     },
     {
       id: "p-004",
@@ -54,7 +108,25 @@ export const dashboardData: DashboardData = {
       dueDate: "2026-07-12",
       team: 7,
       riskCount: 2,
-      summary: "暂停等待统一任务类型标准，模型提示词方案已准备。"
+      summary: "暂停等待统一任务类型标准，模型提示词方案已准备。",
+      milestones: [
+        {
+          id: "m-004-1",
+          title: "任务类型标准确认",
+          status: "未开始",
+          dueDate: "2026-06-10",
+          owner: "陈澈",
+          note: "统一前端、后端、测试拆解输出结构。"
+        },
+        {
+          id: "m-004-2",
+          title: "拆解流程恢复",
+          status: "未开始",
+          dueDate: "2026-07-12",
+          owner: "陈澈",
+          note: "按新标准恢复需求拆解功能联调。"
+        }
+      ]
     }
   ],
   tasks: [

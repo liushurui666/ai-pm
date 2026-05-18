@@ -50,8 +50,10 @@ import {
   CalendarOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
+  DeleteOutlined,
   DashboardOutlined,
   EditOutlined,
+  FlagOutlined,
   FileTextOutlined,
   FolderOpenOutlined,
   InboxOutlined,
@@ -78,6 +80,7 @@ import type {
   FeishuPerson,
   FeishuUser,
   Project,
+  ProjectMilestone,
   Requirement,
   Risk,
   Task,
@@ -109,6 +112,13 @@ const statusColor: Record<Project["status"], NonNullable<BadgeProps["status"]>> 
   有风险: "error",
   已完成: "success",
   暂停: "default"
+};
+
+const milestoneColor: Record<ProjectMilestone["status"], string> = {
+  未开始: "default",
+  进行中: "blue",
+  已完成: "green",
+  延期: "red"
 };
 
 const priorityColor: Record<Task["priority"] | Requirement["priority"], string> = {
@@ -202,8 +212,10 @@ export function ProjectManagementPlatform() {
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [createType, setCreateType] = useState<DashboardEntityType | null>(null);
   const [createSubmitting, setCreateSubmitting] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editingBug, setEditingBug] = useState<BugReport | null>(null);
+  const [projectEditSubmitting, setProjectEditSubmitting] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [bugEditSubmitting, setBugEditSubmitting] = useState(false);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
@@ -222,6 +234,7 @@ export function ProjectManagementPlatform() {
   const [chatLoading, setChatLoading] = useState(false);
   const [form] = Form.useForm<{ message: string }>();
   const [createForm] = Form.useForm<Record<string, unknown>>();
+  const [projectEditForm] = Form.useForm<Record<string, unknown>>();
   const [editForm] = Form.useForm<Record<string, unknown>>();
   const [bugEditForm] = Form.useForm<Record<string, unknown>>();
   const [breakdownForm] = Form.useForm<Record<string, unknown>>();
@@ -375,10 +388,36 @@ export function ProjectManagementPlatform() {
       )
     },
     {
+      title: "里程碑",
+      dataIndex: "milestones",
+      key: "milestones",
+      width: 130,
+      render: (milestones: ProjectMilestone[] = []) => {
+        const finishedCount = milestones.filter((milestone) => milestone.status === "已完成").length;
+
+        return (
+          <Tag icon={<FlagOutlined />} color={finishedCount === milestones.length && milestones.length ? "green" : "blue"}>
+            {finishedCount}/{milestones.length}
+          </Tag>
+        );
+      }
+    },
+    {
       title: "截止",
       dataIndex: "dueDate",
       key: "dueDate",
       width: 130
+    },
+    {
+      title: "操作",
+      key: "action",
+      fixed: "right",
+      width: 90,
+      render: (_, project) => (
+        <Button type="link" icon={<EditOutlined />} onClick={() => openEditProjectDrawer(project)}>
+          编辑
+        </Button>
+      )
     }
   ];
 
@@ -489,6 +528,12 @@ export function ProjectManagementPlatform() {
     createForm.setFieldsValue(getCreateInitialValues(type, data?.meta?.user));
   }
 
+  function openEditProjectDrawer(project: Project) {
+    setEditingProject(project);
+    projectEditForm.resetFields();
+    projectEditForm.setFieldsValue(getProjectFormValues(project));
+  }
+
   function openEditTaskDrawer(task: Task) {
     setEditingTask(task);
     editForm.resetFields();
@@ -568,6 +613,54 @@ export function ProjectManagementPlatform() {
       messageApi.error(error instanceof Error ? error.message : "创建失败");
     } finally {
       setCreateSubmitting(false);
+    }
+  }
+
+  async function handleUpdateProject(values: Record<string, unknown>) {
+    if (!editingProject) {
+      return;
+    }
+
+    setProjectEditSubmitting(true);
+
+    try {
+      const response = await fetch("/api/records", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          type: "project",
+          id: editingProject.id,
+          values: serializeCreateValues(values)
+        })
+      });
+      const payload = (await response.json()) as CreateRecordResult | { error?: string };
+
+      if (response.status === 401) {
+        window.location.assign("/login");
+
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error("error" in payload ? payload.error || "更新项目失败" : "更新项目失败");
+      }
+
+      if ("error" in payload) {
+        throw new Error(payload.error || "更新项目失败");
+      }
+
+      const result = payload as CreateRecordResult;
+
+      setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
+      messageApi.success(result.message);
+      setEditingProject(null);
+      projectEditForm.resetFields();
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "更新项目失败");
+    } finally {
+      setProjectEditSubmitting(false);
     }
   }
 
@@ -1040,6 +1133,17 @@ export function ProjectManagementPlatform() {
             onSubmit={handleCreateRecord}
           />
 
+          <ProjectEditDrawer
+            form={projectEditForm}
+            project={editingProject}
+            submitting={projectEditSubmitting}
+            people={ownerOptions}
+            peopleLoading={peopleLoading}
+            peopleError={peopleError}
+            onClose={() => setEditingProject(null)}
+            onSubmit={handleUpdateProject}
+          />
+
           <TaskEditDrawer
             form={editForm}
             task={editingTask}
@@ -1305,8 +1409,48 @@ function ProjectsView({
         </Space>
       }
     >
-      <Table rowKey="id" columns={columns} dataSource={projects} pagination={false} scroll={{ x: 920 }} />
+      <Table
+        rowKey="id"
+        columns={columns}
+        dataSource={projects}
+        pagination={false}
+        scroll={{ x: 1120 }}
+        expandable={{
+          expandedRowRender: (project) => <ProjectMilestoneTimeline project={project} />
+        }}
+      />
     </TableView>
+  );
+}
+
+function ProjectMilestoneTimeline({ project }: { project: Project }) {
+  const milestones = [...project.milestones].sort(
+    (left, right) => dayjs(left.dueDate).valueOf() - dayjs(right.dueDate).valueOf()
+  );
+
+  if (!milestones.length) {
+    return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无里程碑" />;
+  }
+
+  return (
+    <div className="project-milestone-panel">
+      <Timeline
+        items={milestones.map((milestone) => ({
+          color: milestoneColor[milestone.status] === "default" ? "gray" : milestoneColor[milestone.status],
+          content: (
+            <Space orientation="vertical" size={4}>
+              <Space wrap>
+                <Text strong>{milestone.title}</Text>
+                <Tag color={milestoneColor[milestone.status]}>{milestone.status}</Tag>
+                <Tag icon={<CalendarOutlined />}>{milestone.dueDate}</Tag>
+                <Tag>{milestone.owner || project.owner}</Tag>
+              </Space>
+              <Text type="secondary">{milestone.note}</Text>
+            </Space>
+          )
+        }))}
+      />
+    </div>
   );
 }
 
@@ -1925,7 +2069,23 @@ function getCreateInitialValues(type: DashboardEntityType, currentUser?: FeishuU
       health: 80,
       dueDate: dayjs().add(14, "day"),
       team: 1,
-      riskCount: 0
+      riskCount: 0,
+      milestones: [
+        {
+          title: "项目启动",
+          status: "进行中",
+          dueDate: dayjs(),
+          owner: "",
+          note: "确认项目目标、范围和负责人。"
+        },
+        {
+          title: "阶段验收",
+          status: "未开始",
+          dueDate: dayjs().add(14, "day"),
+          owner: "",
+          note: "检查交付物、风险和上线准备。"
+        }
+      ]
     };
   }
 
@@ -1966,6 +2126,17 @@ function getCreateInitialValues(type: DashboardEntityType, currentUser?: FeishuU
   };
 }
 
+function getProjectFormValues(project: Project) {
+  return {
+    ...project,
+    dueDate: dayjs(project.dueDate),
+    milestones: project.milestones.map((milestone) => ({
+      ...milestone,
+      dueDate: dayjs(milestone.dueDate)
+    }))
+  };
+}
+
 function getTaskFormValues(task: Task) {
   return {
     ...task,
@@ -1997,15 +2168,30 @@ function getBugEmptyText(onlyMine: boolean, projectFilter: string) {
   return "暂无 Bug，点击右上角提 Bug";
 }
 
+function serializeCreateValue(value: unknown, key = ""): unknown {
+  if (dayjs.isDayjs(value)) {
+    return value.format(key === "updatedAt" ? "YYYY-MM-DD HH:mm" : "YYYY-MM-DD");
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => serializeCreateValue(item, key));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([childKey, childValue]) => [
+        childKey,
+        serializeCreateValue(childValue, childKey)
+      ])
+    );
+  }
+
+  return value;
+}
+
 function serializeCreateValues(values: Record<string, unknown>) {
   return Object.fromEntries(
-    Object.entries(values).map(([key, value]) => {
-      if (dayjs.isDayjs(value)) {
-        return [key, value.format(key === "updatedAt" ? "YYYY-MM-DD HH:mm" : "YYYY-MM-DD")];
-      }
-
-      return [key, value];
-    })
+    Object.entries(values).map(([key, value]) => [key, serializeCreateValue(value, key)])
   );
 }
 
@@ -2092,6 +2278,11 @@ function updateDashboardWithRecordUpdate(data: DashboardData, result: CreateReco
   if (result.type === "task") {
     const task = result.record as Task;
     nextData.tasks = nextData.tasks.map((item) => item.id === task.id ? task : item);
+  }
+
+  if (result.type === "project") {
+    const project = result.record as Project;
+    nextData.projects = nextData.projects.map((item) => item.id === project.id ? project : item);
   }
 
   if (result.type === "bug") {
@@ -2212,6 +2403,60 @@ function CreateRecordDrawer({
           ) : null}
           {type === "requirement" ? <RequirementFields projectOptions={projectOptions} /> : null}
           {type === "document" ? <DocumentFields /> : null}
+        </Form>
+      ) : null}
+    </Drawer>
+  );
+}
+
+function ProjectEditDrawer({
+  form,
+  project,
+  submitting,
+  people,
+  peopleLoading,
+  peopleError,
+  onClose,
+  onSubmit
+}: {
+  form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
+  project: Project | null;
+  submitting: boolean;
+  people: FeishuPerson[];
+  peopleLoading: boolean;
+  peopleError: string;
+  onClose: () => void;
+  onSubmit: (values: Record<string, unknown>) => void;
+}) {
+  return (
+    <Drawer
+      title={
+        <Space>
+          <EditOutlined />
+          <span>编辑项目</span>
+        </Space>
+      }
+      open={Boolean(project)}
+      onClose={onClose}
+      size="large"
+      extra={
+        <Space>
+          <Button onClick={onClose}>取消</Button>
+          <Button type="primary" loading={submitting} onClick={() => form.submit()}>
+            保存修改
+          </Button>
+        </Space>
+      }
+    >
+      {project ? (
+        <Form form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
+          <ProjectFields
+            form={form}
+            people={people}
+            peopleLoading={peopleLoading}
+            peopleError={peopleError}
+            ownerRequired={false}
+          />
         </Form>
       ) : null}
     </Drawer>
@@ -2508,19 +2753,21 @@ function ProjectFields({
   form,
   people,
   peopleLoading,
-  peopleError
+  peopleError,
+  ownerRequired = true
 }: {
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   people: FeishuPerson[];
   peopleLoading: boolean;
   peopleError: string;
+  ownerRequired?: boolean;
 }) {
   return (
     <>
       <Form.Item label="项目名称" name="name" rules={[{ required: true, message: "请输入项目名称" }]}>
         <Input placeholder="例如：智能项目驾驶舱二期" />
       </Form.Item>
-      <OwnerSelect form={form} people={people} loading={peopleLoading} error={peopleError} />
+      <OwnerSelect form={form} people={people} loading={peopleLoading} error={peopleError} required={ownerRequired} />
       <Row gutter={12}>
         <Col span={12}>
           <Form.Item label="状态" name="status">
@@ -2560,6 +2807,84 @@ function ProjectFields({
       <Form.Item label="摘要" name="summary">
         <Input.TextArea rows={4} placeholder="项目当前进展、目标或风险说明" />
       </Form.Item>
+      <Form.List name="milestones">
+        {(fields, { add, remove }) => (
+          <div className="project-milestone-form">
+            <Flex justify="space-between" align="center" className="project-milestone-form-header">
+              <Text strong>项目里程碑</Text>
+              <Button
+                size="small"
+                icon={<PlusOutlined />}
+                onClick={() =>
+                  add({
+                    title: "",
+                    status: "未开始",
+                    dueDate: dayjs().add(7, "day"),
+                    owner: "",
+                    note: ""
+                  })
+                }
+              >
+                添加里程碑
+              </Button>
+            </Flex>
+            <Space orientation="vertical" size={12} className="pm-wide">
+              {fields.map(({ key, name, ...restField }, index) => (
+                <div className="project-milestone-form-item" key={key}>
+                  <Flex justify="space-between" align="center">
+                    <Text type="secondary">里程碑 {index + 1}</Text>
+                    <Tooltip title="删除里程碑">
+                      <Button
+                        danger
+                        size="small"
+                        type="text"
+                        icon={<DeleteOutlined />}
+                        onClick={() => remove(name)}
+                        disabled={fields.length <= 1}
+                      />
+                    </Tooltip>
+                  </Flex>
+                  <Form.Item {...restField} name={[name, "id"]} hidden>
+                    <Input />
+                  </Form.Item>
+                  <Row gutter={12}>
+                    <Col span={12}>
+                      <Form.Item
+                        {...restField}
+                        label="标题"
+                        name={[name, "title"]}
+                        rules={[{ required: true, message: "请输入里程碑标题" }]}
+                      >
+                        <Input placeholder="例如：需求评审完成" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item {...restField} label="状态" name={[name, "status"]}>
+                        <Select options={["未开始", "进行中", "已完成", "延期"].map((value) => ({ value, label: value }))} />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <Row gutter={12}>
+                    <Col span={12}>
+                      <Form.Item {...restField} label="日期" name={[name, "dueDate"]}>
+                        <DatePicker className="pm-form-control" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item {...restField} label="负责人" name={[name, "owner"]}>
+                        <Input placeholder="里程碑负责人" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <Form.Item {...restField} label="说明" name={[name, "note"]}>
+                    <Input.TextArea rows={2} placeholder="交付范围、检查点或风险说明" />
+                  </Form.Item>
+                </div>
+              ))}
+            </Space>
+          </div>
+        )}
+      </Form.List>
     </>
   );
 }

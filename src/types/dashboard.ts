@@ -1,4 +1,14 @@
 export type ProjectStatus = "进行中" | "有风险" | "已完成" | "暂停";
+export type ProjectMilestoneStatus = "未开始" | "进行中" | "已完成" | "延期";
+
+export type ProjectMilestone = {
+  id: string;
+  title: string;
+  status: ProjectMilestoneStatus;
+  dueDate: string;
+  owner: string;
+  note: string;
+};
 
 export type Project = {
   id: string;
@@ -15,6 +25,7 @@ export type Project = {
   team: number;
   riskCount: number;
   summary: string;
+  milestones: ProjectMilestone[];
 };
 
 export type TaskStage = "待处理" | "进行中" | "评审中" | "已完成";

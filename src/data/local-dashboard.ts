@@ -9,6 +9,8 @@ import type {
   DocumentItem,
   FeishuUser,
   Project,
+  ProjectMilestone,
+  ProjectMilestoneStatus,
   ProjectStatus,
   Requirement,
   Risk,
@@ -31,7 +33,7 @@ function cloneSeedData(): LocalDatabase {
   } as LocalDatabase;
 }
 
-function createLocalId(type: DashboardEntityType) {
+function createLocalId(type: DashboardEntityType | "milestone") {
   return `${type}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
@@ -168,6 +170,22 @@ function normalizeProjectStatus(value: string): ProjectStatus {
   return "进行中";
 }
 
+function normalizeMilestoneStatus(value: string): ProjectMilestoneStatus {
+  if (value.includes("完成")) {
+    return "已完成";
+  }
+
+  if (value.includes("延期") || value.includes("风险")) {
+    return "延期";
+  }
+
+  if (value.includes("进行") || value.includes("处理中")) {
+    return "进行中";
+  }
+
+  return "未开始";
+}
+
 function normalizeTaskStage(value: string): TaskStage {
   if (value.includes("完成")) {
     return "已完成";
@@ -288,23 +306,109 @@ function normalizeDocumentType(value: string): DocumentItem["type"] {
   return "PRD";
 }
 
+function createFallbackMilestones({
+  dueDate,
+  owner,
+  progress,
+  projectName
+}: {
+  dueDate: string;
+  owner: string;
+  progress: number;
+  projectName: string;
+}): ProjectMilestone[] {
+  return [
+    {
+      id: createLocalId("milestone"),
+      title: "项目启动",
+      status: progress > 0 ? "已完成" : "未开始",
+      dueDate: asDateString(dayjs(dueDate).subtract(14, "day").format("YYYY-MM-DD")),
+      owner,
+      note: `${projectName} 立项、目标和成员范围确认。`
+    },
+    {
+      id: createLocalId("milestone"),
+      title: "阶段验收",
+      status: progress >= 100 ? "已完成" : progress >= 60 ? "进行中" : "未开始",
+      dueDate,
+      owner,
+      note: "按里程碑确认交付范围、风险和下一步行动。"
+    }
+  ];
+}
+
+function normalizeProjectMilestone(
+  value: unknown,
+  index: number,
+  fallback: { dueDate: string; owner: string }
+): ProjectMilestone {
+  const milestone = typeof value === "object" && value ? (value as Record<string, unknown>) : {};
+
+  return {
+    id: asText(milestone.id, createLocalId("milestone")),
+    title: asText(milestone.title, `里程碑 ${index + 1}`),
+    status: normalizeMilestoneStatus(asText(milestone.status, index === 0 ? "进行中" : "未开始")),
+    dueDate: asDateString(milestone.dueDate, fallback.dueDate),
+    owner: asText(milestone.owner, fallback.owner),
+    note: asText(milestone.note, "暂无说明。")
+  };
+}
+
+function normalizeProjectMilestones(
+  value: unknown,
+  fallback: {
+    dueDate: string;
+    owner: string;
+    progress: number;
+    projectName: string;
+  }
+) {
+  const milestones = Array.isArray(value)
+    ? value
+        .filter((milestone) => typeof milestone === "object" && milestone)
+        .map((milestone, index) => normalizeProjectMilestone(milestone, index, fallback))
+        .filter((milestone) => milestone.title)
+    : [];
+
+  return milestones.length ? milestones : createFallbackMilestones(fallback);
+}
+
 function normalizeCreateProject(values: Record<string, unknown>, id = createLocalId("project")): Project {
   const progress = Math.min(100, Math.max(0, asNumber(values.progress, 0)));
   const health = Math.min(100, Math.max(0, asNumber(values.health, 80)));
+  const name = asText(values.name, "未命名项目");
+  const owner = asOwnerName(values);
+  const dueDate = asDateString(values.dueDate, dayjs().add(14, "day").format("YYYY-MM-DD"));
 
   return {
     id,
-    name: asText(values.name, "未命名项目"),
-    owner: asOwnerName(values),
+    name,
+    owner,
     ...createOwnerLink(values),
     status: normalizeProjectStatus(asText(values.status, "进行中")),
     progress,
     health,
-    dueDate: asDateString(values.dueDate, dayjs().add(14, "day").format("YYYY-MM-DD")),
+    dueDate,
     team: asNumber(values.team, 1),
     riskCount: asNumber(values.riskCount, 0),
-    summary: asText(values.summary, "暂无项目摘要。")
+    summary: asText(values.summary, "暂无项目摘要。"),
+    milestones: normalizeProjectMilestones(values.milestones, {
+      dueDate,
+      owner,
+      progress,
+      projectName: name
+    })
   };
+}
+
+function normalizeExistingProject(project: Project): Project {
+  return normalizeCreateProject(
+    {
+      ...project,
+      milestones: (project as Project & { milestones?: unknown }).milestones
+    },
+    project.id
+  );
 }
 
 function normalizeCreateTask(values: Record<string, unknown>, id = createLocalId("task")): Task {
@@ -369,6 +473,7 @@ function normalizeExistingBug(bug: BugReport): BugReport {
 function migrateLocalDatabase(data: LocalDatabase): LocalDatabase {
   return {
     ...data,
+    projects: data.projects.map(normalizeExistingProject),
     tasks: data.tasks.map(normalizeExistingTask),
     bugs: data.bugs.map(normalizeExistingBug)
   };

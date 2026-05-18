@@ -196,6 +196,27 @@
   min-width: 0;
 }
 
+.project-milestone-panel {
+  padding: 10px 16px 0;
+}
+
+.project-milestone-form {
+  margin-top: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.project-milestone-form-header {
+  margin-bottom: 12px;
+}
+
+.project-milestone-form-item {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
 .page-title {
   display: flex;
   align-items: center;
