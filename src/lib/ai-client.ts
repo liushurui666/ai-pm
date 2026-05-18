@@ -1,8 +1,8 @@
 import type { DashboardData } from "@/types/dashboard";
 import type { DocumentTaskBreakdown } from "@/types/records";
 
-const DEFAULT_AI_BASE_URL = "https://api.deepseek.com";
-const DEFAULT_AI_MODEL = "deepseek-chat";
+const DEFAULT_AI_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+const DEFAULT_AI_MODEL = "qwen-plus";
 const REQUEST_TIMEOUT_MS = 20_000;
 
 type ChatCompletionResponse = {
