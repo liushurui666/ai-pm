@@ -171,6 +171,29 @@ function isMyTask(task: Task, currentUser?: FeishuUser) {
   return [currentUser.name, currentUser.enName, currentUser.email].some((value) => owner && owner === normalizeIdentity(value));
 }
 
+function isMyBug(bug: BugReport, currentUser?: FeishuUser) {
+  if (!currentUser) {
+    return false;
+  }
+
+  const strictMatches = [
+    [bug.ownerOpenId, currentUser.openId],
+    [bug.ownerUnionId, currentUser.unionId],
+    [bug.ownerUserId, currentUser.userId],
+    [bug.ownerEmail, currentUser.email]
+  ];
+
+  if (strictMatches.some(([left, right]) => normalizeIdentity(left) && normalizeIdentity(left) === normalizeIdentity(right))) {
+    return true;
+  }
+
+  const owner = normalizeIdentity(bug.owner);
+  const reporter = normalizeIdentity(bug.reporter);
+  const userIdentities = [currentUser.name, currentUser.enName, currentUser.email].map(normalizeIdentity).filter(Boolean);
+
+  return userIdentities.some((identity) => owner === identity || reporter === identity);
+}
+
 export function ProjectManagementPlatform() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -886,6 +909,7 @@ export function ProjectManagementPlatform() {
                   {activeView === "bugs" ? (
                     <BugsView
                       bugs={data.bugs}
+                      currentUser={data.meta?.user}
                       onCreate={() => openCreateDrawer("bug")}
                       onEdit={openEditBugDrawer}
                     />
@@ -1527,23 +1551,29 @@ function TasksView({
 
 function BugsView({
   bugs,
+  currentUser,
   onCreate,
   onEdit
 }: {
   bugs: BugReport[];
+  currentUser?: FeishuUser;
   onCreate: () => void;
   onEdit: (bug: BugReport) => void;
 }) {
   const [statusFilter, setStatusFilter] = useState<"全部" | BugReport["status"]>("全部");
+  const [onlyMine, setOnlyMine] = useState(false);
+  const scopedBugs = useMemo(() => {
+    return onlyMine ? bugs.filter((bug) => isMyBug(bug, currentUser)) : bugs;
+  }, [bugs, currentUser, onlyMine]);
   const visibleBugs = useMemo(() => {
     if (statusFilter === "全部") {
-      return bugs;
+      return scopedBugs;
     }
 
-    return bugs.filter((bug) => bug.status === statusFilter);
-  }, [bugs, statusFilter]);
-  const openBugCount = bugs.filter((bug) => bug.status !== "已关闭").length;
-  const blockerCount = bugs.filter((bug) => bug.severity === "阻塞" && bug.status !== "已关闭").length;
+    return scopedBugs.filter((bug) => bug.status === statusFilter);
+  }, [scopedBugs, statusFilter]);
+  const openBugCount = scopedBugs.filter((bug) => bug.status !== "已关闭").length;
+  const blockerCount = scopedBugs.filter((bug) => bug.severity === "阻塞" && bug.status !== "已关闭").length;
   const bugColumns: ColumnsType<BugReport> = [
     {
       title: "Bug",
@@ -1646,6 +1676,12 @@ function BugsView({
               onChange={(value) => setStatusFilter(value as "全部" | BugReport["status"])}
               options={["全部", "新建", "定位中", "修复中", "待验证", "已关闭"]}
             />
+            <Tooltip title={currentUser ? `匹配提交人或修复负责人：${currentUser.name}` : "未获取到登录用户"}>
+              <Space className="task-mine-filter">
+                <Text type="secondary">只看我的</Text>
+                <Switch checked={onlyMine} disabled={!currentUser} onChange={setOnlyMine} />
+              </Space>
+            </Tooltip>
             <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>
               提 Bug
             </Button>
@@ -1659,14 +1695,14 @@ function BugsView({
         <MetricCard
           icon={<CheckCircleOutlined />}
           title="待验证"
-          value={bugs.filter((bug) => bug.status === "待验证").length}
+          value={scopedBugs.filter((bug) => bug.status === "待验证").length}
           suffix="个"
           tone="blue"
         />
         <MetricCard
           icon={<UserOutlined />}
           title="已关闭"
-          value={bugs.filter((bug) => bug.status === "已关闭").length}
+          value={scopedBugs.filter((bug) => bug.status === "已关闭").length}
           suffix="个"
           tone="green"
         />
@@ -1677,7 +1713,7 @@ function BugsView({
           rowKey="id"
           columns={bugColumns}
           dataSource={visibleBugs}
-          locale={{ emptyText: "暂无 Bug，点击右上角提 Bug" }}
+          locale={{ emptyText: onlyMine ? "暂无与你相关的 Bug" : "暂无 Bug，点击右上角提 Bug" }}
           pagination={{ pageSize: 12, showSizeChanger: true }}
           scroll={{ x: 1400 }}
           expandable={{
