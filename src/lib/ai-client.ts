@@ -3,7 +3,8 @@ import type { DocumentTaskBreakdown } from "@/types/records";
 
 const DEFAULT_AI_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1";
 const DEFAULT_AI_MODEL = "qwen-plus";
-const REQUEST_TIMEOUT_MS = 20_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const DOCUMENT_BREAKDOWN_TIMEOUT_MS = 90_000;
 
 type ChatCompletionResponse = {
   choices?: Array<{
@@ -84,15 +85,22 @@ function createSystemPrompt() {
   ].join("\n");
 }
 
-async function createChatCompletion(messages: Array<{ role: "system" | "user"; content: string }>) {
+async function createChatCompletion(
+  messages: Array<{ role: "system" | "user"; content: string }>,
+  options: {
+    timeoutMs?: number;
+    maxTokens?: number;
+  } = {}
+) {
   const apiKey = getAiApiKey();
 
   if (!apiKey) {
     throw new Error("请先配置 AI_API_KEY");
   }
 
+  const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(`${getAiBaseUrl()}/chat/completions`, {
@@ -104,7 +112,8 @@ async function createChatCompletion(messages: Array<{ role: "system" | "user"; c
       body: JSON.stringify({
         model: getAiModel(),
         temperature: 0.2,
-        messages
+        messages,
+        ...(options.maxTokens ? { max_tokens: options.maxTokens } : {})
       }),
       cache: "no-store",
       signal: controller.signal
@@ -122,6 +131,12 @@ async function createChatCompletion(messages: Array<{ role: "system" | "user"; c
     }
 
     return reply;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`AI 模型响应超过 ${Math.round(timeoutMs / 1000)} 秒，请稍后重试或缩短文档内容。`);
+    }
+
+    throw error;
   } finally {
     clearTimeout(timeout);
   }
@@ -200,29 +215,35 @@ export async function createAiDocumentTaskBreakdown({
   projectName: string;
   peopleNames: string[];
 }) {
-  const reply = await createChatCompletion([
+  const reply = await createChatCompletion(
+    [
+      {
+        role: "system",
+        content: [
+          "你是 AI 项目管理平台的文档拆解助手。",
+          "你只基于用户上传的文档内容拆解项目任务，不要编造文档之外的事实。",
+          "请输出严格 JSON，不要 Markdown，不要解释。",
+          "JSON 结构：{ \"documentTitle\": string, \"documentType\": \"PRD\"|\"会议纪要\"|\"技术方案\"|\"复盘\", \"summary\": string, \"tasks\": [{ \"title\": string, \"owner\": string, \"priority\": \"高\"|\"中\"|\"低\", \"dueDate\": \"YYYY-MM-DD\", \"aiHint\": string }] }。",
+          "任务 title 应该可执行，owner 优先从可选负责人里选择；如果文档没有负责人，owner 留空。",
+          "最多输出 12 个任务，优先保留明确有交付物、截止时间、依赖或风险的事项。"
+        ].join("\n")
+      },
+      {
+        role: "user",
+        content: [
+          `项目：${projectName}`,
+          `文件名：${fileName}`,
+          `可选负责人：${peopleNames.length ? peopleNames.join("、") : "暂无"}`,
+          "文档内容：",
+          documentText.slice(0, 16_000)
+        ].join("\n")
+      }
+    ],
     {
-      role: "system",
-      content: [
-        "你是 AI 项目管理平台的文档拆解助手。",
-        "你只基于用户上传的文档内容拆解项目任务，不要编造文档之外的事实。",
-        "请输出严格 JSON，不要 Markdown，不要解释。",
-        "JSON 结构：{ \"documentTitle\": string, \"documentType\": \"PRD\"|\"会议纪要\"|\"技术方案\"|\"复盘\", \"summary\": string, \"tasks\": [{ \"title\": string, \"owner\": string, \"priority\": \"高\"|\"中\"|\"低\", \"dueDate\": \"YYYY-MM-DD\", \"aiHint\": string }] }。",
-        "任务 title 应该可执行，owner 优先从可选负责人里选择；如果文档没有负责人，owner 留空。",
-        "最多输出 12 个任务，优先保留明确有交付物、截止时间、依赖或风险的事项。"
-      ].join("\n")
-    },
-    {
-      role: "user",
-      content: [
-        `项目：${projectName}`,
-        `文件名：${fileName}`,
-        `可选负责人：${peopleNames.length ? peopleNames.join("、") : "暂无"}`,
-        "文档内容：",
-        documentText.slice(0, 16_000)
-      ].join("\n")
+      timeoutMs: DOCUMENT_BREAKDOWN_TIMEOUT_MS,
+      maxTokens: 2_000
     }
-  ]);
+  );
 
   return normalizeBreakdown(extractJsonObject(reply), fileName.replace(/\.[^.]+$/, ""));
 }
