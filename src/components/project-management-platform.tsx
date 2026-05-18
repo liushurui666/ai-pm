@@ -62,7 +62,9 @@ import {
   SearchOutlined,
   SendOutlined,
   ThunderboltOutlined,
-  UploadOutlined
+  UnorderedListOutlined,
+  UploadOutlined,
+  UserOutlined
 } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import dayjs from "dayjs";
@@ -1082,42 +1084,167 @@ function ProjectsView({
 }
 
 function TasksView({ tasks, onCreate }: { tasks: Task[]; onCreate: () => void }) {
+  const [viewMode, setViewMode] = useState<"table" | "owner">("table");
+  const ownerGroups = useMemo(() => {
+    const groups = new Map<string, Task[]>();
+
+    for (const task of tasks) {
+      const owner = task.owner?.trim() || "未分配";
+      groups.set(owner, [...(groups.get(owner) ?? []), task]);
+    }
+
+    return Array.from(groups.entries())
+      .map(([owner, ownerTasks]) => ({
+        owner,
+        tasks: ownerTasks.sort((left, right) => {
+          const stageDelta = taskStages.indexOf(left.stage) - taskStages.indexOf(right.stage);
+
+          if (stageDelta !== 0) {
+            return stageDelta;
+          }
+
+          return dayjs(left.dueDate).valueOf() - dayjs(right.dueDate).valueOf();
+        })
+      }))
+      .sort((left, right) => right.tasks.length - left.tasks.length || left.owner.localeCompare(right.owner, "zh-CN"));
+  }, [tasks]);
+  const taskColumns: ColumnsType<Task> = [
+    {
+      title: "任务",
+      dataIndex: "title",
+      key: "title",
+      fixed: "left",
+      width: 300,
+      render: (_, task) => (
+        <Space orientation="vertical" size={4}>
+          <Text strong>{task.title}</Text>
+          <Text type="secondary">{task.aiHint}</Text>
+        </Space>
+      )
+    },
+    {
+      title: "项目",
+      dataIndex: "project",
+      key: "project",
+      width: 180,
+      render: (project: string) => <Text>{project}</Text>
+    },
+    {
+      title: "负责人",
+      dataIndex: "owner",
+      key: "owner",
+      width: 140,
+      render: (owner: string) => (
+        <Space>
+          <Avatar size="small">{(owner || "未").slice(0, 1)}</Avatar>
+          <Text>{owner || "未分配"}</Text>
+        </Space>
+      )
+    },
+    {
+      title: "阶段",
+      dataIndex: "stage",
+      key: "stage",
+      width: 120,
+      filters: taskStages.map((stage) => ({ text: stage, value: stage })),
+      onFilter: (value, task) => task.stage === value,
+      render: (stage: TaskStage) => <Tag color={stage === "已完成" ? "green" : stage === "评审中" ? "blue" : "default"}>{stage}</Tag>
+    },
+    {
+      title: "优先级",
+      dataIndex: "priority",
+      key: "priority",
+      width: 100,
+      filters: ["高", "中", "低"].map((priority) => ({ text: priority, value: priority })),
+      onFilter: (value, task) => task.priority === value,
+      render: (priority: Task["priority"]) => <Tag color={priorityColor[priority]}>{priority}</Tag>
+    },
+    {
+      title: "截止日期",
+      dataIndex: "dueDate",
+      key: "dueDate",
+      width: 130,
+      sorter: (left, right) => dayjs(left.dueDate).valueOf() - dayjs(right.dueDate).valueOf(),
+      render: (dueDate: string, task) => (
+        <Text type={task.stage !== "已完成" && dayjs(dueDate).isBefore(dayjs().startOf("day")) ? "danger" : "secondary"}>
+          {dueDate}
+        </Text>
+      )
+    },
+    {
+      title: "飞书关联",
+      dataIndex: "ownerOpenId",
+      key: "ownerOpenId",
+      width: 120,
+      render: (ownerOpenId?: string) => (
+        <Tag color={ownerOpenId ? "green" : "default"}>{ownerOpenId ? "已关联" : "未关联"}</Tag>
+      )
+    }
+  ];
+
   return (
     <Space orientation="vertical" size={18} className="pm-page-stack">
       <PageTitle
         icon={<CheckCircleOutlined />}
         title="任务看板"
-        subtitle="按状态推进任务，并让 AI 标记依赖、延期和补充动作。"
+        subtitle="先用表格扫全量任务，再按负责人追踪每个人手上的交付。"
         extra={
-          <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>
-            新建任务
-          </Button>
+          <Space wrap>
+            <Segmented
+              value={viewMode}
+              onChange={(value) => setViewMode(value as "table" | "owner")}
+              options={[
+                { label: "全部任务", value: "table", icon: <UnorderedListOutlined /> },
+                { label: "按负责人", value: "owner", icon: <UserOutlined /> }
+              ]}
+            />
+            <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>
+              新建任务
+            </Button>
+          </Space>
         }
       />
 
-      <div className="kanban-grid">
-        {taskStages.map((stage) => {
-          const stageTasks = tasks.filter((task) => task.stage === stage);
-
-          return (
-            <Card className="kanban-column" title={`${stage} ${stageTasks.length}`} key={stage}>
-              {stageTasks.length ? (
+      {viewMode === "table" ? (
+        <Card>
+          <Table
+            rowKey="id"
+            columns={taskColumns}
+            dataSource={tasks}
+            pagination={{ pageSize: 12, showSizeChanger: true }}
+            scroll={{ x: 1160 }}
+            size="middle"
+          />
+        </Card>
+      ) : (
+        <div className="owner-kanban-grid">
+          {ownerGroups.length ? (
+            ownerGroups.map((group) => (
+              <Card
+                className="owner-kanban-column"
+                key={group.owner}
+                title={
+                  <Flex justify="space-between" align="center">
+                    <Space>
+                      <Avatar size="small">{group.owner.slice(0, 1)}</Avatar>
+                      <Text strong>{group.owner}</Text>
+                    </Space>
+                    <Badge count={group.tasks.length} color="#2563eb" />
+                  </Flex>
+                }
+              >
                 <Space orientation="vertical" size={12} className="pm-wide">
-                  {stageTasks.map((task) => (
+                  {group.tasks.map((task) => (
                     <div className="task-card" key={task.id}>
                       <Flex justify="space-between" align="start" gap={12}>
                         <Text strong>{task.title}</Text>
                         <Tag color={priorityColor[task.priority]}>{task.priority}</Tag>
                       </Flex>
-                      <Text type="secondary">{task.project}</Text>
-                      <Divider />
-                      <Flex justify="space-between" align="center">
-                        <Space>
-                          <Avatar size="small">{task.owner.slice(0, 1)}</Avatar>
-                          <Text>{task.owner}</Text>
-                        </Space>
-                        <Text type="secondary">{task.dueDate}</Text>
-                      </Flex>
+                      <Space wrap size={[6, 6]} className="task-meta-tags">
+                        <Tag>{task.stage}</Tag>
+                        <Tag color="blue">{task.project}</Tag>
+                        <Tag icon={<CalendarOutlined />}>{task.dueDate}</Tag>
+                      </Space>
                       <Alert
                         className="task-ai-hint"
                         type={task.priority === "高" ? "warning" : "info"}
@@ -1127,13 +1254,15 @@ function TasksView({ tasks, onCreate }: { tasks: Task[]; onCreate: () => void })
                     </div>
                   ))}
                 </Space>
-              ) : (
-                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无任务" />
-              )}
+              </Card>
+            ))
+          ) : (
+            <Card className="pm-wide">
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无任务，上传文档后会自动生成" />
             </Card>
-          );
-        })}
-      </div>
+          )}
+        </div>
+      )}
     </Space>
   );
 }

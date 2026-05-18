@@ -222,20 +222,24 @@
   flex: 0 0 auto;
 }
 
-.kanban-grid {
+.owner-kanban-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(238px, 1fr));
+  grid-auto-columns: minmax(300px, 360px);
+  grid-auto-flow: column;
   gap: 16px;
   overflow-x: auto;
-  padding-bottom: 4px;
+  padding: 2px 2px 8px;
 }
 
-.kanban-column {
-  min-width: 238px;
+.owner-kanban-column {
+  min-width: 300px;
   background: #f8fafc;
 }
 
 .task-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   padding: 14px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -246,8 +250,12 @@
   margin: 12px 0;
 }
 
+.task-meta-tags {
+  margin-top: 2px;
+}
+
 .task-ai-hint {
-  margin-top: 12px;
+  margin-top: 2px;
 }
 
 .risk-card {
