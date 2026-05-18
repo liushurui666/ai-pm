@@ -1,10 +1,11 @@
-import type { DocumentItem, Project, Requirement, Risk, Task } from "@/types/dashboard";
+import type { BugReport, DocumentItem, Project, Requirement, Risk, Task } from "@/types/dashboard";
 
-export type DashboardEntityType = "project" | "task" | "risk" | "requirement" | "document";
+export type DashboardEntityType = "project" | "task" | "bug" | "risk" | "requirement" | "document";
 
 export type DashboardEntityMap = {
   project: Project;
   task: Task;
+  bug: BugReport;
   risk: Risk;
   requirement: Requirement;
   document: DocumentItem;

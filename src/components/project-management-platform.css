@@ -266,6 +266,14 @@
   margin-top: 2px;
 }
 
+.bug-detail-row {
+  padding: 4px 0;
+}
+
+.bug-detail-row .ant-typography {
+  margin-bottom: 4px;
+}
+
 .risk-card {
   height: 100%;
 }

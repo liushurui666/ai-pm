@@ -114,6 +114,36 @@ export const dashboardData: DashboardData = {
       aiHint: "建议拆分为用户故事、研发任务、测试用例三类输出。"
     }
   ],
+  bugs: [
+    {
+      id: "b-001",
+      title: "文档拆解后任务负责人未自动带出飞书身份",
+      status: "修复中",
+      severity: "严重",
+      project: "需求智能拆解",
+      reporter: "测试同学",
+      owner: "陈澈",
+      environment: "Chrome 124 / macOS",
+      reproduction: "上传包含负责人姓名的 PRD，等待 AI 拆解完成后查看任务表负责人关联状态。",
+      expected: "负责人能匹配飞书通讯录并保存 open_id，机器人能收到通知。",
+      actual: "任务负责人仅展示姓名，飞书关联显示未关联。",
+      dueDate: "2026-05-22"
+    },
+    {
+      id: "b-002",
+      title: "任务表格在小屏横向滚动提示不明显",
+      status: "新建",
+      severity: "一般",
+      project: "智能项目驾驶舱一期",
+      reporter: "产品经理",
+      owner: "李闻",
+      environment: "iPhone 15 / Safari",
+      reproduction: "进入任务看板，切到全部任务，在移动端查看表格列。",
+      expected: "用户可以明确感知表格支持横向查看全部字段。",
+      actual: "右侧字段被截断，用户容易误以为数据缺失。",
+      dueDate: "2026-05-25"
+    }
+  ],
   risks: [
     {
       id: "r-001",

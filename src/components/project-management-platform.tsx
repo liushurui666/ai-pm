@@ -46,6 +46,7 @@ import {
   AlertOutlined,
   ApiOutlined,
   BarChartOutlined,
+  BugOutlined,
   CalendarOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
@@ -71,6 +72,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import dayjs from "dayjs";
 import type {
+  BugReport,
   DashboardData,
   DocumentItem,
   FeishuPerson,
@@ -96,6 +98,7 @@ const taskStages: TaskStage[] = ["待处理", "进行中", "评审中", "已完�
 const entityLabels: Record<DashboardEntityType, string> = {
   project: "项目",
   task: "任务",
+  bug: "Bug",
   risk: "风险",
   requirement: "需求",
   document: "文档"
@@ -121,6 +124,21 @@ const riskColor: Record<Risk["level"], string> = {
   高: "red",
   中: "gold",
   低: "green"
+};
+
+const bugSeverityColor: Record<BugReport["severity"], string> = {
+  阻塞: "red",
+  严重: "volcano",
+  一般: "gold",
+  轻微: "blue"
+};
+
+const bugStatusColor: Record<BugReport["status"], string> = {
+  新建: "red",
+  定位中: "gold",
+  修复中: "blue",
+  待验证: "purple",
+  已关闭: "green"
 };
 
 type PeopleResponse = {
@@ -162,7 +180,9 @@ export function ProjectManagementPlatform() {
   const [createType, setCreateType] = useState<DashboardEntityType | null>(null);
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editingBug, setEditingBug] = useState<BugReport | null>(null);
   const [editSubmitting, setEditSubmitting] = useState(false);
+  const [bugEditSubmitting, setBugEditSubmitting] = useState(false);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const [breakdownSubmitting, setBreakdownSubmitting] = useState(false);
   const [activeView, setActiveView] = useState("overview");
@@ -180,6 +200,7 @@ export function ProjectManagementPlatform() {
   const [form] = Form.useForm<{ message: string }>();
   const [createForm] = Form.useForm<Record<string, unknown>>();
   const [editForm] = Form.useForm<Record<string, unknown>>();
+  const [bugEditForm] = Form.useForm<Record<string, unknown>>();
   const [breakdownForm] = Form.useForm<Record<string, unknown>>();
   const [messageApi, messageContextHolder] = message.useMessage();
   const screens = useBreakpoint();
@@ -442,13 +463,19 @@ export function ProjectManagementPlatform() {
   function openCreateDrawer(type: DashboardEntityType) {
     setCreateType(type);
     createForm.resetFields();
-    createForm.setFieldsValue(getCreateInitialValues(type));
+    createForm.setFieldsValue(getCreateInitialValues(type, data?.meta?.user));
   }
 
   function openEditTaskDrawer(task: Task) {
     setEditingTask(task);
     editForm.resetFields();
     editForm.setFieldsValue(getTaskFormValues(task));
+  }
+
+  function openEditBugDrawer(bug: BugReport) {
+    setEditingBug(bug);
+    bugEditForm.resetFields();
+    bugEditForm.setFieldsValue(getBugFormValues(bug));
   }
 
   function openDocumentBreakdownDrawer(project?: string) {
@@ -510,6 +537,10 @@ export function ProjectManagementPlatform() {
         setActiveView("docs");
         openDocumentBreakdownDrawer(project.name);
       }
+
+      if (submittedType === "bug") {
+        setActiveView("bugs");
+      }
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : "创建失败");
     } finally {
@@ -562,6 +593,54 @@ export function ProjectManagementPlatform() {
       messageApi.error(error instanceof Error ? error.message : "更新任务失败");
     } finally {
       setEditSubmitting(false);
+    }
+  }
+
+  async function handleUpdateBug(values: Record<string, unknown>) {
+    if (!editingBug) {
+      return;
+    }
+
+    setBugEditSubmitting(true);
+
+    try {
+      const response = await fetch("/api/records", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          type: "bug",
+          id: editingBug.id,
+          values: serializeCreateValues(values)
+        })
+      });
+      const payload = (await response.json()) as CreateRecordResult | { error?: string };
+
+      if (response.status === 401) {
+        window.location.assign("/login");
+
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error("error" in payload ? payload.error || "更新 Bug 失败" : "更新 Bug 失败");
+      }
+
+      if ("error" in payload) {
+        throw new Error(payload.error || "更新 Bug 失败");
+      }
+
+      const result = payload as CreateRecordResult;
+
+      setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
+      messageApi.success(result.message);
+      setEditingBug(null);
+      bugEditForm.resetFields();
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "更新 Bug 失败");
+    } finally {
+      setBugEditSubmitting(false);
     }
   }
 
@@ -628,6 +707,7 @@ export function ProjectManagementPlatform() {
     { key: "overview", icon: <DashboardOutlined />, label: "工作台" },
     { key: "projects", icon: <ProjectOutlined />, label: "项目管理" },
     { key: "tasks", icon: <CheckCircleOutlined />, label: "任务看板" },
+    { key: "bugs", icon: <BugOutlined />, label: "Bug 管理" },
     { key: "requirements", icon: <NodeIndexOutlined />, label: "需求管理" },
     { key: "risks", icon: <AlertOutlined />, label: "风险中心" },
     { key: "docs", icon: <FileTextOutlined />, label: "文档知识库" },
@@ -761,6 +841,7 @@ export function ProjectManagementPlatform() {
                     { label: "工作台", value: "overview" },
                     { label: "项目", value: "projects" },
                     { label: "任务", value: "tasks" },
+                    { label: "Bug", value: "bugs" },
                     { label: "风险", value: "risks" }
                   ]}
                 />
@@ -800,6 +881,13 @@ export function ProjectManagementPlatform() {
                       currentUser={data.meta?.user}
                       onCreate={() => openCreateDrawer("task")}
                       onEdit={openEditTaskDrawer}
+                    />
+                  ) : null}
+                  {activeView === "bugs" ? (
+                    <BugsView
+                      bugs={data.bugs}
+                      onCreate={() => openCreateDrawer("bug")}
+                      onEdit={openEditBugDrawer}
                     />
                   ) : null}
                   {activeView === "requirements" ? (
@@ -937,6 +1025,18 @@ export function ProjectManagementPlatform() {
             peopleError={peopleError}
             onClose={() => setEditingTask(null)}
             onSubmit={handleUpdateTask}
+          />
+
+          <BugEditDrawer
+            form={bugEditForm}
+            bug={editingBug}
+            submitting={bugEditSubmitting}
+            projectOptions={projectOptions}
+            people={ownerOptions}
+            peopleLoading={peopleLoading}
+            peopleError={peopleError}
+            onClose={() => setEditingBug(null)}
+            onSubmit={handleUpdateBug}
           />
 
           <DocumentBreakdownDrawer
@@ -1425,6 +1525,185 @@ function TasksView({
   );
 }
 
+function BugsView({
+  bugs,
+  onCreate,
+  onEdit
+}: {
+  bugs: BugReport[];
+  onCreate: () => void;
+  onEdit: (bug: BugReport) => void;
+}) {
+  const [statusFilter, setStatusFilter] = useState<"全部" | BugReport["status"]>("全部");
+  const visibleBugs = useMemo(() => {
+    if (statusFilter === "全部") {
+      return bugs;
+    }
+
+    return bugs.filter((bug) => bug.status === statusFilter);
+  }, [bugs, statusFilter]);
+  const openBugCount = bugs.filter((bug) => bug.status !== "已关闭").length;
+  const blockerCount = bugs.filter((bug) => bug.severity === "阻塞" && bug.status !== "已关闭").length;
+  const bugColumns: ColumnsType<BugReport> = [
+    {
+      title: "Bug",
+      dataIndex: "title",
+      key: "title",
+      fixed: "left",
+      width: 320,
+      render: (_, bug) => (
+        <Space orientation="vertical" size={4}>
+          <Text strong>{bug.title}</Text>
+          <Text type="secondary" ellipsis>
+            {bug.reproduction}
+          </Text>
+        </Space>
+      )
+    },
+    {
+      title: "严重程度",
+      dataIndex: "severity",
+      key: "severity",
+      width: 110,
+      filters: ["阻塞", "严重", "一般", "轻微"].map((severity) => ({ text: severity, value: severity })),
+      onFilter: (value, bug) => bug.severity === value,
+      render: (severity: BugReport["severity"]) => <Tag color={bugSeverityColor[severity]}>{severity}</Tag>
+    },
+    {
+      title: "状态",
+      dataIndex: "status",
+      key: "status",
+      width: 110,
+      filters: ["新建", "定位中", "修复中", "待验证", "已关闭"].map((status) => ({ text: status, value: status })),
+      onFilter: (value, bug) => bug.status === value,
+      render: (status: BugReport["status"]) => <Tag color={bugStatusColor[status]}>{status}</Tag>
+    },
+    {
+      title: "项目",
+      dataIndex: "project",
+      key: "project",
+      width: 190
+    },
+    {
+      title: "提交人",
+      dataIndex: "reporter",
+      key: "reporter",
+      width: 120
+    },
+    {
+      title: "负责人",
+      dataIndex: "owner",
+      key: "owner",
+      width: 140,
+      render: (owner: string) => (
+        <Space>
+          <Avatar size="small">{(owner || "未").slice(0, 1)}</Avatar>
+          <Text>{owner || "未分配"}</Text>
+        </Space>
+      )
+    },
+    {
+      title: "环境",
+      dataIndex: "environment",
+      key: "environment",
+      width: 180
+    },
+    {
+      title: "截止日期",
+      dataIndex: "dueDate",
+      key: "dueDate",
+      width: 130,
+      sorter: (left, right) => dayjs(left.dueDate).valueOf() - dayjs(right.dueDate).valueOf(),
+      render: (dueDate: string, bug) => (
+        <Text type={bug.status !== "已关闭" && dayjs(dueDate).isBefore(dayjs().startOf("day")) ? "danger" : "secondary"}>
+          {dueDate}
+        </Text>
+      )
+    },
+    {
+      title: "操作",
+      key: "action",
+      fixed: "right",
+      width: 90,
+      render: (_, bug) => (
+        <Button type="link" icon={<EditOutlined />} onClick={() => onEdit(bug)}>
+          编辑
+        </Button>
+      )
+    }
+  ];
+
+  return (
+    <Space orientation="vertical" size={18} className="pm-page-stack">
+      <PageTitle
+        icon={<BugOutlined />}
+        title="Bug 管理"
+        subtitle="给测试、产品和业务同学提 Bug，保留复现步骤、环境、预期和实际结果。"
+        extra={
+          <Space wrap>
+            <Segmented
+              value={statusFilter}
+              onChange={(value) => setStatusFilter(value as "全部" | BugReport["status"])}
+              options={["全部", "新建", "定位中", "修复中", "待验证", "已关闭"]}
+            />
+            <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>
+              提 Bug
+            </Button>
+          </Space>
+        }
+      />
+
+      <Row gutter={[16, 16]}>
+        <MetricCard icon={<BugOutlined />} title="未关闭 Bug" value={openBugCount} suffix="个" tone="orange" />
+        <MetricCard icon={<AlertOutlined />} title="阻塞 Bug" value={blockerCount} suffix="个" tone="violet" />
+        <MetricCard
+          icon={<CheckCircleOutlined />}
+          title="待验证"
+          value={bugs.filter((bug) => bug.status === "待验证").length}
+          suffix="个"
+          tone="blue"
+        />
+        <MetricCard
+          icon={<UserOutlined />}
+          title="已关闭"
+          value={bugs.filter((bug) => bug.status === "已关闭").length}
+          suffix="个"
+          tone="green"
+        />
+      </Row>
+
+      <Card>
+        <Table
+          rowKey="id"
+          columns={bugColumns}
+          dataSource={visibleBugs}
+          locale={{ emptyText: "暂无 Bug，点击右上角提 Bug" }}
+          pagination={{ pageSize: 12, showSizeChanger: true }}
+          scroll={{ x: 1400 }}
+          expandable={{
+            expandedRowRender: (bug) => (
+              <Row gutter={[16, 12]} className="bug-detail-row">
+                <Col xs={24} md={8}>
+                  <Text strong>复现步骤</Text>
+                  <Paragraph>{bug.reproduction}</Paragraph>
+                </Col>
+                <Col xs={24} md={8}>
+                  <Text strong>预期结果</Text>
+                  <Paragraph>{bug.expected}</Paragraph>
+                </Col>
+                <Col xs={24} md={8}>
+                  <Text strong>实际结果</Text>
+                  <Paragraph>{bug.actual}</Paragraph>
+                </Col>
+              </Row>
+            )
+          }}
+        />
+      </Card>
+    </Space>
+  );
+}
+
 function RisksView({ risks, onCreate }: { risks: Risk[]; onCreate: () => void }) {
   return (
     <Space orientation="vertical" size={18} className="pm-page-stack">
@@ -1574,7 +1853,7 @@ function PageTitle({
   );
 }
 
-function getCreateInitialValues(type: DashboardEntityType) {
+function getCreateInitialValues(type: DashboardEntityType, currentUser?: FeishuUser) {
   if (type === "project") {
     return {
       status: "进行中",
@@ -1592,6 +1871,15 @@ function getCreateInitialValues(type: DashboardEntityType) {
       priority: "中",
       startDate: dayjs(),
       dueDate: dayjs().add(7, "day")
+    };
+  }
+
+  if (type === "bug") {
+    return {
+      status: "新建",
+      severity: "一般",
+      reporter: currentUser?.name ?? "",
+      dueDate: dayjs().add(3, "day")
     };
   }
 
@@ -1622,6 +1910,13 @@ function getTaskFormValues(task: Task) {
   };
 }
 
+function getBugFormValues(bug: BugReport) {
+  return {
+    ...bug,
+    dueDate: dayjs(bug.dueDate)
+  };
+}
+
 function serializeCreateValues(values: Record<string, unknown>) {
   return Object.fromEntries(
     Object.entries(values).map(([key, value]) => {
@@ -1647,7 +1942,7 @@ function recalculateMetrics(data: DashboardData) {
     activeProjects,
     deliveryRate,
     overdueTasks,
-    aiSavedHours: Math.max(0, data.requirements.length * 3 + data.documents.length * 2 + data.tasks.length)
+    aiSavedHours: Math.max(0, data.requirements.length * 3 + data.documents.length * 2 + data.tasks.length + data.bugs.length)
   };
 }
 
@@ -1656,6 +1951,7 @@ function updateDashboardWithRecord(data: DashboardData, result: CreateRecordResu
     ...data,
     projects: [...data.projects],
     tasks: [...data.tasks],
+    bugs: [...data.bugs],
     risks: [...data.risks],
     requirements: [...data.requirements],
     documents: [...data.documents],
@@ -1673,6 +1969,10 @@ function updateDashboardWithRecord(data: DashboardData, result: CreateRecordResu
 
   if (result.type === "task") {
     nextData.tasks = [result.record as Task, ...nextData.tasks];
+  }
+
+  if (result.type === "bug") {
+    nextData.bugs = [result.record as BugReport, ...nextData.bugs];
   }
 
   if (result.type === "risk") {
@@ -1697,6 +1997,7 @@ function updateDashboardWithRecordUpdate(data: DashboardData, result: CreateReco
     ...data,
     projects: [...data.projects],
     tasks: [...data.tasks],
+    bugs: [...data.bugs],
     risks: [...data.risks],
     requirements: [...data.requirements],
     documents: [...data.documents],
@@ -1713,6 +2014,11 @@ function updateDashboardWithRecordUpdate(data: DashboardData, result: CreateReco
     nextData.tasks = nextData.tasks.map((item) => item.id === task.id ? task : item);
   }
 
+  if (result.type === "bug") {
+    const bug = result.record as BugReport;
+    nextData.bugs = nextData.bugs.map((item) => item.id === bug.id ? bug : item);
+  }
+
   nextData.metrics = recalculateMetrics(nextData);
 
   return nextData;
@@ -1722,6 +2028,7 @@ function updateDashboardWithDocumentAnalysis(data: DashboardData, result: Docume
   const nextData: DashboardData = {
     ...data,
     tasks: [...result.tasks, ...data.tasks],
+    bugs: [...data.bugs],
     documents: [result.document, ...data.documents],
     meta: data.meta
       ? {
@@ -1805,6 +2112,15 @@ function CreateRecordDrawer({
               projectOptions={projectOptions}
             />
           ) : null}
+          {type === "bug" ? (
+            <BugFields
+              form={form}
+              people={people}
+              peopleLoading={peopleLoading}
+              peopleError={peopleError}
+              projectOptions={projectOptions}
+            />
+          ) : null}
           {type === "risk" ? (
             <RiskFields
               form={form}
@@ -1866,6 +2182,62 @@ function TaskEditDrawer({
       {task ? (
         <Form form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
           <TaskFields
+            form={form}
+            people={people}
+            peopleLoading={peopleLoading}
+            peopleError={peopleError}
+            projectOptions={projectOptions}
+          />
+        </Form>
+      ) : null}
+    </Drawer>
+  );
+}
+
+function BugEditDrawer({
+  form,
+  bug,
+  submitting,
+  projectOptions,
+  people,
+  peopleLoading,
+  peopleError,
+  onClose,
+  onSubmit
+}: {
+  form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
+  bug: BugReport | null;
+  submitting: boolean;
+  projectOptions: string[];
+  people: FeishuPerson[];
+  peopleLoading: boolean;
+  peopleError: string;
+  onClose: () => void;
+  onSubmit: (values: Record<string, unknown>) => void;
+}) {
+  return (
+    <Drawer
+      title={
+        <Space>
+          <EditOutlined />
+          <span>编辑 Bug</span>
+        </Space>
+      }
+      open={Boolean(bug)}
+      onClose={onClose}
+      size="default"
+      extra={
+        <Space>
+          <Button onClick={onClose}>取消</Button>
+          <Button type="primary" loading={submitting} onClick={() => form.submit()}>
+            保存修改
+          </Button>
+        </Space>
+      }
+    >
+      {bug ? (
+        <Form form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
+          <BugFields
             form={form}
             people={people}
             peopleLoading={peopleLoading}
@@ -2191,6 +2563,79 @@ function TaskFields({
       </Row>
       <Form.Item label="AI 提示" name="aiHint">
         <Input.TextArea rows={4} placeholder="可填写 AI 需要提醒的风险、依赖或建议" />
+      </Form.Item>
+    </>
+  );
+}
+
+function BugFields({
+  form,
+  projectOptions,
+  people,
+  peopleLoading,
+  peopleError
+}: {
+  form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
+  projectOptions: string[];
+  people: FeishuPerson[];
+  peopleLoading: boolean;
+  peopleError: string;
+}) {
+  return (
+    <>
+      <Form.Item label="Bug 标题" name="title" rules={[{ required: true, message: "请输入 Bug 标题" }]}>
+        <Input placeholder="例如：上传文档后任务负责人未自动关联飞书" />
+      </Form.Item>
+      <Row gutter={12}>
+        <Col span={12}>
+          <Form.Item label="严重程度" name="severity">
+            <Select options={["阻塞", "严重", "一般", "轻微"].map((value) => ({ value, label: value }))} />
+          </Form.Item>
+        </Col>
+        <Col span={12}>
+          <Form.Item label="状态" name="status">
+            <Select options={["新建", "定位中", "修复中", "待验证", "已关闭"].map((value) => ({ value, label: value }))} />
+          </Form.Item>
+        </Col>
+      </Row>
+      <Form.Item label="关联项目" name="project" rules={[{ required: true, message: "请选择关联项目" }]}>
+        <ProjectSelect projectOptions={projectOptions} />
+      </Form.Item>
+      <Row gutter={12}>
+        <Col span={12}>
+          <Form.Item
+            label="提交人"
+            name="reporter"
+            rules={[{ required: true, message: "请输入提交人" }]}
+          >
+            <Input placeholder="填写提 Bug 的人" />
+          </Form.Item>
+        </Col>
+        <Col span={12}>
+          <Form.Item label="截止日期" name="dueDate">
+            <DatePicker className="pm-form-control" />
+          </Form.Item>
+        </Col>
+      </Row>
+      <OwnerSelect
+        form={form}
+        people={people}
+        loading={peopleLoading}
+        error={peopleError}
+        required={false}
+        label="修复负责人"
+      />
+      <Form.Item label="环境" name="environment" rules={[{ required: true, message: "请输入复现环境" }]}>
+        <Input placeholder="例如：Chrome 124 / macOS / 测试环境" />
+      </Form.Item>
+      <Form.Item label="复现步骤" name="reproduction" rules={[{ required: true, message: "请输入复现步骤" }]}>
+        <Input.TextArea rows={4} placeholder="按 1、2、3 写清楚如何稳定复现" />
+      </Form.Item>
+      <Form.Item label="预期结果" name="expected">
+        <Input.TextArea rows={3} placeholder="系统应该出现什么结果" />
+      </Form.Item>
+      <Form.Item label="实际结果" name="actual" rules={[{ required: true, message: "请输入实际结果" }]}>
+        <Input.TextArea rows={3} placeholder="实际看到的问题、报错或异常表现" />
       </Form.Item>
     </>
   );

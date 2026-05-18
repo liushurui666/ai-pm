@@ -4,6 +4,7 @@ import dayjs from "dayjs";
 import { dashboardData } from "@/data/dashboard";
 import { sendFeishuBotText } from "@/lib/feishu-message";
 import type {
+  BugReport,
   DashboardData,
   DocumentItem,
   FeishuUser,
@@ -56,10 +57,20 @@ async function readDatabase() {
   }
 
   try {
-    const data = JSON.parse(raw) as LocalDatabase;
+    const data = JSON.parse(raw) as Partial<LocalDatabase>;
+    const seed = cloneSeedData();
     const migratedData = migrateLocalDatabase({
-      ...cloneSeedData(),
-      ...data
+      ...seed,
+      ...data,
+      metrics: seed.metrics,
+      projects: Array.isArray(data.projects) ? data.projects : seed.projects,
+      tasks: Array.isArray(data.tasks) ? data.tasks : seed.tasks,
+      bugs: Array.isArray(data.bugs) ? data.bugs : [],
+      risks: Array.isArray(data.risks) ? data.risks : seed.risks,
+      requirements: Array.isArray(data.requirements) ? data.requirements : seed.requirements,
+      documents: Array.isArray(data.documents) ? data.documents : seed.documents,
+      weeklyInsight: Array.isArray(data.weeklyInsight) ? data.weeklyInsight : seed.weeklyInsight,
+      updatedAt: asText(data.updatedAt, seed.updatedAt)
     });
 
     return {
@@ -185,6 +196,42 @@ function normalizeTaskPriority(value: string): Task["priority"] {
   return "中";
 }
 
+function normalizeBugSeverity(value: string): BugReport["severity"] {
+  if (value.includes("阻塞") || value.includes("P0") || value.toLowerCase().includes("block")) {
+    return "阻塞";
+  }
+
+  if (value.includes("严重") || value.includes("高") || value.includes("P1")) {
+    return "严重";
+  }
+
+  if (value.includes("轻") || value.includes("低") || value.includes("P3")) {
+    return "轻微";
+  }
+
+  return "一般";
+}
+
+function normalizeBugStatus(value: string): BugReport["status"] {
+  if (value.includes("关闭") || value.includes("完成") || value.includes("已解决")) {
+    return "已关闭";
+  }
+
+  if (value.includes("验证") || value.includes("验收")) {
+    return "待验证";
+  }
+
+  if (value.includes("修复") || value.includes("开发")) {
+    return "修复中";
+  }
+
+  if (value.includes("定位") || value.includes("分析") || value.includes("处理中")) {
+    return "定位中";
+  }
+
+  return "新建";
+}
+
 function normalizeRequirementPriority(value: string): Requirement["priority"] {
   if (value.includes("P0") || value.includes("高")) {
     return "P0";
@@ -290,10 +337,40 @@ function normalizeExistingTask(task: Task): Task {
   };
 }
 
+function normalizeCreateBug(values: Record<string, unknown>, id = createLocalId("bug")): BugReport {
+  return {
+    id,
+    title: asText(values.title, "未命名 Bug"),
+    status: normalizeBugStatus(asText(values.status, "新建")),
+    severity: normalizeBugSeverity(asText(values.severity, "一般")),
+    project: asText(values.project, "未关联项目"),
+    reporter: asText(values.reporter, "未填写"),
+    owner: asOwnerName(values),
+    ...createOwnerLink(values),
+    environment: asText(values.environment, "未填写"),
+    reproduction: asText(values.reproduction, "暂无复现步骤。"),
+    expected: asText(values.expected, "暂无预期结果。"),
+    actual: asText(values.actual, "暂无实际结果。"),
+    dueDate: asDateString(values.dueDate, dayjs().add(3, "day").format("YYYY-MM-DD"))
+  };
+}
+
+function normalizeExistingBug(bug: BugReport): BugReport {
+  return normalizeCreateBug(
+    {
+      ...bug,
+      status: bug.status,
+      severity: bug.severity
+    },
+    bug.id
+  );
+}
+
 function migrateLocalDatabase(data: LocalDatabase): LocalDatabase {
   return {
     ...data,
-    tasks: data.tasks.map(normalizeExistingTask)
+    tasks: data.tasks.map(normalizeExistingTask),
+    bugs: data.bugs.map(normalizeExistingBug)
   };
 }
 
@@ -345,6 +422,10 @@ function createRecord<T extends DashboardEntityType>(
     return normalizeCreateTask(values) as DashboardEntityMap[T];
   }
 
+  if (type === "bug") {
+    return normalizeCreateBug(values) as DashboardEntityMap[T];
+  }
+
   if (type === "risk") {
     return normalizeCreateRisk(values) as DashboardEntityMap[T];
   }
@@ -356,14 +437,17 @@ function createRecord<T extends DashboardEntityType>(
   return normalizeCreateDocument(values) as DashboardEntityMap[T];
 }
 
-function createMetrics(data: Pick<DashboardData, "projects" | "tasks" | "requirements" | "documents">) {
+function createMetrics(data: Pick<DashboardData, "projects" | "tasks" | "bugs" | "requirements" | "documents">) {
   const activeProjects = data.projects.filter((project) => project.status !== "已完成").length;
   const deliveryRate = data.projects.length
     ? Math.round(data.projects.reduce((sum, project) => sum + project.progress, 0) / data.projects.length)
     : 0;
   const today = dayjs().startOf("day");
   const overdueTasks = data.tasks.filter((task) => task.stage !== "已完成" && dayjs(task.dueDate).isBefore(today)).length;
-  const aiSavedHours = Math.max(0, data.requirements.length * 3 + data.documents.length * 2 + data.tasks.length);
+  const aiSavedHours = Math.max(
+    0,
+    data.requirements.length * 3 + data.documents.length * 2 + data.tasks.length + data.bugs.length
+  );
 
   return {
     activeProjects,
@@ -385,6 +469,7 @@ function getEntityLabel(type: DashboardEntityType) {
   const labels: Record<DashboardEntityType, string> = {
     project: "项目",
     task: "任务",
+    bug: "Bug",
     risk: "风险",
     requirement: "需求",
     document: "文档"
@@ -443,6 +528,10 @@ export async function createDashboardRecord<T extends DashboardEntityType>(
     data.tasks = [record as Task, ...data.tasks];
   }
 
+  if (type === "bug") {
+    data.bugs = [record as BugReport, ...data.bugs];
+  }
+
   if (type === "risk") {
     data.risks = [record as Risk, ...data.risks];
   }
@@ -487,6 +576,11 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
   if (type === "task") {
     data.tasks = data.tasks.map((task) => task.id === id ? (typedRecord as Task) : task);
     updated = data.tasks.some((task) => task.id === id);
+  }
+
+  if (type === "bug") {
+    data.bugs = data.bugs.map((bug) => bug.id === id ? (typedRecord as BugReport) : bug);
+    updated = data.bugs.some((bug) => bug.id === id);
   }
 
   if (type === "risk") {

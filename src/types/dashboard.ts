@@ -18,6 +18,8 @@ export type Project = {
 };
 
 export type TaskStage = "待处理" | "进行中" | "评审中" | "已完成";
+export type BugSeverity = "阻塞" | "严重" | "一般" | "轻微";
+export type BugStatus = "新建" | "定位中" | "修复中" | "待验证" | "已关闭";
 
 export type Task = {
   id: string;
@@ -46,6 +48,25 @@ export type Risk = {
   ownerEmail?: string;
   project: string;
   mitigation: string;
+};
+
+export type BugReport = {
+  id: string;
+  title: string;
+  status: BugStatus;
+  severity: BugSeverity;
+  project: string;
+  reporter: string;
+  owner: string;
+  ownerOpenId?: string;
+  ownerUnionId?: string;
+  ownerUserId?: string;
+  ownerEmail?: string;
+  environment: string;
+  reproduction: string;
+  expected: string;
+  actual: string;
+  dueDate: string;
 };
 
 export type Requirement = {
@@ -86,6 +107,7 @@ export type DashboardData = {
   };
   projects: Project[];
   tasks: Task[];
+  bugs: BugReport[];
   risks: Risk[];
   requirements: Requirement[];
   documents: DocumentItem[];
