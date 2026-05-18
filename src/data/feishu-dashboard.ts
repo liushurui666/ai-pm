@@ -37,6 +37,21 @@ type BitableCreateResponse = {
   };
 };
 
+type BitableTable = {
+  table_id: string;
+  name: string;
+};
+
+type BitableTableListResponse = {
+  code: number;
+  msg?: string;
+  data?: {
+    items?: BitableTable[];
+    page_token?: string;
+    has_more?: boolean;
+  };
+};
+
 type TableKey = "projects" | "tasks" | "risks" | "requirements" | "documents" | "insights";
 
 const tableEnv: Record<TableKey, string> = {
@@ -55,6 +70,15 @@ const tableLabels: Record<TableKey, string> = {
   requirements: "需求",
   documents: "文档",
   insights: "洞察"
+};
+
+const tableNameAliases: Record<TableKey, string[]> = {
+  projects: ["项目", "项目表", "项目管理", "Projects", "Project"],
+  tasks: ["任务", "任务表", "任务看板", "Tasks", "Task"],
+  risks: ["风险", "风险表", "风险中心", "Risks", "Risk"],
+  requirements: ["需求", "需求表", "需求管理", "Requirements", "Requirement"],
+  documents: ["文档", "文档表", "文档知识库", "Documents", "Document"],
+  insights: ["洞察", "洞察表", "AI洞察", "AI 洞察", "Insights", "Insight"]
 };
 
 const fieldAliases = {
@@ -89,11 +113,86 @@ function createLocalId(type: DashboardEntityType) {
 }
 
 export function isFeishuBitableConfigured() {
-  return Boolean(process.env.FEISHU_BITABLE_APP_TOKEN && getConfiguredTables().length > 0);
+  return Boolean(process.env.FEISHU_BITABLE_APP_TOKEN);
 }
 
-function getConfiguredTables() {
-  return (Object.keys(tableEnv) as TableKey[]).filter((key) => Boolean(process.env[tableEnv[key]]));
+function normalizeTableName(name: string) {
+  return name.replace(/\s+/g, "").toLowerCase();
+}
+
+async function listBitableTables() {
+  const appToken = process.env.FEISHU_BITABLE_APP_TOKEN;
+
+  if (!appToken) {
+    throw new Error("请先配置 FEISHU_BITABLE_APP_TOKEN");
+  }
+
+  const accessToken = await getFeishuAppAccessToken();
+  const tables: BitableTable[] = [];
+  let pageToken = "";
+
+  do {
+    const url = new URL(`https://open.feishu.cn/open-apis/bitable/v1/apps/${appToken}/tables`);
+    url.searchParams.set("page_size", "100");
+
+    if (pageToken) {
+      url.searchParams.set("page_token", pageToken);
+    }
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      },
+      cache: "no-store"
+    });
+    const payload = (await response.json()) as BitableTableListResponse;
+
+    if (!response.ok || payload.code !== 0) {
+      throw new Error(payload.msg || "读取飞书多维表格数据表列表失败");
+    }
+
+    tables.push(...(payload.data?.items ?? []));
+    pageToken = payload.data?.has_more ? payload.data.page_token ?? "" : "";
+  } while (pageToken);
+
+  return tables;
+}
+
+async function resolveTableIds() {
+  const resolved: Partial<Record<TableKey, string>> = {};
+
+  for (const key of Object.keys(tableEnv) as TableKey[]) {
+    const tableId = process.env[tableEnv[key]]?.trim();
+
+    if (tableId) {
+      resolved[key] = tableId;
+    }
+  }
+
+  if (!process.env.FEISHU_BITABLE_APP_TOKEN) {
+    return resolved;
+  }
+
+  const unresolvedKeys = (Object.keys(tableEnv) as TableKey[]).filter((key) => !resolved[key]);
+
+  if (!unresolvedKeys.length) {
+    return resolved;
+  }
+
+  const tables = await listBitableTables();
+  const tableByName = new Map(tables.map((table) => [normalizeTableName(table.name), table.table_id]));
+
+  for (const key of unresolvedKeys) {
+    const matchedTableId = tableNameAliases[key]
+      .map((name) => tableByName.get(normalizeTableName(name)))
+      .find(Boolean);
+
+    if (matchedTableId) {
+      resolved[key] = matchedTableId;
+    }
+  }
+
+  return resolved;
 }
 
 async function searchBitableRecords(tableId: string) {
@@ -533,7 +632,7 @@ function normalizeCreateDocument(values: Record<string, unknown>, id = createLoc
   };
 }
 
-function getTableIdForType(type: DashboardEntityType) {
+async function getTableIdForType(type: DashboardEntityType) {
   const tableKeyByType: Record<DashboardEntityType, TableKey> = {
     project: "projects",
     task: "tasks",
@@ -542,10 +641,11 @@ function getTableIdForType(type: DashboardEntityType) {
     document: "documents"
   };
   const key = tableKeyByType[type];
+  const tableIds = await resolveTableIds();
 
   return {
     key,
-    tableId: process.env[tableEnv[key]]
+    tableId: tableIds[key]
   };
 }
 
@@ -668,9 +768,7 @@ function mapInsights(records: BitableRecord[]) {
     .slice(0, 5);
 }
 
-async function loadTable<T>(key: TableKey, mapper: (records: BitableRecord[]) => T[]) {
-  const tableId = process.env[tableEnv[key]];
-
+async function loadTable<T>(tableId: string | undefined, mapper: (records: BitableRecord[]) => T[]) {
   if (!tableId) {
     return null;
   }
@@ -697,9 +795,8 @@ function createMetrics(data: DashboardData) {
 
 export async function getDashboardData(user?: FeishuUser): Promise<DashboardData> {
   const data = cloneMockData();
-  const configuredTables = getConfiguredTables();
 
-  if (!process.env.FEISHU_BITABLE_APP_TOKEN || configuredTables.length === 0) {
+  if (!process.env.FEISHU_BITABLE_APP_TOKEN) {
     return {
       ...data,
       meta: {
@@ -710,18 +807,19 @@ export async function getDashboardData(user?: FeishuUser): Promise<DashboardData
     };
   }
 
+  const tableIds = await resolveTableIds();
   const loadedTables: string[] = [];
   const missingTables = (Object.keys(tableEnv) as TableKey[])
-    .filter((key) => !process.env[tableEnv[key]])
+    .filter((key) => !tableIds[key])
     .map((key) => tableLabels[key]);
 
   const [projects, tasks, risks, requirements, documents, insights] = await Promise.all([
-    loadTable("projects", mapProjects),
-    loadTable("tasks", mapTasks),
-    loadTable("risks", mapRisks),
-    loadTable("requirements", mapRequirements),
-    loadTable("documents", mapDocuments),
-    loadTable("insights", mapInsights)
+    loadTable(tableIds.projects, mapProjects),
+    loadTable(tableIds.tasks, mapTasks),
+    loadTable(tableIds.risks, mapRisks),
+    loadTable(tableIds.requirements, mapRequirements),
+    loadTable(tableIds.documents, mapDocuments),
+    loadTable(tableIds.insights, mapInsights)
   ]);
 
   if (projects) {
@@ -773,7 +871,7 @@ export async function createDashboardRecord<T extends DashboardEntityType>(
   values: Record<string, unknown>,
   user?: FeishuUser
 ): Promise<CreateRecordResult<T>> {
-  const { key, tableId } = getTableIdForType(type);
+  const { key, tableId } = await getTableIdForType(type);
   const mockRecord = createMockRecord(type, values);
 
   if (!process.env.FEISHU_BITABLE_APP_TOKEN || !tableId) {

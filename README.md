@@ -32,7 +32,16 @@ cp .env.example .env.local
 http://localhost:3000/api/auth/feishu/callback
 ```
 
-真实项目数据通过飞书多维表格读取。至少配置 `FEISHU_BITABLE_APP_TOKEN` 和一个表 ID：
+真实项目数据通过飞书多维表格读取。通常只需要配置 `FEISHU_BITABLE_APP_TOKEN`，系统会自动在这个多维表格里查找这些数据表：
+
+- `项目`
+- `任务`
+- `风险`
+- `需求`
+- `文档`
+- `洞察`
+
+如果你的表名不一致，或者一个多维表格里有多套同名/近似表，可以再手动指定 table id：
 
 - `FEISHU_PROJECTS_TABLE_ID`
 - `FEISHU_TASKS_TABLE_ID`
@@ -50,7 +59,7 @@ http://localhost:3000/api/auth/feishu/callback
 - 文档表：`标题`、`类型`、`更新时间`、`AI摘要`
 - 洞察表：`内容`
 
-平台中的“新建项目 / 新建任务 / 登记风险 / 新建需求 / 新建文档”会调用 `/api/records`。如果配置了对应表 ID，会把记录写入飞书多维表格；如果未配置，会在当前页面临时创建，方便本地开发和演示。
+平台中的“新建项目 / 新建任务 / 登记风险 / 新建需求 / 新建文档”会调用 `/api/records`。如果识别到对应数据表，会把记录写入飞书多维表格；如果未识别到，会在当前页面临时创建，方便本地开发和演示。
 
 写入字段默认使用上述中文字段名。若你的多维表格字段名不同，需要同步调整 `src/data/feishu-dashboard.ts` 里的 `createFieldsForType`。
 
