@@ -877,6 +877,10 @@ function createOwnerFieldValue(values: Record<string, unknown>, ownerFieldType?:
     ];
   }
 
+  if (ownerFieldType === 11) {
+    throw new Error("负责人字段是飞书人员字段，请先从飞书通讯录选择负责人。");
+  }
+
   return asOwnerName(values);
 }
 

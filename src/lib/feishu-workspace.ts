@@ -14,6 +14,9 @@ type ManagedWorkspace = {
 type FeishuFolderCreateResponse = {
   code: number;
   msg?: string;
+  error?: {
+    message?: string;
+  };
   data?: {
     token?: string;
     url?: string;
@@ -23,6 +26,9 @@ type FeishuFolderCreateResponse = {
 type FeishuBitableCreateResponse = {
   code: number;
   msg?: string;
+  error?: {
+    message?: string;
+  };
   data?: {
     app?: {
       app_token?: string;
@@ -36,6 +42,9 @@ type FeishuBitableCreateResponse = {
 type FeishuPermissionResponse = {
   code: number;
   msg?: string;
+  error?: {
+    message?: string;
+  };
 };
 
 const WORKSPACE_DIR = path.join(process.cwd(), ".ai-pm");
@@ -74,8 +83,13 @@ async function saveManagedWorkspace(workspace: ManagedWorkspace) {
   await writeFile(WORKSPACE_FILE, `${JSON.stringify(workspace, null, 2)}\n`, { mode: 0o600 });
 }
 
-async function createFeishuFolder(accessToken: string) {
-  const parentFolderToken = process.env.FEISHU_PARENT_FOLDER_TOKEN?.trim() || "";
+function getFeishuErrorMessage(payload: { code?: number; msg?: string; error?: { message?: string } }, fallback: string) {
+  const message = payload.msg || payload.error?.message || fallback;
+
+  return payload.code === undefined ? message : `${message}（code: ${payload.code}）`;
+}
+
+async function createFeishuFolder(accessToken: string, parentFolderToken: string) {
   const response = await fetch("https://open.feishu.cn/open-apis/drive/v1/files/create_folder", {
     method: "POST",
     headers: {
@@ -83,7 +97,7 @@ async function createFeishuFolder(accessToken: string) {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      ...(parentFolderToken ? { folder_token: parentFolderToken } : {}),
+      folder_token: parentFolderToken,
       name: getWorkspaceName()
     }),
     cache: "no-store"
@@ -91,7 +105,7 @@ async function createFeishuFolder(accessToken: string) {
   const payload = (await response.json()) as FeishuFolderCreateResponse;
 
   if (!response.ok || payload.code !== 0 || !payload.data?.token) {
-    throw new Error(payload.msg || "创建飞书项目管理文件夹失败");
+    throw new Error(getFeishuErrorMessage(payload, "创建飞书项目管理文件夹失败"));
   }
 
   return {
@@ -118,7 +132,7 @@ async function createFeishuBitableApp(accessToken: string, folderToken?: string)
   const appToken = payload.data?.app?.app_token || payload.data?.app_token;
 
   if (!response.ok || payload.code !== 0 || !appToken) {
-    throw new Error(payload.msg || "创建飞书项目管理多维表格失败");
+    throw new Error(getFeishuErrorMessage(payload, "创建飞书项目管理多维表格失败"));
   }
 
   return {
@@ -154,7 +168,7 @@ async function grantFeishuPermission(token: string, type: "folder" | "bitable", 
   const payload = (await response.json()) as FeishuPermissionResponse;
 
   if (!response.ok || payload.code !== 0) {
-    throw new Error(payload.msg || "授权飞书项目管理文件失败");
+    throw new Error(getFeishuErrorMessage(payload, "授权飞书项目管理文件失败"));
   }
 }
 
@@ -194,18 +208,21 @@ export async function ensureFeishuWorkspace(user?: FeishuUser) {
   }
 
   const accessToken = await getFeishuTenantAccessToken();
-  const folder = await createFeishuFolder(accessToken);
-  const bitable = await createFeishuBitableApp(accessToken, folder.token);
+  const parentFolderToken = process.env.FEISHU_PARENT_FOLDER_TOKEN?.trim();
+  const folder = parentFolderToken ? await createFeishuFolder(accessToken, parentFolderToken) : null;
+  const bitable = await createFeishuBitableApp(accessToken, folder?.token || parentFolderToken);
   const workspace: ManagedWorkspace = {
-    folderToken: folder.token,
-    folderUrl: folder.url,
+    folderToken: folder?.token,
+    folderUrl: folder?.url,
     appToken: bitable.appToken,
     appUrl: bitable.url,
     createdAt: new Date().toISOString()
   };
 
   await saveManagedWorkspace(workspace);
-  await grantFeishuPermission(folder.token, "folder", user?.openId).catch(() => undefined);
+  if (folder?.token) {
+    await grantFeishuPermission(folder.token, "folder", user?.openId).catch(() => undefined);
+  }
   await grantFeishuPermission(bitable.appToken, "bitable", user?.openId).catch(() => undefined);
 
   return {

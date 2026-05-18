@@ -238,6 +238,17 @@ export function ProjectManagementPlatform() {
     return data.projects.filter((project) => project.status === projectFilter);
   }, [data, projectFilter]);
 
+  const ownerOptions = useMemo(() => {
+    const currentUser = data?.meta?.user;
+    const mergedPeople = [...people];
+
+    if (currentUser?.openId && !mergedPeople.some((person) => person.openId === currentUser.openId)) {
+      mergedPeople.unshift(currentUser);
+    }
+
+    return mergedPeople;
+  }, [data?.meta?.user, people]);
+
   const projectColumns: ColumnsType<Project> = [
     {
       title: "项目",
@@ -732,7 +743,7 @@ export function ProjectManagementPlatform() {
             type={createType}
             submitting={createSubmitting}
             projectOptions={projectOptions}
-            people={people}
+            people={ownerOptions}
             peopleLoading={peopleLoading}
             peopleError={peopleError}
             onClose={() => setCreateType(null)}
@@ -1389,7 +1400,7 @@ function OwnerSelect({
         <Select
           showSearch
           loading={loading}
-          disabled={Boolean(error)}
+          disabled={Boolean(error) && !people.length}
           placeholder="从飞书通讯录选择负责人"
           optionFilterProp="label"
           options={people.map((person) => ({
@@ -1409,13 +1420,21 @@ function OwnerSelect({
       <Form.Item name="owner" hidden>
         <Input />
       </Form.Item>
-      {error ? (
+      {error && !people.length ? (
         <Alert
           className="pm-form-alert"
           type="error"
           showIcon
           title="无法读取飞书通讯录"
           description={error}
+        />
+      ) : error ? (
+        <Alert
+          className="pm-form-alert"
+          type="warning"
+          showIcon
+          title="通讯录权限不足"
+          description={`已保留当前登录用户可选。若要选择其他负责人，请在飞书开放平台补充通讯录用户读取权限。原始错误：${error}`}
         />
       ) : (
         <Text className="pm-form-note" type="secondary">
