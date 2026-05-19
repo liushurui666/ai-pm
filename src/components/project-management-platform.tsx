@@ -35,8 +35,7 @@ import {
   Tooltip,
   Typography,
   Upload,
-  message,
-  theme
+  message
 } from "antd";
 import type { BadgeProps } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -86,6 +85,7 @@ import type {
   TaskStage
 } from "@/types/dashboard";
 import type { CreateRecordResult, DashboardEntityType, DocumentAnalyzeResult } from "@/types/records";
+import { getAntdThemeConfig, ThemeToggleButton, useThemePreference } from "@/components/theme-mode";
 
 const { Header, Sider, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
@@ -320,6 +320,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
   const [bugEditForm] = Form.useForm<Record<string, unknown>>();
   const [breakdownForm] = Form.useForm<Record<string, unknown>>();
   const [messageApi, messageContextHolder] = message.useMessage();
+  const { mode: themeMode, effectiveTheme, cycleMode } = useThemePreference();
   const screens = useBreakpoint();
   const isMobile = !screens.md;
 
@@ -985,42 +986,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
 
   return (
     <ConfigProvider
-      theme={{
-        algorithm: theme.defaultAlgorithm,
-        token: {
-          colorPrimary: "#2563eb",
-          colorInfo: "#0f766e",
-          colorBgLayout: "#f5f7fb",
-          colorText: "#172033",
-          colorTextSecondary: "#667085",
-          borderRadius: 8,
-          boxShadowTertiary: "0 10px 30px rgba(15, 23, 42, 0.06)",
-          fontFamily:
-            'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
-        },
-        components: {
-          Button: {
-            borderRadius: 8,
-            controlHeight: 38
-          },
-          Card: {
-            borderRadiusLG: 8
-          },
-          Layout: {
-            siderBg: "#102033",
-            headerBg: "#ffffff"
-          },
-          Menu: {
-            darkItemBg: "#102033",
-            darkSubMenuItemBg: "#102033",
-            darkItemSelectedBg: "#2563eb"
-          },
-          Table: {
-            headerBg: "#f8fafc",
-            headerColor: "#475467"
-          }
-        }
-      }}
+      theme={getAntdThemeConfig(effectiveTheme)}
     >
       <App>
         {messageContextHolder}
@@ -1046,7 +1012,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
 
           <Layout className="pm-main">
             <Header className="pm-header">
-              <Space size={12}>
+              <Space size={12} className="pm-header-left">
                 {!isMobile ? (
                   <Tooltip title={collapsed ? "展开导航" : "收起导航"}>
                     <Button
@@ -1079,7 +1045,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
                 />
               </Space>
 
-              <Space size={10}>
+              <Space size={10} className="pm-header-actions">
                 {data?.meta ? (
                   <Tag color={data.meta.source === "local" ? "green" : "default"}>
                     {data.meta.source === "local" ? "站内数据" : "演示数据"}
@@ -1088,6 +1054,12 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
                 <Tooltip title="查看日程">
                   <Button icon={<CalendarOutlined />} onClick={() => setScheduleOpen(true)} />
                 </Tooltip>
+                <ThemeToggleButton
+                  mode={themeMode}
+                  effectiveTheme={effectiveTheme}
+                  onClick={cycleMode}
+                  showLabel={!isMobile}
+                />
                 <Tooltip title="打开 AI 项目助手">
                   <Button
                     type="primary"
@@ -1605,7 +1577,7 @@ function Overview({
                   <div className="project-health-progress">
                     <Progress
                       percent={project.progress}
-                      strokeColor={project.health >= 85 ? "#0f766e" : "#b45309"}
+                      strokeColor={project.health >= 85 ? "var(--teal)" : "var(--amber)"}
                     />
                   </div>
                 </div>
@@ -2282,7 +2254,7 @@ function TasksView({
                       <OwnerAvatar name={group.owner} avatarUrl={group.avatarUrl} />
                       <Text strong>{group.owner}</Text>
                     </Space>
-                    <Badge count={group.tasks.length} color="#2563eb" />
+                    <Badge count={group.tasks.length} color="var(--brand)" />
                   </Flex>
                 }
               >
@@ -2615,7 +2587,7 @@ function ReportsView({ data, onGenerateReport }: { data: DashboardData; onGenera
         <Col xs={24} lg={8}>
           <Card title="交付预测">
             <div className="report-focus">
-              <Progress type="dashboard" percent={data.metrics.deliveryRate} strokeColor="#0f766e" />
+              <Progress type="dashboard" percent={data.metrics.deliveryRate} strokeColor="var(--teal)" />
               <Paragraph>
                 AI 判断当前交付趋势稳定。若知识库增强项目风险在 3 天内关闭，本月达成率预计可提升到 91%。
               </Paragraph>

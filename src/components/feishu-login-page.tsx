@@ -1,8 +1,9 @@
 "use client";
 
-import { Alert, Button, Card, ConfigProvider, Space, Tag, Typography, theme } from "antd";
+import { Alert, Button, Card, ConfigProvider, Space, Tag, Typography } from "antd";
 import { LoginOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import Link from "next/link";
+import { getAntdThemeConfig, ThemeToggleButton, useThemePreference } from "@/components/theme-mode";
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -13,18 +14,19 @@ const errorMessageMap: Record<string, string> = {
 
 export function FeishuLoginPage({ configured, error }: { configured: boolean; error?: string }) {
   const errorMessage = error ? errorMessageMap[error] ?? error : "";
+  const { mode: themeMode, effectiveTheme, cycleMode } = useThemePreference();
 
   return (
-    <ConfigProvider
-      theme={{
-        algorithm: theme.defaultAlgorithm,
-        token: {
-          colorPrimary: "#2563eb",
-          borderRadius: 8
-        }
-      }}
-    >
+    <ConfigProvider theme={getAntdThemeConfig(effectiveTheme)}>
       <main className="login-shell">
+        <div className="login-theme-action">
+          <ThemeToggleButton
+            mode={themeMode}
+            effectiveTheme={effectiveTheme}
+            onClick={cycleMode}
+            showLabel
+          />
+        </div>
         <section className="login-hero">
           <div className="login-brand-mark">
             <ThunderboltOutlined />
