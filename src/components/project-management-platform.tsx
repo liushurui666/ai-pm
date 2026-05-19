@@ -309,9 +309,11 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editingBug, setEditingBug] = useState<BugReport | null>(null);
+  const [editingRequirement, setEditingRequirement] = useState<Requirement | null>(null);
   const [projectEditSubmitting, setProjectEditSubmitting] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [bugEditSubmitting, setBugEditSubmitting] = useState(false);
+  const [requirementEditSubmitting, setRequirementEditSubmitting] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -326,7 +328,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
-      content: "我会持续观察项目进度、任务阻塞和风险变化。你可以问我：本周风险、生成周报、拆解需求。"
+      content: "我会持续观察项目进度、任务阻塞和风险变化。你可以问我：本周风险、生成周报、版本范围。"
     }
   ]);
   const [chatLoading, setChatLoading] = useState(false);
@@ -335,6 +337,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
   const [projectEditForm] = Form.useForm<Record<string, unknown>>();
   const [editForm] = Form.useForm<Record<string, unknown>>();
   const [bugEditForm] = Form.useForm<Record<string, unknown>>();
+  const [requirementEditForm] = Form.useForm<Record<string, unknown>>();
   const [breakdownForm] = Form.useForm<Record<string, unknown>>();
   const [messageApi, messageContextHolder] = message.useMessage();
   const { mode: themeMode, effectiveTheme, cycleMode } = useThemePreference();
@@ -556,6 +559,17 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
       dataIndex: "project",
       key: "project",
       width: 190
+    },
+    {
+      title: "操作",
+      key: "action",
+      fixed: "right",
+      width: 90,
+      render: (_, requirement) => (
+        <Button type="link" icon={<EditOutlined />} onClick={() => openEditRequirementDrawer(requirement)}>
+          编辑
+        </Button>
+      )
     }
   ];
 
@@ -667,6 +681,12 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
     bugEditForm.setFieldsValue(getBugFormValues(bug));
   }
 
+  function openEditRequirementDrawer(requirement: Requirement) {
+    setEditingRequirement(requirement);
+    requirementEditForm.resetFields();
+    requirementEditForm.setFieldsValue(requirement);
+  }
+
   function openDocumentBreakdownDrawer(initialValues: Record<string, unknown> = {}) {
     setBreakdownOpen(true);
     breakdownForm.resetFields();
@@ -717,13 +737,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
       createForm.resetFields();
 
       if (submittedType === "project") {
-        const project = result.record as Project;
-
-        switchView("requirements");
-        openCreateDrawer("requirementVersion", {
-          name: `${project.name} 首个版本`,
-          project: project.name
-        });
+        switchView("projects");
       }
 
       if (submittedType === "bug") {
@@ -880,6 +894,55 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
       messageApi.error(error instanceof Error ? error.message : "更新 Bug 失败");
     } finally {
       setBugEditSubmitting(false);
+    }
+  }
+
+  async function handleUpdateRequirement(values: Record<string, unknown>) {
+    if (!editingRequirement) {
+      return;
+    }
+
+    setRequirementEditSubmitting(true);
+
+    try {
+      const response = await fetch("/api/records", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          type: "requirement",
+          id: editingRequirement.id,
+          values: serializeCreateValues(values)
+        })
+      });
+      const payload = (await response.json()) as CreateRecordResult | { error?: string };
+
+      if (response.status === 401) {
+        window.location.assign("/login");
+
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error("error" in payload ? payload.error || "更新需求失败" : "更新需求失败");
+      }
+
+      if ("error" in payload) {
+        throw new Error(payload.error || "更新需求失败");
+      }
+
+      const result = payload as CreateRecordResult;
+
+      setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
+      void refreshDashboardState();
+      messageApi.success(result.message);
+      setEditingRequirement(null);
+      requirementEditForm.resetFields();
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "更新需求失败");
+    } finally {
+      setRequirementEditSubmitting(false);
     }
   }
 
@@ -1217,26 +1280,10 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
                   {activeView === "requirements" ? (
                     <RequirementsView
                       columns={requirementColumns}
-                      bugs={data.bugs}
                       requirements={data.requirements}
                       selectedVersionId={selectedRequirementVersionId}
-                      tasks={data.tasks}
                       versions={requirementVersions}
                       onBack={() => setSelectedRequirementVersionId(null)}
-                      onBreakdown={(version) =>
-                        openDocumentBreakdownDrawer({
-                          versionId: version.id,
-                          versionName: version.name,
-                          project: version.project === "跨项目" ? undefined : version.project
-                        })
-                      }
-                      onCreateBug={(version) =>
-                        openCreateDrawer("bug", {
-                          versionId: version.id,
-                          versionName: version.name,
-                          project: version.project === "跨项目" ? undefined : version.project
-                        })
-                      }
                       onCreateRequirement={(version) =>
                         openCreateDrawer("requirement", {
                           versionId: version.id,
@@ -1244,16 +1291,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
                           project: version.project === "跨项目" ? undefined : version.project
                         })
                       }
-                      onCreateTask={(version) =>
-                        openCreateDrawer("task", {
-                          versionId: version.id,
-                          versionName: version.name,
-                          project: version.project === "跨项目" ? undefined : version.project
-                        })
-                      }
                       onCreateVersion={() => openCreateDrawer("requirementVersion")}
-                      onEditBug={openEditBugDrawer}
-                      onEditTask={openEditTaskDrawer}
                       onSelectVersion={setSelectedRequirementVersionId}
                     />
                   ) : null}
@@ -1396,6 +1434,16 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
             peopleError={peopleError}
             onClose={() => setEditingBug(null)}
             onSubmit={handleUpdateBug}
+          />
+
+          <RequirementEditDrawer
+            form={requirementEditForm}
+            requirement={editingRequirement}
+            submitting={requirementEditSubmitting}
+            projectOptions={projectOptions}
+            versionOptions={requirementVersionOptions}
+            onClose={() => setEditingRequirement(null)}
+            onSubmit={handleUpdateRequirement}
           />
 
           {data ? (
@@ -1777,7 +1825,7 @@ function ProjectsView({
   return (
     <TableView
       title="项目管理"
-      subtitle="统一查看项目状态、健康度、风险数量和交付进度。"
+      subtitle="面向研发执行视角，统一查看项目状态、版本交付、健康度和里程碑进展。"
       icon={<FolderOpenOutlined />}
       extra={
         <Space wrap>
@@ -1808,147 +1856,35 @@ function ProjectsView({
 
 function RequirementsView({
   columns,
-  bugs,
   requirements,
   selectedVersionId,
-  tasks,
   versions,
   onBack,
-  onBreakdown,
-  onCreateBug,
   onCreateRequirement,
-  onCreateTask,
   onCreateVersion,
-  onEditBug,
-  onEditTask,
   onSelectVersion
 }: {
   columns: ColumnsType<Requirement>;
-  bugs: BugReport[];
   requirements: Requirement[];
   selectedVersionId: string | null;
-  tasks: Task[];
   versions: RequirementVersion[];
   onBack: () => void;
-  onBreakdown: (version: RequirementVersion) => void;
-  onCreateBug: (version: RequirementVersion) => void;
   onCreateRequirement: (version: RequirementVersion) => void;
-  onCreateTask: (version: RequirementVersion) => void;
   onCreateVersion: () => void;
-  onEditBug: (bug: BugReport) => void;
-  onEditTask: (task: Task) => void;
   onSelectVersion: (id: string) => void;
 }) {
-  const [activeDetail, setActiveDetail] = useState<"requirements" | "tasks" | "bugs">("requirements");
   const selectedVersion = selectedVersionId ? versions.find((version) => version.id === selectedVersionId) : null;
 
   if (selectedVersion) {
     const scopedRequirements = requirements.filter((requirement) => requirement.versionId === selectedVersion.id);
-    const scopedTasks = tasks.filter((task) => task.versionId === selectedVersion.id);
-    const scopedBugs = bugs.filter((bug) => bug.versionId === selectedVersion.id);
     const readyCount = scopedRequirements.filter((requirement) => requirement.status === "待上线").length;
-    const finishedTaskCount = scopedTasks.filter((task) => task.stage === "已完成").length;
-    const openBugCount = scopedBugs.filter((bug) => bug.status !== "已关闭").length;
+    const reviewCount = scopedRequirements.filter((requirement) => requirement.status === "评审中").length;
+    const highPriorityCount = scopedRequirements.filter((requirement) => requirement.priority !== "P2").length;
     const progress = selectedVersion.status === "已发布"
       ? 100
-      : scopedTasks.length
-        ? Math.round((finishedTaskCount / scopedTasks.length) * 100)
-        : scopedRequirements.length
-          ? Math.round((readyCount / scopedRequirements.length) * 100)
+      : scopedRequirements.length
+        ? Math.round((readyCount / scopedRequirements.length) * 100)
         : 0;
-    const taskColumns: ColumnsType<Task> = [
-      {
-        title: "任务",
-        dataIndex: "title",
-        key: "title",
-        render: (_, task) => (
-          <Space orientation="vertical" size={2}>
-            <Text strong>{task.title}</Text>
-            <Text type="secondary">{task.aiHint}</Text>
-          </Space>
-        )
-      },
-      {
-        title: "负责人",
-        dataIndex: "owner",
-        key: "owner",
-        width: 140,
-        render: (_, task) => <OwnerInline name={task.owner} avatarUrl={task.ownerAvatarUrl} />
-      },
-      {
-        title: "阶段",
-        dataIndex: "stage",
-        key: "stage",
-        width: 110,
-        render: (stage: TaskStage) => <Tag color={stage === "已完成" ? "green" : "blue"}>{stage}</Tag>
-      },
-      {
-        title: "截止日期",
-        dataIndex: "dueDate",
-        key: "dueDate",
-        width: 130
-      },
-      {
-        title: "操作",
-        key: "action",
-        width: 90,
-        render: (_, task) => (
-          <Button type="link" icon={<EditOutlined />} onClick={() => onEditTask(task)}>
-            编辑
-          </Button>
-        )
-      }
-    ];
-    const bugColumns: ColumnsType<BugReport> = [
-      {
-        title: "Bug",
-        dataIndex: "title",
-        key: "title",
-        render: (_, bug) => (
-          <Space orientation="vertical" size={2}>
-            <Text strong>{bug.title}</Text>
-            <Text type="secondary">{bug.reproduction}</Text>
-          </Space>
-        )
-      },
-      {
-        title: "严重程度",
-        dataIndex: "severity",
-        key: "severity",
-        width: 110,
-        render: (severity: BugReport["severity"]) => <Tag color={bugSeverityColor[severity]}>{severity}</Tag>
-      },
-      {
-        title: "状态",
-        dataIndex: "status",
-        key: "status",
-        width: 110,
-        render: (status: BugReport["status"]) => <Tag color={bugStatusColor[status]}>{status}</Tag>
-      },
-      {
-        title: "负责人",
-        dataIndex: "owner",
-        key: "owner",
-        width: 140,
-        render: (_, bug) => <OwnerInline name={bug.owner} avatarUrl={bug.ownerAvatarUrl} />
-      },
-      {
-        title: "截止日期",
-        dataIndex: "dueDate",
-        key: "dueDate",
-        width: 130
-      },
-      {
-        title: "操作",
-        key: "action",
-        width: 90,
-        render: (_, bug) => (
-          <Button type="link" icon={<EditOutlined />} onClick={() => onEditBug(bug)}>
-            编辑
-          </Button>
-        )
-      }
-    ];
 
     return (
       <TableView
@@ -1958,17 +1894,8 @@ function RequirementsView({
         extra={
           <Space wrap>
             <Button onClick={onBack}>返回版本</Button>
-            <Button icon={<UploadOutlined />} onClick={() => onBreakdown(selectedVersion)}>
-              上传文档拆任务
-            </Button>
             <Button type="primary" icon={<PlusOutlined />} onClick={() => onCreateRequirement(selectedVersion)}>
               绑定需求
-            </Button>
-            <Button icon={<CheckCircleOutlined />} onClick={() => onCreateTask(selectedVersion)}>
-              新建任务
-            </Button>
-            <Button icon={<BugOutlined />} onClick={() => onCreateBug(selectedVersion)}>
-              提 Bug
             </Button>
           </Space>
         }
@@ -1989,56 +1916,24 @@ function RequirementsView({
             </Text>
           </div>
           <div className="requirement-version-summary-item">
-            <Text type="secondary">任务进度</Text>
+            <Text type="secondary">需求就绪</Text>
             <Progress percent={progress} size="small" />
           </div>
           <div className="requirement-version-summary-item">
-            <Text type="secondary">需求 / 任务 / 未关 Bug</Text>
+            <Text type="secondary">总数 / 评审中 / 高优</Text>
             <Text strong>
-              {scopedRequirements.length} / {scopedTasks.length} / {openBugCount}
+              {scopedRequirements.length} / {reviewCount} / {highPriorityCount}
             </Text>
           </div>
         </div>
-        <Segmented
-          className="version-detail-tabs"
-          value={activeDetail}
-          onChange={(value) => setActiveDetail(value as "requirements" | "tasks" | "bugs")}
-          options={[
-            { label: `需求 ${scopedRequirements.length}`, value: "requirements" },
-            { label: `任务 ${scopedTasks.length}`, value: "tasks" },
-            { label: `Bug ${scopedBugs.length}`, value: "bugs" }
-          ]}
+        <Table
+          rowKey="id"
+          columns={columns}
+          dataSource={scopedRequirements}
+          pagination={false}
+          scroll={{ x: 960 }}
+          locale={{ emptyText: "该版本暂无需求，点击右上角绑定需求" }}
         />
-        {activeDetail === "requirements" ? (
-          <Table
-            rowKey="id"
-            columns={columns}
-            dataSource={scopedRequirements}
-            pagination={false}
-            scroll={{ x: 860 }}
-            locale={{ emptyText: "该版本暂无需求，点击右上角绑定需求" }}
-          />
-        ) : null}
-        {activeDetail === "tasks" ? (
-          <Table
-            rowKey="id"
-            columns={taskColumns}
-            dataSource={scopedTasks}
-            pagination={false}
-            scroll={{ x: 860 }}
-            locale={{ emptyText: "该版本暂无任务，上传文档或新建任务后会显示在这里" }}
-          />
-        ) : null}
-        {activeDetail === "bugs" ? (
-          <Table
-            rowKey="id"
-            columns={bugColumns}
-            dataSource={scopedBugs}
-            pagination={false}
-            scroll={{ x: 920 }}
-            locale={{ emptyText: "该版本暂无 Bug" }}
-          />
-        ) : null}
       </TableView>
     );
   }
@@ -2048,7 +1943,7 @@ function RequirementsView({
       <PageTitle
         icon={<NodeIndexOutlined />}
         title="需求版本"
-        subtitle="先按版本集中需求，再进入版本维护范围、验收标准和交付状态。"
+        subtitle="给产品同学维护版本范围、需求优先级、验收标准和上线状态。"
         extra={
           <Button type="primary" icon={<PlusOutlined />} onClick={onCreateVersion}>
             新建版本
@@ -2059,16 +1954,13 @@ function RequirementsView({
         <div className="requirement-version-grid">
           {versions.map((version) => {
             const scopedRequirements = requirements.filter((requirement) => requirement.versionId === version.id);
-            const scopedTasks = tasks.filter((task) => task.versionId === version.id);
-            const scopedBugs = bugs.filter((bug) => bug.versionId === version.id);
             const readyCount = scopedRequirements.filter((requirement) => requirement.status === "待上线").length;
-            const finishedTaskCount = scopedTasks.filter((task) => task.stage === "已完成").length;
+            const reviewCount = scopedRequirements.filter((requirement) => requirement.status === "评审中").length;
+            const highPriorityCount = scopedRequirements.filter((requirement) => requirement.priority !== "P2").length;
             const progress = version.status === "已发布"
               ? 100
-              : scopedTasks.length
-                ? Math.round((finishedTaskCount / scopedTasks.length) * 100)
-                : scopedRequirements.length
-                  ? Math.round((readyCount / scopedRequirements.length) * 100)
+              : scopedRequirements.length
+                ? Math.round((readyCount / scopedRequirements.length) * 100)
                 : 0;
 
             return (
@@ -2085,7 +1977,7 @@ function RequirementsView({
                 </Paragraph>
                 <div className="requirement-version-progress">
                   <Flex justify="space-between" align="center">
-                    <Text type="secondary">上线就绪</Text>
+                    <Text type="secondary">需求就绪</Text>
                     <Text strong>{progress}%</Text>
                   </Flex>
                   <Progress percent={progress} size="small" showInfo={false} />
@@ -2096,12 +1988,12 @@ function RequirementsView({
                     <Text strong>{scopedRequirements.length}</Text>
                   </div>
                   <div>
-                    <Text type="secondary">任务数</Text>
-                    <Text strong>{scopedTasks.length}</Text>
+                    <Text type="secondary">评审中</Text>
+                    <Text strong>{reviewCount}</Text>
                   </div>
                   <div>
-                    <Text type="secondary">未关 Bug</Text>
-                    <Text strong>{scopedBugs.filter((bug) => bug.status !== "已关闭").length}</Text>
+                    <Text type="secondary">高优先级</Text>
+                    <Text strong>{highPriorityCount}</Text>
                   </div>
                 </div>
                 <Button block onClick={() => onSelectVersion(version.id)}>
@@ -2642,7 +2534,7 @@ function TasksView({
       <PageTitle
         icon={<CheckCircleOutlined />}
         title="任务看板"
-        subtitle="先用表格扫全量任务，再按负责人追踪每个人手上的交付。"
+        subtitle="给研发同学按项目、版本和负责人推进交付任务，文档拆解后的执行项统一进入这里。"
         extra={
           <Space wrap>
             <Segmented
@@ -3704,6 +3596,53 @@ function BugEditDrawer({
             projectOptions={projectOptions}
             versionOptions={versionOptions}
           />
+        </Form>
+      ) : null}
+    </Drawer>
+  );
+}
+
+function RequirementEditDrawer({
+  form,
+  requirement,
+  submitting,
+  projectOptions,
+  versionOptions,
+  onClose,
+  onSubmit
+}: {
+  form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
+  requirement: Requirement | null;
+  submitting: boolean;
+  projectOptions: string[];
+  versionOptions: RequirementVersionOption[];
+  onClose: () => void;
+  onSubmit: (values: Record<string, unknown>) => void;
+}) {
+  return (
+    <Drawer
+      className="pm-record-drawer"
+      title={
+        <Space>
+          <EditOutlined />
+          <span>编辑需求</span>
+        </Space>
+      }
+      open={Boolean(requirement)}
+      onClose={onClose}
+      size="default"
+      footer={
+        <DrawerFooterActions
+          submitting={submitting}
+          submitText="保存修改"
+          onClose={onClose}
+          onSubmit={() => form.submit()}
+        />
+      }
+    >
+      {requirement ? (
+        <Form form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
+          <RequirementFields form={form} projectOptions={projectOptions} versionOptions={versionOptions} />
         </Form>
       ) : null}
     </Drawer>
