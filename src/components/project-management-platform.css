@@ -374,8 +374,61 @@
   margin-bottom: 4px;
 }
 
+.pm-list-stack {
+  display: flex;
+  flex-direction: column;
+}
+
+.pm-list-item {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.pm-list-item:first-child {
+  padding-top: 0;
+}
+
+.pm-list-item:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.search-results-list {
+  display: flex;
+  flex-direction: column;
+}
+
 .search-result-item {
-  padding-inline: 0;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.search-result-item:last-child {
+  border-bottom: 0;
+}
+
+.search-result-main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  gap: 12px;
+}
+
+.search-result-content {
+  min-width: 0;
+}
+
+.search-result-description {
+  display: block;
+  max-width: 220px;
+}
+
+.search-result-action {
+  flex: 0 0 auto;
 }
 
 .risk-card {

@@ -20,7 +20,6 @@ import {
   Input,
   InputNumber,
   Layout,
-  List,
   Menu,
   Progress,
   Row,
@@ -92,7 +91,7 @@ const { Header, Sider, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
 const { useBreakpoint } = Grid;
 
-type AppView = "overview" | "projects" | "tasks" | "bugs" | "requirements" | "risks" | "docs" | "reports";
+export type AppView = "overview" | "projects" | "tasks" | "bugs" | "requirements" | "risks" | "docs" | "reports";
 
 type ChatMessage = {
   role: "assistant" | "user";
@@ -205,16 +204,6 @@ async function fetchDashboardFromApi() {
   return nextData;
 }
 
-function getInitialView(): AppView {
-  if (typeof window === "undefined") {
-    return "overview";
-  }
-
-  const view = new URLSearchParams(window.location.search).get("view");
-
-  return view && validViews.has(view as AppView) ? (view as AppView) : "overview";
-}
-
 function normalizeIdentity(value?: string) {
   return value?.trim().toLowerCase() ?? "";
 }
@@ -293,7 +282,7 @@ function isMyOwnerRecord(
   return [currentUser.name, currentUser.enName, currentUser.email].some((value) => owner && owner === normalizeIdentity(value));
 }
 
-export function ProjectManagementPlatform() {
+export function ProjectManagementPlatform({ initialView = "overview" }: { initialView?: AppView }) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -312,7 +301,7 @@ export function ProjectManagementPlatform() {
   const [searchQuery, setSearchQuery] = useState("");
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const [breakdownSubmitting, setBreakdownSubmitting] = useState(false);
-  const [activeView, setActiveView] = useState<AppView>(() => getInitialView());
+  const [activeView, setActiveView] = useState<AppView>(validViews.has(initialView) ? initialView : "overview");
   const [projectFilter, setProjectFilter] = useState("全部");
   const [people, setPeople] = useState<FeishuPerson[]>([]);
   const [peopleLoading, setPeopleLoading] = useState(false);
@@ -1639,10 +1628,9 @@ function Overview({
             }
           >
             {urgentTasks.length ? (
-              <List
-                dataSource={urgentTasks}
-                renderItem={(task) => (
-                  <List.Item>
+              <div className="pm-list-stack">
+                {urgentTasks.map((task) => (
+                  <div className="pm-list-item" key={task.id}>
                     <Space orientation="vertical" size={4} className="pm-wide">
                       <Flex justify="space-between" align="start" gap={12}>
                         <Text strong>{task.title}</Text>
@@ -1652,9 +1640,9 @@ function Overview({
                         {task.project} · {task.owner || "未分配"} · {task.dueDate}
                       </Text>
                     </Space>
-                  </List.Item>
-                )}
-              />
+                  </div>
+                ))}
+              </div>
             ) : (
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无待办任务" />
             )}
@@ -2081,37 +2069,28 @@ function SearchDrawer({
           placeholder="搜索项目、任务、Bug、文档、风险"
         />
         {results.length ? (
-          <List
-            dataSource={results}
-            renderItem={(result) => (
-              <List.Item
-                className="search-result-item"
-                actions={[
-                  <Button type="link" key="open" onClick={() => onOpenResult(result)}>
-                    打开详情
-                  </Button>
-                ]}
-              >
-                <List.Item.Meta
-                  avatar={result.owner ? <OwnerAvatar name={result.owner} avatarUrl={result.ownerAvatarUrl} /> : null}
-                  title={
+          <div className="search-results-list">
+            {results.map((result) => (
+              <div className="search-result-item" key={`${result.entity}-${result.id}`}>
+                <div className="search-result-main">
+                  {result.owner ? <OwnerAvatar name={result.owner} avatarUrl={result.ownerAvatarUrl} /> : null}
+                  <Space orientation="vertical" size={4} className="search-result-content">
                     <Space wrap>
                       <Tag>{result.type}</Tag>
                       <Text strong>{result.title}</Text>
                     </Space>
-                  }
-                  description={
-                    <Space orientation="vertical" size={2}>
-                      <Text type="secondary">{result.meta}</Text>
-                      <Text type="secondary" ellipsis>
-                        {result.description}
-                      </Text>
-                    </Space>
-                  }
-                />
-              </List.Item>
-            )}
-          />
+                    <Text type="secondary">{result.meta}</Text>
+                    <Text type="secondary" ellipsis className="search-result-description">
+                      {result.description}
+                    </Text>
+                  </Space>
+                </div>
+                <Button type="link" className="search-result-action" onClick={() => onOpenResult(result)}>
+                  打开详情
+                </Button>
+              </div>
+            ))}
+          </div>
         ) : (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={query.trim() ? "没有匹配结果" : "输入关键词开始搜索"} />
         )}
@@ -2650,15 +2629,14 @@ function ReportsView({ data, onGenerateReport }: { data: DashboardData; onGenera
         </Col>
         <Col xs={24} lg={8}>
           <Card title="资源负载">
-            <List
-              dataSource={[
+            <div className="pm-list-stack">
+              {[
                 { team: "产品组", load: 82 },
                 { team: "前端组", load: 76 },
                 { team: "后端组", load: 91 },
                 { team: "测试组", load: 88 }
-              ]}
-              renderItem={(item) => (
-                <List.Item>
+              ].map((item) => (
+                <div className="pm-list-item" key={item.team}>
                   <Space orientation="vertical" size={4} className="pm-wide">
                     <Flex justify="space-between">
                       <Text>{item.team}</Text>
@@ -2666,9 +2644,9 @@ function ReportsView({ data, onGenerateReport }: { data: DashboardData; onGenera
                     </Flex>
                     <Progress percent={item.load} showInfo={false} />
                   </Space>
-                </List.Item>
-              )}
-            />
+                </div>
+              ))}
+            </div>
           </Card>
         </Col>
       </Row>
@@ -3517,7 +3495,7 @@ function ProjectFields({
       <Row gutter={12}>
         <Col span={12}>
           <Form.Item label="进度（自动）" name="progress">
-            <InputNumber className="pm-form-control" min={0} max={100} addonAfter="%" disabled />
+            <InputNumber className="pm-form-control" min={0} max={100} suffix="%" disabled />
           </Form.Item>
         </Col>
         <Col span={12}>
