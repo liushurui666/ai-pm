@@ -1071,11 +1071,6 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
                       setSearchOpen(false);
                     }
                   }}
-                  onFocus={() => {
-                    if (searchQuery.trim()) {
-                      setSearchOpen(true);
-                    }
-                  }}
                   onPressEnter={() => {
                     if (searchQuery.trim()) {
                       setSearchOpen(true);
