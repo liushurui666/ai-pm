@@ -404,6 +404,8 @@
 }
 
 .project-milestone-form-header {
+  flex-wrap: wrap;
+  gap: 8px;
   margin-bottom: 12px;
 }
 
@@ -416,13 +418,22 @@
 
 .project-milestone-form-grid {
   display: grid;
-  grid-template-columns: minmax(220px, 1.3fr) minmax(130px, 0.7fr) minmax(150px, 0.8fr) minmax(150px, 0.8fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   align-items: start;
 }
 
 .project-milestone-form-grid .ant-form-item {
   margin-bottom: 12px;
+}
+
+.project-milestone-form-grid .ant-form-item-control-input-content {
+  min-width: 0;
+}
+
+.project-milestone-form-grid .ant-picker,
+.project-milestone-form-grid .ant-select {
+  width: 100%;
 }
 
 .project-milestone-note {
@@ -651,6 +662,26 @@
   margin: -4px 0 16px;
 }
 
+.pm-record-drawer .ant-drawer-content {
+  overflow: hidden;
+}
+
+.pm-record-drawer .ant-drawer-body {
+  padding-bottom: 18px;
+}
+
+.pm-record-drawer .ant-drawer-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  border-top: 1px solid var(--border);
+  background: var(--surface-elevated);
+}
+
+.pm-drawer-actions {
+  width: 100%;
+}
+
 @media (max-width: 1200px) {
   .overview-command {
     grid-template-columns: 1fr;
@@ -668,9 +699,6 @@
     max-width: 520px;
   }
 
-  .project-milestone-form-grid {
-    grid-template-columns: repeat(2, minmax(180px, 1fr));
-  }
 }
 
 @media (max-width: 768px) {

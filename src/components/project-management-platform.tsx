@@ -3426,6 +3426,27 @@ function getSelectedUploadFile(value: unknown) {
   return file instanceof File ? file : null;
 }
 
+function DrawerFooterActions({
+  submitting,
+  submitText,
+  onClose,
+  onSubmit
+}: {
+  submitting: boolean;
+  submitText: string;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <Flex className="pm-drawer-actions" justify="flex-end" gap={10}>
+      <Button onClick={onClose}>取消</Button>
+      <Button type="primary" loading={submitting} onClick={onSubmit}>
+        {submitText}
+      </Button>
+    </Flex>
+  );
+}
+
 function CreateRecordDrawer({
   form,
   open,
@@ -3455,17 +3476,18 @@ function CreateRecordDrawer({
 
   return (
     <Drawer
+      className="pm-record-drawer"
       title={type ? `新建${label}` : "新建"}
       open={open}
       onClose={onClose}
-      size="default"
-      extra={
-        <Space>
-          <Button onClick={onClose}>取消</Button>
-          <Button type="primary" loading={submitting} onClick={() => form.submit()}>
-            保存
-          </Button>
-        </Space>
+      size={type === "project" ? "large" : "default"}
+      footer={
+        <DrawerFooterActions
+          submitting={submitting}
+          submitText="保存"
+          onClose={onClose}
+          onSubmit={() => form.submit()}
+        />
       }
     >
       {type ? (
@@ -3534,6 +3556,7 @@ function ProjectEditDrawer({
 }) {
   return (
     <Drawer
+      className="pm-record-drawer"
       title={
         <Space>
           <EditOutlined />
@@ -3543,13 +3566,13 @@ function ProjectEditDrawer({
       open={Boolean(project)}
       onClose={onClose}
       size="large"
-      extra={
-        <Space>
-          <Button onClick={onClose}>取消</Button>
-          <Button type="primary" loading={submitting} onClick={() => form.submit()}>
-            保存修改
-          </Button>
-        </Space>
+      footer={
+        <DrawerFooterActions
+          submitting={submitting}
+          submitText="保存修改"
+          onClose={onClose}
+          onSubmit={() => form.submit()}
+        />
       }
     >
       {project ? (
@@ -3592,6 +3615,7 @@ function TaskEditDrawer({
 }) {
   return (
     <Drawer
+      className="pm-record-drawer"
       title={
         <Space>
           <EditOutlined />
@@ -3601,13 +3625,13 @@ function TaskEditDrawer({
       open={Boolean(task)}
       onClose={onClose}
       size="default"
-      extra={
-        <Space>
-          <Button onClick={onClose}>取消</Button>
-          <Button type="primary" loading={submitting} onClick={() => form.submit()}>
-            保存修改
-          </Button>
-        </Space>
+      footer={
+        <DrawerFooterActions
+          submitting={submitting}
+          submitText="保存修改"
+          onClose={onClose}
+          onSubmit={() => form.submit()}
+        />
       }
     >
       {task ? (
@@ -3651,6 +3675,7 @@ function BugEditDrawer({
 }) {
   return (
     <Drawer
+      className="pm-record-drawer"
       title={
         <Space>
           <EditOutlined />
@@ -3660,13 +3685,13 @@ function BugEditDrawer({
       open={Boolean(bug)}
       onClose={onClose}
       size="default"
-      extra={
-        <Space>
-          <Button onClick={onClose}>取消</Button>
-          <Button type="primary" loading={submitting} onClick={() => form.submit()}>
-            保存修改
-          </Button>
-        </Space>
+      footer={
+        <DrawerFooterActions
+          submitting={submitting}
+          submitText="保存修改"
+          onClose={onClose}
+          onSubmit={() => form.submit()}
+        />
       }
     >
       {bug ? (
@@ -3710,6 +3735,7 @@ function DocumentBreakdownDrawer({
 }) {
   return (
     <Drawer
+      className="pm-record-drawer"
       title={
         <Space>
           <UploadOutlined />
@@ -3719,13 +3745,13 @@ function DocumentBreakdownDrawer({
       open={open}
       onClose={onClose}
       size="default"
-      extra={
-        <Space>
-          <Button onClick={onClose}>取消</Button>
-          <Button type="primary" loading={submitting} onClick={() => form.submit()}>
-            AI 拆解并入库
-          </Button>
-        </Space>
+      footer={
+        <DrawerFooterActions
+          submitting={submitting}
+          submitText="AI 拆解并入库"
+          onClose={onClose}
+          onSubmit={() => form.submit()}
+        />
       }
     >
       <Form form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
