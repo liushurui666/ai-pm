@@ -581,6 +581,8 @@ function normalizeCreateRequirement(
     project: asText(values.project, "未关联项目"),
     versionId: asText(values.versionId) || DEFAULT_REQUIREMENT_VERSION.id,
     versionName: asText(values.versionName) || DEFAULT_REQUIREMENT_VERSION.name,
+    uiLink: asText(values.uiLink),
+    documentLink: asText(values.documentLink),
     acceptance: asText(values.acceptance, "暂无验收标准。")
   };
 }

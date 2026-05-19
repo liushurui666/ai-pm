@@ -55,6 +55,7 @@ import {
   FolderOpenOutlined,
   InboxOutlined,
   InfoCircleOutlined,
+  LinkOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -559,6 +560,12 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
       dataIndex: "project",
       key: "project",
       width: 190
+    },
+    {
+      title: "资料链接",
+      key: "links",
+      width: 180,
+      render: (_, requirement) => <RequirementLinkActions requirement={requirement} />
     },
     {
       title: "操作",
@@ -1931,7 +1938,7 @@ function RequirementsView({
           columns={columns}
           dataSource={scopedRequirements}
           pagination={false}
-          scroll={{ x: 960 }}
+          scroll={{ x: 1140 }}
           locale={{ emptyText: "该版本暂无需求，点击右上角绑定需求" }}
         />
       </TableView>
@@ -2011,6 +2018,35 @@ function RequirementsView({
           />
         </div>
       )}
+    </Space>
+  );
+}
+
+function RequirementLinkActions({ requirement }: { requirement: Requirement }) {
+  const links = [
+    { key: "ui", label: "UI", href: getSafeExternalUrl(requirement.uiLink) },
+    { key: "document", label: "需求文档", href: getSafeExternalUrl(requirement.documentLink) }
+  ].filter((link) => Boolean(link.href));
+
+  if (!links.length) {
+    return <Text type="secondary">未填写</Text>;
+  }
+
+  return (
+    <Space className="requirement-link-actions" size={[8, 4]} wrap>
+      {links.map((link) => (
+        <Button
+          key={link.key}
+          type="link"
+          size="small"
+          icon={<LinkOutlined />}
+          href={link.href}
+          target="_blank"
+          rel="noreferrer"
+        >
+          {link.label}
+        </Button>
+      ))}
     </Space>
   );
 }
@@ -2298,7 +2334,15 @@ function createSearchResults(data: DashboardData, query: string): SearchResult[]
     }));
   const requirementResults = data.requirements
     .filter((requirement) =>
-      matches([requirement.title, requirement.project, requirement.versionName, requirement.acceptance, requirement.status])
+      matches([
+        requirement.title,
+        requirement.project,
+        requirement.versionName,
+        requirement.acceptance,
+        requirement.status,
+        requirement.uiLink,
+        requirement.documentLink
+      ])
     )
     .map((requirement) => ({
       entity: "requirement" as const,
@@ -3139,6 +3183,30 @@ function getBugEmptyText(onlyMine: boolean, projectFilter: string) {
   }
 
   return "暂无 Bug，点击右上角提 Bug";
+}
+
+function getSafeExternalUrl(value?: string) {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  try {
+    const url = new URL(trimmed);
+
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
+function validateExternalUrl(_: unknown, value?: string) {
+  if (!value?.trim() || getSafeExternalUrl(value)) {
+    return Promise.resolve();
+  }
+
+  return Promise.reject(new Error("请输入 http 或 https 开头的完整链接"));
 }
 
 function serializeCreateValue(value: unknown, key = ""): unknown {
@@ -4392,6 +4460,18 @@ function RequirementFields({
         <Col span={12}>
           <Form.Item label="状态" name="status">
             <Select options={["评审中", "设计中", "开发中", "待上线"].map((value) => ({ value, label: value }))} />
+          </Form.Item>
+        </Col>
+      </Row>
+      <Row gutter={12}>
+        <Col span={12}>
+          <Form.Item label="UI 设计链接" name="uiLink" rules={[{ validator: validateExternalUrl }]}>
+            <Input prefix={<LinkOutlined />} placeholder="例如：https://www.figma.com/design/..." />
+          </Form.Item>
+        </Col>
+        <Col span={12}>
+          <Form.Item label="需求文档链接" name="documentLink" rules={[{ validator: validateExternalUrl }]}>
+            <Input prefix={<LinkOutlined />} placeholder="例如：https://xxx.feishu.cn/docx/..." />
           </Form.Item>
         </Col>
       </Row>

@@ -393,6 +393,11 @@
   padding: 24px;
 }
 
+.requirement-link-actions .ant-btn {
+  height: auto;
+  padding-inline: 0;
+}
+
 .project-milestone-form {
   margin-top: 8px;
   padding-top: 14px;

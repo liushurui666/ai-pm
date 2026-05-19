@@ -68,6 +68,8 @@ function compactDashboardContext(data: DashboardData) {
       状态: requirement.status,
       项目: requirement.project,
       版本: requirement.versionName,
+      UI链接: requirement.uiLink,
+      需求文档链接: requirement.documentLink,
       验收标准: requirement.acceptance
     })),
     版本: data.requirementVersions.slice(0, 10).map((version) => ({

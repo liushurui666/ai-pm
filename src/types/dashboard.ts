@@ -101,6 +101,8 @@ export type Requirement = {
   project: string;
   versionId?: string;
   versionName?: string;
+  uiLink?: string;
+  documentLink?: string;
   acceptance: string;
 };
 
