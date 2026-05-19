@@ -135,6 +135,36 @@
   padding: 24px 22px 56px;
 }
 
+.pm-content *,
+.ant-drawer-content * {
+  min-width: 0;
+}
+
+.pm-content .ant-typography,
+.pm-content .ant-alert-message,
+.pm-content .ant-alert-description,
+.ant-drawer-content .ant-typography,
+.ant-drawer-content .ant-alert-message,
+.ant-drawer-content .ant-alert-description {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.pm-content .ant-card,
+.ant-drawer-content .ant-card {
+  overflow: hidden;
+}
+
+.pm-content .ant-tag,
+.ant-drawer-content .ant-tag {
+  max-width: 100%;
+  height: auto;
+  min-height: 22px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
 .pm-mobile-nav {
   position: sticky;
   top: 68px;
@@ -362,8 +392,10 @@
 }
 
 .requirement-version-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -438,6 +470,11 @@
 .requirement-title-cell .ant-typography {
   max-width: 100%;
   white-space: normal;
+}
+
+.requirement-detail-table .ant-table-cell {
+  overflow-wrap: anywhere;
+  vertical-align: top;
 }
 
 .requirement-quality-cell {
@@ -626,7 +663,12 @@
 }
 
 .task-meta-tags {
+  max-width: 100%;
   margin-top: 2px;
+}
+
+.requirement-link-actions {
+  max-width: 100%;
 }
 
 .task-mine-filter {
