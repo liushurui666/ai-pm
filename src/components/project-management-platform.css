@@ -405,6 +405,10 @@
   margin-bottom: 16px;
 }
 
+.requirement-material-alert {
+  margin-bottom: 12px;
+}
+
 .requirement-version-empty {
   display: grid;
   min-height: 220px;

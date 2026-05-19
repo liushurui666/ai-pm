@@ -2009,6 +2009,9 @@ function RequirementsView({
   if (selectedVersion) {
     const scopedRequirements = requirements.filter((requirement) => requirement.versionId === selectedVersion.id);
     const detailColumns = columns.filter((column) => column.key !== "versionName");
+    const incompleteMaterialRequirements = scopedRequirements.filter(
+      (requirement) => !getSafeExternalUrl(requirement.uiLink) || !getSafeExternalUrl(requirement.documentLink)
+    );
     const readyCount = scopedRequirements.filter((requirement) => requirement.status === "待上线").length;
     const reviewCount = scopedRequirements.filter((requirement) => requirement.status === "评审中").length;
     const highPriorityCount = scopedRequirements.filter((requirement) => requirement.priority !== "P2").length;
@@ -2075,6 +2078,18 @@ function RequirementsView({
             </Text>
           </div>
         </div>
+        {incompleteMaterialRequirements.length ? (
+          <Alert
+            className="requirement-material-alert"
+            type="warning"
+            showIcon
+            title={`${incompleteMaterialRequirements.length} 条需求资料未补齐`}
+            description={`请补齐 UI 设计链接和需求文档链接：${incompleteMaterialRequirements
+              .slice(0, 3)
+              .map((requirement) => requirement.title)
+              .join("、")}${incompleteMaterialRequirements.length > 3 ? " 等" : ""}`}
+          />
+        ) : null}
         <Table
           className="requirement-detail-table"
           rowKey="id"
