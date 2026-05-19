@@ -405,10 +405,6 @@
   margin-bottom: 16px;
 }
 
-.requirement-material-alert {
-  margin-bottom: 12px;
-}
-
 .requirement-version-empty {
   display: grid;
   min-height: 220px;
@@ -419,6 +415,10 @@
 .requirement-link-actions .ant-btn {
   height: auto;
   padding-inline: 0;
+}
+
+.requirement-link-actions .ant-tag {
+  margin-inline-end: 0;
 }
 
 .requirement-detail-table {

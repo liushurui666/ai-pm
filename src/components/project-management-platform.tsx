@@ -2009,9 +2009,6 @@ function RequirementsView({
   if (selectedVersion) {
     const scopedRequirements = requirements.filter((requirement) => requirement.versionId === selectedVersion.id);
     const detailColumns = columns.filter((column) => column.key !== "versionName");
-    const incompleteMaterialRequirements = scopedRequirements.filter(
-      (requirement) => !getSafeExternalUrl(requirement.uiLink) || !getSafeExternalUrl(requirement.documentLink)
-    );
     const readyCount = scopedRequirements.filter((requirement) => requirement.status === "待上线").length;
     const reviewCount = scopedRequirements.filter((requirement) => requirement.status === "评审中").length;
     const highPriorityCount = scopedRequirements.filter((requirement) => requirement.priority !== "P2").length;
@@ -2078,18 +2075,6 @@ function RequirementsView({
             </Text>
           </div>
         </div>
-        {incompleteMaterialRequirements.length ? (
-          <Alert
-            className="requirement-material-alert"
-            type="warning"
-            showIcon
-            title={`${incompleteMaterialRequirements.length} 条需求资料未补齐`}
-            description={`请补齐 UI 设计链接和需求文档链接：${incompleteMaterialRequirements
-              .slice(0, 3)
-              .map((requirement) => requirement.title)
-              .join("、")}${incompleteMaterialRequirements.length > 3 ? " 等" : ""}`}
-          />
-        ) : null}
         <Table
           className="requirement-detail-table"
           rowKey="id"
@@ -2200,14 +2185,16 @@ function RequirementsView({
 }
 
 function RequirementLinkActions({ requirement }: { requirement: Requirement }) {
+  const uiHref = getSafeExternalUrl(requirement.uiLink);
+  const documentHref = getSafeExternalUrl(requirement.documentLink);
   const links = [
-    { key: "ui", label: "UI", href: getSafeExternalUrl(requirement.uiLink) },
-    { key: "document", label: "需求文档", href: getSafeExternalUrl(requirement.documentLink) }
+    { key: "ui", label: "UI", href: uiHref },
+    { key: "document", label: "需求文档", href: documentHref }
   ].filter((link) => Boolean(link.href));
-
-  if (!links.length) {
-    return <Text type="secondary">未填写</Text>;
-  }
+  const missingItems = [
+    !uiHref ? { key: "ui-missing", label: "缺 UI" } : null,
+    !documentHref ? { key: "document-missing", label: "缺文档" } : null
+  ].filter(Boolean) as Array<{ key: string; label: string }>;
 
   return (
     <Space className="requirement-link-actions" size={[8, 4]} wrap>
@@ -2223,6 +2210,11 @@ function RequirementLinkActions({ requirement }: { requirement: Requirement }) {
         >
           {link.label}
         </Button>
+      ))}
+      {missingItems.map((item) => (
+        <Tag key={item.key} color="warning">
+          {item.label}
+        </Tag>
       ))}
     </Space>
   );
