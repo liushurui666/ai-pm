@@ -26,6 +26,14 @@ export type CreateRecordResult<T extends DashboardEntityType = DashboardEntityTy
   message: string;
 };
 
+export type DeleteRecordResult<T extends DashboardEntityType = DashboardEntityType> = {
+  type: T;
+  id: string;
+  persisted: boolean;
+  message: string;
+  fallbackVersion?: RequirementVersion;
+};
+
 export type DocumentTaskDraft = {
   title: string;
   owner?: string;

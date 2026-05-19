@@ -31,6 +31,7 @@ const DEFAULT_REQUIREMENT_VERSION: RequirementVersion = {
   releaseDate: "2026-06-30",
   goal: "收纳尚未进入明确版本的需求，评审后再绑定到目标版本。"
 };
+const DEFAULT_REQUIREMENT_VERSION_ID = DEFAULT_REQUIREMENT_VERSION.id;
 
 type LocalDatabase = Omit<DashboardData, "meta"> & {
   updatedAt: string;
@@ -596,7 +597,8 @@ function normalizeExistingRequirement(requirement: Requirement, versions: Requir
     {
       ...requirement,
       versionId: matchedVersion.id,
-      versionName: matchedVersion.name
+      versionName: matchedVersion.name,
+      project: matchedVersion.project
     },
     requirement.id
   );
@@ -1052,10 +1054,42 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
   }
 
   if (type === "requirementVersion") {
+    const version = typedRecord as RequirementVersion;
+
     data.requirementVersions = data.requirementVersions.map((version) =>
       version.id === id ? (typedRecord as RequirementVersion) : version
     );
     updated = data.requirementVersions.some((version) => version.id === id);
+
+    if (updated) {
+      data.requirements = data.requirements.map((requirement) =>
+        requirement.versionId === id
+          ? {
+              ...requirement,
+              versionName: version.name,
+              project: version.project
+            }
+          : requirement
+      );
+      data.tasks = data.tasks.map((task) =>
+        task.versionId === id
+          ? {
+              ...task,
+              versionName: version.name,
+              project: version.project === "跨项目" ? task.project : version.project
+            }
+          : task
+      );
+      data.bugs = data.bugs.map((bug) =>
+        bug.versionId === id
+          ? {
+              ...bug,
+              versionName: version.name,
+              project: version.project === "跨项目" ? bug.project : version.project
+            }
+          : bug
+      );
+    }
   }
 
   if (type === "requirement") {
@@ -1084,5 +1118,91 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
     record: savedRecord,
     persisted: true,
     message: `已更新${getEntityLabel(type)}：${getRecordTitle(type, values)}。`
+  };
+}
+
+export async function deleteDashboardRecord<T extends DashboardEntityType>(type: T, id: string) {
+  const data = await readDatabase();
+  const existingRecord = findRecord(data, type, id);
+
+  if (!existingRecord) {
+    throw new Error("记录不存在或已被删除");
+  }
+
+  let fallbackVersion: RequirementVersion | undefined;
+
+  if (type === "requirementVersion") {
+    if (id === DEFAULT_REQUIREMENT_VERSION_ID) {
+      throw new Error("未规划需求池是系统兜底版本，不能删除");
+    }
+
+    fallbackVersion =
+      data.requirementVersions.find((version) => version.id === DEFAULT_REQUIREMENT_VERSION_ID) ??
+      data.requirementVersions.find((version) => version.id !== id);
+
+    if (!fallbackVersion) {
+      throw new Error("请至少保留一个需求版本");
+    }
+
+    const migrationVersion = fallbackVersion;
+
+    data.requirementVersions = data.requirementVersions.filter((version) => version.id !== id);
+    data.requirements = data.requirements.map((requirement) =>
+      requirement.versionId === id
+        ? {
+            ...requirement,
+            versionId: migrationVersion.id,
+            versionName: migrationVersion.name,
+            project: migrationVersion.project === "跨项目" ? requirement.project : migrationVersion.project
+          }
+        : requirement
+    );
+    data.tasks = data.tasks.map((task) =>
+      task.versionId === id
+        ? {
+            ...task,
+            versionId: migrationVersion.id,
+            versionName: migrationVersion.name,
+            project: migrationVersion.project === "跨项目" ? task.project : migrationVersion.project
+          }
+        : task
+    );
+    data.bugs = data.bugs.map((bug) =>
+      bug.versionId === id
+        ? {
+            ...bug,
+            versionId: migrationVersion.id,
+            versionName: migrationVersion.name,
+            project: migrationVersion.project === "跨项目" ? bug.project : migrationVersion.project
+          }
+        : bug
+    );
+  } else if (type === "requirement") {
+    data.requirements = data.requirements.filter((requirement) => requirement.id !== id);
+  } else if (type === "document") {
+    data.documents = data.documents.filter((document) => document.id !== id);
+  } else if (type === "project") {
+    data.projects = data.projects.filter((project) => project.id !== id);
+  } else if (type === "task") {
+    data.tasks = data.tasks.filter((task) => task.id !== id);
+  } else if (type === "bug") {
+    data.bugs = data.bugs.filter((bug) => bug.id !== id);
+  } else if (type === "risk") {
+    data.risks = data.risks.filter((risk) => risk.id !== id);
+  }
+
+  const savedData = applyProjectMetrics(data);
+
+  await writeDatabase(savedData);
+
+  return {
+    type,
+    id,
+    persisted: true,
+    fallbackVersion,
+    message:
+      type === "requirementVersion" && fallbackVersion
+        ? `已删除${getEntityLabel(type)}，关联记录已迁移到「${fallbackVersion.name}」。`
+        : `已删除${getEntityLabel(type)}。`
   };
 }

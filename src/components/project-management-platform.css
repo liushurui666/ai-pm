@@ -348,6 +348,12 @@
   padding: 18px;
 }
 
+.requirement-version-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .requirement-version-goal {
   min-height: 48px;
   margin-bottom: 0 !important;

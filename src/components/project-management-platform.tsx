@@ -21,6 +21,7 @@ import {
   InputNumber,
   Layout,
   Menu,
+  Popconfirm,
   Progress,
   Row,
   Segmented,
@@ -86,7 +87,7 @@ import type {
   Task,
   TaskStage
 } from "@/types/dashboard";
-import type { CreateRecordResult, DashboardEntityType, DocumentAnalyzeResult } from "@/types/records";
+import type { CreateRecordResult, DashboardEntityType, DeleteRecordResult, DocumentAnalyzeResult } from "@/types/records";
 import { getAntdThemeConfig, ThemeToggleButton, useThemePreference } from "@/components/theme-mode";
 
 const { Header, Sider, Content } = Layout;
@@ -110,6 +111,7 @@ const entityLabels: Record<DashboardEntityType, string> = {
   requirement: "需求",
   document: "文档"
 };
+const fallbackRequirementVersionId = "rv-backlog";
 const validViews = new Set<AppView>(["overview", "projects", "tasks", "bugs", "requirements", "risks", "docs", "reports"]);
 
 const statusColor: Record<Project["status"], NonNullable<BadgeProps["status"]>> = {
@@ -311,10 +313,12 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editingBug, setEditingBug] = useState<BugReport | null>(null);
   const [editingRequirement, setEditingRequirement] = useState<Requirement | null>(null);
+  const [editingRequirementVersion, setEditingRequirementVersion] = useState<RequirementVersion | null>(null);
   const [projectEditSubmitting, setProjectEditSubmitting] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [bugEditSubmitting, setBugEditSubmitting] = useState(false);
   const [requirementEditSubmitting, setRequirementEditSubmitting] = useState(false);
+  const [requirementVersionEditSubmitting, setRequirementVersionEditSubmitting] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -339,6 +343,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
   const [editForm] = Form.useForm<Record<string, unknown>>();
   const [bugEditForm] = Form.useForm<Record<string, unknown>>();
   const [requirementEditForm] = Form.useForm<Record<string, unknown>>();
+  const [requirementVersionEditForm] = Form.useForm<Record<string, unknown>>();
   const [breakdownForm] = Form.useForm<Record<string, unknown>>();
   const [messageApi, messageContextHolder] = message.useMessage();
   const { mode: themeMode, effectiveTheme, cycleMode } = useThemePreference();
@@ -556,12 +561,6 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
       render: (_, requirement) => requirement.versionName ? <Tag color="blue">{requirement.versionName}</Tag> : <Tag>未规划</Tag>
     },
     {
-      title: "关联项目",
-      dataIndex: "project",
-      key: "project",
-      width: 190
-    },
-    {
       title: "资料链接",
       key: "links",
       width: 180,
@@ -571,11 +570,25 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
       title: "操作",
       key: "action",
       fixed: "right",
-      width: 90,
+      width: 150,
       render: (_, requirement) => (
-        <Button type="link" icon={<EditOutlined />} onClick={() => openEditRequirementDrawer(requirement)}>
-          编辑
-        </Button>
+        <Space size={4}>
+          <Button type="link" icon={<EditOutlined />} onClick={() => openEditRequirementDrawer(requirement)}>
+            编辑
+          </Button>
+          <Popconfirm
+            title="删除需求"
+            description="删除后不会影响任务和 Bug，但该需求记录会从版本中移除。"
+            okText="删除"
+            cancelText="取消"
+            okButtonProps={{ danger: true }}
+            onConfirm={() => handleDeleteRecord("requirement", requirement.id)}
+          >
+            <Button type="link" danger icon={<DeleteOutlined />}>
+              删除
+            </Button>
+          </Popconfirm>
+        </Space>
       )
     }
   ];
@@ -692,6 +705,12 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
     setEditingRequirement(requirement);
     requirementEditForm.resetFields();
     requirementEditForm.setFieldsValue(requirement);
+  }
+
+  function openEditRequirementVersionDrawer(version: RequirementVersion) {
+    setEditingRequirementVersion(version);
+    requirementVersionEditForm.resetFields();
+    requirementVersionEditForm.setFieldsValue(getRequirementVersionFormValues(version));
   }
 
   function openDocumentBreakdownDrawer(initialValues: Record<string, unknown> = {}) {
@@ -950,6 +969,97 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
       messageApi.error(error instanceof Error ? error.message : "更新需求失败");
     } finally {
       setRequirementEditSubmitting(false);
+    }
+  }
+
+  async function handleUpdateRequirementVersion(values: Record<string, unknown>) {
+    if (!editingRequirementVersion) {
+      return;
+    }
+
+    setRequirementVersionEditSubmitting(true);
+
+    try {
+      const response = await fetch("/api/records", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          type: "requirementVersion",
+          id: editingRequirementVersion.id,
+          values: serializeCreateValues(values)
+        })
+      });
+      const payload = (await response.json()) as CreateRecordResult | { error?: string };
+
+      if (response.status === 401) {
+        window.location.assign("/login");
+
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error("error" in payload ? payload.error || "更新版本失败" : "更新版本失败");
+      }
+
+      if ("error" in payload) {
+        throw new Error(payload.error || "更新版本失败");
+      }
+
+      const result = payload as CreateRecordResult;
+
+      setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
+      void refreshDashboardState();
+      messageApi.success(result.message);
+      setEditingRequirementVersion(null);
+      requirementVersionEditForm.resetFields();
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "更新版本失败");
+    } finally {
+      setRequirementVersionEditSubmitting(false);
+    }
+  }
+
+  async function handleDeleteRecord(type: DashboardEntityType, id: string) {
+    try {
+      const response = await fetch("/api/records", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          type,
+          id
+        })
+      });
+      const payload = (await response.json()) as DeleteRecordResult | { error?: string };
+
+      if (response.status === 401) {
+        window.location.assign("/login");
+
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error("error" in payload ? payload.error || "删除失败" : "删除失败");
+      }
+
+      if ("error" in payload) {
+        throw new Error(payload.error || "删除失败");
+      }
+
+      const result = payload as DeleteRecordResult;
+
+      setData((current) => (current ? updateDashboardWithRecordDeletion(current, result) : current));
+      void refreshDashboardState();
+      messageApi.success(result.message);
+
+      if (type === "requirementVersion" && selectedRequirementVersionId === id) {
+        setSelectedRequirementVersionId(null);
+      }
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "删除失败");
     }
   }
 
@@ -1299,6 +1409,8 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
                         })
                       }
                       onCreateVersion={() => openCreateDrawer("requirementVersion")}
+                      onDeleteVersion={(version) => handleDeleteRecord("requirementVersion", version.id)}
+                      onEditVersion={openEditRequirementVersionDrawer}
                       onSelectVersion={setSelectedRequirementVersionId}
                     />
                   ) : null}
@@ -1447,10 +1559,18 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
             form={requirementEditForm}
             requirement={editingRequirement}
             submitting={requirementEditSubmitting}
-            projectOptions={projectOptions}
             versionOptions={requirementVersionOptions}
             onClose={() => setEditingRequirement(null)}
             onSubmit={handleUpdateRequirement}
+          />
+
+          <RequirementVersionEditDrawer
+            form={requirementVersionEditForm}
+            version={editingRequirementVersion}
+            submitting={requirementVersionEditSubmitting}
+            projectOptions={projectOptions}
+            onClose={() => setEditingRequirementVersion(null)}
+            onSubmit={handleUpdateRequirementVersion}
           />
 
           {data ? (
@@ -1869,6 +1989,8 @@ function RequirementsView({
   onBack,
   onCreateRequirement,
   onCreateVersion,
+  onDeleteVersion,
+  onEditVersion,
   onSelectVersion
 }: {
   columns: ColumnsType<Requirement>;
@@ -1878,6 +2000,8 @@ function RequirementsView({
   onBack: () => void;
   onCreateRequirement: (version: RequirementVersion) => void;
   onCreateVersion: () => void;
+  onDeleteVersion: (version: RequirementVersion) => void;
+  onEditVersion: (version: RequirementVersion) => void;
   onSelectVersion: (id: string) => void;
 }) {
   const selectedVersion = selectedVersionId ? versions.find((version) => version.id === selectedVersionId) : null;
@@ -1901,6 +2025,23 @@ function RequirementsView({
         extra={
           <Space wrap>
             <Button onClick={onBack}>返回版本</Button>
+            <Button icon={<EditOutlined />} onClick={() => onEditVersion(selectedVersion)}>
+              编辑版本
+            </Button>
+            {selectedVersion.id !== fallbackRequirementVersionId ? (
+              <Popconfirm
+                title="删除版本"
+                description="删除后，该版本下的需求、任务和 Bug 会迁移到未规划需求池。"
+                okText="删除"
+                cancelText="取消"
+                okButtonProps={{ danger: true }}
+                onConfirm={() => onDeleteVersion(selectedVersion)}
+              >
+                <Button danger icon={<DeleteOutlined />}>
+                  删除版本
+                </Button>
+              </Popconfirm>
+            ) : null}
             <Button type="primary" icon={<PlusOutlined />} onClick={() => onCreateRequirement(selectedVersion)}>
               绑定需求
             </Button>
@@ -1909,7 +2050,7 @@ function RequirementsView({
       >
         <div className="requirement-version-summary">
           <div className="requirement-version-summary-item">
-            <Text type="secondary">关联项目</Text>
+            <Text type="secondary">版本归属项目</Text>
             <Text strong>{selectedVersion.project}</Text>
           </div>
           <div className="requirement-version-summary-item">
@@ -1938,7 +2079,7 @@ function RequirementsView({
           columns={columns}
           dataSource={scopedRequirements}
           pagination={false}
-          scroll={{ x: 1140 }}
+          scroll={{ x: 960 }}
           locale={{ emptyText: "该版本暂无需求，点击右上角绑定需求" }}
         />
       </TableView>
@@ -2006,6 +2147,25 @@ function RequirementsView({
                 <Button block onClick={() => onSelectVersion(version.id)}>
                   进入版本
                 </Button>
+                <div className="requirement-version-actions">
+                  <Button icon={<EditOutlined />} onClick={() => onEditVersion(version)}>
+                    编辑
+                  </Button>
+                  {version.id !== fallbackRequirementVersionId ? (
+                    <Popconfirm
+                      title="删除版本"
+                      description="删除后，该版本下的需求、任务和 Bug 会迁移到未规划需求池。"
+                      okText="删除"
+                      cancelText="取消"
+                      okButtonProps={{ danger: true }}
+                      onConfirm={() => onDeleteVersion(version)}
+                    >
+                      <Button danger icon={<DeleteOutlined />}>
+                        删除
+                      </Button>
+                    </Popconfirm>
+                  ) : null}
+                </div>
               </div>
             );
           })}
@@ -3169,6 +3329,14 @@ function getBugFormValues(bug: BugReport) {
   };
 }
 
+function getRequirementVersionFormValues(version: RequirementVersion) {
+  return {
+    ...version,
+    startDate: dayjs(version.startDate),
+    releaseDate: dayjs(version.releaseDate)
+  };
+}
+
 function getBugEmptyText(onlyMine: boolean, projectFilter: string) {
   if (onlyMine && projectFilter !== "全部") {
     return "该项目暂无与你相关的 Bug";
@@ -3340,11 +3508,107 @@ function updateDashboardWithRecordUpdate(data: DashboardData, result: CreateReco
   if (result.type === "requirementVersion") {
     const version = result.record as RequirementVersion;
     nextData.requirementVersions = nextData.requirementVersions.map((item) => item.id === version.id ? version : item);
+    nextData.requirements = nextData.requirements.map((requirement) =>
+      requirement.versionId === version.id
+        ? {
+            ...requirement,
+            versionName: version.name,
+            project: version.project
+          }
+        : requirement
+    );
+    nextData.tasks = nextData.tasks.map((task) =>
+      task.versionId === version.id
+        ? {
+            ...task,
+            versionName: version.name,
+            project: version.project === "跨项目" ? task.project : version.project
+          }
+        : task
+    );
+    nextData.bugs = nextData.bugs.map((bug) =>
+      bug.versionId === version.id
+        ? {
+            ...bug,
+            versionName: version.name,
+            project: version.project === "跨项目" ? bug.project : version.project
+          }
+        : bug
+    );
   }
 
   if (result.type === "requirement") {
     const requirement = result.record as Requirement;
     nextData.requirements = nextData.requirements.map((item) => item.id === requirement.id ? requirement : item);
+  }
+
+  nextData.metrics = recalculateMetrics(nextData);
+
+  return nextData;
+}
+
+function updateDashboardWithRecordDeletion(data: DashboardData, result: DeleteRecordResult): DashboardData {
+  const nextData: DashboardData = {
+    ...data,
+    projects: [...data.projects],
+    tasks: [...data.tasks],
+    bugs: [...data.bugs],
+    risks: [...data.risks],
+    requirementVersions: [...data.requirementVersions],
+    requirements: [...data.requirements],
+    documents: [...data.documents],
+    meta: data.meta
+      ? {
+          ...data.meta,
+          message: result.message
+        }
+      : undefined
+  };
+
+  if (result.type === "requirement") {
+    nextData.requirements = nextData.requirements.filter((requirement) => requirement.id !== result.id);
+  }
+
+  if (result.type === "requirementVersion") {
+    const fallbackVersion =
+      result.fallbackVersion ??
+      nextData.requirementVersions.find((version) => version.id === fallbackRequirementVersionId) ??
+      nextData.requirementVersions.find((version) => version.id !== result.id);
+
+    nextData.requirementVersions = nextData.requirementVersions.filter((version) => version.id !== result.id);
+
+    if (fallbackVersion) {
+      nextData.requirements = nextData.requirements.map((requirement) =>
+        requirement.versionId === result.id
+          ? {
+              ...requirement,
+              versionId: fallbackVersion.id,
+              versionName: fallbackVersion.name,
+              project: fallbackVersion.project === "跨项目" ? requirement.project : fallbackVersion.project
+            }
+          : requirement
+      );
+      nextData.tasks = nextData.tasks.map((task) =>
+        task.versionId === result.id
+          ? {
+              ...task,
+              versionId: fallbackVersion.id,
+              versionName: fallbackVersion.name,
+              project: fallbackVersion.project === "跨项目" ? task.project : fallbackVersion.project
+            }
+          : task
+      );
+      nextData.bugs = nextData.bugs.map((bug) =>
+        bug.versionId === result.id
+          ? {
+              ...bug,
+              versionId: fallbackVersion.id,
+              versionName: fallbackVersion.name,
+              project: fallbackVersion.project === "跨项目" ? bug.project : fallbackVersion.project
+            }
+          : bug
+      );
+    }
   }
 
   nextData.metrics = recalculateMetrics(nextData);
@@ -3486,7 +3750,7 @@ function CreateRecordDrawer({
           ) : null}
           {type === "requirementVersion" ? <RequirementVersionFields projectOptions={projectOptions} /> : null}
           {type === "requirement" ? (
-            <RequirementFields form={form} projectOptions={projectOptions} versionOptions={requirementVersionOptions} />
+            <RequirementFields form={form} versionOptions={requirementVersionOptions} />
           ) : null}
           {type === "document" ? <DocumentFields /> : null}
         </Form>
@@ -3674,7 +3938,6 @@ function RequirementEditDrawer({
   form,
   requirement,
   submitting,
-  projectOptions,
   versionOptions,
   onClose,
   onSubmit
@@ -3682,7 +3945,6 @@ function RequirementEditDrawer({
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   requirement: Requirement | null;
   submitting: boolean;
-  projectOptions: string[];
   versionOptions: RequirementVersionOption[];
   onClose: () => void;
   onSubmit: (values: Record<string, unknown>) => void;
@@ -3710,7 +3972,52 @@ function RequirementEditDrawer({
     >
       {requirement ? (
         <Form form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
-          <RequirementFields form={form} projectOptions={projectOptions} versionOptions={versionOptions} />
+          <RequirementFields form={form} versionOptions={versionOptions} />
+        </Form>
+      ) : null}
+    </Drawer>
+  );
+}
+
+function RequirementVersionEditDrawer({
+  form,
+  version,
+  submitting,
+  projectOptions,
+  onClose,
+  onSubmit
+}: {
+  form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
+  version: RequirementVersion | null;
+  submitting: boolean;
+  projectOptions: string[];
+  onClose: () => void;
+  onSubmit: (values: Record<string, unknown>) => void;
+}) {
+  return (
+    <Drawer
+      className="pm-record-drawer"
+      title={
+        <Space>
+          <EditOutlined />
+          <span>编辑版本</span>
+        </Space>
+      }
+      open={Boolean(version)}
+      onClose={onClose}
+      size="default"
+      footer={
+        <DrawerFooterActions
+          submitting={submitting}
+          submitText="保存修改"
+          onClose={onClose}
+          onSubmit={() => form.submit()}
+        />
+      }
+    >
+      {version ? (
+        <Form form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
+          <RequirementVersionFields projectOptions={projectOptions} />
         </Form>
       ) : null}
     </Drawer>
@@ -4187,11 +4494,45 @@ function VersionProjectFields({
           </Form.Item>
         </Col>
         <Col span={12}>
-          <Form.Item label="关联项目" name="project" rules={[{ required: true, message: "请选择关联项目" }]}>
+          <Form.Item label="版本归属项目" name="project" rules={[{ required: true, message: "请选择版本归属项目" }]}>
             <ProjectOptionSelect projectOptions={projectOptions} />
           </Form.Item>
         </Col>
       </Row>
+    </>
+  );
+}
+
+function RequirementVersionSelectField({
+  form,
+  versionOptions,
+  versionLabel = "关联版本",
+  versionMessage = "请选择关联版本"
+}: {
+  form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
+  versionOptions: RequirementVersionOption[];
+  versionLabel?: string;
+  versionMessage?: string;
+}) {
+  useSyncProjectWithVersion(form, versionOptions);
+
+  return (
+    <>
+      <Form.Item label={versionLabel} name="versionId" rules={[{ required: true, message: versionMessage }]}>
+        <Select
+          showSearch
+          optionFilterProp="label"
+          placeholder="选择版本"
+          notFoundContent="请先新建版本"
+          options={versionOptions}
+        />
+      </Form.Item>
+      <Form.Item name="versionName" hidden>
+        <Input />
+      </Form.Item>
+      <Form.Item name="project" hidden>
+        <Input />
+      </Form.Item>
     </>
   );
 }
@@ -4389,7 +4730,7 @@ function RequirementVersionFields({ projectOptions }: { projectOptions: string[]
           </Form.Item>
         </Col>
         <Col span={12}>
-          <Form.Item label="关联项目" name="project" rules={[{ required: true, message: "请选择关联项目" }]}>
+          <Form.Item label="版本归属项目" name="project" rules={[{ required: true, message: "请选择版本归属项目" }]}>
             <ProjectOptionSelect projectOptions={projectOptions} />
           </Form.Item>
         </Col>
@@ -4432,11 +4773,9 @@ function RequirementVersionFields({ projectOptions }: { projectOptions: string[]
 
 function RequirementFields({
   form,
-  projectOptions,
   versionOptions
 }: {
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
-  projectOptions: string[];
   versionOptions: RequirementVersionOption[];
 }) {
   return (
@@ -4444,9 +4783,8 @@ function RequirementFields({
       <Form.Item label="需求标题" name="title" rules={[{ required: true, message: "请输入需求标题" }]}>
         <Input placeholder="例如：会议纪要自动转任务" />
       </Form.Item>
-      <VersionProjectFields
+      <RequirementVersionSelectField
         form={form}
-        projectOptions={projectOptions}
         versionOptions={versionOptions}
         versionLabel="需求版本"
         versionMessage="请选择需求版本"
