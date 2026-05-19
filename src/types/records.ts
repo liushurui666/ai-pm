@@ -58,3 +58,22 @@ export type DocumentAnalyzeResult = {
   message: string;
   warning?: string;
 };
+
+export type RequirementAnalyzeResult = {
+  title: string;
+  summary: string;
+  acceptance: string;
+  suggestedPriority: Requirement["priority"];
+  suggestedStatus: Requirement["status"];
+  risks: string[];
+  missingItems: string[];
+  frontendNotes: string[];
+  backendNotes: string[];
+  testingNotes: string[];
+  completenessScore: number;
+  source: "ai" | "fallback";
+  documentTitle: string;
+  extractedChars: number;
+  message: string;
+  warning?: string;
+};

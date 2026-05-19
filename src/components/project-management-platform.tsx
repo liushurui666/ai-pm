@@ -89,6 +89,12 @@ import type {
 } from "@/types/dashboard";
 import type { CreateRecordResult, DashboardEntityType, DeleteRecordResult, DocumentAnalyzeResult } from "@/types/records";
 import { getAntdThemeConfig, ThemeToggleButton, useThemePreference } from "@/components/theme-mode";
+import { RequirementAiLinkAnalyzer } from "@/components/project-management-platform/requirements/requirement-ai-link-analyzer";
+import {
+  getRequirementCompleteness,
+  requirementStatusColor,
+  requirementStatusOptions
+} from "@/lib/requirements/requirement-quality";
 
 const { Header, Sider, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
@@ -535,6 +541,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
       render: (_, requirement) => (
         <Space orientation="vertical" size={2} className="requirement-title-cell">
           <Text strong>{requirement.title}</Text>
+          {requirement.aiSummary ? <Text type="secondary">AI：{requirement.aiSummary}</Text> : null}
           <Text type="secondary">{requirement.acceptance}</Text>
         </Space>
       )
@@ -552,7 +559,8 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
       title: "状态",
       dataIndex: "status",
       key: "status",
-      width: 82
+      width: 92,
+      render: (status: Requirement["status"]) => <Tag color={requirementStatusColor[status]}>{status}</Tag>
     },
     {
       title: "版本",
@@ -562,9 +570,28 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
       render: (_, requirement) => requirement.versionName ? <Tag color="blue">{requirement.versionName}</Tag> : <Tag>未规划</Tag>
     },
     {
+      title: "完整度",
+      key: "completeness",
+      width: 150,
+      render: (_, requirement) => {
+        const quality = getRequirementCompleteness(requirement);
+
+        return (
+          <Space direction="vertical" size={2} className="requirement-quality-cell">
+            <Progress percent={quality.score} size="small" status={quality.score >= 80 ? "success" : "active"} />
+            {quality.issues.length ? (
+              <Text type="secondary">{quality.issues.slice(0, 2).join("、")}</Text>
+            ) : (
+              <Text type="success">资料完整</Text>
+            )}
+          </Space>
+        );
+      }
+    },
+    {
       title: "资料链接",
       key: "links",
-      width: 112,
+      width: 132,
       render: (_, requirement) => <RequirementLinkActions requirement={requirement} />
     },
     {
@@ -704,7 +731,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
   function openEditRequirementDrawer(requirement: Requirement) {
     setEditingRequirement(requirement);
     requirementEditForm.resetFields();
-    requirementEditForm.setFieldsValue(requirement);
+    requirementEditForm.setFieldsValue(getRequirementFormValues(requirement));
   }
 
   function openEditRequirementVersionDrawer(version: RequirementVersion) {
@@ -1396,9 +1423,11 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
                   ) : null}
                   {activeView === "requirements" ? (
                     <RequirementsView
+                      bugs={data.bugs}
                       columns={requirementColumns}
                       requirements={data.requirements}
                       selectedVersionId={selectedRequirementVersionId}
+                      tasks={data.tasks}
                       versions={requirementVersions}
                       onBack={() => setSelectedRequirementVersionId(null)}
                       onCreateRequirement={(version) =>
@@ -1982,9 +2011,11 @@ function ProjectsView({
 }
 
 function RequirementsView({
+  bugs,
   columns,
   requirements,
   selectedVersionId,
+  tasks,
   versions,
   onBack,
   onCreateRequirement,
@@ -1993,9 +2024,11 @@ function RequirementsView({
   onEditVersion,
   onSelectVersion
 }: {
+  bugs: BugReport[];
   columns: ColumnsType<Requirement>;
   requirements: Requirement[];
   selectedVersionId: string | null;
+  tasks: Task[];
   versions: RequirementVersion[];
   onBack: () => void;
   onCreateRequirement: (version: RequirementVersion) => void;
@@ -2008,8 +2041,12 @@ function RequirementsView({
 
   if (selectedVersion) {
     const scopedRequirements = requirements.filter((requirement) => requirement.versionId === selectedVersion.id);
+    const scopedTasks = tasks.filter((task) => task.versionId === selectedVersion.id);
+    const scopedBugs = bugs.filter((bug) => bug.versionId === selectedVersion.id);
     const detailColumns = columns.filter((column) => column.key !== "versionName");
-    const readyCount = scopedRequirements.filter((requirement) => requirement.status === "待上线").length;
+    const readyCount = scopedRequirements.filter(
+      (requirement) => requirement.status === "待上线" || requirement.status === "已上线"
+    ).length;
     const reviewCount = scopedRequirements.filter((requirement) => requirement.status === "评审中").length;
     const highPriorityCount = scopedRequirements.filter((requirement) => requirement.priority !== "P2").length;
     const progress = selectedVersion.status === "已发布"
@@ -2074,6 +2111,12 @@ function RequirementsView({
               {scopedRequirements.length} / {reviewCount} / {highPriorityCount}
             </Text>
           </div>
+          <div className="requirement-version-summary-item">
+            <Text type="secondary">研发任务 / Bug</Text>
+            <Text strong>
+              {scopedTasks.length} / {scopedBugs.length}
+            </Text>
+          </div>
         </div>
         <Table
           className="requirement-detail-table"
@@ -2081,7 +2124,7 @@ function RequirementsView({
           columns={detailColumns}
           dataSource={scopedRequirements}
           pagination={false}
-          scroll={{ x: 656 }}
+          scroll={{ x: 860 }}
           locale={{ emptyText: "该版本暂无需求，点击右上角绑定需求" }}
         />
       </TableView>
@@ -2104,7 +2147,11 @@ function RequirementsView({
         <div className="requirement-version-grid">
           {versions.map((version) => {
             const scopedRequirements = requirements.filter((requirement) => requirement.versionId === version.id);
-            const readyCount = scopedRequirements.filter((requirement) => requirement.status === "待上线").length;
+            const scopedTasks = tasks.filter((task) => task.versionId === version.id);
+            const scopedBugs = bugs.filter((bug) => bug.versionId === version.id);
+            const readyCount = scopedRequirements.filter(
+              (requirement) => requirement.status === "待上线" || requirement.status === "已上线"
+            ).length;
             const reviewCount = scopedRequirements.filter((requirement) => requirement.status === "评审中").length;
             const highPriorityCount = scopedRequirements.filter((requirement) => requirement.priority !== "P2").length;
             const progress = version.status === "已发布"
@@ -2144,6 +2191,10 @@ function RequirementsView({
                   <div>
                     <Text type="secondary">高优先级</Text>
                     <Text strong>{highPriorityCount}</Text>
+                  </div>
+                  <div>
+                    <Text type="secondary">任务/Bug</Text>
+                    <Text strong>{scopedTasks.length}/{scopedBugs.length}</Text>
                   </div>
                 </div>
                 <Button block onClick={() => onSelectVersion(version.id)}>
@@ -3294,7 +3345,7 @@ function getCreateInitialValues(type: DashboardEntityType, currentUser?: FeishuU
   if (type === "requirement") {
     return {
       priority: "P1",
-      status: "评审中"
+      status: "待评审"
     };
   }
 
@@ -3343,6 +3394,17 @@ function getRequirementVersionFormValues(version: RequirementVersion) {
     ...version,
     startDate: dayjs(version.startDate),
     releaseDate: dayjs(version.releaseDate)
+  };
+}
+
+function getRequirementFormValues(requirement: Requirement) {
+  return {
+    ...requirement,
+    aiRisks: JSON.stringify(requirement.aiRisks ?? []),
+    aiMissingItems: JSON.stringify(requirement.aiMissingItems ?? []),
+    aiFrontendNotes: JSON.stringify(requirement.aiFrontendNotes ?? []),
+    aiBackendNotes: JSON.stringify(requirement.aiBackendNotes ?? []),
+    aiTestingNotes: JSON.stringify(requirement.aiTestingNotes ?? [])
   };
 }
 
@@ -4806,7 +4868,7 @@ function RequirementFields({
         </Col>
         <Col span={12}>
           <Form.Item label="状态" name="status">
-            <Select options={["评审中", "设计中", "开发中", "待上线"].map((value) => ({ value, label: value }))} />
+            <Select options={requirementStatusOptions.map((value) => ({ value, label: value }))} />
           </Form.Item>
         </Col>
       </Row>
@@ -4822,8 +4884,30 @@ function RequirementFields({
           </Form.Item>
         </Col>
       </Row>
+      <RequirementAiLinkAnalyzer form={form} />
       <Form.Item label="验收标准" name="acceptance">
         <Input.TextArea rows={4} placeholder="可量化的验收条件和边界场景" />
+      </Form.Item>
+      <Form.Item name="aiSummary" hidden>
+        <Input />
+      </Form.Item>
+      <Form.Item name="aiRisks" hidden>
+        <Input />
+      </Form.Item>
+      <Form.Item name="aiMissingItems" hidden>
+        <Input />
+      </Form.Item>
+      <Form.Item name="aiFrontendNotes" hidden>
+        <Input />
+      </Form.Item>
+      <Form.Item name="aiBackendNotes" hidden>
+        <Input />
+      </Form.Item>
+      <Form.Item name="aiTestingNotes" hidden>
+        <Input />
+      </Form.Item>
+      <Form.Item name="aiCompletenessScore" hidden>
+        <InputNumber />
       </Form.Item>
     </>
   );

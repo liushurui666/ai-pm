@@ -440,12 +440,62 @@
   white-space: normal;
 }
 
+.requirement-quality-cell {
+  width: 100%;
+}
+
+.requirement-quality-cell .ant-progress {
+  min-width: 96px;
+}
+
+.requirement-quality-cell .ant-typography {
+  font-size: 12px;
+}
+
 .requirement-row-actions {
   white-space: nowrap;
 }
 
 .requirement-row-actions .ant-btn {
   padding-inline: 2px;
+}
+
+.requirement-ai-card {
+  margin: 4px 0 18px;
+  border-color: var(--border);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand) 7%, transparent), transparent 58%),
+    var(--surface-subtle);
+}
+
+.requirement-ai-card .ant-card-body {
+  padding: 14px;
+}
+
+.requirement-ai-card-head {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.requirement-ai-card-head .ant-typography {
+  margin-bottom: 0;
+}
+
+.requirement-ai-card-head .ant-btn {
+  flex: 0 0 auto;
+}
+
+.requirement-ai-result {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.requirement-ai-score {
+  display: grid;
+  gap: 4px;
 }
 
 .project-milestone-form {

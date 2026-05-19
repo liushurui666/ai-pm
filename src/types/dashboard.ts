@@ -97,13 +97,20 @@ export type Requirement = {
   id: string;
   title: string;
   priority: "P0" | "P1" | "P2";
-  status: "评审中" | "设计中" | "开发中" | "待上线";
+  status: "待评审" | "评审中" | "待排期" | "设计中" | "开发中" | "待上线" | "已上线" | "已关闭" | "已驳回";
   project: string;
   versionId?: string;
   versionName?: string;
   uiLink?: string;
   documentLink?: string;
   acceptance: string;
+  aiSummary?: string;
+  aiRisks?: string[];
+  aiMissingItems?: string[];
+  aiFrontendNotes?: string[];
+  aiBackendNotes?: string[];
+  aiTestingNotes?: string[];
+  aiCompletenessScore?: number;
 };
 
 export type RequirementVersion = {

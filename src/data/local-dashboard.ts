@@ -130,6 +130,33 @@ function asText(value: unknown, fallback = "") {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
 
+function asTextArray(value: unknown) {
+  if (typeof value === "string" && value.trim()) {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+
+      if (Array.isArray(parsed)) {
+        return asTextArray(parsed);
+      }
+    } catch {
+      return value
+        .split(/[,\n，、]/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .slice(0, 12);
+    }
+  }
+
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter(Boolean)
+    .slice(0, 12);
+}
+
 function asOwnerName(values: Record<string, unknown>) {
   return asText(values.owner, "未分配");
 }
@@ -279,6 +306,18 @@ function normalizeRequirementPriority(value: string): Requirement["priority"] {
 }
 
 function normalizeRequirementStatus(value: string): Requirement["status"] {
+  if (value.includes("驳回")) {
+    return "已驳回";
+  }
+
+  if (value.includes("关闭") || value.includes("终止")) {
+    return "已关闭";
+  }
+
+  if (value.includes("已上线") || value.includes("已发布")) {
+    return "已上线";
+  }
+
   if (value.includes("开发")) {
     return "开发中";
   }
@@ -291,7 +330,15 @@ function normalizeRequirementStatus(value: string): Requirement["status"] {
     return "设计中";
   }
 
-  return "评审中";
+  if (value.includes("排期")) {
+    return "待排期";
+  }
+
+  if (value.includes("评审")) {
+    return "评审中";
+  }
+
+  return "待评审";
 }
 
 function normalizeRequirementVersionStatus(value: string): RequirementVersion["status"] {
@@ -584,7 +631,14 @@ function normalizeCreateRequirement(
     versionName: asText(values.versionName) || DEFAULT_REQUIREMENT_VERSION.name,
     uiLink: asText(values.uiLink),
     documentLink: asText(values.documentLink),
-    acceptance: asText(values.acceptance, "暂无验收标准。")
+    acceptance: asText(values.acceptance, "暂无验收标准。"),
+    aiSummary: asText(values.aiSummary) || undefined,
+    aiRisks: asTextArray(values.aiRisks),
+    aiMissingItems: asTextArray(values.aiMissingItems),
+    aiFrontendNotes: asTextArray(values.aiFrontendNotes),
+    aiBackendNotes: asTextArray(values.aiBackendNotes),
+    aiTestingNotes: asTextArray(values.aiTestingNotes),
+    aiCompletenessScore: Math.max(0, Math.min(100, asNumber(values.aiCompletenessScore, 0))) || undefined
   };
 }
 
