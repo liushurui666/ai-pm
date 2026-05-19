@@ -177,6 +177,7 @@ type ScheduleItem = {
 };
 
 type SearchResult = {
+  entity: DashboardEntityType;
   id: string;
   title: string;
   description: string;
@@ -952,6 +953,47 @@ export function ProjectManagementPlatform() {
     }
   }
 
+  function openSearchResult(result: SearchResult) {
+    if (!data) {
+      return;
+    }
+
+    switchView(result.view);
+    setSearchOpen(false);
+
+    if (result.entity === "project") {
+      const project = data.projects.find((item) => item.id === result.id);
+
+      if (project) {
+        openEditProjectDrawer(project);
+      }
+
+      return;
+    }
+
+    if (result.entity === "task") {
+      const task = data.tasks.find((item) => item.id === result.id);
+
+      if (task) {
+        openEditTaskDrawer(task);
+      }
+
+      return;
+    }
+
+    if (result.entity === "bug") {
+      const bug = data.bugs.find((item) => item.id === result.id);
+
+      if (bug) {
+        openEditBugDrawer(bug);
+      }
+
+      return;
+    }
+
+    messageApi.success(`已打开${result.type}模块`);
+  }
+
   return (
     <ConfigProvider
       theme={{
@@ -1326,10 +1368,7 @@ export function ProjectManagementPlatform() {
               query={searchQuery}
               results={globalSearchResults}
               onClose={() => setSearchOpen(false)}
-              onOpenView={(view) => {
-                switchView(view);
-                setSearchOpen(false);
-              }}
+              onOpenResult={openSearchResult}
               onQueryChange={setSearchQuery}
             />
           ) : null}
@@ -1932,6 +1971,7 @@ function createSearchResults(data: DashboardData, query: string): SearchResult[]
   const projectResults = data.projects
     .filter((project) => matches([project.name, project.owner, project.summary, project.status]))
     .map((project) => ({
+      entity: "project" as const,
       id: project.id,
       title: project.name,
       description: project.summary,
@@ -1944,6 +1984,7 @@ function createSearchResults(data: DashboardData, query: string): SearchResult[]
   const taskResults = data.tasks
     .filter((task) => matches([task.title, task.owner, task.project, task.stage, task.aiHint]))
     .map((task) => ({
+      entity: "task" as const,
       id: task.id,
       title: task.title,
       description: task.aiHint,
@@ -1956,6 +1997,7 @@ function createSearchResults(data: DashboardData, query: string): SearchResult[]
   const bugResults = data.bugs
     .filter((bug) => matches([bug.title, bug.owner, bug.reporter, bug.project, bug.reproduction, bug.actual]))
     .map((bug) => ({
+      entity: "bug" as const,
       id: bug.id,
       title: bug.title,
       description: bug.reproduction,
@@ -1968,6 +2010,7 @@ function createSearchResults(data: DashboardData, query: string): SearchResult[]
   const documentResults = data.documents
     .filter((document) => matches([document.title, document.type, document.aiSummary]))
     .map((document) => ({
+      entity: "document" as const,
       id: document.id,
       title: document.title,
       description: document.aiSummary,
@@ -1978,6 +2021,7 @@ function createSearchResults(data: DashboardData, query: string): SearchResult[]
   const riskResults = data.risks
     .filter((risk) => matches([risk.title, risk.owner, risk.project, risk.mitigation, risk.level]))
     .map((risk) => ({
+      entity: "risk" as const,
       id: risk.id,
       title: risk.title,
       description: risk.mitigation,
@@ -1990,6 +2034,7 @@ function createSearchResults(data: DashboardData, query: string): SearchResult[]
   const requirementResults = data.requirements
     .filter((requirement) => matches([requirement.title, requirement.project, requirement.acceptance, requirement.status]))
     .map((requirement) => ({
+      entity: "requirement" as const,
       id: requirement.id,
       title: requirement.title,
       description: requirement.acceptance,
@@ -2003,14 +2048,14 @@ function createSearchResults(data: DashboardData, query: string): SearchResult[]
 
 function SearchDrawer({
   onClose,
-  onOpenView,
+  onOpenResult,
   onQueryChange,
   open,
   query,
   results
 }: {
   onClose: () => void;
-  onOpenView: (view: AppView) => void;
+  onOpenResult: (result: SearchResult) => void;
   onQueryChange: (query: string) => void;
   open: boolean;
   query: string;
@@ -2042,8 +2087,8 @@ function SearchDrawer({
               <List.Item
                 className="search-result-item"
                 actions={[
-                  <Button type="link" key="open" onClick={() => onOpenView(result.view)}>
-                    打开
+                  <Button type="link" key="open" onClick={() => onOpenResult(result)}>
+                    打开详情
                   </Button>
                 ]}
               >
