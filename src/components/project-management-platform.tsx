@@ -667,15 +667,10 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
     bugEditForm.setFieldsValue(getBugFormValues(bug));
   }
 
-  function openDocumentBreakdownDrawer(project?: string) {
+  function openDocumentBreakdownDrawer(initialValues: Record<string, unknown> = {}) {
     setBreakdownOpen(true);
     breakdownForm.resetFields();
-
-    if (project) {
-      breakdownForm.setFieldsValue({
-        project
-      });
-    }
+    breakdownForm.setFieldsValue(initialValues);
   }
 
   async function handleCreateRecord(values: Record<string, unknown>) {
@@ -724,8 +719,11 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
       if (submittedType === "project") {
         const project = result.record as Project;
 
-        switchView("docs");
-        openDocumentBreakdownDrawer(project.name);
+        switchView("requirements");
+        openCreateDrawer("requirementVersion", {
+          name: `${project.name} 首个版本`,
+          project: project.name
+        });
       }
 
       if (submittedType === "bug") {
@@ -900,7 +898,17 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
       const formData = new FormData();
 
       formData.append("file", file);
-      for (const key of ["project", "owner", "ownerOpenId", "ownerUnionId", "ownerUserId", "ownerEmail", "ownerAvatarUrl"]) {
+      for (const key of [
+        "project",
+        "versionId",
+        "versionName",
+        "owner",
+        "ownerOpenId",
+        "ownerUnionId",
+        "ownerUserId",
+        "ownerEmail",
+        "ownerAvatarUrl"
+      ]) {
         const value = values[key];
 
         if (typeof value === "string") {
@@ -1191,6 +1199,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
                     <TasksView
                       tasks={data.tasks}
                       currentUser={data.meta?.user}
+                      versionOptions={requirementVersionOptions}
                       onCreate={() => openCreateDrawer("task")}
                       onEdit={openEditTaskDrawer}
                     />
@@ -1200,6 +1209,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
                       bugs={data.bugs}
                       currentUser={data.meta?.user}
                       projectOptions={projectOptions}
+                      versionOptions={requirementVersionOptions}
                       onCreate={() => openCreateDrawer("bug")}
                       onEdit={openEditBugDrawer}
                     />
@@ -1207,10 +1217,26 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
                   {activeView === "requirements" ? (
                     <RequirementsView
                       columns={requirementColumns}
+                      bugs={data.bugs}
                       requirements={data.requirements}
                       selectedVersionId={selectedRequirementVersionId}
+                      tasks={data.tasks}
                       versions={requirementVersions}
                       onBack={() => setSelectedRequirementVersionId(null)}
+                      onBreakdown={(version) =>
+                        openDocumentBreakdownDrawer({
+                          versionId: version.id,
+                          versionName: version.name,
+                          project: version.project === "跨项目" ? undefined : version.project
+                        })
+                      }
+                      onCreateBug={(version) =>
+                        openCreateDrawer("bug", {
+                          versionId: version.id,
+                          versionName: version.name,
+                          project: version.project === "跨项目" ? undefined : version.project
+                        })
+                      }
                       onCreateRequirement={(version) =>
                         openCreateDrawer("requirement", {
                           versionId: version.id,
@@ -1218,7 +1244,16 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
                           project: version.project === "跨项目" ? undefined : version.project
                         })
                       }
+                      onCreateTask={(version) =>
+                        openCreateDrawer("task", {
+                          versionId: version.id,
+                          versionName: version.name,
+                          project: version.project === "跨项目" ? undefined : version.project
+                        })
+                      }
                       onCreateVersion={() => openCreateDrawer("requirementVersion")}
+                      onEditBug={openEditBugDrawer}
+                      onEditTask={openEditTaskDrawer}
                       onSelectVersion={setSelectedRequirementVersionId}
                     />
                   ) : null}
@@ -1342,6 +1377,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
             task={editingTask}
             submitting={editSubmitting}
             projectOptions={projectOptions}
+            versionOptions={requirementVersionOptions}
             people={ownerOptions}
             peopleLoading={peopleLoading}
             peopleError={peopleError}
@@ -1354,6 +1390,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
             bug={editingBug}
             submitting={bugEditSubmitting}
             projectOptions={projectOptions}
+            versionOptions={requirementVersionOptions}
             people={ownerOptions}
             peopleLoading={peopleLoading}
             peopleError={peopleError}
@@ -1386,6 +1423,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
             open={breakdownOpen}
             submitting={breakdownSubmitting}
             projectOptions={projectOptions}
+            versionOptions={requirementVersionOptions}
             people={ownerOptions}
             peopleLoading={peopleLoading}
             peopleError={peopleError}
@@ -1770,33 +1808,147 @@ function ProjectsView({
 
 function RequirementsView({
   columns,
+  bugs,
   requirements,
   selectedVersionId,
+  tasks,
   versions,
   onBack,
+  onBreakdown,
+  onCreateBug,
   onCreateRequirement,
+  onCreateTask,
   onCreateVersion,
+  onEditBug,
+  onEditTask,
   onSelectVersion
 }: {
   columns: ColumnsType<Requirement>;
+  bugs: BugReport[];
   requirements: Requirement[];
   selectedVersionId: string | null;
+  tasks: Task[];
   versions: RequirementVersion[];
   onBack: () => void;
+  onBreakdown: (version: RequirementVersion) => void;
+  onCreateBug: (version: RequirementVersion) => void;
   onCreateRequirement: (version: RequirementVersion) => void;
+  onCreateTask: (version: RequirementVersion) => void;
   onCreateVersion: () => void;
+  onEditBug: (bug: BugReport) => void;
+  onEditTask: (task: Task) => void;
   onSelectVersion: (id: string) => void;
 }) {
+  const [activeDetail, setActiveDetail] = useState<"requirements" | "tasks" | "bugs">("requirements");
   const selectedVersion = selectedVersionId ? versions.find((version) => version.id === selectedVersionId) : null;
 
   if (selectedVersion) {
     const scopedRequirements = requirements.filter((requirement) => requirement.versionId === selectedVersion.id);
+    const scopedTasks = tasks.filter((task) => task.versionId === selectedVersion.id);
+    const scopedBugs = bugs.filter((bug) => bug.versionId === selectedVersion.id);
     const readyCount = scopedRequirements.filter((requirement) => requirement.status === "待上线").length;
+    const finishedTaskCount = scopedTasks.filter((task) => task.stage === "已完成").length;
+    const openBugCount = scopedBugs.filter((bug) => bug.status !== "已关闭").length;
     const progress = selectedVersion.status === "已发布"
       ? 100
-      : scopedRequirements.length
-        ? Math.round((readyCount / scopedRequirements.length) * 100)
+      : scopedTasks.length
+        ? Math.round((finishedTaskCount / scopedTasks.length) * 100)
+        : scopedRequirements.length
+          ? Math.round((readyCount / scopedRequirements.length) * 100)
         : 0;
+    const taskColumns: ColumnsType<Task> = [
+      {
+        title: "任务",
+        dataIndex: "title",
+        key: "title",
+        render: (_, task) => (
+          <Space orientation="vertical" size={2}>
+            <Text strong>{task.title}</Text>
+            <Text type="secondary">{task.aiHint}</Text>
+          </Space>
+        )
+      },
+      {
+        title: "负责人",
+        dataIndex: "owner",
+        key: "owner",
+        width: 140,
+        render: (_, task) => <OwnerInline name={task.owner} avatarUrl={task.ownerAvatarUrl} />
+      },
+      {
+        title: "阶段",
+        dataIndex: "stage",
+        key: "stage",
+        width: 110,
+        render: (stage: TaskStage) => <Tag color={stage === "已完成" ? "green" : "blue"}>{stage}</Tag>
+      },
+      {
+        title: "截止日期",
+        dataIndex: "dueDate",
+        key: "dueDate",
+        width: 130
+      },
+      {
+        title: "操作",
+        key: "action",
+        width: 90,
+        render: (_, task) => (
+          <Button type="link" icon={<EditOutlined />} onClick={() => onEditTask(task)}>
+            编辑
+          </Button>
+        )
+      }
+    ];
+    const bugColumns: ColumnsType<BugReport> = [
+      {
+        title: "Bug",
+        dataIndex: "title",
+        key: "title",
+        render: (_, bug) => (
+          <Space orientation="vertical" size={2}>
+            <Text strong>{bug.title}</Text>
+            <Text type="secondary">{bug.reproduction}</Text>
+          </Space>
+        )
+      },
+      {
+        title: "严重程度",
+        dataIndex: "severity",
+        key: "severity",
+        width: 110,
+        render: (severity: BugReport["severity"]) => <Tag color={bugSeverityColor[severity]}>{severity}</Tag>
+      },
+      {
+        title: "状态",
+        dataIndex: "status",
+        key: "status",
+        width: 110,
+        render: (status: BugReport["status"]) => <Tag color={bugStatusColor[status]}>{status}</Tag>
+      },
+      {
+        title: "负责人",
+        dataIndex: "owner",
+        key: "owner",
+        width: 140,
+        render: (_, bug) => <OwnerInline name={bug.owner} avatarUrl={bug.ownerAvatarUrl} />
+      },
+      {
+        title: "截止日期",
+        dataIndex: "dueDate",
+        key: "dueDate",
+        width: 130
+      },
+      {
+        title: "操作",
+        key: "action",
+        width: 90,
+        render: (_, bug) => (
+          <Button type="link" icon={<EditOutlined />} onClick={() => onEditBug(bug)}>
+            编辑
+          </Button>
+        )
+      }
+    ];
 
     return (
       <TableView
@@ -1806,8 +1958,17 @@ function RequirementsView({
         extra={
           <Space wrap>
             <Button onClick={onBack}>返回版本</Button>
+            <Button icon={<UploadOutlined />} onClick={() => onBreakdown(selectedVersion)}>
+              上传文档拆任务
+            </Button>
             <Button type="primary" icon={<PlusOutlined />} onClick={() => onCreateRequirement(selectedVersion)}>
               绑定需求
+            </Button>
+            <Button icon={<CheckCircleOutlined />} onClick={() => onCreateTask(selectedVersion)}>
+              新建任务
+            </Button>
+            <Button icon={<BugOutlined />} onClick={() => onCreateBug(selectedVersion)}>
+              提 Bug
             </Button>
           </Space>
         }
@@ -1828,18 +1989,56 @@ function RequirementsView({
             </Text>
           </div>
           <div className="requirement-version-summary-item">
-            <Text type="secondary">需求进度</Text>
+            <Text type="secondary">任务进度</Text>
             <Progress percent={progress} size="small" />
           </div>
+          <div className="requirement-version-summary-item">
+            <Text type="secondary">需求 / 任务 / 未关 Bug</Text>
+            <Text strong>
+              {scopedRequirements.length} / {scopedTasks.length} / {openBugCount}
+            </Text>
+          </div>
         </div>
-        <Table
-          rowKey="id"
-          columns={columns}
-          dataSource={scopedRequirements}
-          pagination={false}
-          scroll={{ x: 860 }}
-          locale={{ emptyText: "该版本暂无需求，点击右上角绑定需求" }}
+        <Segmented
+          className="version-detail-tabs"
+          value={activeDetail}
+          onChange={(value) => setActiveDetail(value as "requirements" | "tasks" | "bugs")}
+          options={[
+            { label: `需求 ${scopedRequirements.length}`, value: "requirements" },
+            { label: `任务 ${scopedTasks.length}`, value: "tasks" },
+            { label: `Bug ${scopedBugs.length}`, value: "bugs" }
+          ]}
         />
+        {activeDetail === "requirements" ? (
+          <Table
+            rowKey="id"
+            columns={columns}
+            dataSource={scopedRequirements}
+            pagination={false}
+            scroll={{ x: 860 }}
+            locale={{ emptyText: "该版本暂无需求，点击右上角绑定需求" }}
+          />
+        ) : null}
+        {activeDetail === "tasks" ? (
+          <Table
+            rowKey="id"
+            columns={taskColumns}
+            dataSource={scopedTasks}
+            pagination={false}
+            scroll={{ x: 860 }}
+            locale={{ emptyText: "该版本暂无任务，上传文档或新建任务后会显示在这里" }}
+          />
+        ) : null}
+        {activeDetail === "bugs" ? (
+          <Table
+            rowKey="id"
+            columns={bugColumns}
+            dataSource={scopedBugs}
+            pagination={false}
+            scroll={{ x: 920 }}
+            locale={{ emptyText: "该版本暂无 Bug" }}
+          />
+        ) : null}
       </TableView>
     );
   }
@@ -1860,11 +2059,16 @@ function RequirementsView({
         <div className="requirement-version-grid">
           {versions.map((version) => {
             const scopedRequirements = requirements.filter((requirement) => requirement.versionId === version.id);
+            const scopedTasks = tasks.filter((task) => task.versionId === version.id);
+            const scopedBugs = bugs.filter((bug) => bug.versionId === version.id);
             const readyCount = scopedRequirements.filter((requirement) => requirement.status === "待上线").length;
+            const finishedTaskCount = scopedTasks.filter((task) => task.stage === "已完成").length;
             const progress = version.status === "已发布"
               ? 100
-              : scopedRequirements.length
-                ? Math.round((readyCount / scopedRequirements.length) * 100)
+              : scopedTasks.length
+                ? Math.round((finishedTaskCount / scopedTasks.length) * 100)
+                : scopedRequirements.length
+                  ? Math.round((readyCount / scopedRequirements.length) * 100)
                 : 0;
 
             return (
@@ -1892,12 +2096,12 @@ function RequirementsView({
                     <Text strong>{scopedRequirements.length}</Text>
                   </div>
                   <div>
-                    <Text type="secondary">已就绪</Text>
-                    <Text strong>{readyCount}</Text>
+                    <Text type="secondary">任务数</Text>
+                    <Text strong>{scopedTasks.length}</Text>
                   </div>
                   <div>
-                    <Text type="secondary">发布日期</Text>
-                    <Text strong>{version.releaseDate}</Text>
+                    <Text type="secondary">未关 Bug</Text>
+                    <Text strong>{scopedBugs.filter((bug) => bug.status !== "已关闭").length}</Text>
                   </div>
                 </div>
                 <Button block onClick={() => onSelectVersion(version.id)}>
@@ -2140,26 +2344,26 @@ function createSearchResults(data: DashboardData, query: string): SearchResult[]
       view: "projects" as const
     }));
   const taskResults = data.tasks
-    .filter((task) => matches([task.title, task.owner, task.project, task.stage, task.aiHint]))
+    .filter((task) => matches([task.title, task.owner, task.project, task.versionName, task.stage, task.aiHint]))
     .map((task) => ({
       entity: "task" as const,
       id: task.id,
       title: task.title,
       description: task.aiHint,
-      meta: `任务 · ${task.stage} · ${task.dueDate}`,
+      meta: `任务 · ${task.versionName ?? "未规划"} · ${task.stage} · ${task.dueDate}`,
       owner: task.owner,
       ownerAvatarUrl: task.ownerAvatarUrl,
       type: "任务",
       view: "tasks" as const
     }));
   const bugResults = data.bugs
-    .filter((bug) => matches([bug.title, bug.owner, bug.reporter, bug.project, bug.reproduction, bug.actual]))
+    .filter((bug) => matches([bug.title, bug.owner, bug.reporter, bug.project, bug.versionName, bug.reproduction, bug.actual]))
     .map((bug) => ({
       entity: "bug" as const,
       id: bug.id,
       title: bug.title,
       description: bug.reproduction,
-      meta: `Bug · ${bug.status} · ${bug.severity}`,
+      meta: `Bug · ${bug.versionName ?? "未规划"} · ${bug.status} · ${bug.severity}`,
       owner: bug.owner,
       ownerAvatarUrl: bug.ownerAvatarUrl,
       type: "Bug",
@@ -2293,11 +2497,13 @@ function SearchDrawer({
 function TasksView({
   tasks,
   currentUser,
+  versionOptions,
   onCreate,
   onEdit
 }: {
   tasks: Task[];
   currentUser?: FeishuUser;
+  versionOptions: RequirementVersionOption[];
   onCreate: () => void;
   onEdit: (task: Task) => void;
 }) {
@@ -2354,6 +2560,15 @@ function TasksView({
       key: "project",
       width: 180,
       render: (project: string) => <Text>{project}</Text>
+    },
+    {
+      title: "版本",
+      dataIndex: "versionName",
+      key: "versionName",
+      width: 180,
+      filters: versionOptions.map((version) => ({ text: version.versionName, value: version.versionName })),
+      onFilter: (value, task) => task.versionName === value,
+      render: (_, task) => task.versionName ? <Tag color="blue">{task.versionName}</Tag> : <Tag>未规划</Tag>
     },
     {
       title: "负责人",
@@ -2461,7 +2676,7 @@ function TasksView({
               emptyText: onlyMine ? "暂无分配给你的任务" : "暂无任务"
             }}
             pagination={{ pageSize: 12, showSizeChanger: true }}
-            scroll={{ x: 1320 }}
+            scroll={{ x: 1500 }}
             size="middle"
           />
         </Card>
@@ -2502,6 +2717,7 @@ function TasksView({
                       <Space wrap size={[6, 6]} className="task-meta-tags">
                         <Tag>{task.stage}</Tag>
                         <Tag color="blue">{task.project}</Tag>
+                        {task.versionName ? <Tag color="cyan">{task.versionName}</Tag> : null}
                         <Tag>开始 {task.startDate}</Tag>
                         <Tag icon={<CalendarOutlined />}>{task.dueDate}</Tag>
                       </Space>
@@ -2534,17 +2750,20 @@ function BugsView({
   bugs,
   currentUser,
   projectOptions,
+  versionOptions,
   onCreate,
   onEdit
 }: {
   bugs: BugReport[];
   currentUser?: FeishuUser;
   projectOptions: string[];
+  versionOptions: RequirementVersionOption[];
   onCreate: () => void;
   onEdit: (bug: BugReport) => void;
 }) {
   const [statusFilter, setStatusFilter] = useState<"全部" | BugReport["status"]>("全部");
   const [projectFilter, setProjectFilter] = useState("全部");
+  const [versionFilter, setVersionFilter] = useState("全部");
   const [onlyMine, setOnlyMine] = useState(false);
   const bugProjectOptions = useMemo(() => {
     return Array.from(new Set([...projectOptions, ...bugs.map((bug) => bug.project).filter(Boolean)]));
@@ -2560,12 +2779,15 @@ function BugsView({
     return scopedBugs.filter((bug) => bug.project === projectFilter);
   }, [projectFilter, scopedBugs]);
   const visibleBugs = useMemo(() => {
-    if (statusFilter === "全部") {
-      return projectScopedBugs;
+    const statusScopedBugs =
+      statusFilter === "全部" ? projectScopedBugs : projectScopedBugs.filter((bug) => bug.status === statusFilter);
+
+    if (versionFilter === "全部") {
+      return statusScopedBugs;
     }
 
-    return projectScopedBugs.filter((bug) => bug.status === statusFilter);
-  }, [projectScopedBugs, statusFilter]);
+    return statusScopedBugs.filter((bug) => bug.versionId === versionFilter);
+  }, [projectScopedBugs, statusFilter, versionFilter]);
   const openBugCount = projectScopedBugs.filter((bug) => bug.status !== "已关闭").length;
   const blockerCount = projectScopedBugs.filter((bug) => bug.severity === "阻塞" && bug.status !== "已关闭").length;
   const bugColumns: ColumnsType<BugReport> = [
@@ -2607,6 +2829,13 @@ function BugsView({
       dataIndex: "project",
       key: "project",
       width: 190
+    },
+    {
+      title: "版本",
+      dataIndex: "versionName",
+      key: "versionName",
+      width: 180,
+      render: (_, bug) => bug.versionName ? <Tag color="blue">{bug.versionName}</Tag> : <Tag>未规划</Tag>
     },
     {
       title: "提交人",
@@ -2679,6 +2908,20 @@ function BugsView({
                 }))
               ]}
             />
+            <Select
+              className="bug-project-filter"
+              showSearch
+              value={versionFilter}
+              onChange={setVersionFilter}
+              optionFilterProp="label"
+              options={[
+                { value: "全部", label: "全部版本" },
+                ...versionOptions.map((version) => ({
+                  value: version.value,
+                  label: version.label
+                }))
+              ]}
+            />
             <Tooltip title={currentUser ? `匹配提交人或修复负责人：${currentUser.name}` : "未获取到登录用户"}>
               <Space className="task-mine-filter">
                 <Text type="secondary">只看我的</Text>
@@ -2718,7 +2961,7 @@ function BugsView({
           dataSource={visibleBugs}
           locale={{ emptyText: getBugEmptyText(onlyMine, projectFilter) }}
           pagination={{ pageSize: 12, showSizeChanger: true }}
-          scroll={{ x: 1400 }}
+          scroll={{ x: 1580 }}
           expandable={{
             expandedRowRender: (bug) => (
               <Row gutter={[16, 12]} className="bug-detail-row">
@@ -3237,6 +3480,7 @@ function CreateRecordDrawer({
               peopleLoading={peopleLoading}
               peopleError={peopleError}
               projectOptions={projectOptions}
+              versionOptions={requirementVersionOptions}
             />
           ) : null}
           {type === "bug" ? (
@@ -3246,6 +3490,7 @@ function CreateRecordDrawer({
               peopleLoading={peopleLoading}
               peopleError={peopleError}
               projectOptions={projectOptions}
+              versionOptions={requirementVersionOptions}
             />
           ) : null}
           {type === "risk" ? (
@@ -3327,6 +3572,7 @@ function TaskEditDrawer({
   task,
   submitting,
   projectOptions,
+  versionOptions,
   people,
   peopleLoading,
   peopleError,
@@ -3337,6 +3583,7 @@ function TaskEditDrawer({
   task: Task | null;
   submitting: boolean;
   projectOptions: string[];
+  versionOptions: RequirementVersionOption[];
   people: FeishuPerson[];
   peopleLoading: boolean;
   peopleError: string;
@@ -3371,6 +3618,7 @@ function TaskEditDrawer({
             peopleLoading={peopleLoading}
             peopleError={peopleError}
             projectOptions={projectOptions}
+            versionOptions={versionOptions}
           />
         </Form>
       ) : null}
@@ -3383,6 +3631,7 @@ function BugEditDrawer({
   bug,
   submitting,
   projectOptions,
+  versionOptions,
   people,
   peopleLoading,
   peopleError,
@@ -3393,6 +3642,7 @@ function BugEditDrawer({
   bug: BugReport | null;
   submitting: boolean;
   projectOptions: string[];
+  versionOptions: RequirementVersionOption[];
   people: FeishuPerson[];
   peopleLoading: boolean;
   peopleError: string;
@@ -3427,6 +3677,7 @@ function BugEditDrawer({
             peopleLoading={peopleLoading}
             peopleError={peopleError}
             projectOptions={projectOptions}
+            versionOptions={versionOptions}
           />
         </Form>
       ) : null}
@@ -3439,6 +3690,7 @@ function DocumentBreakdownDrawer({
   open,
   submitting,
   projectOptions,
+  versionOptions,
   people,
   peopleLoading,
   peopleError,
@@ -3449,6 +3701,7 @@ function DocumentBreakdownDrawer({
   open: boolean;
   submitting: boolean;
   projectOptions: string[];
+  versionOptions: RequirementVersionOption[];
   people: FeishuPerson[];
   peopleLoading: boolean;
   peopleError: string;
@@ -3483,16 +3736,13 @@ function DocumentBreakdownDrawer({
           title="上传后会自动生成任务"
           description="系统会读取文档内容，调用 AI 拆解执行任务，并保存到任务看板。AI 识别到的负责人会优先匹配飞书通讯录，未匹配时使用默认负责人。"
         />
-        <Form.Item label="所属项目" name="project" rules={[{ required: true, message: "请选择所属项目" }]}>
-          <Select
-            showSearch
-            placeholder="选择项目"
-            options={projectOptions.map((project) => ({
-              value: project,
-              label: project
-            }))}
-          />
-        </Form.Item>
+        <VersionProjectFields
+          form={form}
+          projectOptions={projectOptions}
+          versionOptions={versionOptions}
+          versionLabel="目标版本"
+          versionMessage="请选择文档拆解的目标版本"
+        />
         <OwnerSelect
           form={form}
           people={people}
@@ -3846,15 +4096,84 @@ function ProjectOptionSelect({
   );
 }
 
+function useSyncProjectWithVersion(
+  form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0],
+  versionOptions: RequirementVersionOption[]
+) {
+  const selectedVersionId = Form.useWatch("versionId", form) as string | undefined;
+
+  useEffect(() => {
+    const selectedVersion = versionOptions.find((version) => version.value === selectedVersionId);
+
+    if (!selectedVersion) {
+      return;
+    }
+
+    const nextValues: Record<string, unknown> = {
+      versionName: selectedVersion.versionName
+    };
+
+    if (selectedVersion.project !== "跨项目") {
+      nextValues.project = selectedVersion.project;
+    }
+
+    form.setFieldsValue(nextValues);
+  }, [form, selectedVersionId, versionOptions]);
+}
+
+function VersionProjectFields({
+  form,
+  projectOptions,
+  versionOptions,
+  versionLabel = "关联版本",
+  versionMessage = "请选择关联版本"
+}: {
+  form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
+  projectOptions: string[];
+  versionOptions: RequirementVersionOption[];
+  versionLabel?: string;
+  versionMessage?: string;
+}) {
+  useSyncProjectWithVersion(form, versionOptions);
+
+  return (
+    <>
+      <Row gutter={12}>
+        <Col span={12}>
+          <Form.Item label={versionLabel} name="versionId" rules={[{ required: true, message: versionMessage }]}>
+            <Select
+              showSearch
+              optionFilterProp="label"
+              placeholder="选择版本"
+              notFoundContent="请先在需求管理中新建版本"
+              options={versionOptions}
+            />
+          </Form.Item>
+          <Form.Item name="versionName" hidden>
+            <Input />
+          </Form.Item>
+        </Col>
+        <Col span={12}>
+          <Form.Item label="关联项目" name="project" rules={[{ required: true, message: "请选择关联项目" }]}>
+            <ProjectOptionSelect projectOptions={projectOptions} />
+          </Form.Item>
+        </Col>
+      </Row>
+    </>
+  );
+}
+
 function TaskFields({
   form,
   projectOptions,
+  versionOptions,
   people,
   peopleLoading,
   peopleError
 }: {
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   projectOptions: string[];
+  versionOptions: RequirementVersionOption[];
   people: FeishuPerson[];
   peopleLoading: boolean;
   peopleError: string;
@@ -3876,9 +4195,7 @@ function TaskFields({
           </Form.Item>
         </Col>
       </Row>
-      <Form.Item label="关联项目" name="project" rules={[{ required: true, message: "请选择关联项目" }]}>
-        <ProjectOptionSelect projectOptions={projectOptions} />
-      </Form.Item>
+      <VersionProjectFields form={form} projectOptions={projectOptions} versionOptions={versionOptions} />
       <OwnerSelect form={form} people={people} loading={peopleLoading} error={peopleError} />
       <Row gutter={12}>
         <Col span={12}>
@@ -3919,12 +4236,14 @@ function TaskFields({
 function BugFields({
   form,
   projectOptions,
+  versionOptions,
   people,
   peopleLoading,
   peopleError
 }: {
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   projectOptions: string[];
+  versionOptions: RequirementVersionOption[];
   people: FeishuPerson[];
   peopleLoading: boolean;
   peopleError: string;
@@ -3946,9 +4265,7 @@ function BugFields({
           </Form.Item>
         </Col>
       </Row>
-      <Form.Item label="关联项目" name="project" rules={[{ required: true, message: "请选择关联项目" }]}>
-        <ProjectOptionSelect projectOptions={projectOptions} />
-      </Form.Item>
+      <VersionProjectFields form={form} projectOptions={projectOptions} versionOptions={versionOptions} />
       <Row gutter={12}>
         <Col span={12}>
           <Form.Item
@@ -4089,61 +4406,27 @@ function RequirementFields({
   projectOptions: string[];
   versionOptions: RequirementVersionOption[];
 }) {
-  const selectedVersionId = Form.useWatch("versionId", form) as string | undefined;
-
-  useEffect(() => {
-    const selectedVersion = versionOptions.find((version) => version.value === selectedVersionId);
-
-    if (!selectedVersion) {
-      return;
-    }
-
-    const nextValues: Record<string, unknown> = {
-      versionName: selectedVersion.versionName
-    };
-
-    if (selectedVersion.project !== "跨项目") {
-      nextValues.project = selectedVersion.project;
-    }
-
-    form.setFieldsValue(nextValues);
-  }, [form, selectedVersionId, versionOptions]);
-
   return (
     <>
       <Form.Item label="需求标题" name="title" rules={[{ required: true, message: "请输入需求标题" }]}>
         <Input placeholder="例如：会议纪要自动转任务" />
       </Form.Item>
+      <VersionProjectFields
+        form={form}
+        projectOptions={projectOptions}
+        versionOptions={versionOptions}
+        versionLabel="需求版本"
+        versionMessage="请选择需求版本"
+      />
       <Row gutter={12}>
-        <Col span={12}>
-          <Form.Item label="需求版本" name="versionId" rules={[{ required: true, message: "请选择需求版本" }]}>
-            <Select
-              showSearch
-              optionFilterProp="label"
-              placeholder="选择需求归属版本"
-              notFoundContent="请先新建需求版本"
-              options={versionOptions}
-            />
-          </Form.Item>
-          <Form.Item name="versionName" hidden>
-            <Input />
-          </Form.Item>
-        </Col>
         <Col span={12}>
           <Form.Item label="优先级" name="priority">
             <Select options={["P0", "P1", "P2"].map((value) => ({ value, label: value }))} />
           </Form.Item>
         </Col>
-      </Row>
-      <Row gutter={12}>
         <Col span={12}>
           <Form.Item label="状态" name="status">
             <Select options={["评审中", "设计中", "开发中", "待上线"].map((value) => ({ value, label: value }))} />
-          </Form.Item>
-        </Col>
-        <Col span={12}>
-          <Form.Item label="关联项目" name="project" rules={[{ required: true, message: "请选择关联项目" }]}>
-            <ProjectOptionSelect projectOptions={projectOptions} />
           </Form.Item>
         </Col>
       </Row>

@@ -50,6 +50,7 @@ function compactDashboardContext(data: DashboardData) {
       阶段: task.stage,
       负责人: task.owner,
       项目: task.project,
+      版本: task.versionName,
       优先级: task.priority,
       截止日期: task.dueDate,
       AI提示: task.aiHint
@@ -66,7 +67,16 @@ function compactDashboardContext(data: DashboardData) {
       优先级: requirement.priority,
       状态: requirement.status,
       项目: requirement.project,
+      版本: requirement.versionName,
       验收标准: requirement.acceptance
+    })),
+    版本: data.requirementVersions.slice(0, 10).map((version) => ({
+      名称: version.name,
+      项目: version.project,
+      状态: version.status,
+      开始日期: version.startDate,
+      发布日期: version.releaseDate,
+      目标: version.goal
     })),
     文档: data.documents.slice(0, 8).map((document) => ({
       标题: document.title,
@@ -248,11 +258,13 @@ export async function createAiDocumentTaskBreakdown({
   documentText,
   fileName,
   projectName,
+  versionName,
   peopleNames
 }: {
   documentText: string;
   fileName: string;
   projectName: string;
+  versionName: string;
   peopleNames: string[];
 }) {
   const reply = await createChatCompletion(
@@ -262,6 +274,7 @@ export async function createAiDocumentTaskBreakdown({
         content: [
           "你是 AI 项目管理平台的文档拆解助手。",
           "你只基于用户上传的文档内容拆解项目任务，不要编造文档之外的事实。",
+          "任务必须归属到用户选择的项目版本；所有任务都围绕该版本的交付范围拆解，不要拆到其他版本。",
           "当前平台技术约束：前端为 Next.js/React/Ant Design；项目管理主数据保存在平台站内数据源；飞书只用于登录、负责人选择和机器人通知；文档上传暂支持 .docx、.txt、.md、.csv、.json 且 4MB 以内。",
           "禁止编造文档没有提到的数据库、接口路径、表名、字段名、缓存表、定时任务、文件格式、文件大小、性能阈值、鉴权协议、权限 scope、第三方系统或组织流程；如果信息不明确，请输出确认/澄清任务。",
           "请输出严格 JSON，不要 Markdown，不要解释。",
@@ -282,6 +295,7 @@ export async function createAiDocumentTaskBreakdown({
         role: "user",
         content: [
           `项目：${projectName}`,
+          `目标版本：${versionName}`,
           `文件名：${fileName}`,
           `可选负责人：${peopleNames.length ? peopleNames.join("、") : "暂无"}`,
           "文档内容：",

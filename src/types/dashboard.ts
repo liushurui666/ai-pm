@@ -49,6 +49,8 @@ export type Task = {
   ownerEmail?: string;
   ownerAvatarUrl?: string;
   project: string;
+  versionId?: string;
+  versionName?: string;
   priority: "高" | "中" | "低";
   startDate: string;
   dueDate: string;
@@ -75,6 +77,8 @@ export type BugReport = {
   status: BugStatus;
   severity: BugSeverity;
   project: string;
+  versionId?: string;
+  versionName?: string;
   reporter: string;
   owner: string;
   ownerOpenId?: string;

@@ -488,6 +488,8 @@ function normalizeCreateTask(values: Record<string, unknown>, id = createLocalId
     owner: asOwnerName(values),
     ...createOwnerLink(values),
     project: asText(values.project, "未关联项目"),
+    versionId: asText(values.versionId) || DEFAULT_REQUIREMENT_VERSION.id,
+    versionName: asText(values.versionName) || DEFAULT_REQUIREMENT_VERSION.name,
     priority: normalizeTaskPriority(asText(values.priority, "中")),
     startDate: asDateString(values.startDate, dayjs(dueDate).subtract(3, "day").format("YYYY-MM-DD")),
     dueDate,
@@ -495,11 +497,15 @@ function normalizeCreateTask(values: Record<string, unknown>, id = createLocalId
   };
 }
 
-function normalizeExistingTask(task: Task): Task {
+function normalizeExistingTask(task: Task, versions: RequirementVersion[]): Task {
   const dueDate = asDateString(task.dueDate, dayjs().add(7, "day").format("YYYY-MM-DD"));
+  const fallbackVersion = findFallbackVersionForProject(task.project, versions);
+  const matchedVersion = versions.find((version) => version.id === task.versionId) ?? fallbackVersion;
 
   return {
     ...task,
+    versionId: matchedVersion.id,
+    versionName: matchedVersion.name,
     dueDate,
     startDate: asDateString(
       (task as Task & { startDate?: unknown }).startDate,
@@ -515,6 +521,8 @@ function normalizeCreateBug(values: Record<string, unknown>, id = createLocalId(
     status: normalizeBugStatus(asText(values.status, "新建")),
     severity: normalizeBugSeverity(asText(values.severity, "一般")),
     project: asText(values.project, "未关联项目"),
+    versionId: asText(values.versionId) || DEFAULT_REQUIREMENT_VERSION.id,
+    versionName: asText(values.versionName) || DEFAULT_REQUIREMENT_VERSION.name,
     reporter: asText(values.reporter, "未填写"),
     owner: asOwnerName(values),
     ...createOwnerLink(values),
@@ -526,10 +534,15 @@ function normalizeCreateBug(values: Record<string, unknown>, id = createLocalId(
   };
 }
 
-function normalizeExistingBug(bug: BugReport): BugReport {
+function normalizeExistingBug(bug: BugReport, versions: RequirementVersion[]): BugReport {
+  const fallbackVersion = findFallbackVersionForProject(bug.project, versions);
+  const matchedVersion = versions.find((version) => version.id === bug.versionId) ?? fallbackVersion;
+
   return normalizeCreateBug(
     {
       ...bug,
+      versionId: matchedVersion.id,
+      versionName: matchedVersion.name,
       status: bug.status,
       severity: bug.severity
     },
@@ -594,8 +607,8 @@ function migrateLocalDatabase(data: LocalDatabase): LocalDatabase {
   return {
     ...data,
     projects: data.projects.map(normalizeExistingProject),
-    tasks: data.tasks.map(normalizeExistingTask),
-    bugs: data.bugs.map(normalizeExistingBug),
+    tasks: data.tasks.map((task) => normalizeExistingTask(task, normalizedVersions)),
+    bugs: data.bugs.map((bug) => normalizeExistingBug(bug, normalizedVersions)),
     requirementVersions: normalizedVersions,
     requirements: data.requirements.map((requirement) => normalizeExistingRequirement(requirement, normalizedVersions))
   };
@@ -660,6 +673,15 @@ function normalizeProjectName(value: string) {
 
 function isLinkedToProject(project: Project, value?: string) {
   return Boolean(value && normalizeProjectName(project.name) === normalizeProjectName(value));
+}
+
+function findFallbackVersionForProject(project: string, versions: RequirementVersion[]) {
+  return (
+    versions.find((version) => version.project !== "跨项目" && normalizeProjectName(version.project) === normalizeProjectName(project)) ??
+    versions.find((version) => version.id === DEFAULT_REQUIREMENT_VERSION.id) ??
+    versions[0] ??
+    DEFAULT_REQUIREMENT_VERSION
+  );
 }
 
 function clampScore(value: number) {

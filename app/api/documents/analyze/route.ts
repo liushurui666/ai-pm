@@ -121,11 +121,13 @@ async function createBreakdown({
   documentText,
   fileName,
   projectName,
+  versionName,
   people
 }: {
   documentText: string;
   fileName: string;
   projectName: string;
+  versionName: string;
   people: FeishuPerson[];
 }) {
   if (!isAiAssistantConfigured()) {
@@ -143,6 +145,7 @@ async function createBreakdown({
         documentText,
         fileName,
         projectName,
+        versionName,
         peopleNames: people.map((person) => person.name)
       })
     };
@@ -203,6 +206,8 @@ export async function POST(request: NextRequest) {
   const formData = await request.formData();
   const file = formData.get("file");
   const projectName = getFormText(formData, "project");
+  const versionId = getFormText(formData, "versionId");
+  const versionName = getFormText(formData, "versionName");
 
   if (!(file instanceof File)) {
     return NextResponse.json(
@@ -219,6 +224,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error: "请选择文档所属项目"
+      },
+      {
+        status: 400
+      }
+    );
+  }
+
+  if (!versionId || !versionName) {
+    return NextResponse.json(
+      {
+        error: "请选择文档拆解的目标版本"
       },
       {
         status: 400
@@ -246,6 +262,7 @@ export async function POST(request: NextRequest) {
       documentText,
       fileName: file.name,
       projectName,
+      versionName,
       people
     });
     const breakdown = ensureUsefulBreakdown(rawBreakdown);
@@ -269,6 +286,8 @@ export async function POST(request: NextRequest) {
         ownerEmail: owner.ownerEmail,
         ownerAvatarUrl: owner.ownerAvatarUrl,
         project: projectName,
+        versionId,
+        versionName,
         priority: task.priority,
         startDate: normalizeStartDate(task.startDate, task.dueDate),
         dueDate: normalizeDueDate(task.dueDate),
