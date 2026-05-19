@@ -4,7 +4,15 @@ import { isFeishuAuthConfigured } from "@/lib/feishu-auth";
 import { getSession } from "@/lib/session";
 import type { DashboardEntityType } from "@/types/records";
 
-const entityTypes = new Set<DashboardEntityType>(["project", "task", "bug", "risk", "requirement", "document"]);
+const entityTypes = new Set<DashboardEntityType>([
+  "project",
+  "task",
+  "bug",
+  "risk",
+  "requirementVersion",
+  "requirement",
+  "document"
+]);
 
 export async function POST(request: NextRequest) {
   const session = await getSession();

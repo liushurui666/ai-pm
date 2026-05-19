@@ -249,6 +249,8 @@ export const dashboardData: DashboardData = {
       priority: "P0",
       status: "开发中",
       project: "AI 周报自动化",
+      versionId: "rv-2026-05-ai",
+      versionName: "2026.05 AI 协同版",
       acceptance: "支持按项目、部门、负责人三个维度生成汇报。"
     },
     {
@@ -257,6 +259,8 @@ export const dashboardData: DashboardData = {
       priority: "P1",
       status: "设计中",
       project: "智能项目驾驶舱一期",
+      versionId: "rv-1-4",
+      versionName: "1.4 项目驾驶舱增强",
       acceptance: "至少展示延期概率、关键原因和建议动作。"
     },
     {
@@ -265,7 +269,38 @@ export const dashboardData: DashboardData = {
       priority: "P1",
       status: "评审中",
       project: "需求智能拆解",
+      versionId: "rv-2026-05-ai",
+      versionName: "2026.05 AI 协同版",
       acceptance: "识别待办、负责人、截止时间，允许人工确认后入库。"
+    }
+  ],
+  requirementVersions: [
+    {
+      id: "rv-1-4",
+      name: "1.4 项目驾驶舱增强",
+      project: "智能项目驾驶舱一期",
+      status: "进行中",
+      startDate: "2026-05-01",
+      releaseDate: "2026-06-01",
+      goal: "集中交付健康度解释、风险聚合和管理层视图，提升项目状态透明度。"
+    },
+    {
+      id: "rv-2026-05-ai",
+      name: "2026.05 AI 协同版",
+      project: "AI 周报自动化",
+      status: "规划中",
+      startDate: "2026-05-10",
+      releaseDate: "2026-06-15",
+      goal: "把文档拆解、AI 周报和任务联动纳入一个可验收版本。"
+    },
+    {
+      id: "rv-backlog",
+      name: "未规划需求池",
+      project: "跨项目",
+      status: "规划中",
+      startDate: "2026-05-01",
+      releaseDate: "2026-06-30",
+      goal: "收纳尚未进入明确版本的需求，评审后再绑定到目标版本。"
     }
   ],
   documents: [

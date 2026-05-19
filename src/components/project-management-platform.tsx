@@ -80,6 +80,7 @@ import type {
   Project,
   ProjectMilestone,
   Requirement,
+  RequirementVersion,
   Risk,
   Task,
   TaskStage
@@ -104,6 +105,7 @@ const entityLabels: Record<DashboardEntityType, string> = {
   task: "任务",
   bug: "Bug",
   risk: "风险",
+  requirementVersion: "需求版本",
   requirement: "需求",
   document: "文档"
 };
@@ -121,6 +123,13 @@ const milestoneColor: Record<ProjectMilestone["status"], string> = {
   进行中: "blue",
   已完成: "green",
   延期: "red"
+};
+
+const requirementVersionColor: Record<RequirementVersion["status"], string> = {
+  规划中: "blue",
+  进行中: "gold",
+  已发布: "green",
+  已归档: "default"
 };
 
 const priorityColor: Record<Task["priority"] | Requirement["priority"], string> = {
@@ -185,6 +194,13 @@ type SearchResult = {
   ownerAvatarUrl?: string;
   type: string;
   view: AppView;
+};
+
+type RequirementVersionOption = {
+  value: string;
+  label: string;
+  versionName: string;
+  project: string;
 };
 
 async function fetchDashboardFromApi() {
@@ -303,6 +319,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
   const [breakdownSubmitting, setBreakdownSubmitting] = useState(false);
   const [activeView, setActiveView] = useState<AppView>(validViews.has(initialView) ? initialView : "overview");
   const [projectFilter, setProjectFilter] = useState("全部");
+  const [selectedRequirementVersionId, setSelectedRequirementVersionId] = useState<string | null>(null);
   const [people, setPeople] = useState<FeishuPerson[]>([]);
   const [peopleLoading, setPeopleLoading] = useState(false);
   const [peopleError, setPeopleError] = useState("");
@@ -528,6 +545,13 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
       width: 120
     },
     {
+      title: "版本",
+      dataIndex: "versionName",
+      key: "versionName",
+      width: 190,
+      render: (_, requirement) => requirement.versionName ? <Tag color="blue">{requirement.versionName}</Tag> : <Tag>未规划</Tag>
+    },
+    {
       title: "关联项目",
       dataIndex: "project",
       key: "project",
@@ -616,10 +640,13 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
     void submitAssistantQuestion("请基于当前项目、任务、Bug、风险和文档数据，生成一份本周项目汇报，包含总体结论、关键风险、负责人和下周动作。");
   }
 
-  function openCreateDrawer(type: DashboardEntityType) {
+  function openCreateDrawer(type: DashboardEntityType, initialValues: Record<string, unknown> = {}) {
     setCreateType(type);
     createForm.resetFields();
-    createForm.setFieldsValue(getCreateInitialValues(type, data?.meta?.user));
+    createForm.setFieldsValue({
+      ...getCreateInitialValues(type, data?.meta?.user),
+      ...initialValues
+    });
   }
 
   function openEditProjectDrawer(project: Project) {
@@ -931,6 +958,17 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
   const userName = data?.meta?.user?.name ?? "苏";
   const userInitial = userName.slice(0, 1);
   const projectOptions = data?.projects.map((project) => project.name) ?? [];
+  const requirementVersions = useMemo(() => data?.requirementVersions ?? [], [data?.requirementVersions]);
+  const requirementVersionOptions = useMemo(
+    () =>
+      requirementVersions.map((version) => ({
+        value: version.id,
+        label: `${version.name} · ${version.project}`,
+        versionName: version.name,
+        project: version.project
+      })),
+    [requirementVersions]
+  );
   const globalSearchResults = useMemo(() => (data ? createSearchResults(data, searchQuery) : []), [data, searchQuery]);
 
   function switchView(view: AppView) {
@@ -977,6 +1015,25 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
       if (bug) {
         openEditBugDrawer(bug);
       }
+
+      return;
+    }
+
+    if (result.entity === "requirementVersion") {
+      setSelectedRequirementVersionId(result.id);
+      messageApi.success("已打开需求版本");
+
+      return;
+    }
+
+    if (result.entity === "requirement") {
+      const requirement = data.requirements.find((item) => item.id === result.id);
+
+      if (requirement?.versionId) {
+        setSelectedRequirementVersionId(requirement.versionId);
+      }
+
+      messageApi.success("已定位到需求所在版本");
 
       return;
     }
@@ -1148,28 +1205,22 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
                     />
                   ) : null}
                   {activeView === "requirements" ? (
-                    <TableView
-                      title="需求管理"
-                      subtitle="围绕优先级、验收标准和关联项目组织需求执行。"
-                      icon={<NodeIndexOutlined />}
-                      extra={
-                        <Button
-                          type="primary"
-                          icon={<PlusOutlined />}
-                          onClick={() => openCreateDrawer("requirement")}
-                        >
-                          新建需求
-                        </Button>
+                    <RequirementsView
+                      columns={requirementColumns}
+                      requirements={data.requirements}
+                      selectedVersionId={selectedRequirementVersionId}
+                      versions={requirementVersions}
+                      onBack={() => setSelectedRequirementVersionId(null)}
+                      onCreateRequirement={(version) =>
+                        openCreateDrawer("requirement", {
+                          versionId: version.id,
+                          versionName: version.name,
+                          project: version.project === "跨项目" ? undefined : version.project
+                        })
                       }
-                    >
-                      <Table
-                        rowKey="id"
-                        columns={requirementColumns}
-                        dataSource={data.requirements}
-                        pagination={false}
-                        scroll={{ x: 720 }}
-                      />
-                    </TableView>
+                      onCreateVersion={() => openCreateDrawer("requirementVersion")}
+                      onSelectVersion={setSelectedRequirementVersionId}
+                    />
                   ) : null}
                   {activeView === "risks" ? (
                     <RisksView risks={data.risks} onCreate={() => openCreateDrawer("risk")} />
@@ -1267,6 +1318,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
             type={createType}
             submitting={createSubmitting}
             projectOptions={projectOptions}
+            requirementVersionOptions={requirementVersionOptions}
             people={ownerOptions}
             peopleLoading={peopleLoading}
             peopleError={peopleError}
@@ -1716,6 +1768,157 @@ function ProjectsView({
   );
 }
 
+function RequirementsView({
+  columns,
+  requirements,
+  selectedVersionId,
+  versions,
+  onBack,
+  onCreateRequirement,
+  onCreateVersion,
+  onSelectVersion
+}: {
+  columns: ColumnsType<Requirement>;
+  requirements: Requirement[];
+  selectedVersionId: string | null;
+  versions: RequirementVersion[];
+  onBack: () => void;
+  onCreateRequirement: (version: RequirementVersion) => void;
+  onCreateVersion: () => void;
+  onSelectVersion: (id: string) => void;
+}) {
+  const selectedVersion = selectedVersionId ? versions.find((version) => version.id === selectedVersionId) : null;
+
+  if (selectedVersion) {
+    const scopedRequirements = requirements.filter((requirement) => requirement.versionId === selectedVersion.id);
+    const readyCount = scopedRequirements.filter((requirement) => requirement.status === "待上线").length;
+    const progress = selectedVersion.status === "已发布"
+      ? 100
+      : scopedRequirements.length
+        ? Math.round((readyCount / scopedRequirements.length) * 100)
+        : 0;
+
+    return (
+      <TableView
+        title={selectedVersion.name}
+        subtitle={selectedVersion.goal}
+        icon={<NodeIndexOutlined />}
+        extra={
+          <Space wrap>
+            <Button onClick={onBack}>返回版本</Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => onCreateRequirement(selectedVersion)}>
+              绑定需求
+            </Button>
+          </Space>
+        }
+      >
+        <div className="requirement-version-summary">
+          <div className="requirement-version-summary-item">
+            <Text type="secondary">关联项目</Text>
+            <Text strong>{selectedVersion.project}</Text>
+          </div>
+          <div className="requirement-version-summary-item">
+            <Text type="secondary">版本状态</Text>
+            <Tag color={requirementVersionColor[selectedVersion.status]}>{selectedVersion.status}</Tag>
+          </div>
+          <div className="requirement-version-summary-item">
+            <Text type="secondary">版本周期</Text>
+            <Text strong>
+              {selectedVersion.startDate} - {selectedVersion.releaseDate}
+            </Text>
+          </div>
+          <div className="requirement-version-summary-item">
+            <Text type="secondary">需求进度</Text>
+            <Progress percent={progress} size="small" />
+          </div>
+        </div>
+        <Table
+          rowKey="id"
+          columns={columns}
+          dataSource={scopedRequirements}
+          pagination={false}
+          scroll={{ x: 860 }}
+          locale={{ emptyText: "该版本暂无需求，点击右上角绑定需求" }}
+        />
+      </TableView>
+    );
+  }
+
+  return (
+    <Space orientation="vertical" size={18} className="pm-page-stack">
+      <PageTitle
+        icon={<NodeIndexOutlined />}
+        title="需求版本"
+        subtitle="先按版本集中需求，再进入版本维护范围、验收标准和交付状态。"
+        extra={
+          <Button type="primary" icon={<PlusOutlined />} onClick={onCreateVersion}>
+            新建版本
+          </Button>
+        }
+      />
+      {versions.length ? (
+        <div className="requirement-version-grid">
+          {versions.map((version) => {
+            const scopedRequirements = requirements.filter((requirement) => requirement.versionId === version.id);
+            const readyCount = scopedRequirements.filter((requirement) => requirement.status === "待上线").length;
+            const progress = version.status === "已发布"
+              ? 100
+              : scopedRequirements.length
+                ? Math.round((readyCount / scopedRequirements.length) * 100)
+                : 0;
+
+            return (
+              <div className="requirement-version-card" key={version.id}>
+                <Flex align="flex-start" justify="space-between" gap={12}>
+                  <Space orientation="vertical" size={4}>
+                    <Text strong>{version.name}</Text>
+                    <Text type="secondary">{version.project}</Text>
+                  </Space>
+                  <Tag color={requirementVersionColor[version.status]}>{version.status}</Tag>
+                </Flex>
+                <Paragraph className="requirement-version-goal" type="secondary">
+                  {version.goal}
+                </Paragraph>
+                <div className="requirement-version-progress">
+                  <Flex justify="space-between" align="center">
+                    <Text type="secondary">上线就绪</Text>
+                    <Text strong>{progress}%</Text>
+                  </Flex>
+                  <Progress percent={progress} size="small" showInfo={false} />
+                </div>
+                <div className="requirement-version-meta">
+                  <div>
+                    <Text type="secondary">需求数</Text>
+                    <Text strong>{scopedRequirements.length}</Text>
+                  </div>
+                  <div>
+                    <Text type="secondary">已就绪</Text>
+                    <Text strong>{readyCount}</Text>
+                  </div>
+                  <div>
+                    <Text type="secondary">发布日期</Text>
+                    <Text strong>{version.releaseDate}</Text>
+                  </div>
+                </div>
+                <Button block onClick={() => onSelectVersion(version.id)}>
+                  进入版本
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="requirement-version-empty">
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description="暂无需求版本，先新建一个版本来收纳需求"
+          />
+        </div>
+      )}
+    </Space>
+  );
+}
+
 function ProjectMilestoneTimeline({ project }: { project: Project }) {
   const milestones = [...project.milestones].sort(
     (left, right) => dayjs(left.dueDate).valueOf() - dayjs(right.dueDate).valueOf()
@@ -1986,19 +2189,40 @@ function createSearchResults(data: DashboardData, query: string): SearchResult[]
       type: "风险",
       view: "risks" as const
     }));
+  const versionResults = data.requirementVersions
+    .filter((version) => matches([version.name, version.project, version.status, version.goal]))
+    .map((version) => ({
+      entity: "requirementVersion" as const,
+      id: version.id,
+      title: version.name,
+      description: version.goal,
+      meta: `需求版本 · ${version.status} · ${version.releaseDate}`,
+      type: "需求版本",
+      view: "requirements" as const
+    }));
   const requirementResults = data.requirements
-    .filter((requirement) => matches([requirement.title, requirement.project, requirement.acceptance, requirement.status]))
+    .filter((requirement) =>
+      matches([requirement.title, requirement.project, requirement.versionName, requirement.acceptance, requirement.status])
+    )
     .map((requirement) => ({
       entity: "requirement" as const,
       id: requirement.id,
       title: requirement.title,
       description: requirement.acceptance,
-      meta: `需求 · ${requirement.priority} · ${requirement.status}`,
+      meta: `需求 · ${requirement.versionName ?? "未规划"} · ${requirement.status}`,
       type: "需求",
       view: "requirements" as const
     }));
 
-  return [...projectResults, ...taskResults, ...bugResults, ...documentResults, ...riskResults, ...requirementResults].slice(0, 30);
+  return [
+    ...projectResults,
+    ...taskResults,
+    ...bugResults,
+    ...documentResults,
+    ...riskResults,
+    ...versionResults,
+    ...requirementResults
+  ].slice(0, 30);
 }
 
 function SearchDrawer({
@@ -2726,6 +2950,14 @@ function getCreateInitialValues(type: DashboardEntityType, currentUser?: FeishuU
     };
   }
 
+  if (type === "requirementVersion") {
+    return {
+      status: "规划中",
+      startDate: dayjs(),
+      releaseDate: dayjs().add(30, "day")
+    };
+  }
+
   return {
     type: "PRD",
     updatedAt: dayjs()
@@ -2825,6 +3057,7 @@ function updateDashboardWithRecord(data: DashboardData, result: CreateRecordResu
     tasks: [...data.tasks],
     bugs: [...data.bugs],
     risks: [...data.risks],
+    requirementVersions: [...data.requirementVersions],
     requirements: [...data.requirements],
     documents: [...data.documents],
     meta: data.meta
@@ -2851,6 +3084,10 @@ function updateDashboardWithRecord(data: DashboardData, result: CreateRecordResu
     nextData.risks = [result.record as Risk, ...nextData.risks];
   }
 
+  if (result.type === "requirementVersion") {
+    nextData.requirementVersions = [result.record as RequirementVersion, ...nextData.requirementVersions];
+  }
+
   if (result.type === "requirement") {
     nextData.requirements = [result.record as Requirement, ...nextData.requirements];
   }
@@ -2871,6 +3108,7 @@ function updateDashboardWithRecordUpdate(data: DashboardData, result: CreateReco
     tasks: [...data.tasks],
     bugs: [...data.bugs],
     risks: [...data.risks],
+    requirementVersions: [...data.requirementVersions],
     requirements: [...data.requirements],
     documents: [...data.documents],
     meta: data.meta
@@ -2894,6 +3132,16 @@ function updateDashboardWithRecordUpdate(data: DashboardData, result: CreateReco
   if (result.type === "bug") {
     const bug = result.record as BugReport;
     nextData.bugs = nextData.bugs.map((item) => item.id === bug.id ? bug : item);
+  }
+
+  if (result.type === "requirementVersion") {
+    const version = result.record as RequirementVersion;
+    nextData.requirementVersions = nextData.requirementVersions.map((item) => item.id === version.id ? version : item);
+  }
+
+  if (result.type === "requirement") {
+    const requirement = result.record as Requirement;
+    nextData.requirements = nextData.requirements.map((item) => item.id === requirement.id ? requirement : item);
   }
 
   nextData.metrics = recalculateMetrics(nextData);
@@ -2941,6 +3189,7 @@ function CreateRecordDrawer({
   type,
   submitting,
   projectOptions,
+  requirementVersionOptions,
   people,
   peopleLoading,
   peopleError,
@@ -2952,6 +3201,7 @@ function CreateRecordDrawer({
   type: DashboardEntityType | null;
   submitting: boolean;
   projectOptions: string[];
+  requirementVersionOptions: RequirementVersionOption[];
   people: FeishuPerson[];
   peopleLoading: boolean;
   peopleError: string;
@@ -3007,7 +3257,10 @@ function CreateRecordDrawer({
               projectOptions={projectOptions}
             />
           ) : null}
-          {type === "requirement" ? <RequirementFields projectOptions={projectOptions} /> : null}
+          {type === "requirementVersion" ? <RequirementVersionFields projectOptions={projectOptions} /> : null}
+          {type === "requirement" ? (
+            <RequirementFields form={form} projectOptions={projectOptions} versionOptions={requirementVersionOptions} />
+          ) : null}
           {type === "document" ? <DocumentFields /> : null}
         </Form>
       ) : null}
@@ -3773,7 +4026,89 @@ function RiskFields({
   );
 }
 
-function RequirementFields({ projectOptions }: { projectOptions: string[] }) {
+function RequirementVersionFields({ projectOptions }: { projectOptions: string[] }) {
+  return (
+    <>
+      <Form.Item label="版本名称" name="name" rules={[{ required: true, message: "请输入版本名称" }]}>
+        <Input placeholder="例如：1.5 协同提效版本" />
+      </Form.Item>
+      <Row gutter={12}>
+        <Col span={12}>
+          <Form.Item label="版本状态" name="status">
+            <Select options={["规划中", "进行中", "已发布", "已归档"].map((value) => ({ value, label: value }))} />
+          </Form.Item>
+        </Col>
+        <Col span={12}>
+          <Form.Item label="关联项目" name="project" rules={[{ required: true, message: "请选择关联项目" }]}>
+            <ProjectOptionSelect projectOptions={projectOptions} />
+          </Form.Item>
+        </Col>
+      </Row>
+      <Row gutter={12}>
+        <Col span={12}>
+          <Form.Item label="开始日期" name="startDate">
+            <DatePicker className="pm-form-control" />
+          </Form.Item>
+        </Col>
+        <Col span={12}>
+          <Form.Item
+            label="发布日期"
+            name="releaseDate"
+            dependencies={["startDate"]}
+            rules={[
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  const startDate = getFieldValue("startDate");
+
+                  if (!value || !startDate || !dayjs(value).isBefore(dayjs(startDate), "day")) {
+                    return Promise.resolve();
+                  }
+
+                  return Promise.reject(new Error("发布日期不能早于开始日期"));
+                }
+              })
+            ]}
+          >
+            <DatePicker className="pm-form-control" />
+          </Form.Item>
+        </Col>
+      </Row>
+      <Form.Item label="版本目标" name="goal">
+        <Input.TextArea rows={4} placeholder="这个版本要解决的问题、交付范围和验收口径" />
+      </Form.Item>
+    </>
+  );
+}
+
+function RequirementFields({
+  form,
+  projectOptions,
+  versionOptions
+}: {
+  form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
+  projectOptions: string[];
+  versionOptions: RequirementVersionOption[];
+}) {
+  const selectedVersionId = Form.useWatch("versionId", form) as string | undefined;
+
+  useEffect(() => {
+    const selectedVersion = versionOptions.find((version) => version.value === selectedVersionId);
+
+    if (!selectedVersion) {
+      return;
+    }
+
+    const nextValues: Record<string, unknown> = {
+      versionName: selectedVersion.versionName
+    };
+
+    if (selectedVersion.project !== "跨项目") {
+      nextValues.project = selectedVersion.project;
+    }
+
+    form.setFieldsValue(nextValues);
+  }, [form, selectedVersionId, versionOptions]);
+
   return (
     <>
       <Form.Item label="需求标题" name="title" rules={[{ required: true, message: "请输入需求标题" }]}>
@@ -3781,19 +4116,37 @@ function RequirementFields({ projectOptions }: { projectOptions: string[] }) {
       </Form.Item>
       <Row gutter={12}>
         <Col span={12}>
+          <Form.Item label="需求版本" name="versionId" rules={[{ required: true, message: "请选择需求版本" }]}>
+            <Select
+              showSearch
+              optionFilterProp="label"
+              placeholder="选择需求归属版本"
+              notFoundContent="请先新建需求版本"
+              options={versionOptions}
+            />
+          </Form.Item>
+          <Form.Item name="versionName" hidden>
+            <Input />
+          </Form.Item>
+        </Col>
+        <Col span={12}>
           <Form.Item label="优先级" name="priority">
             <Select options={["P0", "P1", "P2"].map((value) => ({ value, label: value }))} />
           </Form.Item>
         </Col>
+      </Row>
+      <Row gutter={12}>
         <Col span={12}>
           <Form.Item label="状态" name="status">
             <Select options={["评审中", "设计中", "开发中", "待上线"].map((value) => ({ value, label: value }))} />
           </Form.Item>
         </Col>
+        <Col span={12}>
+          <Form.Item label="关联项目" name="project" rules={[{ required: true, message: "请选择关联项目" }]}>
+            <ProjectOptionSelect projectOptions={projectOptions} />
+          </Form.Item>
+        </Col>
       </Row>
-      <Form.Item label="关联项目" name="project" rules={[{ required: true, message: "请选择关联项目" }]}>
-        <ProjectOptionSelect projectOptions={projectOptions} />
-      </Form.Item>
       <Form.Item label="验收标准" name="acceptance">
         <Input.TextArea rows={4} placeholder="可量化的验收条件和边界场景" />
       </Form.Item>

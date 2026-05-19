@@ -13,6 +13,7 @@ import type {
   ProjectMilestoneStatus,
   ProjectStatus,
   Requirement,
+  RequirementVersion,
   Risk,
   Task,
   TaskStage
@@ -21,6 +22,15 @@ import type { CreateRecordResult, DashboardEntityMap, DashboardEntityType } from
 
 const DATABASE_DIR = path.join(process.cwd(), ".ai-pm");
 const DATABASE_FILE = path.join(DATABASE_DIR, "app-database.json");
+const DEFAULT_REQUIREMENT_VERSION: RequirementVersion = {
+  id: "rv-backlog",
+  name: "未规划需求池",
+  project: "跨项目",
+  status: "规划中",
+  startDate: "2026-05-01",
+  releaseDate: "2026-06-30",
+  goal: "收纳尚未进入明确版本的需求，评审后再绑定到目标版本。"
+};
 
 type LocalDatabase = Omit<DashboardData, "meta"> & {
   updatedAt: string;
@@ -69,6 +79,7 @@ async function readDatabase() {
       tasks: Array.isArray(data.tasks) ? data.tasks : seed.tasks,
       bugs: Array.isArray(data.bugs) ? data.bugs : [],
       risks: Array.isArray(data.risks) ? data.risks : seed.risks,
+      requirementVersions: Array.isArray(data.requirementVersions) ? data.requirementVersions : seed.requirementVersions,
       requirements: Array.isArray(data.requirements) ? data.requirements : seed.requirements,
       documents: Array.isArray(data.documents) ? data.documents : seed.documents,
       weeklyInsight: Array.isArray(data.weeklyInsight) ? data.weeklyInsight : seed.weeklyInsight,
@@ -280,6 +291,22 @@ function normalizeRequirementStatus(value: string): Requirement["status"] {
   }
 
   return "评审中";
+}
+
+function normalizeRequirementVersionStatus(value: string): RequirementVersion["status"] {
+  if (value.includes("发布") || value.includes("上线")) {
+    return "已发布";
+  }
+
+  if (value.includes("归档") || value.includes("关闭")) {
+    return "已归档";
+  }
+
+  if (value.includes("进行") || value.includes("开发") || value.includes("执行")) {
+    return "进行中";
+  }
+
+  return "规划中";
 }
 
 function normalizeRiskLevel(value: string): Risk["level"] {
@@ -510,25 +537,23 @@ function normalizeExistingBug(bug: BugReport): BugReport {
   );
 }
 
-function migrateLocalDatabase(data: LocalDatabase): LocalDatabase {
+function normalizeCreateRequirementVersion(
+  values: Record<string, unknown>,
+  id = createLocalId("requirementVersion")
+): RequirementVersion {
   return {
-    ...data,
-    projects: data.projects.map(normalizeExistingProject),
-    tasks: data.tasks.map(normalizeExistingTask),
-    bugs: data.bugs.map(normalizeExistingBug)
+    id,
+    name: asText(values.name, "未命名版本"),
+    project: asText(values.project, "跨项目"),
+    status: normalizeRequirementVersionStatus(asText(values.status, "规划中")),
+    startDate: asDateString(values.startDate, dayjs().format("YYYY-MM-DD")),
+    releaseDate: asDateString(values.releaseDate, dayjs().add(30, "day").format("YYYY-MM-DD")),
+    goal: asText(values.goal, "暂无版本目标。")
   };
 }
 
-function normalizeCreateRisk(values: Record<string, unknown>, id = createLocalId("risk")): Risk {
-  return {
-    id,
-    title: asText(values.title, "未命名风险"),
-    level: normalizeRiskLevel(asText(values.level, "中")),
-    owner: asOwnerName(values),
-    ...createOwnerLink(values),
-    project: asText(values.project, "未关联项目"),
-    mitigation: asText(values.mitigation, "暂无应对措施。")
-  };
+function normalizeExistingRequirementVersion(version: RequirementVersion): RequirementVersion {
+  return normalizeCreateRequirementVersion(version as unknown as Record<string, unknown>, version.id);
 }
 
 function normalizeCreateRequirement(
@@ -541,7 +566,50 @@ function normalizeCreateRequirement(
     priority: normalizeRequirementPriority(asText(values.priority, "P1")),
     status: normalizeRequirementStatus(asText(values.status, "评审中")),
     project: asText(values.project, "未关联项目"),
+    versionId: asText(values.versionId) || DEFAULT_REQUIREMENT_VERSION.id,
+    versionName: asText(values.versionName) || DEFAULT_REQUIREMENT_VERSION.name,
     acceptance: asText(values.acceptance, "暂无验收标准。")
+  };
+}
+
+function normalizeExistingRequirement(requirement: Requirement, versions: RequirementVersion[]): Requirement {
+  const fallbackVersion =
+    versions.find((version) => version.id === DEFAULT_REQUIREMENT_VERSION.id) ?? versions[0] ?? DEFAULT_REQUIREMENT_VERSION;
+  const matchedVersion = versions.find((version) => version.id === requirement.versionId) ?? fallbackVersion;
+
+  return normalizeCreateRequirement(
+    {
+      ...requirement,
+      versionId: matchedVersion.id,
+      versionName: matchedVersion.name
+    },
+    requirement.id
+  );
+}
+
+function migrateLocalDatabase(data: LocalDatabase): LocalDatabase {
+  const normalizedVersions = (data.requirementVersions.length ? data.requirementVersions : [DEFAULT_REQUIREMENT_VERSION])
+    .map(normalizeExistingRequirementVersion);
+
+  return {
+    ...data,
+    projects: data.projects.map(normalizeExistingProject),
+    tasks: data.tasks.map(normalizeExistingTask),
+    bugs: data.bugs.map(normalizeExistingBug),
+    requirementVersions: normalizedVersions,
+    requirements: data.requirements.map((requirement) => normalizeExistingRequirement(requirement, normalizedVersions))
+  };
+}
+
+function normalizeCreateRisk(values: Record<string, unknown>, id = createLocalId("risk")): Risk {
+  return {
+    id,
+    title: asText(values.title, "未命名风险"),
+    level: normalizeRiskLevel(asText(values.level, "中")),
+    owner: asOwnerName(values),
+    ...createOwnerLink(values),
+    project: asText(values.project, "未关联项目"),
+    mitigation: asText(values.mitigation, "暂无应对措施。")
   };
 }
 
@@ -573,6 +641,10 @@ function createRecord<T extends DashboardEntityType>(
 
   if (type === "risk") {
     return normalizeCreateRisk(values) as DashboardEntityMap[T];
+  }
+
+  if (type === "requirementVersion") {
+    return normalizeCreateRequirementVersion(values) as DashboardEntityMap[T];
   }
 
   if (type === "requirement") {
@@ -780,6 +852,10 @@ function findRecord<T extends DashboardEntityType>(
     return data.risks.find((risk) => risk.id === id) as DashboardEntityMap[T] | undefined;
   }
 
+  if (type === "requirementVersion") {
+    return data.requirementVersions.find((version) => version.id === id) as DashboardEntityMap[T] | undefined;
+  }
+
   if (type === "requirement") {
     return data.requirements.find((requirement) => requirement.id === id) as DashboardEntityMap[T] | undefined;
   }
@@ -812,6 +888,10 @@ function getRecordTitle(type: DashboardEntityType, values: Record<string, unknow
     return asText(values.name, "未命名项目");
   }
 
+  if (type === "requirementVersion") {
+    return asText(values.name, "未命名版本");
+  }
+
   return asText(values.title, "未命名记录");
 }
 
@@ -821,6 +901,7 @@ function getEntityLabel(type: DashboardEntityType) {
     task: "任务",
     bug: "Bug",
     risk: "风险",
+    requirementVersion: "需求版本",
     requirement: "需求",
     document: "文档"
   };
@@ -888,6 +969,10 @@ export async function createDashboardRecord<T extends DashboardEntityType>(
     data.risks = [record as Risk, ...data.risks];
   }
 
+  if (type === "requirementVersion") {
+    data.requirementVersions = [record as RequirementVersion, ...data.requirementVersions];
+  }
+
   if (type === "requirement") {
     data.requirements = [record as Requirement, ...data.requirements];
   }
@@ -940,6 +1025,13 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
   if (type === "risk") {
     data.risks = data.risks.map((risk) => risk.id === id ? (typedRecord as Risk) : risk);
     updated = data.risks.some((risk) => risk.id === id);
+  }
+
+  if (type === "requirementVersion") {
+    data.requirementVersions = data.requirementVersions.map((version) =>
+      version.id === id ? (typedRecord as RequirementVersion) : version
+    );
+    updated = data.requirementVersions.some((version) => version.id === id);
   }
 
   if (type === "requirement") {

@@ -95,7 +95,19 @@ export type Requirement = {
   priority: "P0" | "P1" | "P2";
   status: "评审中" | "设计中" | "开发中" | "待上线";
   project: string;
+  versionId?: string;
+  versionName?: string;
   acceptance: string;
+};
+
+export type RequirementVersion = {
+  id: string;
+  name: string;
+  project: string;
+  status: "规划中" | "进行中" | "已发布" | "已归档";
+  startDate: string;
+  releaseDate: string;
+  goal: string;
 };
 
 export type DocumentItem = {
@@ -129,6 +141,7 @@ export type DashboardData = {
   tasks: Task[];
   bugs: BugReport[];
   risks: Risk[];
+  requirementVersions: RequirementVersion[];
   requirements: Requirement[];
   documents: DocumentItem[];
   weeklyInsight: string[];
