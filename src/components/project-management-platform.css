@@ -82,11 +82,13 @@
 
 .pm-sider + .pm-main {
   margin-left: 248px;
+  width: calc(100% - 248px);
   transition: margin-left 200ms ease;
 }
 
 .pm-sider.ant-layout-sider-collapsed + .pm-main {
   margin-left: 80px;
+  width: calc(100% - 80px);
 }
 
 .pm-header {
@@ -96,6 +98,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   min-height: 68px;
   padding: 0 22px;
   border-bottom: 1px solid var(--header-border);
@@ -107,6 +110,16 @@
 .pm-header-left,
 .pm-header-actions {
   min-width: 0;
+}
+
+.pm-header-left {
+  flex: 1 1 auto;
+}
+
+.pm-header-actions {
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .pm-search {
@@ -402,6 +415,33 @@
 .requirement-link-actions .ant-btn {
   height: auto;
   padding-inline: 0;
+}
+
+.requirement-detail-table {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.requirement-detail-table .ant-table-container {
+  border-start-start-radius: 8px;
+  border-start-end-radius: 8px;
+}
+
+.requirement-title-cell {
+  max-width: 100%;
+}
+
+.requirement-title-cell .ant-typography {
+  max-width: 100%;
+  white-space: normal;
+}
+
+.requirement-row-actions {
+  white-space: nowrap;
+}
+
+.requirement-row-actions .ant-btn {
+  padding-inline: 2px;
 }
 
 .project-milestone-form {

@@ -531,8 +531,9 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
       title: "需求",
       dataIndex: "title",
       key: "title",
+      width: 260,
       render: (_, requirement) => (
-        <Space orientation="vertical" size={2}>
+        <Space orientation="vertical" size={2} className="requirement-title-cell">
           <Text strong>{requirement.title}</Text>
           <Text type="secondary">{requirement.acceptance}</Text>
         </Space>
@@ -542,7 +543,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
       title: "优先级",
       dataIndex: "priority",
       key: "priority",
-      width: 100,
+      width: 72,
       render: (priority: Requirement["priority"]) => (
         <Tag color={priorityColor[priority]}>{priority}</Tag>
       )
@@ -551,29 +552,28 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
       title: "状态",
       dataIndex: "status",
       key: "status",
-      width: 120
+      width: 82
     },
     {
       title: "版本",
       dataIndex: "versionName",
       key: "versionName",
-      width: 190,
+      width: 150,
       render: (_, requirement) => requirement.versionName ? <Tag color="blue">{requirement.versionName}</Tag> : <Tag>未规划</Tag>
     },
     {
       title: "资料链接",
       key: "links",
-      width: 180,
+      width: 112,
       render: (_, requirement) => <RequirementLinkActions requirement={requirement} />
     },
     {
       title: "操作",
       key: "action",
-      fixed: "right",
-      width: 150,
+      width: 130,
       render: (_, requirement) => (
-        <Space size={4}>
-          <Button type="link" icon={<EditOutlined />} onClick={() => openEditRequirementDrawer(requirement)}>
+        <Space className="requirement-row-actions" size={2} wrap={false}>
+          <Button size="small" type="link" icon={<EditOutlined />} onClick={() => openEditRequirementDrawer(requirement)}>
             编辑
           </Button>
           <Popconfirm
@@ -584,7 +584,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
             okButtonProps={{ danger: true }}
             onConfirm={() => handleDeleteRecord("requirement", requirement.id)}
           >
-            <Button type="link" danger icon={<DeleteOutlined />}>
+            <Button size="small" type="link" danger icon={<DeleteOutlined />}>
               删除
             </Button>
           </Popconfirm>
@@ -2008,6 +2008,7 @@ function RequirementsView({
 
   if (selectedVersion) {
     const scopedRequirements = requirements.filter((requirement) => requirement.versionId === selectedVersion.id);
+    const detailColumns = columns.filter((column) => column.key !== "versionName");
     const readyCount = scopedRequirements.filter((requirement) => requirement.status === "待上线").length;
     const reviewCount = scopedRequirements.filter((requirement) => requirement.status === "评审中").length;
     const highPriorityCount = scopedRequirements.filter((requirement) => requirement.priority !== "P2").length;
@@ -2075,11 +2076,12 @@ function RequirementsView({
           </div>
         </div>
         <Table
+          className="requirement-detail-table"
           rowKey="id"
-          columns={columns}
+          columns={detailColumns}
           dataSource={scopedRequirements}
           pagination={false}
-          scroll={{ x: 960 }}
+          scroll={{ x: 656 }}
           locale={{ emptyText: "该版本暂无需求，点击右上角绑定需求" }}
         />
       </TableView>
