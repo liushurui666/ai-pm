@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, App, Button, Card, Progress, Space, Tag, Typography } from "antd";
+import { Alert, App, Button, Card, Progress, Space, Tag, Tooltip, Typography } from "antd";
 import type { FormInstance } from "antd";
 import { RobotOutlined } from "@ant-design/icons";
 import { useState } from "react";
@@ -18,9 +18,13 @@ function renderTags(items: string[], color: string) {
   }
 
   return items.slice(0, 4).map((item) => (
-    <Tag color={color} key={item}>
-      {item}
-    </Tag>
+    <Tooltip title={item} placement="topLeft" key={item}>
+      <span className="requirement-ai-tag-trigger">
+        <Tag className="requirement-ai-tag" color={color}>
+          {item}
+        </Tag>
+      </span>
+    </Tooltip>
   ));
 }
 
@@ -118,8 +122,12 @@ export function RequirementAiLinkAnalyzer({ form }: { form: FormInstance<Record<
             />
             <Text type="secondary">{analysis.documentTitle}</Text>
           </div>
-          <Paragraph>{analysis.summary}</Paragraph>
-          <Space size={[6, 6]} wrap>
+          <Tooltip title={analysis.summary} placement="topLeft">
+            <div className="requirement-ai-summary-trigger">
+              <Paragraph className="requirement-ai-summary-preview">{analysis.summary}</Paragraph>
+            </div>
+          </Tooltip>
+          <Space className="requirement-ai-tags" size={[6, 6]} wrap>
             <Tag color="blue">{analysis.suggestedPriority}</Tag>
             <Tag color="cyan">{analysis.suggestedStatus}</Tag>
             {renderTags(analysis.missingItems, "orange")}

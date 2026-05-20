@@ -20,6 +20,7 @@ import {
   Layout,
   Menu,
   Popconfirm,
+  Popover,
   Progress,
   Row,
   Segmented,
@@ -60,14 +61,18 @@ import {
   RobotOutlined,
   SearchOutlined,
   SendOutlined,
+  TeamOutlined,
   ThunderboltOutlined,
   UploadOutlined
 } from "@ant-design/icons";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ComponentProps } from "react";
 import dayjs from "dayjs";
 import type {
   BugReport,
+  BugAttachment,
   DashboardData,
+  DashboardMember,
+  DashboardWorkspace,
   DocumentItem,
   FeishuPerson,
   FeishuUser,
@@ -84,6 +89,7 @@ import { getAntdThemeConfig, ThemeToggleButton, useThemePreference } from "@/com
 import { RequirementAiLinkAnalyzer } from "@/components/project-management-platform/requirements/requirement-ai-link-analyzer";
 import { TableView } from "@/components/project-management-platform/shared/page-shell";
 import { BugsView } from "@/components/project-management-platform/views/bugs-view";
+import { MembersView } from "@/components/project-management-platform/views/members-view";
 import { OverviewView } from "@/components/project-management-platform/views/overview-view";
 import { ProjectsView } from "@/components/project-management-platform/views/projects-view";
 import { ReportsView } from "@/components/project-management-platform/views/reports-view";
@@ -100,7 +106,7 @@ const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
 const { useBreakpoint } = Grid;
 
-export type AppView = "overview" | "projects" | "tasks" | "bugs" | "requirements" | "risks" | "docs" | "reports";
+export type AppView = "overview" | "projects" | "tasks" | "bugs" | "requirements" | "risks" | "docs" | "members" | "reports";
 
 type ChatMessage = {
   role: "assistant" | "user";
@@ -108,6 +114,16 @@ type ChatMessage = {
 };
 
 const taskStages: TaskStage[] = ["待处理", "进行中", "评审中", "已完成"];
+const ownerRoleLabels: Record<DashboardMember["role"], string> = {
+  owner: "所有者",
+  admin: "管理员",
+  productAdmin: "产品管理员",
+  productMember: "产品成员",
+  frontend: "前端",
+  backend: "后端",
+  qa: "测试",
+  viewer: "只读成员"
+};
 const entityLabels: Record<DashboardEntityType, string> = {
   project: "项目",
   task: "任务",
@@ -118,7 +134,7 @@ const entityLabels: Record<DashboardEntityType, string> = {
   document: "文档"
 };
 const fallbackRequirementVersionId = "rv-backlog";
-const validViews = new Set<AppView>(["overview", "projects", "tasks", "bugs", "requirements", "risks", "docs", "reports"]);
+const validViews = new Set<AppView>(["overview", "projects", "tasks", "bugs", "requirements", "risks", "docs", "members", "reports"]);
 
 const statusColor: Record<Project["status"], NonNullable<BadgeProps["status"]>> = {
   进行中: "processing",
@@ -159,6 +175,7 @@ type ScheduleItem = {
   owner: string;
   ownerAvatarUrl?: string;
   ownerEmail?: string;
+  ownerMemberId?: string;
   ownerOpenId?: string;
   ownerUnionId?: string;
   ownerUserId?: string;
@@ -185,8 +202,32 @@ type RequirementVersionOption = {
   project: string;
 };
 
-async function fetchDashboardFromApi() {
-  const response = await fetch("/api/dashboard");
+type OwnerSelectableMember = {
+  id: string;
+  name: string;
+  role: DashboardMember["role"];
+  email?: string;
+  avatarUrl?: string;
+  feishuOpenId?: string;
+  feishuUnionId?: string;
+  feishuUserId?: string;
+};
+
+type BugAttachmentUploadFile = UploadFile & Partial<BugAttachment> & {
+  response?: {
+    attachment?: BugAttachment;
+  };
+};
+type UploadCustomRequestOptions = Parameters<NonNullable<ComponentProps<typeof Upload>["customRequest"]>>[0];
+
+async function fetchDashboardFromApi(workspaceId?: string | null) {
+  const url = new URL("/api/dashboard", window.location.origin);
+
+  if (workspaceId) {
+    url.searchParams.set("workspaceId", workspaceId);
+  }
+
+  const response = await fetch(url.toString());
   const nextData = (await response.json()) as DashboardData & { error?: string };
 
   if (response.status === 401) {
@@ -236,7 +277,13 @@ function isMyOwnerRecord(
   return [currentUser.name, currentUser.enName, currentUser.email].some((value) => owner && owner === normalizeIdentity(value));
 }
 
-export function ProjectManagementPlatform({ initialView = "overview" }: { initialView?: AppView }) {
+export function ProjectManagementPlatform({
+  initialView = "overview",
+  initialWorkspaceId
+}: {
+  initialView?: AppView;
+  initialWorkspaceId?: string;
+}) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -265,6 +312,11 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
   const [people, setPeople] = useState<FeishuPerson[]>([]);
   const [peopleLoading, setPeopleLoading] = useState(false);
   const [peopleError, setPeopleError] = useState("");
+  const [memberSubmitting, setMemberSubmitting] = useState(false);
+  const [workspaceSubmitting, setWorkspaceSubmitting] = useState(false);
+  const [workspaceDrawerOpen, setWorkspaceDrawerOpen] = useState(false);
+  const [workspaceSelectOpen, setWorkspaceSelectOpen] = useState(false);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState(initialWorkspaceId ?? "");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
@@ -280,17 +332,26 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
   const [requirementEditForm] = Form.useForm<Record<string, unknown>>();
   const [requirementVersionEditForm] = Form.useForm<Record<string, unknown>>();
   const [breakdownForm] = Form.useForm<Record<string, unknown>>();
+  const [workspaceForm] = Form.useForm<Record<string, unknown>>();
   const [messageApi, messageContextHolder] = message.useMessage();
   const { mode: themeMode, effectiveTheme, cycleMode } = useThemePreference();
   const screens = useBreakpoint();
   const isMobile = !screens.md;
+  const permissions = data?.meta?.permissions;
+  const canCreateRequirements = Boolean(permissions?.canCreateRequirements);
+  const canEditRequirements = Boolean(permissions?.canEditRequirements);
+  const canDeleteRequirements = Boolean(permissions?.canDeleteRequirements);
+  const permissionDeniedReason = permissions?.deniedReason ?? "当前角色无此操作权限。";
+  const currentWorkspace = data?.meta?.currentWorkspace;
+  const currentWorkspaceId = currentWorkspace?.id ?? activeWorkspaceId;
 
-  async function refreshDashboardState() {
+  async function refreshDashboardState(workspaceId = currentWorkspaceId) {
     try {
-      const nextData = await fetchDashboardFromApi();
+      const nextData = await fetchDashboardFromApi(workspaceId);
 
       if (nextData) {
         setData(nextData);
+        setActiveWorkspaceId(nextData.meta?.currentWorkspace?.id ?? workspaceId ?? "");
         setLoadError("");
       }
     } catch {
@@ -303,10 +364,11 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
 
     async function loadDashboard() {
       try {
-        const nextData = await fetchDashboardFromApi();
+        const nextData = await fetchDashboardFromApi(initialWorkspaceId);
 
         if (mounted && nextData) {
           setData(nextData);
+          setActiveWorkspaceId(nextData.meta?.currentWorkspace?.id ?? initialWorkspaceId ?? "");
           setLoadError("");
         }
       } catch (error) {
@@ -325,7 +387,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [initialWorkspaceId]);
 
   useEffect(() => {
     let mounted = true;
@@ -381,9 +443,22 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
     return data.projects.filter((project) => project.status === projectFilter);
   }, [data, projectFilter]);
 
-  const ownerOptions = useMemo(() => {
-    return people;
-  }, [people]);
+  const ownerOptions = useMemo<OwnerSelectableMember[]>(() => {
+    return (data?.members ?? [])
+      .filter((member) => member.status === "active")
+      .map((member) => ({
+        id: member.id,
+        name: member.name,
+        role: member.role,
+        email: member.email,
+        avatarUrl: member.avatarUrl,
+        feishuOpenId: member.notification.feishuOpenId,
+        feishuUnionId: member.notification.feishuUnionId,
+        feishuUserId: member.notification.feishuUserId
+      }));
+  }, [data?.members]);
+  const ownerSelectLoading = loading;
+  const ownerSelectError = !ownerSelectLoading && data && !ownerOptions.length ? "暂无可选平台成员，请先在成员管理添加成员。" : "";
 
   const projectColumns: ColumnsType<Project> = [
     {
@@ -469,9 +544,29 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
       width: 260,
       render: (_, requirement) => (
         <Space orientation="vertical" size={2} className="requirement-title-cell">
-          <Text strong>{requirement.title}</Text>
-          {requirement.aiSummary ? <Text type="secondary">AI：{requirement.aiSummary}</Text> : null}
-          <Text type="secondary">{requirement.acceptance}</Text>
+          <Tooltip title={requirement.title} placement="topLeft">
+            <span className="requirement-title-tooltip-trigger">
+              <Text className="requirement-title-primary" strong>
+                {requirement.title}
+              </Text>
+            </span>
+          </Tooltip>
+          {requirement.aiSummary ? (
+            <Tooltip title={requirement.aiSummary} placement="topLeft">
+              <span className="requirement-title-tooltip-trigger">
+                <Text className="requirement-title-summary" type="secondary">
+                  AI：{requirement.aiSummary}
+                </Text>
+              </span>
+            </Tooltip>
+          ) : null}
+          <Tooltip title={requirement.acceptance} placement="topLeft">
+            <span className="requirement-title-tooltip-trigger">
+              <Text className="requirement-title-acceptance" type="secondary">
+                {requirement.acceptance}
+              </Text>
+            </span>
+          </Tooltip>
         </Space>
       )
     },
@@ -499,6 +594,13 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
       render: (_, requirement) => requirement.versionName ? <Tag color="blue">{requirement.versionName}</Tag> : <Tag>未规划</Tag>
     },
     {
+      title: "负责人",
+      dataIndex: "owner",
+      key: "owner",
+      width: 140,
+      render: (_, requirement) => <OwnerInline name={requirement.owner} avatarUrl={requirement.ownerAvatarUrl} />
+    },
+    {
       title: "完整度",
       key: "completeness",
       width: 150,
@@ -506,7 +608,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
         const quality = getRequirementCompleteness(requirement);
 
         return (
-          <Space direction="vertical" size={2} className="requirement-quality-cell">
+          <Space orientation="vertical" size={2} className="requirement-quality-cell">
             <Progress percent={quality.score} size="small" status={quality.score >= 80 ? "success" : "active"} />
             {quality.issues.length ? (
               <Text type="secondary">{quality.issues.slice(0, 2).join("、")}</Text>
@@ -529,21 +631,41 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
       width: 130,
       render: (_, requirement) => (
         <Space className="requirement-row-actions" size={2} wrap={false}>
-          <Button size="small" type="link" icon={<EditOutlined />} onClick={() => openEditRequirementDrawer(requirement)}>
-            编辑
-          </Button>
-          <Popconfirm
-            title="删除需求"
-            description="删除后不会影响任务和 Bug，但该需求记录会从版本中移除。"
-            okText="删除"
-            cancelText="取消"
-            okButtonProps={{ danger: true }}
-            onConfirm={() => handleDeleteRecord("requirement", requirement.id)}
-          >
-            <Button size="small" type="link" danger icon={<DeleteOutlined />}>
-              删除
+          {canEditRequirements ? (
+            <Button size="small" type="link" icon={<EditOutlined />} onClick={() => openEditRequirementDrawer(requirement)}>
+              编辑
             </Button>
-          </Popconfirm>
+          ) : (
+            <Tooltip title={permissionDeniedReason}>
+              <span>
+                <Button size="small" type="link" disabled icon={<EditOutlined />}>
+                  编辑
+                </Button>
+              </span>
+            </Tooltip>
+          )}
+          {canDeleteRequirements ? (
+            <Popconfirm
+              title="删除需求"
+              description="删除后不会影响任务和 Bug，但该需求记录会从版本中移除。"
+              okText="删除"
+              cancelText="取消"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => handleDeleteRecord("requirement", requirement.id)}
+            >
+              <Button size="small" type="link" danger icon={<DeleteOutlined />}>
+                删除
+              </Button>
+            </Popconfirm>
+          ) : (
+            <Tooltip title={permissionDeniedReason}>
+              <span>
+                <Button size="small" type="link" danger disabled icon={<DeleteOutlined />}>
+                  删除
+                </Button>
+              </span>
+            </Tooltip>
+          )}
         </Space>
       )
     }
@@ -604,7 +726,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ message })
+        body: JSON.stringify({ message, workspaceId: currentWorkspaceId })
       });
       const payload = (await response.json()) as { reply?: string; error?: string };
 
@@ -630,40 +752,68 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
     void submitAssistantQuestion("请基于当前项目、任务、Bug、风险和文档数据，生成一份本周项目汇报，包含总体结论、关键风险、负责人和下周动作。");
   }
 
+  function showRecordResultMessage(resultMessage: string) {
+    if (resultMessage.includes("未发送飞书通知") || resultMessage.includes("机器人通知失败")) {
+      messageApi.warning(resultMessage, 6);
+
+      return;
+    }
+
+    messageApi.success(resultMessage);
+  }
+
   function openCreateDrawer(type: DashboardEntityType, initialValues: Record<string, unknown> = {}) {
+    if ((type === "requirement" || type === "requirementVersion") && !canCreateRequirements) {
+      messageApi.warning(permissionDeniedReason);
+
+      return;
+    }
+
     setCreateType(type);
     createForm.resetFields();
-    createForm.setFieldsValue({
+    createForm.setFieldsValue(hydrateOwnerFormValues({
       ...getCreateInitialValues(type, data?.meta?.user),
       ...initialValues
-    });
+    }, ownerOptions));
   }
 
   function openEditProjectDrawer(project: Project) {
     setEditingProject(project);
     projectEditForm.resetFields();
-    projectEditForm.setFieldsValue(getProjectFormValues(project));
+    projectEditForm.setFieldsValue(hydrateOwnerFormValues(getProjectFormValues(project), ownerOptions));
   }
 
   function openEditTaskDrawer(task: Task) {
     setEditingTask(task);
     editForm.resetFields();
-    editForm.setFieldsValue(getTaskFormValues(task));
+    editForm.setFieldsValue(hydrateOwnerFormValues(getTaskFormValues(task), ownerOptions));
   }
 
   function openEditBugDrawer(bug: BugReport) {
     setEditingBug(bug);
     bugEditForm.resetFields();
-    bugEditForm.setFieldsValue(getBugFormValues(bug));
+    bugEditForm.setFieldsValue(hydrateOwnerFormValues(getBugFormValues(bug), ownerOptions));
   }
 
   function openEditRequirementDrawer(requirement: Requirement) {
+    if (!canEditRequirements) {
+      messageApi.warning(permissionDeniedReason);
+
+      return;
+    }
+
     setEditingRequirement(requirement);
     requirementEditForm.resetFields();
-    requirementEditForm.setFieldsValue(getRequirementFormValues(requirement));
+    requirementEditForm.setFieldsValue(hydrateOwnerFormValues(getRequirementFormValues(requirement), ownerOptions));
   }
 
   function openEditRequirementVersionDrawer(version: RequirementVersion) {
+    if (!canEditRequirements) {
+      messageApi.warning(permissionDeniedReason);
+
+      return;
+    }
+
     setEditingRequirementVersion(version);
     requirementVersionEditForm.resetFields();
     requirementVersionEditForm.setFieldsValue(getRequirementVersionFormValues(version));
@@ -672,7 +822,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
   function openDocumentBreakdownDrawer(initialValues: Record<string, unknown> = {}) {
     setBreakdownOpen(true);
     breakdownForm.resetFields();
-    breakdownForm.setFieldsValue(initialValues);
+    breakdownForm.setFieldsValue(hydrateOwnerFormValues(initialValues, ownerOptions));
   }
 
   async function handleCreateRecord(values: Record<string, unknown>) {
@@ -690,6 +840,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
+          workspaceId: currentWorkspaceId,
           type: createType,
           values: serializeCreateValues(values)
         })
@@ -714,7 +865,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
 
       setData((current) => (current ? updateDashboardWithRecord(current, result) : current));
       void refreshDashboardState();
-      messageApi.success(result.message);
+      showRecordResultMessage(result.message);
       setCreateType(null);
       createForm.resetFields();
 
@@ -746,6 +897,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
+          workspaceId: currentWorkspaceId,
           type: "project",
           id: editingProject.id,
           values: serializeCreateValues(values)
@@ -771,7 +923,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
 
       setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
       void refreshDashboardState();
-      messageApi.success(result.message);
+      showRecordResultMessage(result.message);
       setEditingProject(null);
       projectEditForm.resetFields();
     } catch (error) {
@@ -795,6 +947,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
+          workspaceId: currentWorkspaceId,
           type: "task",
           id: editingTask.id,
           values: serializeCreateValues(values)
@@ -820,7 +973,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
 
       setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
       void refreshDashboardState();
-      messageApi.success(result.message);
+      showRecordResultMessage(result.message);
       setEditingTask(null);
       editForm.resetFields();
     } catch (error) {
@@ -844,6 +997,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
+          workspaceId: currentWorkspaceId,
           type: "bug",
           id: editingBug.id,
           values: serializeCreateValues(values)
@@ -869,7 +1023,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
 
       setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
       void refreshDashboardState();
-      messageApi.success(result.message);
+      showRecordResultMessage(result.message);
       setEditingBug(null);
       bugEditForm.resetFields();
     } catch (error) {
@@ -893,6 +1047,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
+          workspaceId: currentWorkspaceId,
           type: "requirement",
           id: editingRequirement.id,
           values: serializeCreateValues(values)
@@ -918,7 +1073,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
 
       setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
       void refreshDashboardState();
-      messageApi.success(result.message);
+      showRecordResultMessage(result.message);
       setEditingRequirement(null);
       requirementEditForm.resetFields();
     } catch (error) {
@@ -942,6 +1097,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
+          workspaceId: currentWorkspaceId,
           type: "requirementVersion",
           id: editingRequirementVersion.id,
           values: serializeCreateValues(values)
@@ -967,7 +1123,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
 
       setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
       void refreshDashboardState();
-      messageApi.success(result.message);
+      showRecordResultMessage(result.message);
       setEditingRequirementVersion(null);
       requirementVersionEditForm.resetFields();
     } catch (error) {
@@ -978,6 +1134,16 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
   }
 
   async function handleDeleteRecord(type: DashboardEntityType, id: string) {
+    const canDelete = type === "requirement" || type === "requirementVersion"
+      ? canDeleteRequirements
+      : Boolean(permissions?.canDeleteRecords);
+
+    if (!canDelete) {
+      messageApi.warning(permissionDeniedReason);
+
+      return;
+    }
+
     try {
       const response = await fetch("/api/records", {
         method: "DELETE",
@@ -985,6 +1151,7 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
+          workspaceId: currentWorkspaceId,
           type,
           id
         })
@@ -1009,13 +1176,134 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
 
       setData((current) => (current ? updateDashboardWithRecordDeletion(current, result) : current));
       void refreshDashboardState();
-      messageApi.success(result.message);
+      showRecordResultMessage(result.message);
 
       if (type === "requirementVersion" && selectedRequirementVersionId === id) {
         setSelectedRequirementVersionId(null);
       }
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : "删除失败");
+    }
+  }
+
+  async function handleCreateMember(values: Record<string, unknown>) {
+    setMemberSubmitting(true);
+
+    try {
+      const response = await fetch("/api/members", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          workspaceId: currentWorkspaceId,
+          values: serializeCreateValues(values)
+        })
+      });
+      const payload = (await response.json()) as { member?: DashboardMember; message?: string; error?: string };
+
+      if (response.status === 401) {
+        window.location.assign("/login");
+
+        return;
+      }
+
+      if (!response.ok || payload.error || !payload.member) {
+        throw new Error(payload.error || "创建成员失败");
+      }
+
+      setData((current) => (current ? updateDashboardWithMember(current, payload.member!, payload.message) : current));
+      void refreshDashboardState();
+      messageApi.success(payload.message || "已添加成员");
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "创建成员失败");
+    } finally {
+      setMemberSubmitting(false);
+    }
+  }
+
+  async function handleUpdateMember(member: DashboardMember, values: Record<string, unknown>) {
+    setMemberSubmitting(true);
+
+    try {
+      const response = await fetch("/api/members", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          id: member.id,
+          workspaceId: member.workspaceId || currentWorkspaceId,
+          values: serializeCreateValues({
+            ...getMemberFormValues(member),
+            ...values
+          })
+        })
+      });
+      const payload = (await response.json()) as { member?: DashboardMember; message?: string; error?: string };
+
+      if (response.status === 401) {
+        window.location.assign("/login");
+
+        return;
+      }
+
+      if (!response.ok || payload.error || !payload.member) {
+        throw new Error(payload.error || "更新成员失败");
+      }
+
+      setData((current) => (current ? updateDashboardWithMember(current, payload.member!, payload.message) : current));
+      void refreshDashboardState();
+      messageApi.success(payload.message || "已更新成员");
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "更新成员失败");
+    } finally {
+      setMemberSubmitting(false);
+    }
+  }
+
+  async function handleCreateWorkspace(values: Record<string, unknown>) {
+    setWorkspaceSubmitting(true);
+
+    try {
+      const response = await fetch("/api/workspaces", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          currentWorkspaceId,
+          values: serializeCreateValues(values)
+        })
+      });
+      const payload = (await response.json()) as {
+        workspace?: DashboardWorkspace;
+        member?: DashboardMember;
+        message?: string;
+        error?: string;
+      };
+
+      if (response.status === 401) {
+        window.location.assign("/login");
+
+        return false;
+      }
+
+      if (!response.ok || payload.error || !payload.workspace) {
+        throw new Error(payload.error || "创建工作区失败");
+      }
+
+      setData((current) => (current ? updateDashboardWithWorkspace(current, payload.workspace!, payload.member, payload.message) : current));
+      await switchWorkspace(payload.workspace.id);
+      messageApi.success(payload.message || "已创建工作区");
+
+      return true;
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "创建工作区失败");
+
+      return false;
+    } finally {
+      setWorkspaceSubmitting(false);
     }
   }
 
@@ -1034,11 +1322,13 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
       const formData = new FormData();
 
       formData.append("file", file);
+      formData.append("workspaceId", currentWorkspaceId);
       for (const key of [
         "project",
         "versionId",
         "versionName",
         "owner",
+        "ownerMemberId",
         "ownerOpenId",
         "ownerUnionId",
         "ownerUserId",
@@ -1097,11 +1387,22 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
     { key: "requirements", icon: <NodeIndexOutlined />, label: "需求管理" },
     { key: "risks", icon: <AlertOutlined />, label: "风险中心" },
     { key: "docs", icon: <FileTextOutlined />, label: "文档知识库" },
+    { key: "members", icon: <TeamOutlined />, label: "成员管理" },
     { key: "reports", icon: <BarChartOutlined />, label: "报表驾驶舱" }
   ];
   const userName = data?.meta?.user?.name ?? "苏";
   const userInitial = userName.slice(0, 1);
   const projectOptions = data?.projects.map((project) => project.name) ?? [];
+  const workspaceOptions = useMemo(
+    () =>
+      (data?.workspaces ?? [])
+        .filter((workspace) => workspace.status === "active")
+        .map((workspace) => ({
+          value: workspace.id,
+          label: workspace.name
+        })),
+    [data?.workspaces]
+  );
   const requirementVersions = useMemo(() => data?.requirementVersions ?? [], [data?.requirementVersions]);
   const requirementVersionOptions = useMemo(
     () =>
@@ -1121,7 +1422,33 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
       url.searchParams.set("view", view);
+      if (currentWorkspaceId) {
+        url.searchParams.set("workspaceId", currentWorkspaceId);
+      }
       window.history.replaceState(null, "", url.toString());
+    }
+  }
+
+  async function switchWorkspace(workspaceId: string) {
+    setActiveWorkspaceId(workspaceId);
+    setSelectedRequirementVersionId(null);
+
+    try {
+      const nextData = await fetchDashboardFromApi(workspaceId);
+
+      if (nextData) {
+        setData(nextData);
+        setLoadError("");
+
+        if (typeof window !== "undefined") {
+          const url = new URL(window.location.href);
+          url.searchParams.set("workspaceId", nextData.meta?.currentWorkspace?.id ?? workspaceId);
+          url.searchParams.set("view", activeView);
+          window.history.replaceState(null, "", url.toString());
+        }
+      }
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "切换工作区失败");
     }
   }
 
@@ -1270,18 +1597,87 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
                     {!isMobile ? "AI 助手" : null}
                   </Button>
                 </Tooltip>
-                {data?.meta?.user ? (
-                  <Tooltip title="退出登录">
-                    <Button href="/api/auth/logout" icon={<LogoutOutlined />}>
-                      {!isMobile ? "退出" : null}
-                    </Button>
-                  </Tooltip>
-                ) : null}
-                <Tooltip title={userName}>
-                  <Avatar className="pm-avatar" src={data?.meta?.user?.avatarUrl}>
-                    {userInitial}
-                  </Avatar>
-                </Tooltip>
+                <Popover
+                  arrow={false}
+                  classNames={{ root: "pm-avatar-popover" }}
+                  content={
+                    <Space className="pm-avatar-menu" direction="vertical" size={12}>
+                      <Space className="pm-avatar-profile" size={10}>
+                        <Avatar className="pm-avatar" src={data?.meta?.user?.avatarUrl}>
+                          {userInitial}
+                        </Avatar>
+                        <Space direction="vertical" size={0}>
+                          <Text strong>{userName}</Text>
+                          <Text type="secondary">账户设置</Text>
+                        </Space>
+                      </Space>
+                      {data?.workspaces?.length ? (
+                        <div className="pm-workspace-control">
+                          <Text className="pm-avatar-menu-label" type="secondary">
+                            工作区
+                          </Text>
+                          <Select
+                            aria-label="切换工作区"
+                            className="pm-workspace-select"
+                            getPopupContainer={(triggerNode) =>
+                              (triggerNode.closest(".pm-avatar-popover") as HTMLElement | null) ??
+                              triggerNode.parentElement ??
+                              document.body
+                            }
+                            open={workspaceSelectOpen}
+                            value={currentWorkspace?.id}
+                            options={workspaceOptions}
+                            popupMatchSelectWidth={220}
+                            popupRender={(menu) => (
+                              <>
+                                {menu}
+                                <div className="pm-workspace-popup-divider" />
+                                {permissions?.canManageMembers ? (
+                                  <Button
+                                    block
+                                    className="pm-workspace-popup-action"
+                                    icon={<PlusOutlined />}
+                                    type="text"
+                                    onMouseDown={(event) => event.preventDefault()}
+                                    onClick={() => {
+                                      setWorkspaceSelectOpen(false);
+                                      workspaceForm.resetFields();
+                                      setWorkspaceDrawerOpen(true);
+                                    }}
+                                  >
+                                    新建工作区
+                                  </Button>
+                                ) : (
+                                  <Tooltip title={permissionDeniedReason}>
+                                    <span className="pm-workspace-popup-disabled">
+                                      <PlusOutlined />
+                                      新建工作区
+                                    </span>
+                                  </Tooltip>
+                                )}
+                              </>
+                            )}
+                            onOpenChange={setWorkspaceSelectOpen}
+                            onChange={switchWorkspace}
+                          />
+                        </div>
+                      ) : null}
+                      {data?.meta?.user ? (
+                        <Button block href="/api/auth/logout" icon={<LogoutOutlined />}>
+                          退出登录
+                        </Button>
+                      ) : null}
+                    </Space>
+                  }
+                  placement="bottomRight"
+                  trigger={isMobile ? "click" : "hover"}
+                >
+                  <span className="pm-avatar-trigger">
+                    <Avatar className="pm-avatar" src={data?.meta?.user?.avatarUrl}>
+                      {userInitial}
+                    </Avatar>
+                  </span>
+                </Popover>
               </Space>
             </Header>
 
@@ -1344,7 +1740,6 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
                     <BugsView
                       bugs={data.bugs}
                       currentUser={data.meta?.user}
-                      projectOptions={projectOptions}
                       versionOptions={requirementVersionOptions}
                       onCreate={() => openCreateDrawer("bug")}
                       onEdit={openEditBugDrawer}
@@ -1353,7 +1748,11 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
                   {activeView === "requirements" ? (
                     <RequirementsView
                       bugs={data.bugs}
+                      canCreateRequirements={canCreateRequirements}
+                      canDeleteRequirements={canDeleteRequirements}
+                      canEditRequirements={canEditRequirements}
                       columns={requirementColumns}
+                      permissionDeniedReason={permissionDeniedReason}
                       requirements={data.requirements}
                       selectedVersionId={selectedRequirementVersionId}
                       tasks={data.tasks}
@@ -1404,6 +1803,25 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
                       />
                     </TableView>
                   ) : null}
+                  {activeView === "members" ? (
+                    <MembersView
+                      members={data.members}
+                      people={people}
+                      peopleError={peopleError}
+                      peopleLoading={peopleLoading}
+                      permissions={permissions ?? {
+                        canManageMembers: false,
+                        canCreateRequirements: false,
+                        canEditRequirements: false,
+                        canDeleteRequirements: false,
+                        canDeleteRecords: false,
+                        deniedReason: permissionDeniedReason
+                      }}
+                      submitting={memberSubmitting}
+                      onCreateMember={handleCreateMember}
+                      onUpdateMember={handleUpdateMember}
+                    />
+                  ) : null}
                   {activeView === "reports" ? (
                     <ReportsView data={data} onGenerateReport={handleGenerateWeeklyReport} />
                   ) : null}
@@ -1411,6 +1829,42 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
               )}
             </Content>
           </Layout>
+
+          <Drawer
+            className="pm-record-drawer"
+            title="新建工作区"
+            open={workspaceDrawerOpen}
+            onClose={() => setWorkspaceDrawerOpen(false)}
+            footer={
+              <Space className="pm-drawer-actions" style={{ justifyContent: "flex-end" }}>
+                <Button onClick={() => setWorkspaceDrawerOpen(false)}>取消</Button>
+                <Button type="primary" loading={workspaceSubmitting} onClick={() => workspaceForm.submit()}>
+                  保存
+                </Button>
+              </Space>
+            }
+          >
+            <Form
+              form={workspaceForm}
+              layout="vertical"
+              requiredMark={false}
+              onFinish={async (values) => {
+                const created = await handleCreateWorkspace(values);
+
+                if (created) {
+                  workspaceForm.resetFields();
+                  setWorkspaceDrawerOpen(false);
+                }
+              }}
+            >
+              <Form.Item label="工作区名称" name="name" rules={[{ required: true, message: "请输入工作区名称" }]}>
+                <Input placeholder="例如：增长产品线" />
+              </Form.Item>
+              <Form.Item label="说明" name="description">
+                <Input.TextArea placeholder="用于区分团队、产品线或业务域" autoSize={{ minRows: 3, maxRows: 5 }} />
+              </Form.Item>
+            </Form>
+          </Drawer>
 
           <Drawer
             title={
@@ -1470,8 +1924,8 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
             projectOptions={projectOptions}
             requirementVersionOptions={requirementVersionOptions}
             people={ownerOptions}
-            peopleLoading={peopleLoading}
-            peopleError={peopleError}
+            peopleLoading={ownerSelectLoading}
+            peopleError={ownerSelectError}
             onClose={() => setCreateType(null)}
             onSubmit={handleCreateRecord}
           />
@@ -1481,8 +1935,8 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
             project={editingProject}
             submitting={projectEditSubmitting}
             people={ownerOptions}
-            peopleLoading={peopleLoading}
-            peopleError={peopleError}
+            peopleLoading={ownerSelectLoading}
+            peopleError={ownerSelectError}
             onClose={() => setEditingProject(null)}
             onSubmit={handleUpdateProject}
           />
@@ -1494,8 +1948,8 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
             projectOptions={projectOptions}
             versionOptions={requirementVersionOptions}
             people={ownerOptions}
-            peopleLoading={peopleLoading}
-            peopleError={peopleError}
+            peopleLoading={ownerSelectLoading}
+            peopleError={ownerSelectError}
             onClose={() => setEditingTask(null)}
             onSubmit={handleUpdateTask}
           />
@@ -1504,11 +1958,10 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
             form={bugEditForm}
             bug={editingBug}
             submitting={bugEditSubmitting}
-            projectOptions={projectOptions}
             versionOptions={requirementVersionOptions}
             people={ownerOptions}
-            peopleLoading={peopleLoading}
-            peopleError={peopleError}
+            peopleLoading={ownerSelectLoading}
+            peopleError={ownerSelectError}
             onClose={() => setEditingBug(null)}
             onSubmit={handleUpdateBug}
           />
@@ -1518,6 +1971,9 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
             requirement={editingRequirement}
             submitting={requirementEditSubmitting}
             versionOptions={requirementVersionOptions}
+            people={ownerOptions}
+            peopleLoading={ownerSelectLoading}
+            peopleError={ownerSelectError}
             onClose={() => setEditingRequirement(null)}
             onSubmit={handleUpdateRequirement}
           />
@@ -1558,8 +2014,8 @@ export function ProjectManagementPlatform({ initialView = "overview" }: { initia
             projectOptions={projectOptions}
             versionOptions={requirementVersionOptions}
             people={ownerOptions}
-            peopleLoading={peopleLoading}
-            peopleError={peopleError}
+            peopleLoading={ownerSelectLoading}
+            peopleError={ownerSelectError}
             onClose={() => setBreakdownOpen(false)}
             onSubmit={handleAnalyzeDocument}
           />
@@ -1625,31 +2081,105 @@ function OwnerInline({
   );
 }
 
-function OwnerOption({ person }: { person: FeishuPerson }) {
+function OwnerOption({ member }: { member: OwnerSelectableMember }) {
+  const secondary = [
+    ownerRoleLabels[member.role],
+    member.email || (member.feishuOpenId ? "已绑定飞书" : "未绑定飞书")
+  ].filter(Boolean).join(" · ");
+
   return (
     <OwnerInline
-      name={person.name}
-      avatarUrl={person.avatarUrl}
-      secondary={person.email || person.enName}
+      name={member.name}
+      avatarUrl={member.avatarUrl}
+      secondary={secondary}
     />
   );
 }
 
-function getPersonSearchText(person: FeishuPerson) {
-  return [person.name, person.enName, person.email, person.openId].filter(Boolean).join(" ");
+function getMemberSearchText(member: OwnerSelectableMember) {
+  return [
+    member.name,
+    ownerRoleLabels[member.role],
+    member.email,
+    member.feishuOpenId,
+    member.feishuUnionId,
+    member.feishuUserId
+  ].filter(Boolean).join(" ");
 }
 
-function getOwnerSelectOptions(people: FeishuPerson[]) {
-  return people.map((person) => ({
-    value: person.openId,
-    displayName: person.name,
-    label: <OwnerOption person={person} />,
-    searchText: getPersonSearchText(person)
+function getOwnerSelectOptions(people: OwnerSelectableMember[]) {
+  return people.map((member) => ({
+    value: member.id,
+    displayName: member.name,
+    label: <OwnerOption member={member} />,
+    searchText: getMemberSearchText(member)
   }));
 }
 
 function filterOwnerOption(input: string, option?: { searchText?: string }) {
   return (option?.searchText ?? "").toLowerCase().includes(input.trim().toLowerCase());
+}
+
+function createOwnerFormFieldsFromMember(member: OwnerSelectableMember) {
+  return {
+    ownerMemberId: member.id,
+    ownerOpenId: member.feishuOpenId ?? "",
+    ownerUnionId: member.feishuUnionId ?? "",
+    ownerUserId: member.feishuUserId ?? "",
+    ownerEmail: member.email ?? "",
+    ownerAvatarUrl: member.avatarUrl ?? "",
+    owner: member.name
+  };
+}
+
+function getOwnerValue(value: unknown) {
+  return typeof value === "string" ? value : "";
+}
+
+function isSameOwnerIdentity(left: unknown, right?: string) {
+  const normalizedLeft = normalizeIdentity(getOwnerValue(left));
+  const normalizedRight = normalizeIdentity(right);
+
+  return Boolean(normalizedLeft && normalizedRight && normalizedLeft === normalizedRight);
+}
+
+function findOwnerSelectableMember(values: Record<string, unknown>, people: OwnerSelectableMember[]) {
+  const ownerMemberId = getOwnerValue(values.ownerMemberId);
+  const ownerName = normalizeIdentity(getOwnerValue(values.owner));
+
+  return people.find((member) => {
+    if (ownerMemberId && member.id === ownerMemberId) {
+      return true;
+    }
+
+    return (
+      isSameOwnerIdentity(values.ownerOpenId, member.feishuOpenId) ||
+      isSameOwnerIdentity(values.ownerUnionId, member.feishuUnionId) ||
+      isSameOwnerIdentity(values.ownerUserId, member.feishuUserId) ||
+      isSameOwnerIdentity(values.ownerEmail, member.email) ||
+      Boolean(ownerName && ownerName === normalizeIdentity(member.name))
+    );
+  });
+}
+
+function hydrateOwnerFormValues<T extends Record<string, unknown>>(values: T, people: OwnerSelectableMember[]): T {
+  const matchedMember = findOwnerSelectableMember(values, people);
+  const nextValues: Record<string, unknown> = matchedMember
+    ? {
+        ...values,
+        ...createOwnerFormFieldsFromMember(matchedMember)
+      }
+    : { ...values };
+
+  if (Array.isArray(nextValues.milestones)) {
+    nextValues.milestones = nextValues.milestones.map((milestone) =>
+      milestone && typeof milestone === "object"
+        ? hydrateOwnerFormValues(milestone as Record<string, unknown>, people)
+        : milestone
+    );
+  }
+
+  return nextValues as T;
 }
 
 
@@ -1701,6 +2231,7 @@ function createScheduleItems(data: DashboardData): ScheduleItem[] {
       owner: milestone.owner || project.owner,
       ownerAvatarUrl: milestone.ownerAvatarUrl || project.ownerAvatarUrl,
       ownerEmail: milestone.ownerEmail || project.ownerEmail,
+      ownerMemberId: milestone.ownerMemberId || project.ownerMemberId,
       ownerOpenId: milestone.ownerOpenId || project.ownerOpenId,
       ownerUnionId: milestone.ownerUnionId || project.ownerUnionId,
       ownerUserId: milestone.ownerUserId || project.ownerUserId,
@@ -1717,6 +2248,7 @@ function createScheduleItems(data: DashboardData): ScheduleItem[] {
     owner: task.owner,
     ownerAvatarUrl: task.ownerAvatarUrl,
     ownerEmail: task.ownerEmail,
+    ownerMemberId: task.ownerMemberId,
     ownerOpenId: task.ownerOpenId,
     ownerUnionId: task.ownerUnionId,
     ownerUserId: task.ownerUserId,
@@ -1732,6 +2264,7 @@ function createScheduleItems(data: DashboardData): ScheduleItem[] {
     owner: bug.owner || bug.reporter,
     ownerAvatarUrl: bug.ownerAvatarUrl,
     ownerEmail: bug.ownerEmail,
+    ownerMemberId: bug.ownerMemberId,
     ownerOpenId: bug.ownerOpenId,
     ownerUnionId: bug.ownerUnionId,
     ownerUserId: bug.ownerUserId,
@@ -1893,7 +2426,16 @@ function createSearchResults(data: DashboardData, query: string): SearchResult[]
       view: "tasks" as const
     }));
   const bugResults = data.bugs
-    .filter((bug) => matches([bug.title, bug.owner, bug.reporter, bug.project, bug.versionName, bug.reproduction, bug.actual]))
+    .filter((bug) => matches([
+      bug.title,
+      bug.owner,
+      bug.reporter,
+      bug.project,
+      bug.versionName,
+      bug.reproduction,
+      bug.actual,
+      ...(bug.attachments?.map((attachment) => attachment.name) ?? [])
+    ]))
     .map((bug) => ({
       entity: "bug" as const,
       id: bug.id,
@@ -1944,6 +2486,7 @@ function createSearchResults(data: DashboardData, query: string): SearchResult[]
     .filter((requirement) =>
       matches([
         requirement.title,
+        requirement.owner,
         requirement.project,
         requirement.versionName,
         requirement.acceptance,
@@ -1958,6 +2501,8 @@ function createSearchResults(data: DashboardData, query: string): SearchResult[]
       title: requirement.title,
       description: requirement.acceptance,
       meta: `需求 · ${requirement.versionName ?? "未规划"} · ${requirement.status}`,
+      owner: requirement.owner,
+      ownerAvatarUrl: requirement.ownerAvatarUrl,
       type: "需求",
       view: "requirements" as const
     }));
@@ -2134,6 +2679,7 @@ function getTaskFormValues(task: Task) {
 function getBugFormValues(bug: BugReport) {
   return {
     ...bug,
+    attachments: bug.attachments?.map(createBugAttachmentUploadFile) ?? [],
     dueDate: dayjs(bug.dueDate)
   };
 }
@@ -2186,6 +2732,10 @@ function serializeCreateValue(value: unknown, key = ""): unknown {
     return value.format(key === "updatedAt" ? "YYYY-MM-DD HH:mm" : "YYYY-MM-DD");
   }
 
+  if (key === "attachments") {
+    return serializeBugAttachments(value);
+  }
+
   if (Array.isArray(value)) {
     return value.map((item) => serializeCreateValue(item, key));
   }
@@ -2202,10 +2752,91 @@ function serializeCreateValue(value: unknown, key = ""): unknown {
   return value;
 }
 
+function createBugAttachmentUploadFile(attachment: BugAttachment): BugAttachmentUploadFile {
+  return {
+    uid: attachment.id,
+    id: attachment.id,
+    key: attachment.key,
+    name: attachment.name,
+    status: "done",
+    type: attachment.type,
+    mimeType: attachment.mimeType,
+    size: attachment.size,
+    url: attachment.url,
+    uploadedAt: attachment.uploadedAt
+  };
+}
+
+function getBugAttachmentFromUploadFile(file: BugAttachmentUploadFile): BugAttachment | null {
+  const attachment = file.response?.attachment;
+
+  if (attachment) {
+    return attachment;
+  }
+
+  if (!file.id || !file.key || !file.name || !file.url || !file.mimeType || !file.uploadedAt) {
+    return null;
+  }
+
+  return {
+    id: file.id,
+    key: file.key,
+    name: file.name,
+    url: file.url,
+    type: file.type === "video" ? "video" : "image",
+    mimeType: file.mimeType,
+    size: typeof file.size === "number" ? file.size : 0,
+    uploadedAt: file.uploadedAt
+  };
+}
+
+function serializeBugAttachments(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => getBugAttachmentFromUploadFile(item as BugAttachmentUploadFile))
+    .filter((item): item is BugAttachment => Boolean(item));
+}
+
+function normalizeBugAttachmentUploadEvent(event: BugAttachmentUploadFile[] | { fileList?: BugAttachmentUploadFile[] }) {
+  const fileList = Array.isArray(event) ? event : event?.fileList ?? [];
+
+  return fileList.map((file) => {
+    const attachment = getBugAttachmentFromUploadFile(file);
+
+    return {
+      ...file,
+      ...(attachment ? createBugAttachmentUploadFile(attachment) : {}),
+      status: file.status,
+      uid: file.uid
+    };
+  });
+}
+
 function serializeCreateValues(values: Record<string, unknown>) {
   return Object.fromEntries(
     Object.entries(values).map(([key, value]) => [key, serializeCreateValue(value, key)])
   );
+}
+
+function getMemberFormValues(member: DashboardMember) {
+  return {
+    workspaceId: member.workspaceId,
+    name: member.name,
+    email: member.email,
+    avatarUrl: member.avatarUrl,
+    role: member.role,
+    status: member.status,
+    feishuEnabled: member.notification.feishuEnabled,
+    feishuOpenId: member.notification.feishuOpenId,
+    feishuUnionId: member.notification.feishuUnionId,
+    feishuUserId: member.notification.feishuUserId,
+    taskAssigned: member.notification.taskAssigned,
+    requirementChanged: member.notification.requirementChanged,
+    channels: member.notification.channels
+  };
 }
 
 function recalculateMetrics(data: DashboardData) {
@@ -2235,6 +2866,8 @@ function updateDashboardWithRecord(data: DashboardData, result: CreateRecordResu
     requirementVersions: [...data.requirementVersions],
     requirements: [...data.requirements],
     documents: [...data.documents],
+    workspaces: [...data.workspaces],
+    members: [...data.members],
     meta: data.meta
       ? {
           ...data.meta,
@@ -2286,6 +2919,8 @@ function updateDashboardWithRecordUpdate(data: DashboardData, result: CreateReco
     requirementVersions: [...data.requirementVersions],
     requirements: [...data.requirements],
     documents: [...data.documents],
+    workspaces: [...data.workspaces],
+    members: [...data.members],
     meta: data.meta
       ? {
           ...data.meta,
@@ -2361,6 +2996,8 @@ function updateDashboardWithRecordDeletion(data: DashboardData, result: DeleteRe
     requirementVersions: [...data.requirementVersions],
     requirements: [...data.requirements],
     documents: [...data.documents],
+    workspaces: [...data.workspaces],
+    members: [...data.members],
     meta: data.meta
       ? {
           ...data.meta,
@@ -2420,12 +3057,52 @@ function updateDashboardWithRecordDeletion(data: DashboardData, result: DeleteRe
   return nextData;
 }
 
+function updateDashboardWithMember(data: DashboardData, member: DashboardMember, message?: string): DashboardData {
+  const exists = data.members.some((item) => item.id === member.id);
+
+  return {
+    ...data,
+    members: exists ? data.members.map((item) => item.id === member.id ? member : item) : [member, ...data.members],
+    meta: data.meta
+      ? {
+          ...data.meta,
+          message: message ?? data.meta.message,
+          currentMember: data.meta.currentMember?.id === member.id ? member : data.meta.currentMember
+        }
+      : undefined
+  };
+}
+
+function updateDashboardWithWorkspace(
+  data: DashboardData,
+  workspace: DashboardWorkspace,
+  member?: DashboardMember,
+  message?: string
+): DashboardData {
+  const workspaceExists = data.workspaces.some((item) => item.id === workspace.id);
+  const nextMembers = member ? updateDashboardWithMember(data, member).members : data.members;
+
+  return {
+    ...data,
+    workspaces: workspaceExists ? data.workspaces.map((item) => item.id === workspace.id ? workspace : item) : [workspace, ...data.workspaces],
+    members: nextMembers,
+    meta: data.meta
+      ? {
+          ...data.meta,
+          message: message ?? data.meta.message
+        }
+      : undefined
+  };
+}
+
 function updateDashboardWithDocumentAnalysis(data: DashboardData, result: DocumentAnalyzeResult): DashboardData {
   const nextData: DashboardData = {
     ...data,
     tasks: [...result.tasks, ...data.tasks],
     bugs: [...data.bugs],
     documents: [result.document, ...data.documents],
+    workspaces: [...data.workspaces],
+    members: [...data.members],
     meta: data.meta
       ? {
           ...data.meta,
@@ -2494,7 +3171,7 @@ function CreateRecordDrawer({
   submitting: boolean;
   projectOptions: string[];
   requirementVersionOptions: RequirementVersionOption[];
-  people: FeishuPerson[];
+  people: OwnerSelectableMember[];
   peopleLoading: boolean;
   peopleError: string;
   onClose: () => void;
@@ -2539,7 +3216,6 @@ function CreateRecordDrawer({
               people={people}
               peopleLoading={peopleLoading}
               peopleError={peopleError}
-              projectOptions={projectOptions}
               versionOptions={requirementVersionOptions}
             />
           ) : null}
@@ -2554,7 +3230,13 @@ function CreateRecordDrawer({
           ) : null}
           {type === "requirementVersion" ? <RequirementVersionFields projectOptions={projectOptions} /> : null}
           {type === "requirement" ? (
-            <RequirementFields form={form} versionOptions={requirementVersionOptions} />
+            <RequirementFields
+              form={form}
+              versionOptions={requirementVersionOptions}
+              people={people}
+              peopleLoading={peopleLoading}
+              peopleError={peopleError}
+            />
           ) : null}
           {type === "document" ? <DocumentFields /> : null}
         </Form>
@@ -2576,7 +3258,7 @@ function ProjectEditDrawer({
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   project: Project | null;
   submitting: boolean;
-  people: FeishuPerson[];
+  people: OwnerSelectableMember[];
   peopleLoading: boolean;
   peopleError: string;
   onClose: () => void;
@@ -2635,7 +3317,7 @@ function TaskEditDrawer({
   submitting: boolean;
   projectOptions: string[];
   versionOptions: RequirementVersionOption[];
-  people: FeishuPerson[];
+  people: OwnerSelectableMember[];
   peopleLoading: boolean;
   peopleError: string;
   onClose: () => void;
@@ -2682,7 +3364,6 @@ function BugEditDrawer({
   form,
   bug,
   submitting,
-  projectOptions,
   versionOptions,
   people,
   peopleLoading,
@@ -2693,9 +3374,8 @@ function BugEditDrawer({
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   bug: BugReport | null;
   submitting: boolean;
-  projectOptions: string[];
   versionOptions: RequirementVersionOption[];
-  people: FeishuPerson[];
+  people: OwnerSelectableMember[];
   peopleLoading: boolean;
   peopleError: string;
   onClose: () => void;
@@ -2729,7 +3409,6 @@ function BugEditDrawer({
             people={people}
             peopleLoading={peopleLoading}
             peopleError={peopleError}
-            projectOptions={projectOptions}
             versionOptions={versionOptions}
           />
         </Form>
@@ -2743,6 +3422,9 @@ function RequirementEditDrawer({
   requirement,
   submitting,
   versionOptions,
+  people,
+  peopleLoading,
+  peopleError,
   onClose,
   onSubmit
 }: {
@@ -2750,6 +3432,9 @@ function RequirementEditDrawer({
   requirement: Requirement | null;
   submitting: boolean;
   versionOptions: RequirementVersionOption[];
+  people: OwnerSelectableMember[];
+  peopleLoading: boolean;
+  peopleError: string;
   onClose: () => void;
   onSubmit: (values: Record<string, unknown>) => void;
 }) {
@@ -2776,7 +3461,13 @@ function RequirementEditDrawer({
     >
       {requirement ? (
         <Form form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
-          <RequirementFields form={form} versionOptions={versionOptions} />
+          <RequirementFields
+            form={form}
+            versionOptions={versionOptions}
+            people={people}
+            peopleLoading={peopleLoading}
+            peopleError={peopleError}
+          />
         </Form>
       ) : null}
     </Drawer>
@@ -2845,7 +3536,7 @@ function DocumentBreakdownDrawer({
   submitting: boolean;
   projectOptions: string[];
   versionOptions: RequirementVersionOption[];
-  people: FeishuPerson[];
+  people: OwnerSelectableMember[];
   peopleLoading: boolean;
   peopleError: string;
   onClose: () => void;
@@ -2878,7 +3569,7 @@ function DocumentBreakdownDrawer({
           type="info"
           showIcon
           title="上传后会自动生成任务"
-          description="系统会读取文档内容，调用 AI 拆解执行任务，并保存到任务看板。AI 识别到的负责人会优先匹配飞书通讯录，未匹配时使用默认负责人。"
+          description="系统会读取文档内容，调用 AI 拆解执行任务，并保存到任务看板。AI 识别到的负责人会优先匹配平台成员，未匹配时使用默认负责人。"
         />
         <VersionProjectFields
           form={form}
@@ -2929,7 +3620,7 @@ function OwnerSelect({
   label = "负责人"
 }: {
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
-  people: FeishuPerson[];
+  people: OwnerSelectableMember[];
   loading: boolean;
   error: string;
   required?: boolean;
@@ -2939,33 +3630,29 @@ function OwnerSelect({
     <>
       <Form.Item
         label={label}
-        name="ownerOpenId"
-        rules={required ? [{ required: true, message: "请选择飞书内部负责人" }] : undefined}
+        name="ownerMemberId"
+        rules={required ? [{ required: true, message: "请选择平台成员" }] : undefined}
       >
         <Select
           showSearch
           loading={loading}
           disabled={Boolean(error) || !people.length}
-          placeholder={required ? "从飞书通讯录选择负责人" : "可选，未匹配负责人时使用"}
+          placeholder={required ? "从平台成员选择负责人" : "可选，未匹配负责人时使用"}
           optionFilterProp="displayName"
           optionLabelProp="displayName"
           filterOption={(input, option) => filterOwnerOption(input, option as { searchText?: string })}
           options={getOwnerSelectOptions(people)}
           onChange={(value) => {
-            const selectedPerson = people.find((person) => person.openId === value);
+            const selectedMember = people.find((member) => member.id === value);
 
-            form.setFieldsValue({
-              ownerOpenId: value,
-              ownerUnionId: selectedPerson?.unionId ?? "",
-              ownerUserId: selectedPerson?.userId ?? "",
-              ownerEmail: selectedPerson?.email ?? "",
-              ownerAvatarUrl: selectedPerson?.avatarUrl ?? "",
-              owner: selectedPerson?.name ?? ""
-            });
+            form.setFieldsValue(selectedMember ? createOwnerFormFieldsFromMember(selectedMember) : {});
           }}
         />
       </Form.Item>
       <Form.Item name="owner" hidden>
+        <Input />
+      </Form.Item>
+      <Form.Item name="ownerOpenId" hidden>
         <Input />
       </Form.Item>
       <Form.Item name="ownerUnionId" hidden>
@@ -2983,22 +3670,22 @@ function OwnerSelect({
       {error ? (
         <Alert
           className="pm-form-alert"
-          type="error"
+          type="warning"
           showIcon
-          title="通讯录权限不足，无法选择负责人"
-          description={`请在飞书开放平台把应用通讯录权限范围设置为全员或目标部门，并开通通讯录用户读取权限。原始错误：${error}`}
+          title="暂无可选平台成员"
+          description={error}
         />
       ) : !people.length && !loading ? (
         <Alert
           className="pm-form-alert"
           type="warning"
           showIcon
-          title="通讯录暂无可选成员"
-          description="飞书接口没有返回成员。请确认应用通讯录权限范围包含需要选择的部门成员。"
+          title="暂无可选平台成员"
+          description="请先在成员管理中添加并启用成员，再配置负责人。"
         />
       ) : (
         <Text className="pm-form-note" type="secondary">
-          负责人会保存飞书身份关联，并在创建成功后尝试通过机器人通知。
+          负责人来自平台成员；如该成员绑定了飞书且开启通知，创建或变更时会尝试机器人提醒。
         </Text>
       )}
     </>
@@ -3015,7 +3702,7 @@ function MilestoneOwnerSelect({
 }: {
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   name: number;
-  people: FeishuPerson[];
+  people: OwnerSelectableMember[];
   peopleError: string;
   peopleLoading: boolean;
   restField: Record<string, unknown>;
@@ -3025,30 +3712,25 @@ function MilestoneOwnerSelect({
       <Form.Item
         {...restField}
         label="负责人"
-        name={[name, "ownerOpenId"]}
-        rules={!peopleError && people.length ? [{ required: true, message: "请选择飞书成员" }] : undefined}
+        name={[name, "ownerMemberId"]}
+        rules={!peopleError && people.length ? [{ required: true, message: "请选择平台成员" }] : undefined}
       >
         <Select
           showSearch
           loading={peopleLoading}
           disabled={Boolean(peopleError) || !people.length}
-          placeholder="从飞书通讯录选择"
+          placeholder="从平台成员选择"
           optionFilterProp="displayName"
           optionLabelProp="displayName"
           filterOption={(input, option) => filterOwnerOption(input, option as { searchText?: string })}
           options={getOwnerSelectOptions(people)}
           onChange={(value) => {
-            const selectedPerson = people.find((person) => person.openId === value);
+            const selectedMember = people.find((member) => member.id === value);
             const milestones = [...((form.getFieldValue("milestones") as ProjectMilestone[]) ?? [])];
 
             milestones[name] = {
               ...milestones[name],
-              owner: selectedPerson?.name ?? "",
-              ownerOpenId: value,
-              ownerUnionId: selectedPerson?.unionId ?? "",
-              ownerUserId: selectedPerson?.userId ?? "",
-              ownerEmail: selectedPerson?.email ?? "",
-              ownerAvatarUrl: selectedPerson?.avatarUrl ?? ""
+              ...(selectedMember ? createOwnerFormFieldsFromMember(selectedMember) : {})
             };
             form.setFieldsValue({
               milestones
@@ -3057,6 +3739,9 @@ function MilestoneOwnerSelect({
         />
       </Form.Item>
       <Form.Item {...restField} name={[name, "owner"]} hidden>
+        <Input />
+      </Form.Item>
+      <Form.Item {...restField} name={[name, "ownerOpenId"]} hidden>
         <Input />
       </Form.Item>
       <Form.Item {...restField} name={[name, "ownerUnionId"]} hidden>
@@ -3083,7 +3768,7 @@ function ProjectFields({
   ownerRequired = true
 }: {
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
-  people: FeishuPerson[];
+  people: OwnerSelectableMember[];
   peopleLoading: boolean;
   peopleError: string;
   ownerRequired?: boolean;
@@ -3147,6 +3832,7 @@ function ProjectFields({
                     status: "未开始",
                     dueDate: dayjs().add(7, "day"),
                     owner: form.getFieldValue("owner") || "",
+                    ownerMemberId: form.getFieldValue("ownerMemberId") || "",
                     ownerOpenId: form.getFieldValue("ownerOpenId") || "",
                     ownerUnionId: form.getFieldValue("ownerUnionId") || "",
                     ownerUserId: form.getFieldValue("ownerUserId") || "",
@@ -3242,7 +3928,8 @@ function ProjectOptionSelect({
 
 function useSyncProjectWithVersion(
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0],
-  versionOptions: RequirementVersionOption[]
+  versionOptions: RequirementVersionOption[],
+  syncCrossProject = false
 ) {
   const selectedVersionId = Form.useWatch("versionId", form) as string | undefined;
 
@@ -3257,12 +3944,12 @@ function useSyncProjectWithVersion(
       versionName: selectedVersion.versionName
     };
 
-    if (selectedVersion.project !== "跨项目") {
+    if (syncCrossProject || selectedVersion.project !== "跨项目") {
       nextValues.project = selectedVersion.project;
     }
 
     form.setFieldsValue(nextValues);
-  }, [form, selectedVersionId, versionOptions]);
+  }, [form, selectedVersionId, syncCrossProject, versionOptions]);
 }
 
 function VersionProjectFields({
@@ -3303,6 +3990,40 @@ function VersionProjectFields({
           </Form.Item>
         </Col>
       </Row>
+    </>
+  );
+}
+
+function VersionOnlyField({
+  form,
+  versionOptions,
+  versionLabel = "关联版本",
+  versionMessage = "请选择关联版本"
+}: {
+  form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
+  versionOptions: RequirementVersionOption[];
+  versionLabel?: string;
+  versionMessage?: string;
+}) {
+  useSyncProjectWithVersion(form, versionOptions, true);
+
+  return (
+    <>
+      <Form.Item label={versionLabel} name="versionId" rules={[{ required: true, message: versionMessage }]}>
+        <Select
+          showSearch
+          optionFilterProp="label"
+          placeholder="选择版本"
+          notFoundContent="请先在需求管理中新建版本"
+          options={versionOptions}
+        />
+      </Form.Item>
+      <Form.Item name="versionName" hidden>
+        <Input />
+      </Form.Item>
+      <Form.Item name="project" hidden>
+        <Input />
+      </Form.Item>
     </>
   );
 }
@@ -3352,7 +4073,7 @@ function TaskFields({
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   projectOptions: string[];
   versionOptions: RequirementVersionOption[];
-  people: FeishuPerson[];
+  people: OwnerSelectableMember[];
   peopleLoading: boolean;
   peopleError: string;
 }) {
@@ -3413,16 +4134,14 @@ function TaskFields({
 
 function BugFields({
   form,
-  projectOptions,
   versionOptions,
   people,
   peopleLoading,
   peopleError
 }: {
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
-  projectOptions: string[];
   versionOptions: RequirementVersionOption[];
-  people: FeishuPerson[];
+  people: OwnerSelectableMember[];
   peopleLoading: boolean;
   peopleError: string;
 }) {
@@ -3443,7 +4162,7 @@ function BugFields({
           </Form.Item>
         </Col>
       </Row>
-      <VersionProjectFields form={form} projectOptions={projectOptions} versionOptions={versionOptions} />
+      <VersionOnlyField form={form} versionOptions={versionOptions} />
       <Row gutter={12}>
         <Col span={12}>
           <Form.Item
@@ -3473,6 +4192,45 @@ function BugFields({
       <Form.Item label="复现步骤" name="reproduction" rules={[{ required: true, message: "请输入复现步骤" }]}>
         <Input.TextArea rows={4} placeholder="按 1、2、3 写清楚如何稳定复现" />
       </Form.Item>
+      <Form.Item
+        label="复现材料"
+        name="attachments"
+        valuePropName="fileList"
+        getValueFromEvent={normalizeBugAttachmentUploadEvent}
+        rules={[
+          {
+            validator(_, fileList: BugAttachmentUploadFile[] = []) {
+              if (fileList.some((file) => file.status === "uploading")) {
+                return Promise.reject(new Error("复现材料仍在上传，请稍后保存"));
+              }
+
+              if (fileList.some((file) => file.status === "error")) {
+                return Promise.reject(new Error("请删除上传失败的材料后再保存"));
+              }
+
+              return Promise.resolve();
+            }
+          }
+        ]}
+      >
+        <Upload.Dragger
+          accept="image/*,video/*"
+          customRequest={uploadBugAttachment}
+          maxCount={8}
+          multiple
+          onPreview={(file) => {
+            if (file.url) {
+              window.open(file.url, "_blank", "noopener,noreferrer");
+            }
+          }}
+        >
+          <p className="ant-upload-drag-icon">
+            <InboxOutlined />
+          </p>
+          <p className="ant-upload-text">上传复现截图或视频</p>
+          <p className="ant-upload-hint">支持图片、视频，文件会保存到腾讯云 COS。</p>
+        </Upload.Dragger>
+      </Form.Item>
       <Form.Item label="预期结果" name="expected">
         <Input.TextArea rows={3} placeholder="系统应该出现什么结果" />
       </Form.Item>
@@ -3481,6 +4239,41 @@ function BugFields({
       </Form.Item>
     </>
   );
+}
+
+async function uploadBugAttachment(options: UploadCustomRequestOptions) {
+  const { file, onError, onProgress, onSuccess } = options;
+
+  try {
+    if (!(file instanceof File)) {
+      throw new Error("请选择有效的图片或视频文件");
+    }
+
+    if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+      throw new Error("仅支持上传图片或视频材料");
+    }
+
+    onProgress?.({ percent: 20 });
+
+    const formData = new FormData();
+
+    formData.append("file", file);
+
+    const response = await fetch("/api/bug-attachments", {
+      method: "POST",
+      body: formData
+    });
+    const payload = (await response.json().catch(() => null)) as { attachment?: BugAttachment; error?: string } | null;
+
+    if (!response.ok || !payload?.attachment) {
+      throw new Error(payload?.error || "上传复现材料失败");
+    }
+
+    onProgress?.({ percent: 100 });
+    onSuccess?.({ attachment: payload.attachment });
+  } catch (error) {
+    onError?.(error instanceof Error ? error : new Error("上传复现材料失败"));
+  }
 }
 
 function RiskFields({
@@ -3492,7 +4285,7 @@ function RiskFields({
 }: {
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   projectOptions: string[];
-  people: FeishuPerson[];
+  people: OwnerSelectableMember[];
   peopleLoading: boolean;
   peopleError: string;
 }) {
@@ -3577,10 +4370,16 @@ function RequirementVersionFields({ projectOptions }: { projectOptions: string[]
 
 function RequirementFields({
   form,
-  versionOptions
+  versionOptions,
+  people,
+  peopleLoading,
+  peopleError
 }: {
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   versionOptions: RequirementVersionOption[];
+  people: OwnerSelectableMember[];
+  peopleLoading: boolean;
+  peopleError: string;
 }) {
   return (
     <>
@@ -3592,6 +4391,13 @@ function RequirementFields({
         versionOptions={versionOptions}
         versionLabel="需求版本"
         versionMessage="请选择需求版本"
+      />
+      <OwnerSelect
+        form={form}
+        people={people}
+        loading={peopleLoading}
+        error={peopleError}
+        label="需求负责人"
       />
       <Row gutter={12}>
         <Col span={12}>

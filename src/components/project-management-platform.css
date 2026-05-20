@@ -126,8 +126,68 @@
   width: min(36vw, 420px);
 }
 
+.pm-workspace-control {
+  width: 100%;
+  max-width: 100%;
+}
+
+.pm-workspace-select {
+  width: 100%;
+  min-width: 140px;
+}
+
+.pm-workspace-popup-divider {
+  margin: 4px 0;
+  border-top: 1px solid var(--border);
+}
+
+.pm-workspace-popup-action {
+  justify-content: flex-start;
+  height: 34px;
+}
+
+.pm-workspace-popup-disabled {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
 .pm-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  line-height: 32px;
   background: linear-gradient(135deg, var(--brand), var(--violet));
+  flex: 0 0 32px;
+}
+
+.pm-avatar-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+}
+
+.pm-avatar-menu {
+  width: min(260px, calc(100vw - 48px));
+}
+
+.pm-avatar-profile {
+  width: 100%;
+}
+
+.pm-avatar-menu-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
 }
 
 .pm-content {
@@ -464,12 +524,45 @@
 }
 
 .requirement-title-cell {
+  width: 100%;
   max-width: 100%;
+  overflow: hidden;
 }
 
+.requirement-title-cell .ant-space-item,
 .requirement-title-cell .ant-typography {
   max-width: 100%;
+  overflow: hidden;
+}
+
+.requirement-title-primary {
+  display: block;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.requirement-title-tooltip-trigger {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.requirement-title-summary,
+.requirement-title-acceptance {
+  display: -webkit-box;
   white-space: normal;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.requirement-title-summary {
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.requirement-title-acceptance {
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
 }
 
 .requirement-detail-table .ant-table-cell {
@@ -509,6 +602,12 @@
   padding: 14px;
 }
 
+.requirement-ai-card,
+.requirement-ai-result {
+  max-width: 100%;
+  overflow: hidden;
+}
+
 .requirement-ai-card-head {
   width: 100%;
   justify-content: space-between;
@@ -533,6 +632,72 @@
 .requirement-ai-score {
   display: grid;
   gap: 4px;
+}
+
+.requirement-ai-summary-preview {
+  display: -webkit-box;
+  margin-bottom: 0 !important;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.requirement-ai-summary-trigger {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.requirement-ai-tags {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.requirement-ai-tags .ant-space-item {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.requirement-ai-tag-trigger {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  vertical-align: bottom;
+}
+
+.requirement-ai-tag {
+  display: inline-block;
+  max-width: min(100%, 260px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
+.member-role-select {
+  width: 156px;
+}
+
+.member-channel-item {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.member-channel-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.member-channel-grid {
+  display: grid;
+  grid-template-columns: minmax(140px, 180px) minmax(0, 1fr);
+  gap: 12px;
 }
 
 .project-milestone-form {
@@ -679,7 +844,7 @@
   background: var(--surface);
 }
 
-.bug-project-filter {
+.bug-version-filter {
   width: clamp(150px, 18vw, 220px);
 }
 
@@ -693,6 +858,13 @@
 
 .bug-detail-row .ant-typography {
   margin-bottom: 4px;
+}
+
+.bug-attachment-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .pm-list-stack {
@@ -825,6 +997,7 @@
 
 .pm-record-drawer .ant-drawer-body {
   padding-bottom: 18px;
+  overflow-x: hidden;
 }
 
 .pm-record-drawer .ant-drawer-footer {
@@ -856,6 +1029,10 @@
     max-width: 520px;
   }
 
+  .member-channel-grid {
+    grid-template-columns: 1fr;
+  }
+
 }
 
 @media (max-width: 768px) {
@@ -877,6 +1054,10 @@
   .pm-header-actions {
     justify-content: flex-end;
     flex-wrap: wrap;
+  }
+
+  .pm-workspace-select {
+    min-width: 0;
   }
 
   .pm-header-actions .ant-tag {
@@ -926,9 +1107,12 @@
     flex-direction: column;
   }
 
+  .page-title > .ant-space,
   .page-title-extra {
+    flex: none;
     width: 100%;
   }
+
 }
 
 @media (max-width: 520px) {

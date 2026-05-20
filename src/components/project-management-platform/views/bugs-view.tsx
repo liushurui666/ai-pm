@@ -1,11 +1,11 @@
 "use client";
 
 import { Button, Card, Col, Row, Segmented, Select, Space, Switch, Table, Tag, Tooltip, Typography } from "antd";
-import { AlertOutlined, BugOutlined, CheckCircleOutlined, EditOutlined, PlusOutlined, UserOutlined } from "@ant-design/icons";
+import { AlertOutlined, BugOutlined, CheckCircleOutlined, EditOutlined, PaperClipOutlined, PlusOutlined, UserOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo, useState } from "react";
 import dayjs from "dayjs";
-import type { BugReport, FeishuUser } from "@/types/dashboard";
+import type { BugAttachment, BugReport, FeishuUser } from "@/types/dashboard";
 import { MetricCard } from "@/components/project-management-platform/shared/metric-card";
 import { OwnerInline } from "@/components/project-management-platform/shared/owner-inline";
 import { PageTitle } from "@/components/project-management-platform/shared/page-shell";
@@ -61,61 +61,70 @@ function isMyBug(bug: BugReport, currentUser?: FeishuUser) {
   return userIdentities.some((identity) => owner === identity || reporter === identity);
 }
 
-function getBugEmptyText(onlyMine: boolean, projectFilter: string) {
-  if (onlyMine && projectFilter !== "全部") {
-    return "该项目暂无与你相关的 Bug";
+function getBugEmptyText(onlyMine: boolean, versionFilter: string) {
+  if (onlyMine && versionFilter !== "全部") {
+    return "该版本暂无与你相关的 Bug";
   }
 
   if (onlyMine) {
     return "暂无与你相关的 Bug";
   }
 
-  if (projectFilter !== "全部") {
-    return "该项目暂无 Bug";
+  if (versionFilter !== "全部") {
+    return "该版本暂无 Bug";
   }
 
   return "暂无 Bug，点击右上角提 Bug";
 }
 
+function formatAttachmentSize(size: number) {
+  if (size >= 1024 * 1024) {
+    return `${(size / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  if (size >= 1024) {
+    return `${Math.round(size / 1024)} KB`;
+  }
+
+  return `${size} B`;
+}
+
+function getAttachmentLabel(attachment: BugAttachment) {
+  return `${attachment.type === "video" ? "视频" : "图片"} · ${formatAttachmentSize(attachment.size)}`;
+}
+
 export function BugsView({
   bugs,
   currentUser,
-  projectOptions,
   versionOptions,
   onCreate,
   onEdit
 }: {
   bugs: BugReport[];
   currentUser?: FeishuUser;
-  projectOptions: string[];
   versionOptions: RequirementVersionOption[];
   onCreate: () => void;
   onEdit: (bug: BugReport) => void;
 }) {
   const [statusFilter, setStatusFilter] = useState<"全部" | BugReport["status"]>("全部");
-  const [projectFilter, setProjectFilter] = useState("全部");
   const [versionFilter, setVersionFilter] = useState("全部");
   const [onlyMine, setOnlyMine] = useState(false);
-  const bugProjectOptions = useMemo(
-    () => Array.from(new Set([...projectOptions, ...bugs.map((bug) => bug.project).filter(Boolean)])),
-    [bugs, projectOptions]
-  );
   const scopedBugs = useMemo(
     () => (onlyMine ? bugs.filter((bug) => isMyBug(bug, currentUser)) : bugs),
     [bugs, currentUser, onlyMine]
   );
-  const projectScopedBugs = useMemo(
-    () => (projectFilter === "全部" ? scopedBugs : scopedBugs.filter((bug) => bug.project === projectFilter)),
-    [projectFilter, scopedBugs]
+  const versionScopedBugs = useMemo(
+    () => (versionFilter === "全部" ? scopedBugs : scopedBugs.filter((bug) => bug.versionId === versionFilter)),
+    [scopedBugs, versionFilter]
   );
   const visibleBugs = useMemo(() => {
     const statusScopedBugs =
-      statusFilter === "全部" ? projectScopedBugs : projectScopedBugs.filter((bug) => bug.status === statusFilter);
+      statusFilter === "全部" ? versionScopedBugs : versionScopedBugs.filter((bug) => bug.status === statusFilter);
 
-    return versionFilter === "全部" ? statusScopedBugs : statusScopedBugs.filter((bug) => bug.versionId === versionFilter);
-  }, [projectScopedBugs, statusFilter, versionFilter]);
-  const openBugCount = projectScopedBugs.filter((bug) => bug.status !== "已关闭").length;
-  const blockerCount = projectScopedBugs.filter((bug) => bug.severity === "阻塞" && bug.status !== "已关闭").length;
+    return statusScopedBugs;
+  }, [statusFilter, versionScopedBugs]);
+  const openBugCount = versionScopedBugs.filter((bug) => bug.status !== "已关闭").length;
+  const blockerCount = versionScopedBugs.filter((bug) => bug.severity === "阻塞" && bug.status !== "已关闭").length;
   const bugColumns: ColumnsType<BugReport> = [
     {
       title: "Bug",
@@ -148,7 +157,20 @@ export function BugsView({
       onFilter: (value, bug) => bug.status === value,
       render: (status: BugReport["status"]) => <Tag color={bugStatusColor[status]}>{status}</Tag>
     },
-    { title: "项目", dataIndex: "project", key: "project", width: 190 },
+    {
+      title: "材料",
+      dataIndex: "attachments",
+      key: "attachments",
+      width: 90,
+      render: (_, bug) =>
+        bug.attachments?.length ? (
+          <Tag icon={<PaperClipOutlined />} color="blue">
+            {bug.attachments.length}
+          </Tag>
+        ) : (
+          <Text type="secondary">无</Text>
+        )
+    },
     {
       title: "版本",
       dataIndex: "versionName",
@@ -195,7 +217,7 @@ export function BugsView({
       <PageTitle
         icon={<BugOutlined />}
         title="Bug 管理"
-        subtitle="给测试、产品和业务同学提 Bug，保留复现步骤、环境、预期和实际结果。"
+        subtitle="按版本追踪缺陷，保留复现步骤、材料、环境、预期和实际结果。"
         extra={
           <Space wrap>
             <Segmented
@@ -204,15 +226,7 @@ export function BugsView({
               options={["全部", "新建", "定位中", "修复中", "待验证", "已关闭"]}
             />
             <Select
-              className="bug-project-filter"
-              showSearch
-              value={projectFilter}
-              onChange={setProjectFilter}
-              optionFilterProp="label"
-              options={[{ value: "全部", label: "全部项目" }, ...bugProjectOptions.map((project) => ({ value: project, label: project }))]}
-            />
-            <Select
-              className="bug-project-filter"
+              className="bug-version-filter"
               showSearch
               value={versionFilter}
               onChange={setVersionFilter}
@@ -238,14 +252,14 @@ export function BugsView({
         <MetricCard
           icon={<CheckCircleOutlined />}
           title="待验证"
-          value={projectScopedBugs.filter((bug) => bug.status === "待验证").length}
+          value={versionScopedBugs.filter((bug) => bug.status === "待验证").length}
           suffix="个"
           tone="blue"
         />
         <MetricCard
           icon={<UserOutlined />}
           title="已关闭"
-          value={projectScopedBugs.filter((bug) => bug.status === "已关闭").length}
+          value={versionScopedBugs.filter((bug) => bug.status === "已关闭").length}
           suffix="个"
           tone="green"
         />
@@ -256,9 +270,9 @@ export function BugsView({
           rowKey="id"
           columns={bugColumns}
           dataSource={visibleBugs}
-          locale={{ emptyText: getBugEmptyText(onlyMine, projectFilter) }}
+          locale={{ emptyText: getBugEmptyText(onlyMine, versionFilter) }}
           pagination={{ pageSize: 12, showSizeChanger: true }}
-          scroll={{ x: 1580 }}
+          scroll={{ x: 1390 }}
           expandable={{
             expandedRowRender: (bug) => (
               <Row gutter={[16, 12]} className="bug-detail-row">
@@ -274,6 +288,25 @@ export function BugsView({
                   <Text strong>实际结果</Text>
                   <Paragraph>{bug.actual}</Paragraph>
                 </Col>
+                {bug.attachments?.length ? (
+                  <Col span={24}>
+                    <Text strong>复现材料</Text>
+                    <div className="bug-attachment-list">
+                      {bug.attachments.map((attachment) => (
+                        <Button
+                          href={attachment.url}
+                          icon={<PaperClipOutlined />}
+                          key={attachment.id}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {attachment.name}
+                          <Text type="secondary"> {getAttachmentLabel(attachment)}</Text>
+                        </Button>
+                      ))}
+                    </div>
+                  </Col>
+                ) : null}
               </Row>
             )
           }}

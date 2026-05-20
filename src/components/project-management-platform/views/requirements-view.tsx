@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Empty, Flex, Popconfirm, Progress, Space, Table, Tag, Typography } from "antd";
+import { Button, Empty, Flex, Popconfirm, Progress, Space, Table, Tag, Tooltip, Typography } from "antd";
 import { DeleteOutlined, EditOutlined, NodeIndexOutlined, PlusOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import type { BugReport, Requirement, RequirementVersion, Task } from "@/types/dashboard";
@@ -16,10 +16,15 @@ const requirementVersionColor: Record<RequirementVersion["status"], string> = {
   已发布: "green",
   已归档: "default"
 };
+const requirementReadinessTip = "按该版本下「待上线 / 已上线」需求占总需求数计算，用于快速判断版本就绪度。";
 
 export function RequirementsView({
   bugs,
+  canCreateRequirements,
+  canDeleteRequirements,
+  canEditRequirements,
   columns,
+  permissionDeniedReason,
   requirements,
   selectedVersionId,
   tasks,
@@ -32,7 +37,11 @@ export function RequirementsView({
   onSelectVersion
 }: {
   bugs: BugReport[];
+  canCreateRequirements: boolean;
+  canDeleteRequirements: boolean;
+  canEditRequirements: boolean;
   columns: ColumnsType<Requirement>;
+  permissionDeniedReason: string;
   requirements: Requirement[];
   selectedVersionId: string | null;
   tasks: Task[];
@@ -50,7 +59,11 @@ export function RequirementsView({
     return (
       <RequirementVersionDetail
         bugs={bugs}
+        canCreateRequirements={canCreateRequirements}
+        canDeleteRequirements={canDeleteRequirements}
+        canEditRequirements={canEditRequirements}
         columns={columns}
+        permissionDeniedReason={permissionDeniedReason}
         requirements={requirements}
         selectedVersion={selectedVersion}
         tasks={tasks}
@@ -69,9 +82,19 @@ export function RequirementsView({
         title="需求版本"
         subtitle="给产品同学维护版本范围、需求优先级、验收标准和上线状态。"
         extra={
-          <Button type="primary" icon={<PlusOutlined />} onClick={onCreateVersion}>
-            新建版本
-          </Button>
+          canCreateRequirements ? (
+            <Button type="primary" icon={<PlusOutlined />} onClick={onCreateVersion}>
+              新建版本
+            </Button>
+          ) : (
+            <Tooltip title={permissionDeniedReason}>
+              <span>
+                <Button type="primary" disabled icon={<PlusOutlined />}>
+                  新建版本
+                </Button>
+              </span>
+            </Tooltip>
+          )
         }
       />
       {versions.length ? (
@@ -79,6 +102,9 @@ export function RequirementsView({
           {versions.map((version) => (
             <RequirementVersionCard
               bugs={bugs}
+              canDeleteRequirements={canDeleteRequirements}
+              canEditRequirements={canEditRequirements}
+              permissionDeniedReason={permissionDeniedReason}
               key={version.id}
               requirements={requirements}
               tasks={tasks}
@@ -135,7 +161,11 @@ function getVersionStats({
 
 function RequirementVersionDetail({
   bugs,
+  canCreateRequirements,
+  canDeleteRequirements,
+  canEditRequirements,
   columns,
+  permissionDeniedReason,
   requirements,
   selectedVersion,
   tasks,
@@ -145,7 +175,11 @@ function RequirementVersionDetail({
   onEditVersion
 }: {
   bugs: BugReport[];
+  canCreateRequirements: boolean;
+  canDeleteRequirements: boolean;
+  canEditRequirements: boolean;
   columns: ColumnsType<Requirement>;
+  permissionDeniedReason: string;
   requirements: Requirement[];
   selectedVersion: RequirementVersion;
   tasks: Task[];
@@ -165,26 +199,56 @@ function RequirementVersionDetail({
       extra={
         <Space wrap>
           <Button onClick={onBack}>返回版本</Button>
-          <Button icon={<EditOutlined />} onClick={() => onEditVersion(selectedVersion)}>
-            编辑版本
-          </Button>
+          {canEditRequirements ? (
+            <Button icon={<EditOutlined />} onClick={() => onEditVersion(selectedVersion)}>
+              编辑版本
+            </Button>
+          ) : (
+            <Tooltip title={permissionDeniedReason}>
+              <span>
+                <Button disabled icon={<EditOutlined />}>
+                  编辑版本
+                </Button>
+              </span>
+            </Tooltip>
+          )}
           {selectedVersion.id !== fallbackRequirementVersionId ? (
-            <Popconfirm
-              title="删除版本"
-              description="删除后，该版本下的需求、任务和 Bug 会迁移到未规划需求池。"
-              okText="删除"
-              cancelText="取消"
-              okButtonProps={{ danger: true }}
-              onConfirm={() => onDeleteVersion(selectedVersion)}
-            >
-              <Button danger icon={<DeleteOutlined />}>
-                删除版本
-              </Button>
-            </Popconfirm>
+            canDeleteRequirements ? (
+              <Popconfirm
+                title="删除版本"
+                description="删除后，该版本下的需求、任务和 Bug 会迁移到未规划需求池。"
+                okText="删除"
+                cancelText="取消"
+                okButtonProps={{ danger: true }}
+                onConfirm={() => onDeleteVersion(selectedVersion)}
+              >
+                <Button danger icon={<DeleteOutlined />}>
+                  删除版本
+                </Button>
+              </Popconfirm>
+            ) : (
+              <Tooltip title={permissionDeniedReason}>
+                <span>
+                  <Button danger disabled icon={<DeleteOutlined />}>
+                    删除版本
+                  </Button>
+                </span>
+              </Tooltip>
+            )
           ) : null}
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => onCreateRequirement(selectedVersion)}>
-            绑定需求
-          </Button>
+          {canCreateRequirements ? (
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => onCreateRequirement(selectedVersion)}>
+              绑定需求
+            </Button>
+          ) : (
+            <Tooltip title={permissionDeniedReason}>
+              <span>
+                <Button type="primary" disabled icon={<PlusOutlined />}>
+                  绑定需求
+                </Button>
+              </span>
+            </Tooltip>
+          )}
         </Space>
       }
     >
@@ -195,7 +259,7 @@ function RequirementVersionDetail({
         columns={detailColumns}
         dataSource={stats.scopedRequirements}
         pagination={false}
-        scroll={{ x: 860 }}
+        scroll={{ x: 1040 }}
         locale={{ emptyText: "该版本暂无需求，点击右上角绑定需求" }}
       />
     </TableView>
@@ -224,7 +288,9 @@ function VersionSummary({
         <Text strong>{version.startDate} - {version.releaseDate}</Text>
       </div>
       <div className="requirement-version-summary-item">
-        <Text type="secondary">需求就绪</Text>
+        <Tooltip title={requirementReadinessTip}>
+          <Text type="secondary">需求就绪</Text>
+        </Tooltip>
         <Progress percent={stats.progress} size="small" />
       </div>
       <div className="requirement-version-summary-item">
@@ -245,6 +311,9 @@ function VersionSummary({
 
 function RequirementVersionCard({
   bugs,
+  canDeleteRequirements,
+  canEditRequirements,
+  permissionDeniedReason,
   requirements,
   tasks,
   version,
@@ -253,6 +322,9 @@ function RequirementVersionCard({
   onSelectVersion
 }: {
   bugs: BugReport[];
+  canDeleteRequirements: boolean;
+  canEditRequirements: boolean;
+  permissionDeniedReason: string;
   requirements: Requirement[];
   tasks: Task[];
   version: RequirementVersion;
@@ -276,7 +348,9 @@ function RequirementVersionCard({
       </Paragraph>
       <div className="requirement-version-progress">
         <Flex justify="space-between" align="center">
-          <Text type="secondary">需求就绪</Text>
+          <Tooltip title={requirementReadinessTip}>
+            <Text type="secondary">需求就绪</Text>
+          </Tooltip>
           <Text strong>{stats.progress}%</Text>
         </Flex>
         <Progress percent={stats.progress} size="small" showInfo={false} />
@@ -303,22 +377,42 @@ function RequirementVersionCard({
         进入版本
       </Button>
       <div className="requirement-version-actions">
-        <Button icon={<EditOutlined />} onClick={() => onEditVersion(version)}>
-          编辑
-        </Button>
+        {canEditRequirements ? (
+          <Button icon={<EditOutlined />} onClick={() => onEditVersion(version)}>
+            编辑
+          </Button>
+        ) : (
+          <Tooltip title={permissionDeniedReason}>
+            <span>
+              <Button disabled icon={<EditOutlined />}>
+                编辑
+              </Button>
+            </span>
+          </Tooltip>
+        )}
         {version.id !== fallbackRequirementVersionId ? (
-          <Popconfirm
-            title="删除版本"
-            description="删除后，该版本下的需求、任务和 Bug 会迁移到未规划需求池。"
-            okText="删除"
-            cancelText="取消"
-            okButtonProps={{ danger: true }}
-            onConfirm={() => onDeleteVersion(version)}
-          >
-            <Button danger icon={<DeleteOutlined />}>
-              删除
-            </Button>
-          </Popconfirm>
+          canDeleteRequirements ? (
+            <Popconfirm
+              title="删除版本"
+              description="删除后，该版本下的需求、任务和 Bug 会迁移到未规划需求池。"
+              okText="删除"
+              cancelText="取消"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => onDeleteVersion(version)}
+            >
+              <Button danger icon={<DeleteOutlined />}>
+                删除
+              </Button>
+            </Popconfirm>
+          ) : (
+            <Tooltip title={permissionDeniedReason}>
+              <span>
+                <Button danger disabled icon={<DeleteOutlined />}>
+                  删除
+                </Button>
+              </span>
+            </Tooltip>
+          )
         ) : null}
       </div>
     </div>
