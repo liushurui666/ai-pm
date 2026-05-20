@@ -7,6 +7,7 @@ import {
   Avatar,
   Badge,
   Button,
+  Card,
   Col,
   ConfigProvider,
   DatePicker,
@@ -41,6 +42,7 @@ import type { ColumnsType } from "antd/es/table";
 import type { UploadFile } from "antd/es/upload/interface";
 import {
   AlertOutlined,
+  ArrowLeftOutlined,
   BarChartOutlined,
   BugOutlined,
   CalendarOutlined,
@@ -56,9 +58,11 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   NodeIndexOutlined,
+  PaperClipOutlined,
   PlusOutlined,
   ProjectOutlined,
   RobotOutlined,
+  SaveOutlined,
   SearchOutlined,
   SendOutlined,
   TeamOutlined,
@@ -87,8 +91,18 @@ import type {
 import type { CreateRecordResult, DashboardEntityType, DeleteRecordResult, DocumentAnalyzeResult } from "@/types/records";
 import { getAntdThemeConfig, ThemeToggleButton, useThemePreference } from "@/components/theme-mode";
 import { RequirementAiLinkAnalyzer } from "@/components/project-management-platform/requirements/requirement-ai-link-analyzer";
-import { TableView } from "@/components/project-management-platform/shared/page-shell";
-import { BugsView } from "@/components/project-management-platform/views/bugs-view";
+import { PageTitle, TableView } from "@/components/project-management-platform/shared/page-shell";
+import {
+  BugsView,
+  bugFlowActionColor,
+  bugFlowActionLabel,
+  bugSeverityColor,
+  bugStatusColor,
+  getAttachmentLabel,
+  getBugFlowDescription,
+  getBugFlowRecords,
+  isBugOverdue
+} from "@/components/project-management-platform/views/bugs-view";
 import { MembersView } from "@/components/project-management-platform/views/members-view";
 import { OverviewView } from "@/components/project-management-platform/views/overview-view";
 import { ProjectsView } from "@/components/project-management-platform/views/projects-view";
@@ -106,7 +120,17 @@ const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
 const { useBreakpoint } = Grid;
 
-export type AppView = "overview" | "projects" | "tasks" | "bugs" | "requirements" | "risks" | "docs" | "members" | "reports";
+export type AppView =
+  | "overview"
+  | "projects"
+  | "tasks"
+  | "bugs"
+  | "bugEdit"
+  | "requirements"
+  | "risks"
+  | "docs"
+  | "members"
+  | "reports";
 
 type ChatMessage = {
   role: "assistant" | "user";
@@ -134,7 +158,7 @@ const entityLabels: Record<DashboardEntityType, string> = {
   document: "文档"
 };
 const fallbackRequirementVersionId = "rv-backlog";
-const validViews = new Set<AppView>(["overview", "projects", "tasks", "bugs", "requirements", "risks", "docs", "members", "reports"]);
+const validViews = new Set<AppView>(["overview", "projects", "tasks", "bugs", "bugEdit", "requirements", "risks", "docs", "members", "reports"]);
 
 const statusColor: Record<Project["status"], NonNullable<BadgeProps["status"]>> = {
   进行中: "processing",
@@ -278,9 +302,11 @@ function isMyOwnerRecord(
 }
 
 export function ProjectManagementPlatform({
+  initialBugId,
   initialView = "overview",
   initialWorkspaceId
 }: {
+  initialBugId?: string;
   initialView?: AppView;
   initialWorkspaceId?: string;
 }) {
@@ -345,6 +371,8 @@ export function ProjectManagementPlatform({
   const permissionDeniedReason = permissions?.deniedReason ?? "当前角色无此操作权限。";
   const currentWorkspace = data?.meta?.currentWorkspace;
   const currentWorkspaceId = currentWorkspace?.id ?? activeWorkspaceId;
+  const navigationView = activeView === "bugEdit" ? "bugs" : activeView;
+  const routeBug = initialBugId ? data?.bugs.find((bug) => bug.id === initialBugId) ?? null : null;
 
   async function refreshDashboardState(workspaceId = currentWorkspaceId) {
     try {
@@ -790,12 +818,6 @@ export function ProjectManagementPlatform({
     editForm.setFieldsValue(hydrateOwnerFormValues(getTaskFormValues(task), ownerOptions));
   }
 
-  function openEditBugDrawer(bug: BugReport) {
-    setEditingBug(bug);
-    bugEditForm.resetFields();
-    bugEditForm.setFieldsValue(hydrateOwnerFormValues(getBugFormValues(bug), ownerOptions));
-  }
-
   function openEditRequirementDrawer(requirement: Requirement) {
     if (!canEditRequirements) {
       messageApi.warning(permissionDeniedReason);
@@ -984,8 +1006,14 @@ export function ProjectManagementPlatform({
     }
   }
 
-  async function handleUpdateBug(values: Record<string, unknown>) {
-    if (!editingBug) {
+  async function handleUpdateBug(
+    values: Record<string, unknown>,
+    bugOverride?: BugReport,
+    options: { keepFormOpen?: boolean } = {}
+  ) {
+    const targetBug = bugOverride ?? editingBug;
+
+    if (!targetBug) {
       return;
     }
 
@@ -1000,7 +1028,7 @@ export function ProjectManagementPlatform({
         body: JSON.stringify({
           workspaceId: currentWorkspaceId,
           type: "bug",
-          id: editingBug.id,
+          id: targetBug.id,
           values: serializeCreateValues(values)
         })
       });
@@ -1025,8 +1053,10 @@ export function ProjectManagementPlatform({
       setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
       void refreshDashboardState();
       showRecordResultMessage(result.message);
-      setEditingBug(null);
-      bugEditForm.resetFields();
+      if (!options.keepFormOpen) {
+        setEditingBug(null);
+        bugEditForm.resetFields();
+      }
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : "更新 Bug 失败");
     } finally {
@@ -1145,7 +1175,7 @@ export function ProjectManagementPlatform({
     if (!canDelete) {
       messageApi.warning(permissionDeniedReason);
 
-      return;
+      return false;
     }
 
     try {
@@ -1165,7 +1195,7 @@ export function ProjectManagementPlatform({
       if (response.status === 401) {
         window.location.assign("/login");
 
-        return;
+        return false;
       }
 
       if (!response.ok) {
@@ -1185,8 +1215,12 @@ export function ProjectManagementPlatform({
       if (type === "requirementVersion" && selectedRequirementVersionId === id) {
         setSelectedRequirementVersionId(null);
       }
+
+      return true;
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : "删除失败");
+
+      return false;
     }
   }
 
@@ -1420,10 +1454,52 @@ export function ProjectManagementPlatform({
   );
   const globalSearchResults = useMemo(() => (data ? createSearchResults(data, searchQuery) : []), [data, searchQuery]);
 
+  function getWorkspaceQueryString(view?: AppView) {
+    const params = new URLSearchParams();
+
+    if (view && view !== "bugEdit") {
+      params.set("view", view);
+    }
+
+    if (currentWorkspaceId) {
+      params.set("workspaceId", currentWorkspaceId);
+    }
+
+    const query = params.toString();
+
+    return query ? `?${query}` : "";
+  }
+
+  function navigateToBugEdit(bug: BugReport) {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.location.assign(`/bugs/${bug.id}${getWorkspaceQueryString()}`);
+  }
+
+  function navigateToView(view: AppView) {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.location.assign(`/${getWorkspaceQueryString(view)}`);
+  }
+
   function switchView(view: AppView) {
+    if (view === "bugEdit") {
+      return;
+    }
+
     setActiveView(view);
 
     if (typeof window !== "undefined") {
+      if (window.location.pathname !== "/") {
+        navigateToView(view);
+
+        return;
+      }
+
       const url = new URL(window.location.href);
       url.searchParams.set("view", view);
       if (currentWorkspaceId) {
@@ -1488,7 +1564,7 @@ export function ProjectManagementPlatform({
       const bug = data.bugs.find((item) => item.id === result.id);
 
       if (bug) {
-        openEditBugDrawer(bug);
+        navigateToBugEdit(bug);
       }
 
       return;
@@ -1535,7 +1611,7 @@ export function ProjectManagementPlatform({
               <Menu
                 theme="dark"
                 mode="inline"
-                selectedKeys={[activeView]}
+                selectedKeys={[navigationView]}
                 items={menuItems}
                 onClick={(item) => switchView(item.key as AppView)}
               />
@@ -1689,7 +1765,7 @@ export function ProjectManagementPlatform({
               <div className="pm-mobile-nav">
                 <Segmented
                   block
-                  value={activeView}
+                  value={navigationView}
                   onChange={(value) => switchView(String(value) as AppView)}
                   options={[
                     { label: "工作台", value: "overview" },
@@ -1749,7 +1825,29 @@ export function ProjectManagementPlatform({
                       versionOptions={requirementVersionOptions}
                       onCreate={() => openCreateDrawer("bug")}
                       onDelete={(bug) => handleDeleteRecord("bug", bug.id)}
-                      onEdit={openEditBugDrawer}
+                      onEdit={navigateToBugEdit}
+                    />
+                  ) : null}
+                  {activeView === "bugEdit" ? (
+                    <BugRouteEditView
+                      bug={routeBug}
+                      canDeleteBugs={canDeleteBugs}
+                      form={bugEditForm}
+                      people={ownerOptions}
+                      peopleError={ownerSelectError}
+                      peopleLoading={ownerSelectLoading}
+                      permissionDeniedReason={permissions?.deniedReason ?? "只有所有者、管理员或测试可以删除 Bug。"}
+                      submitting={bugEditSubmitting}
+                      versionOptions={requirementVersionOptions}
+                      onBack={() => navigateToView("bugs")}
+                      onDelete={async (bug) => {
+                        const deleted = await handleDeleteRecord("bug", bug.id);
+
+                        if (deleted) {
+                          navigateToView("bugs");
+                        }
+                      }}
+                      onSubmit={(bug, values) => handleUpdateBug(values, bug, { keepFormOpen: true })}
                     />
                   ) : null}
                   {activeView === "requirements" ? (
@@ -2030,6 +2128,196 @@ export function ProjectManagementPlatform({
         </Layout>
       </App>
     </ConfigProvider>
+  );
+}
+
+function BugRouteEditView({
+  bug,
+  canDeleteBugs,
+  form,
+  onBack,
+  onDelete,
+  onSubmit,
+  people,
+  peopleError,
+  peopleLoading,
+  permissionDeniedReason,
+  submitting,
+  versionOptions
+}: {
+  bug: BugReport | null;
+  canDeleteBugs: boolean;
+  form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
+  onBack: () => void;
+  onDelete: (bug: BugReport) => void;
+  onSubmit: (bug: BugReport, values: Record<string, unknown>) => void;
+  people: OwnerSelectableMember[];
+  peopleError: string;
+  peopleLoading: boolean;
+  permissionDeniedReason: string;
+  submitting: boolean;
+  versionOptions: RequirementVersionOption[];
+}) {
+  useEffect(() => {
+    if (!bug) {
+      form.resetFields();
+
+      return;
+    }
+
+    form.resetFields();
+    form.setFieldsValue(hydrateOwnerFormValues(getBugFormValues(bug), people));
+  }, [bug, form, people]);
+
+  if (!bug) {
+    return (
+      <Space orientation="vertical" size={18} className="pm-page-stack">
+        <PageTitle
+          icon={<BugOutlined />}
+          title="编辑 Bug"
+          subtitle="当前 Bug 不存在或已被删除。"
+          extra={<Button icon={<ArrowLeftOutlined />} onClick={onBack}>返回 Bug 管理</Button>}
+        />
+        <Card>
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有找到这个 Bug" />
+        </Card>
+      </Space>
+    );
+  }
+
+  const flowRecords = getBugFlowRecords(bug);
+
+  return (
+    <Space orientation="vertical" size={18} className="pm-page-stack bug-route-page">
+      <PageTitle
+        icon={<BugOutlined />}
+        title="编辑 Bug"
+        subtitle="在当前页面修改 Bug 信息，并查看流转记录。"
+        extra={
+          <Space wrap>
+            <Button icon={<ArrowLeftOutlined />} onClick={onBack}>
+              返回列表
+            </Button>
+            {canDeleteBugs ? (
+              <Popconfirm
+                title="删除 Bug"
+                description="删除后该 Bug 记录会从当前版本中移除。"
+                okText="删除"
+                cancelText="取消"
+                okButtonProps={{ danger: true }}
+                onConfirm={() => onDelete(bug)}
+              >
+                <Button danger icon={<DeleteOutlined />}>删除</Button>
+              </Popconfirm>
+            ) : (
+              <Tooltip title={permissionDeniedReason}>
+                <span>
+                  <Button danger disabled icon={<DeleteOutlined />}>删除</Button>
+                </span>
+              </Tooltip>
+            )}
+          </Space>
+        }
+      />
+
+      <div className="bug-edit-route-layout">
+        <Card
+          className="bug-edit-form-card"
+          title={
+            <Space>
+              <EditOutlined />
+              <span>编辑 Bug</span>
+            </Space>
+          }
+          extra={
+            <Button type="primary" icon={<SaveOutlined />} loading={submitting} onClick={() => form.submit()}>
+              保存
+            </Button>
+          }
+        >
+          <Form form={form} layout="vertical" onFinish={(values) => onSubmit(bug, values)} requiredMark={false}>
+            <BugFields
+              form={form}
+              people={people}
+              peopleLoading={peopleLoading}
+              peopleError={peopleError}
+              versionOptions={versionOptions}
+            />
+          </Form>
+        </Card>
+
+        <Space orientation="vertical" size={16} className="bug-edit-side">
+          <Card title="当前状态" className="bug-edit-side-card">
+            <Space orientation="vertical" size={12} className="pm-wide">
+              <Space size={8} wrap>
+                <Tag color={bugSeverityColor[bug.severity]}>{bug.severity}</Tag>
+                <Tag color={bugStatusColor[bug.status]}>{bug.status}</Tag>
+                {isBugOverdue(bug) ? <Tag color="red">已逾期</Tag> : null}
+              </Space>
+              <Typography.Title level={4}>{bug.title}</Typography.Title>
+              <Text type="secondary">{bug.versionName ?? "未规划需求池"}</Text>
+              <div className="bug-edit-meta-list">
+                <div>
+                  <Text type="secondary">负责人</Text>
+                  <OwnerInline name={bug.owner} avatarUrl={bug.ownerAvatarUrl} />
+                </div>
+                <div>
+                  <Text type="secondary">截止日期</Text>
+                  <Text type={isBugOverdue(bug) ? "danger" : undefined}>{bug.dueDate}</Text>
+                </div>
+              </div>
+            </Space>
+          </Card>
+
+          <Card title="复现材料" className="bug-edit-side-card">
+            {bug.attachments?.length ? (
+              <div className="bug-attachment-list">
+                {bug.attachments.map((attachment) => (
+                  <Button
+                    href={attachment.url}
+                    icon={<PaperClipOutlined />}
+                    key={attachment.id}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {attachment.name}
+                    <Text type="secondary"> {getAttachmentLabel(attachment)}</Text>
+                  </Button>
+                ))}
+              </div>
+            ) : (
+              <div className="bug-empty-state">暂无复现材料</div>
+            )}
+          </Card>
+
+          <Card title="流转记录" className="bug-edit-side-card">
+            {flowRecords.length ? (
+              <Timeline
+                className="bug-flow-timeline"
+                items={flowRecords.map((record) => ({
+                  color: bugFlowActionColor[record.action],
+                  content: (
+                    <Space orientation="vertical" size={4}>
+                      <Space size={8} wrap>
+                        <Text strong>{bugFlowActionLabel[record.action]}</Text>
+                        <Tag>{getBugFlowDescription(record)}</Tag>
+                      </Space>
+                      <Text type="secondary">{dayjs(record.at).format("YYYY-MM-DD HH:mm")}</Text>
+                      <Text type="secondary">
+                        {record.operator}
+                        {record.note ? ` · ${record.note}` : ""}
+                      </Text>
+                    </Space>
+                  )
+                }))}
+              />
+            ) : (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无流转记录" />
+            )}
+          </Card>
+        </Space>
+      </div>
+    </Space>
   );
 }
 
@@ -2578,7 +2866,7 @@ function SearchDrawer({
                   </Space>
                 </div>
                 <Button type="link" className="search-result-action" onClick={() => onOpenResult(result)}>
-                  打开详情
+                  打开
                 </Button>
               </div>
             ))}

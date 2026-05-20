@@ -857,14 +857,6 @@
   max-width: 100%;
 }
 
-.bug-table-row {
-  cursor: pointer;
-}
-
-.bug-table-row:hover td {
-  background: color-mix(in srgb, var(--brand) 7%, transparent) !important;
-}
-
 .bug-attachment-list {
   display: flex;
   flex-wrap: wrap;
@@ -896,87 +888,41 @@
   padding: 0;
 }
 
-.bug-detail-drawer .ant-drawer-body {
-  padding: 0;
-  overflow-y: auto;
-  background: var(--background);
+.bug-route-page {
+  max-width: 1480px;
 }
 
-.bug-detail-panel {
-  width: 100%;
-  padding: 22px;
+.bug-edit-route-layout {
+  display: grid;
+  align-items: start;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
 }
 
-.bug-detail-hero {
-  display: flex;
-  gap: 16px;
-  align-items: flex-start;
-  justify-content: space-between;
-  padding: 18px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--brand) 12%, transparent), transparent 62%),
-    var(--surface-elevated);
-}
-
-.bug-detail-hero-main {
+.bug-edit-form-card,
+.bug-edit-side {
   min-width: 0;
 }
 
-.bug-detail-hero-main .ant-typography {
+.bug-edit-side {
+  width: 100%;
+}
+
+.bug-edit-side-card {
+  align-self: start;
+}
+
+.bug-edit-side-card .ant-typography {
   margin: 0;
 }
 
-.bug-detail-actions {
-  flex: 0 0 auto;
-  justify-content: flex-end;
-}
-
-.bug-detail-meta-grid,
-.bug-detail-copy-grid {
-  display: grid;
-  gap: 10px;
-}
-
-.bug-detail-meta-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.bug-detail-meta-item,
-.bug-detail-copy-block,
-.bug-detail-section {
-  min-width: 0;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-}
-
-.bug-detail-meta-item {
-  display: flex;
-  min-height: 68px;
-  flex-direction: column;
-  gap: 6px;
-  justify-content: center;
-}
-
-.bug-detail-section {
+.bug-edit-meta-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
-.bug-detail-copy-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.bug-detail-copy-block .ant-typography {
-  margin-bottom: 0;
-  white-space: pre-line;
-}
-
-.bug-detail-empty {
+.bug-empty-state {
   padding: 14px;
   border: 1px dashed var(--border);
   border-radius: 8px;
@@ -985,24 +931,7 @@
 }
 
 @media (max-width: 720px) {
-  .bug-detail-panel {
-    padding: 16px;
-  }
-
-  .bug-detail-meta-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .bug-detail-hero {
-    flex-direction: column;
-  }
-
-  .bug-detail-actions {
-    width: 100%;
-    justify-content: flex-start;
-  }
-
-  .bug-detail-copy-grid {
+  .bug-edit-route-layout {
     grid-template-columns: 1fr;
   }
 }
