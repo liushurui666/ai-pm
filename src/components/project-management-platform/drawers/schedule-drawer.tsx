@@ -14,24 +14,28 @@ const { Text } = Typography;
 
 // 日程由里程碑、任务和 Bug 聚合而来，抽屉只消费统一的时间线模型。
 export function createScheduleItems(data: DashboardData): ScheduleItem[] {
-  const milestoneItems = data.projects.flatMap((project) =>
-    project.milestones.map((milestone) => ({
-      id: `${project.id}-${milestone.id}`,
+  const projectByName = new Map(data.projects.map((project) => [project.name, project]));
+  const milestoneItems = data.requirementVersions.flatMap((version) => {
+    const project = projectByName.get(version.project);
+
+    // 里程碑跟随需求版本，日程中仍补充项目负责人作为兜底责任人。
+    return version.milestones.map((milestone) => ({
+      id: `${version.id}-${milestone.id}`,
       type: "里程碑" as const,
-      title: milestone.title,
-      project: project.name,
+      title: `${version.name} · ${milestone.title}`,
+      project: version.project,
       date: milestone.dueDate,
-      owner: milestone.owner || project.owner,
-      ownerAvatarUrl: milestone.ownerAvatarUrl || project.ownerAvatarUrl,
-      ownerEmail: milestone.ownerEmail || project.ownerEmail,
-      ownerMemberId: milestone.ownerMemberId || project.ownerMemberId,
-      ownerOpenId: milestone.ownerOpenId || project.ownerOpenId,
-      ownerUnionId: milestone.ownerUnionId || project.ownerUnionId,
-      ownerUserId: milestone.ownerUserId || project.ownerUserId,
+      owner: milestone.owner || project?.owner || "未分配",
+      ownerAvatarUrl: milestone.ownerAvatarUrl || project?.ownerAvatarUrl,
+      ownerEmail: milestone.ownerEmail || project?.ownerEmail,
+      ownerMemberId: milestone.ownerMemberId || project?.ownerMemberId,
+      ownerOpenId: milestone.ownerOpenId || project?.ownerOpenId,
+      ownerUnionId: milestone.ownerUnionId || project?.ownerUnionId,
+      ownerUserId: milestone.ownerUserId || project?.ownerUserId,
       status: milestone.status,
       color: milestoneColor[milestone.status] === "default" ? "gray" : milestoneColor[milestone.status]
-    }))
-  );
+    }));
+  });
   const taskItems = data.tasks.map((task) => ({
     id: task.id,
     type: "任务" as const,

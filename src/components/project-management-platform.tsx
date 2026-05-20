@@ -502,6 +502,11 @@ export function ProjectManagementPlatform({
     setProjectEditSubmitting(true);
 
     try {
+      // 项目表单不再展示里程碑，更新基础信息时保留历史项目里程碑数据。
+      const submittedValues = {
+        ...values,
+        milestones: Array.isArray(values.milestones) ? values.milestones : editingProject.milestones
+      };
       const response = await fetch("/api/records", {
         method: "PATCH",
         headers: {
@@ -511,7 +516,7 @@ export function ProjectManagementPlatform({
           workspaceId: currentWorkspaceId,
           type: "project",
           id: editingProject.id,
-          values: serializeCreateValues(values)
+          values: serializeCreateValues(submittedValues)
         })
       });
       const payload = (await response.json()) as CreateRecordResult | { error?: string };
@@ -1593,6 +1598,9 @@ export function ProjectManagementPlatform({
             form={requirementVersionEditForm}
             version={editingRequirementVersion}
             submitting={requirementVersionEditSubmitting}
+            people={ownerOptions}
+            peopleLoading={ownerSelectLoading}
+            peopleError={ownerSelectError}
             projectOptions={projectOptions}
             onClose={() => setEditingRequirementVersion(null)}
             onSubmit={handleUpdateRequirementVersion}

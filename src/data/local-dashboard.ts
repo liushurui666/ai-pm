@@ -48,7 +48,17 @@ const DEFAULT_REQUIREMENT_VERSION: RequirementVersion = {
   status: "规划中",
   startDate: "2026-05-01",
   releaseDate: "2026-06-30",
-  goal: "收纳尚未进入明确版本的需求，评审后再绑定到目标版本。"
+  goal: "收纳尚未进入明确版本的需求，评审后再绑定到目标版本。",
+  milestones: [
+    {
+      id: "rv-backlog-m-1",
+      title: "需求池梳理",
+      status: "进行中",
+      dueDate: "2026-05-15",
+      owner: "",
+      note: "定期评审未规划需求，确认是否进入明确版本。"
+    }
+  ]
 };
 const DEFAULT_REQUIREMENT_VERSION_ID = DEFAULT_REQUIREMENT_VERSION.id;
 const defaultNotificationScenes: MemberNotificationScene[] = ["taskAssigned", "requirementChanged", "bugFlowChanged"];
@@ -570,6 +580,8 @@ function normalizeDocumentType(value: string): DocumentItem["type"] {
 
 function createFallbackMilestones({
   dueDate,
+  endNote = "按里程碑确认交付范围、风险和下一步行动。",
+  endTitle = "阶段验收",
   owner,
   ownerMemberId,
   ownerAvatarUrl,
@@ -578,9 +590,14 @@ function createFallbackMilestones({
   ownerUnionId,
   ownerUserId,
   progress,
-  projectName
+  projectName,
+  startDate,
+  startNote,
+  startTitle = "项目启动"
 }: {
   dueDate: string;
+  endNote?: string;
+  endTitle?: string;
   owner: string;
   ownerMemberId?: string;
   ownerAvatarUrl?: string;
@@ -590,13 +607,16 @@ function createFallbackMilestones({
   ownerUserId?: string;
   progress: number;
   projectName: string;
+  startDate?: string;
+  startNote?: string;
+  startTitle?: string;
 }): ProjectMilestone[] {
   return [
     {
       id: createLocalId("milestone"),
-      title: "项目启动",
+      title: startTitle,
       status: progress > 0 ? "已完成" : "未开始",
-      dueDate: asDateString(dayjs(dueDate).subtract(14, "day").format("YYYY-MM-DD")),
+      dueDate: startDate ?? asDateString(dayjs(dueDate).subtract(14, "day").format("YYYY-MM-DD")),
       owner,
       ownerMemberId,
       ownerOpenId,
@@ -604,11 +624,11 @@ function createFallbackMilestones({
       ownerUserId,
       ownerEmail,
       ownerAvatarUrl,
-      note: `${projectName} 立项、目标和成员范围确认。`
+      note: startNote ?? `${projectName} 立项、目标和成员范围确认。`
     },
     {
       id: createLocalId("milestone"),
-      title: "阶段验收",
+      title: endTitle,
       status: progress >= 100 ? "已完成" : progress >= 60 ? "进行中" : "未开始",
       dueDate,
       owner,
@@ -618,7 +638,7 @@ function createFallbackMilestones({
       ownerUserId,
       ownerEmail,
       ownerAvatarUrl,
-      note: "按里程碑确认交付范围、风险和下一步行动。"
+      note: endNote
     }
   ];
 }
@@ -668,7 +688,7 @@ function normalizeProjectMilestones(
         .filter((milestone) => milestone.title)
     : [];
 
-  return milestones.length ? milestones : createFallbackMilestones(fallback);
+  return milestones;
 }
 
 function normalizeCreateProject(values: Record<string, unknown>, id = createLocalId("project")): Project {
@@ -879,19 +899,76 @@ function appendBugUpdateFlowRecords(previous: BugReport, next: BugReport, operat
   return [...existingRecords, ...nextRecords].slice(-30);
 }
 
+function getRequirementVersionMilestoneProgress(status: RequirementVersion["status"]) {
+  if (status === "已发布" || status === "已归档") {
+    return 100;
+  }
+
+  return status === "进行中" ? 50 : 0;
+}
+
+function normalizeRequirementVersionMilestones(
+  value: unknown,
+  fallback: {
+    name: string;
+    releaseDate: string;
+    startDate: string;
+    status: RequirementVersion["status"];
+  }
+) {
+  const milestones = Array.isArray(value)
+    ? value
+        .filter((milestone) => typeof milestone === "object" && milestone)
+        .map((milestone, index) =>
+          normalizeProjectMilestone(milestone, index, {
+            dueDate: fallback.releaseDate,
+            owner: "",
+            ownerMemberId: undefined
+          })
+        )
+        .filter((milestone) => milestone.title)
+    : [];
+
+  // 版本没有配置里程碑时给出启动和验收兜底，确保需求管理仍能展示交付检查点。
+  return milestones.length
+    ? milestones
+    : createFallbackMilestones({
+        dueDate: fallback.releaseDate,
+        endNote: "检查需求、任务、Bug 和上线准备。",
+        endTitle: "提测验收",
+        owner: "",
+        progress: getRequirementVersionMilestoneProgress(fallback.status),
+        projectName: fallback.name,
+        startDate: fallback.startDate,
+        startNote: "确认版本目标、需求范围和负责人。",
+        startTitle: "版本启动"
+      });
+}
+
 function normalizeCreateRequirementVersion(
   values: Record<string, unknown>,
   id = createLocalId("requirementVersion")
 ): RequirementVersion {
+  const name = asText(values.name, "未命名版本");
+  const status = normalizeRequirementVersionStatus(asText(values.status, "规划中"));
+  const startDate = asDateString(values.startDate, dayjs().format("YYYY-MM-DD"));
+  const releaseDate = asDateString(values.releaseDate, dayjs().add(30, "day").format("YYYY-MM-DD"));
+
   return {
     id,
     workspaceId: asText(values.workspaceId, DEFAULT_WORKSPACE.id),
-    name: asText(values.name, "未命名版本"),
+    name,
     project: asText(values.project, "跨项目"),
-    status: normalizeRequirementVersionStatus(asText(values.status, "规划中")),
-    startDate: asDateString(values.startDate, dayjs().format("YYYY-MM-DD")),
-    releaseDate: asDateString(values.releaseDate, dayjs().add(30, "day").format("YYYY-MM-DD")),
-    goal: asText(values.goal, "暂无版本目标。")
+    status,
+    startDate,
+    releaseDate,
+    goal: asText(values.goal, "暂无版本目标。"),
+    milestones: normalizeRequirementVersionMilestones(values.milestones, {
+      name,
+      releaseDate,
+      startDate,
+      status
+    })
   };
 }
 

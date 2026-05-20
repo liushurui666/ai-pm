@@ -163,6 +163,7 @@ export type RequirementVersion = {
   startDate: string;
   releaseDate: string;
   goal: string;
+  milestones: ProjectMilestone[];
 };
 
 export type DocumentItem = {

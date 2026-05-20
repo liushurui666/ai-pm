@@ -7,7 +7,7 @@ import type { OwnerSelectableMember, RequirementVersionOption } from "@/componen
 import { BugFields, ProjectFields, RequirementFields, RequirementVersionFields, TaskFields } from "@/components/project-management-platform/forms/form-fields";
 import { DrawerFooterActions } from "@/components/project-management-platform/forms/drawer-footer-actions";
 
-// 项目编辑抽屉保留完整里程碑编辑能力，适配项目管理页的行内入口。
+// 项目编辑抽屉只维护基础信息，里程碑由需求版本表单统一承载。
 export function ProjectEditDrawer({
   form,
   project,
@@ -245,6 +245,9 @@ export function RequirementVersionEditDrawer({
   form,
   version,
   submitting,
+  people,
+  peopleLoading,
+  peopleError,
   projectOptions,
   onClose,
   onSubmit
@@ -252,6 +255,9 @@ export function RequirementVersionEditDrawer({
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   version: RequirementVersion | null;
   submitting: boolean;
+  people: OwnerSelectableMember[];
+  peopleLoading: boolean;
+  peopleError: string;
   projectOptions: string[];
   onClose: () => void;
   onSubmit: (values: Record<string, unknown>) => void;
@@ -267,7 +273,7 @@ export function RequirementVersionEditDrawer({
       }
       open={Boolean(version)}
       onClose={onClose}
-      size="default"
+      size="large"
       footer={
         <DrawerFooterActions
           submitting={submitting}
@@ -279,7 +285,13 @@ export function RequirementVersionEditDrawer({
     >
       {version ? (
         <Form form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
-          <RequirementVersionFields projectOptions={projectOptions} />
+          <RequirementVersionFields
+            form={form}
+            people={people}
+            peopleLoading={peopleLoading}
+            peopleError={peopleError}
+            projectOptions={projectOptions}
+          />
         </Form>
       ) : null}
     </Drawer>

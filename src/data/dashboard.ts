@@ -310,7 +310,25 @@ export const dashboardData: DashboardData = {
       status: "进行中",
       startDate: "2026-05-01",
       releaseDate: "2026-06-01",
-      goal: "集中交付健康度解释、风险聚合和管理层视图，提升项目状态透明度。"
+      goal: "集中交付健康度解释、风险聚合和管理层视图，提升项目状态透明度。",
+      milestones: [
+        {
+          id: "rv-1-4-m-1",
+          title: "需求评审完成",
+          status: "已完成",
+          dueDate: "2026-05-12",
+          owner: "林夏",
+          note: "冻结健康度解释、风险聚合和管理层视图范围。"
+        },
+        {
+          id: "rv-1-4-m-2",
+          title: "提测验收",
+          status: "进行中",
+          dueDate: "2026-06-01",
+          owner: "韩越",
+          note: "完成联调、Bug 回归和上线验收。"
+        }
+      ]
     },
     {
       id: "rv-2026-05-ai",
@@ -319,7 +337,25 @@ export const dashboardData: DashboardData = {
       status: "规划中",
       startDate: "2026-05-10",
       releaseDate: "2026-06-15",
-      goal: "把文档拆解、AI 周报和任务联动纳入一个可验收版本。"
+      goal: "把文档拆解、AI 周报和任务联动纳入一个可验收版本。",
+      milestones: [
+        {
+          id: "rv-2026-05-ai-m-1",
+          title: "版本启动",
+          status: "进行中",
+          dueDate: "2026-05-10",
+          owner: "许诺",
+          note: "确认 AI 周报、文档拆解和任务联动的交付范围。"
+        },
+        {
+          id: "rv-2026-05-ai-m-2",
+          title: "灰度验收",
+          status: "未开始",
+          dueDate: "2026-06-15",
+          owner: "许诺",
+          note: "选择两个项目验证自动周报和待办采纳率。"
+        }
+      ]
     },
     {
       id: "rv-backlog",
@@ -328,7 +364,17 @@ export const dashboardData: DashboardData = {
       status: "规划中",
       startDate: "2026-05-01",
       releaseDate: "2026-06-30",
-      goal: "收纳尚未进入明确版本的需求，评审后再绑定到目标版本。"
+      goal: "收纳尚未进入明确版本的需求，评审后再绑定到目标版本。",
+      milestones: [
+        {
+          id: "rv-backlog-m-1",
+          title: "需求池梳理",
+          status: "进行中",
+          dueDate: "2026-05-15",
+          owner: "",
+          note: "定期评审未规划需求，确认是否进入明确版本。"
+        }
+      ]
     }
   ],
   documents: [

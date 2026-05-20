@@ -1,9 +1,11 @@
 "use client";
 
-import { Button, Empty, Flex, Popconfirm, Progress, Space, Table, Tag, Tooltip, Typography } from "antd";
-import { DeleteOutlined, EditOutlined, NodeIndexOutlined, PlusOutlined } from "@ant-design/icons";
+import { Button, Empty, Flex, Popconfirm, Progress, Space, Table, Tag, Timeline, Tooltip, Typography } from "antd";
+import { CalendarOutlined, DeleteOutlined, EditOutlined, NodeIndexOutlined, PlusOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
+import dayjs from "dayjs";
 import type { BugReport, Requirement, RequirementVersion, Task } from "@/types/dashboard";
+import { milestoneColor } from "@/components/project-management-platform/constants";
 import { PageTitle, TableView } from "@/components/project-management-platform/shared/page-shell";
 
 const { Text, Paragraph } = Typography;
@@ -143,6 +145,8 @@ function getVersionStats({
   ).length;
   const reviewCount = scopedRequirements.filter((requirement) => requirement.status === "评审中").length;
   const highPriorityCount = scopedRequirements.filter((requirement) => requirement.priority !== "P2").length;
+  const milestones = version.milestones ?? [];
+  const finishedMilestoneCount = milestones.filter((milestone) => milestone.status === "已完成").length;
   const progress = version.status === "已发布"
     ? 100
     : scopedRequirements.length
@@ -153,6 +157,8 @@ function getVersionStats({
     scopedBugs,
     scopedRequirements,
     scopedTasks,
+    milestones,
+    finishedMilestoneCount,
     reviewCount,
     highPriorityCount,
     progress
@@ -253,6 +259,7 @@ function RequirementVersionDetail({
       }
     >
       <VersionSummary version={selectedVersion} stats={stats} />
+      <VersionMilestoneTimeline version={selectedVersion} stats={stats} />
       <Table
         className="requirement-detail-table"
         rowKey="id"
@@ -305,6 +312,57 @@ function VersionSummary({
           {stats.scopedTasks.length} / {stats.scopedBugs.length}
         </Text>
       </div>
+      <div className="requirement-version-summary-item">
+        <Text type="secondary">里程碑</Text>
+        <Text strong>
+          {stats.finishedMilestoneCount} / {stats.milestones.length}
+        </Text>
+      </div>
+    </div>
+  );
+}
+
+// 版本详情页直接展示创建版本时录入的里程碑，让版本成为真实交付检查点。
+function VersionMilestoneTimeline({
+  version,
+  stats
+}: {
+  version: RequirementVersion;
+  stats: ReturnType<typeof getVersionStats>;
+}) {
+  const milestones = [...stats.milestones].sort(
+    (left, right) => dayjs(left.dueDate).valueOf() - dayjs(right.dueDate).valueOf()
+  );
+
+  if (!milestones.length) {
+    return null;
+  }
+
+  return (
+    <div className="requirement-version-milestones">
+      <Flex justify="space-between" align="center" className="requirement-version-milestones-header">
+        <Space>
+          <CalendarOutlined />
+          <Text strong>版本里程碑</Text>
+        </Space>
+        <Tag>{version.name}</Tag>
+      </Flex>
+      <Timeline
+        items={milestones.map((milestone) => ({
+          color: milestoneColor[milestone.status] === "default" ? "gray" : milestoneColor[milestone.status],
+          content: (
+            <Space orientation="vertical" size={4}>
+              <Space wrap>
+                <Text strong>{milestone.title}</Text>
+                <Tag color={milestoneColor[milestone.status]}>{milestone.status}</Tag>
+                <Tag icon={<CalendarOutlined />}>{milestone.dueDate}</Tag>
+                {milestone.owner ? <Tag>{milestone.owner}</Tag> : null}
+              </Space>
+              <Text type="secondary">{milestone.note}</Text>
+            </Space>
+          )
+        }))}
+      />
     </div>
   );
 }
@@ -367,6 +425,10 @@ function RequirementVersionCard({
         <div>
           <Text type="secondary">高优先级</Text>
           <Text strong>{stats.highPriorityCount}</Text>
+        </div>
+        <div>
+          <Text type="secondary">里程碑</Text>
+          <Text strong>{stats.finishedMilestoneCount}/{stats.milestones.length}</Text>
         </div>
         <div>
           <Text type="secondary">任务/Bug</Text>

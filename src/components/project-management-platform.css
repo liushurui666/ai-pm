@@ -477,7 +477,7 @@
 }
 
 .requirement-version-meta {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(86px, 1fr));
   margin-top: auto;
 }
 
@@ -496,6 +496,20 @@
 .requirement-version-summary {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   margin-bottom: 16px;
+}
+
+.requirement-version-milestones {
+  margin-bottom: 16px;
+  padding: 14px 16px 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.requirement-version-milestones-header {
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
 .requirement-version-empty {
@@ -701,46 +715,46 @@
   gap: 12px;
 }
 
-.project-milestone-form {
+.milestone-form {
   margin-top: 8px;
   padding-top: 14px;
   border-top: 1px solid var(--border);
 }
 
-.project-milestone-form-header {
+.milestone-form-header {
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 12px;
 }
 
-.project-milestone-form-item {
+.milestone-form-item {
   padding: 14px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
 }
 
-.project-milestone-form-grid {
+.milestone-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   align-items: start;
 }
 
-.project-milestone-form-grid .ant-form-item {
+.milestone-form-grid .ant-form-item {
   margin-bottom: 12px;
 }
 
-.project-milestone-form-grid .ant-form-item-control-input-content {
+.milestone-form-grid .ant-form-item-control-input-content {
   min-width: 0;
 }
 
-.project-milestone-form-grid .ant-picker,
-.project-milestone-form-grid .ant-select {
+.milestone-form-grid .ant-picker,
+.milestone-form-grid .ant-select {
   width: 100%;
 }
 
-.project-milestone-note {
+.milestone-note {
   margin-bottom: 0;
 }
 
@@ -1174,7 +1188,7 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .project-milestone-form-grid {
+  .milestone-form-grid {
     grid-template-columns: 1fr;
   }
 

@@ -13,23 +13,7 @@ export function getCreateInitialValues(type: DashboardEntityType, currentUser?: 
       health: 80,
       dueDate: dayjs().add(14, "day"),
       team: 1,
-      riskCount: 0,
-      milestones: [
-        {
-          title: "项目启动",
-          status: "进行中",
-          dueDate: dayjs(),
-          owner: "",
-          note: "确认项目目标、范围和负责人。"
-        },
-        {
-          title: "阶段验收",
-          status: "未开始",
-          dueDate: dayjs().add(14, "day"),
-          owner: "",
-          note: "检查交付物、风险和上线准备。"
-        }
-      ]
+      riskCount: 0
     };
   }
 
@@ -67,7 +51,23 @@ export function getCreateInitialValues(type: DashboardEntityType, currentUser?: 
     return {
       status: "规划中",
       startDate: dayjs(),
-      releaseDate: dayjs().add(30, "day")
+      releaseDate: dayjs().add(30, "day"),
+      milestones: [
+        {
+          title: "版本启动",
+          status: "进行中",
+          dueDate: dayjs(),
+          owner: "",
+          note: "确认版本目标、需求范围和负责人。"
+        },
+        {
+          title: "提测验收",
+          status: "未开始",
+          dueDate: dayjs().add(30, "day"),
+          owner: "",
+          note: "检查需求、任务、Bug 和上线准备。"
+        }
+      ]
     };
   }
 
@@ -111,7 +111,11 @@ export function getRequirementVersionFormValues(version: RequirementVersion) {
   return {
     ...version,
     startDate: dayjs(version.startDate),
-    releaseDate: dayjs(version.releaseDate)
+    releaseDate: dayjs(version.releaseDate),
+    milestones: version.milestones.map((milestone) => ({
+      ...milestone,
+      dueDate: dayjs(milestone.dueDate)
+    }))
   };
 }
 

@@ -41,7 +41,7 @@ export function CreateRecordDrawer({
       title={type ? `新建${label}` : "新建"}
       open={open}
       onClose={onClose}
-      size={type === "project" ? "large" : "default"}
+      size={type === "project" || type === "requirementVersion" ? "large" : "default"}
       footer={
         <DrawerFooterActions
           submitting={submitting}
@@ -84,7 +84,15 @@ export function CreateRecordDrawer({
               projectOptions={projectOptions}
             />
           ) : null}
-          {type === "requirementVersion" ? <RequirementVersionFields projectOptions={projectOptions} /> : null}
+          {type === "requirementVersion" ? (
+            <RequirementVersionFields
+              form={form}
+              people={people}
+              peopleLoading={peopleLoading}
+              peopleError={peopleError}
+              projectOptions={projectOptions}
+            />
+          ) : null}
           {type === "requirement" ? (
             <RequirementFields
               form={form}
