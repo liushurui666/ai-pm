@@ -229,6 +229,7 @@
   position: sticky;
   top: 68px;
   z-index: 19;
+  display: none;
   padding: 12px 14px 0;
   background: var(--header-bg);
   backdrop-filter: blur(18px);
@@ -1099,6 +1100,17 @@
 }
 
 @media (max-width: 768px) {
+  /* 导航显隐交给 CSS 首屏处理，避免断点 hook 水合后才修正布局造成 F5 闪乱。 */
+  .pm-sider {
+    display: none !important;
+  }
+
+  .pm-sider + .pm-main,
+  .pm-sider.ant-layout-sider-collapsed + .pm-main {
+    width: 100%;
+    margin-left: 0;
+  }
+
   .pm-header {
     height: auto !important;
     min-height: 0;
@@ -1142,6 +1154,7 @@
 
   .pm-mobile-nav {
     position: static;
+    display: block;
   }
 
   .pm-hero {

@@ -1,6 +1,5 @@
 "use client";
 
-import "./project-management-platform.css";
 import {
   Alert,
   App,
@@ -176,7 +175,7 @@ export function ProjectManagementPlatform({
   const [messageApi, messageContextHolder] = message.useMessage();
   const { mode: themeMode, effectiveTheme, cycleMode } = useThemePreference();
   const screens = useBreakpoint();
-  const isMobile = !screens.md;
+  const isMobile = screens.md === false;
   const permissions = data?.meta?.permissions;
   const canCreateRequirements = Boolean(permissions?.canCreateRequirements);
   const canEditRequirements = Boolean(permissions?.canEditRequirements);
@@ -1191,24 +1190,23 @@ export function ProjectManagementPlatform({
       <App>
         {messageContextHolder}
         <Layout className="pm-shell">
-          {!isMobile ? (
-            <Sider
-              width={248}
-              collapsed={collapsed}
-              breakpoint="lg"
-              className="pm-sider"
-              trigger={null}
-            >
-              <Brand collapsed={collapsed} />
-              <Menu
-                theme="dark"
-                mode="inline"
-                selectedKeys={[navigationView]}
-                items={menuItems}
-                onClick={(item) => switchView(item.key as AppView)}
-              />
-            </Sider>
-          ) : null}
+          {/* 桌面侧边栏始终输出，由 CSS 媒体查询控制显示，避免 F5 首屏断点未知时布局乱跳。 */}
+          <Sider
+            width={248}
+            collapsed={collapsed}
+            breakpoint="lg"
+            className="pm-sider"
+            trigger={null}
+          >
+            <Brand collapsed={collapsed} />
+            <Menu
+              theme="dark"
+              mode="inline"
+              selectedKeys={[navigationView]}
+              items={menuItems}
+              onClick={(item) => switchView(item.key as AppView)}
+            />
+          </Sider>
 
           <Layout className="pm-main">
             <Header className="pm-header">
@@ -1353,22 +1351,21 @@ export function ProjectManagementPlatform({
               </Space>
             </Header>
 
-            {isMobile ? (
-              <div className="pm-mobile-nav">
-                <Segmented
-                  block
-                  value={navigationView}
-                  onChange={(value) => switchView(String(value) as AppView)}
-                  options={[
-                    { label: "工作台", value: "overview" },
-                    { label: "项目", value: "projects" },
-                    { label: "任务", value: "tasks" },
-                    { label: "Bug", value: "bugs" },
-                    { label: "风险", value: "risks" }
-                  ]}
-                />
-              </div>
-            ) : null}
+            {/* 移动导航也常驻 DOM，用 CSS 在小屏展示，避免刷新水合前后切换整块导航。 */}
+            <div className="pm-mobile-nav">
+              <Segmented
+                block
+                value={navigationView}
+                onChange={(value) => switchView(String(value) as AppView)}
+                options={[
+                  { label: "工作台", value: "overview" },
+                  { label: "项目", value: "projects" },
+                  { label: "任务", value: "tasks" },
+                  { label: "Bug", value: "bugs" },
+                  { label: "风险", value: "risks" }
+                ]}
+              />
+            </div>
 
             <Content className="pm-content">
               {loading || !data ? (

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { AntdRegistry } from "@ant-design/nextjs-registry";
 import { themeInitScript } from "@/components/theme-init-script";
 import "./globals.css";
+import "@/components/project-management-platform.css";
 
 export const metadata: Metadata = {
   title: "AI PM 项目管理平台",
