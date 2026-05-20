@@ -51,6 +51,8 @@ const DEFAULT_REQUIREMENT_VERSION: RequirementVersion = {
   goal: "收纳尚未进入明确版本的需求，评审后再绑定到目标版本。"
 };
 const DEFAULT_REQUIREMENT_VERSION_ID = DEFAULT_REQUIREMENT_VERSION.id;
+const defaultNotificationScenes: MemberNotificationScene[] = ["taskAssigned", "requirementChanged", "bugFlowChanged"];
+const validNotificationScenes = new Set<MemberNotificationScene>(defaultNotificationScenes);
 
 type LocalDatabase = Omit<DashboardData, "meta"> & {
   updatedAt: string;
@@ -961,14 +963,30 @@ function normalizeNotificationProvider(value: unknown): MemberNotificationChanne
   return ["feishu", "email", "webhook", "telegram"].includes(provider) ? provider as MemberNotificationChannelProvider : "feishu";
 }
 
-function normalizeNotificationScenes(value: unknown, fallback: MemberNotificationScene[] = ["taskAssigned", "requirementChanged"]) {
+function withDefaultBugFlowScene(scenes: MemberNotificationScene[]): MemberNotificationScene[] {
+  const normalizedScenes = Array.from(new Set(scenes));
+
+  return normalizedScenes.includes("taskAssigned") && !normalizedScenes.includes("bugFlowChanged")
+    ? [...normalizedScenes, "bugFlowChanged"]
+    : normalizedScenes;
+}
+
+function normalizeNotificationScenes(
+  value: unknown,
+  fallback: MemberNotificationScene[] = defaultNotificationScenes
+): MemberNotificationScene[] {
   const scenes = Array.isArray(value)
     ? value
         .map((scene) => asText(scene))
-        .filter((scene): scene is MemberNotificationScene => scene === "taskAssigned" || scene === "requirementChanged")
+        .filter((scene): scene is MemberNotificationScene => validNotificationScenes.has(scene as MemberNotificationScene))
     : [];
 
-  return scenes.length ? Array.from(new Set(scenes)) : fallback;
+  // 旧数据没有 Bug 流转场景；只要渠道仍开启任务通知，就默认补上，避免升级后关键节点不发消息。
+  if (scenes.length) {
+    return withDefaultBugFlowScene(scenes);
+  }
+
+  return withDefaultBugFlowScene(fallback);
 }
 
 function getLegacyNotificationScenes(notification: Record<string, unknown>, fallback?: DashboardMember["notification"]) {
@@ -976,6 +994,7 @@ function getLegacyNotificationScenes(notification: Record<string, unknown>, fall
 
   if (asBoolean(notification.taskAssigned, fallback?.taskAssigned ?? true)) {
     scenes.push("taskAssigned");
+    scenes.push("bugFlowChanged");
   }
 
   if (asBoolean(notification.requirementChanged, fallback?.requirementChanged ?? true)) {
@@ -1221,7 +1240,7 @@ function createMemberFromUser(user: FeishuUser, role: MemberRole, workspaceId = 
               feishuOpenId: user.openId,
               feishuUnionId: user.unionId,
               feishuUserId: user.userId,
-              scenes: ["taskAssigned", "requirementChanged"]
+              scenes: [...defaultNotificationScenes]
             }
           ]
         : [],
@@ -1804,9 +1823,12 @@ function findNotificationMember(data: LocalDatabase, workspaceId: string, values
 
 async function notifyOwner(data: LocalDatabase, workspaceId: string, type: DashboardEntityType, values: Record<string, unknown>) {
   const member = findNotificationMember(data, workspaceId, values);
-  const notificationScene: MemberNotificationScene = type === "requirement" || type === "requirementVersion"
-    ? "requirementChanged"
-    : "taskAssigned";
+  const notificationScene: MemberNotificationScene =
+    type === "requirement" || type === "requirementVersion"
+      ? "requirementChanged"
+      : type === "bug"
+        ? "bugFlowChanged"
+        : "taskAssigned";
   const feishuChannel = member?.notification.channels.find(
     (channel) => channel.provider === "feishu" && channel.enabled && channel.scenes.includes(notificationScene)
   );
@@ -1838,10 +1860,24 @@ async function notifyOwner(data: LocalDatabase, workspaceId: string, type: Dashb
   }
 
   try {
+    const recordTitle = getRecordTitle(type, values);
+
     await sendFeishuBotTaskCard({
       openId: ownerOpenId,
-      title: `你被设置为${getEntityLabel(type)}负责人`,
-      text: `**${getRecordTitle(type, values)}**\n\n请在 AI PM 平台查看详情并确认下一步动作。`,
+      title: type === "bug" ? "你有一个 Bug 需要处理" : `你被设置为${getEntityLabel(type)}负责人`,
+      text:
+        type === "bug"
+          ? [
+              `**${recordTitle}**`,
+              "",
+              `提交人：${asText(values.reporter, "未填写")}`,
+              `严重程度：${asText(values.severity, "一般")}`,
+              `当前状态：${asText(values.status, "新建")}`,
+              `关联版本：${asText(values.versionName, "未规划")}`,
+              "",
+              "测试已提交或重新打开该 Bug，请开发负责人进入 AI PM 查看复现步骤并继续定位处理。"
+            ].join("\n")
+          : `**${recordTitle}**\n\n请在 AI PM 平台查看详情并确认下一步动作。`,
       view: type === "project" ? "projects" : type === "bug" ? "bugs" : type === "task" ? "tasks" : "overview"
     });
 
@@ -1868,7 +1904,7 @@ async function notifyBugTesterOnReady(
     .filter(Boolean);
   const member = findMemberByNotificationIdentities(data, workspaceId, testerIdentities);
   const feishuChannel = member?.notification.channels.find(
-    (channel) => channel.provider === "feishu" && channel.enabled && channel.scenes.includes("taskAssigned")
+    (channel) => channel.provider === "feishu" && channel.enabled && channel.scenes.includes("bugFlowChanged")
   );
   const testerOpenId = feishuChannel?.feishuOpenId ?? feishuChannel?.target ?? member?.notification.feishuOpenId;
 
@@ -1893,7 +1929,7 @@ async function notifyBugTesterOnReady(
   }
 
   if (!feishuChannel) {
-    return `未发送测试通知：测试人员 ${member.name} 已关闭任务通知场景。`;
+    return `未发送测试通知：测试人员 ${member.name} 已关闭 Bug 流转通知场景。`;
   }
 
   try {
@@ -1916,6 +1952,32 @@ async function notifyBugTesterOnReady(
   } catch (error) {
     return `测试通知失败：${error instanceof Error ? error.message : "未知错误"}。`;
   }
+}
+
+function shouldNotifyBugDeveloperOnOpen(previousBug: BugReport, nextBug: BugReport) {
+  const developerStatuses: BugReport["status"][] = ["新建", "定位中", "修复中"];
+
+  return !developerStatuses.includes(previousBug.status) && developerStatuses.includes(nextBug.status);
+}
+
+// 测试回归不通过时会把 Bug 重新打开，这里把处理权清楚地转回开发负责人。
+async function notifyBugDeveloperOnOpen(
+  data: LocalDatabase,
+  workspaceId: string,
+  previousBug: BugReport,
+  nextBug: BugReport
+) {
+  if (!shouldNotifyBugDeveloperOnOpen(previousBug, nextBug)) {
+    return "";
+  }
+
+  const values: Record<string, unknown> = {
+    ...nextBug,
+    status: nextBug.status,
+    title: nextBug.title
+  };
+
+  return notifyOwner(data, workspaceId, "bug", values);
 }
 
 function getOwnerNotificationSignature(values: Record<string, unknown>) {
@@ -2323,9 +2385,19 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
 
   const savedData = applyProjectMetrics(data);
   const savedRecord = findRecord(savedData, type, id) ?? typedRecord;
+  const shouldNotifyBugOpen =
+    type === "bug" && shouldNotifyBugDeveloperOnOpen(existingRecord as BugReport, savedRecord as BugReport);
   const notifyMessages = [
-    shouldNotifyOwnerUpdate(type, existingRecord, scopedValues)
+    shouldNotifyOwnerUpdate(type, existingRecord, scopedValues) && !shouldNotifyBugOpen
       ? await notifyOwner(savedData, getWorkspaceId(existingRecord), type, scopedValues)
+      : "",
+    type === "bug"
+      ? await notifyBugDeveloperOnOpen(
+          savedData,
+          getWorkspaceId(existingRecord),
+          existingRecord as BugReport,
+          savedRecord as BugReport
+        )
       : "",
     type === "bug"
       ? await notifyBugTesterOnReady(

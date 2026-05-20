@@ -220,7 +220,7 @@ export type MemberIdentity = {
 };
 
 export type MemberNotificationChannelProvider = "feishu" | "email" | "webhook" | "telegram";
-export type MemberNotificationScene = "taskAssigned" | "requirementChanged";
+export type MemberNotificationScene = "taskAssigned" | "requirementChanged" | "bugFlowChanged";
 
 export type MemberNotificationChannel = {
   id: string;

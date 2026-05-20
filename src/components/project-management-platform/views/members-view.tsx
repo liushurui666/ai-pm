@@ -42,7 +42,8 @@ const channelProviderOptions: Array<{ value: MemberNotificationChannelProvider; 
 
 const notificationSceneOptions: Array<{ value: MemberNotificationScene; label: string }> = [
   { value: "taskAssigned", label: "任务分配" },
-  { value: "requirementChanged", label: "需求变更" }
+  { value: "requirementChanged", label: "需求变更" },
+  { value: "bugFlowChanged", label: "Bug 流转" }
 ];
 
 function getRoleMeta(role: MemberRole) {
@@ -78,7 +79,7 @@ function createDefaultNotificationChannel(provider: MemberNotificationChannelPro
     id: "",
     provider,
     enabled: true,
-    scenes: ["taskAssigned", "requirementChanged"] as MemberNotificationScene[],
+    scenes: ["taskAssigned", "requirementChanged", "bugFlowChanged"] as MemberNotificationScene[],
     target: "",
     telegramChatId: ""
   };
@@ -99,8 +100,11 @@ function getMemberNotificationFormValues(member: DashboardMember) {
             feishuUserId: member.notification.feishuUserId || "",
             scenes: [
               member.notification.taskAssigned ? "taskAssigned" : "",
-              member.notification.requirementChanged ? "requirementChanged" : ""
-            ].filter((scene): scene is MemberNotificationScene => scene === "taskAssigned" || scene === "requirementChanged")
+              member.notification.requirementChanged ? "requirementChanged" : "",
+              "bugFlowChanged"
+            ].filter((scene): scene is MemberNotificationScene =>
+              scene === "taskAssigned" || scene === "requirementChanged" || scene === "bugFlowChanged"
+            )
           }
         ]
         : []
