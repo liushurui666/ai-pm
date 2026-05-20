@@ -916,12 +916,6 @@
   margin: 0;
 }
 
-.bug-edit-meta-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
 .bug-empty-state {
   padding: 14px;
   border: 1px dashed var(--border);

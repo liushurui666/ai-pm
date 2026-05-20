@@ -96,8 +96,6 @@ import {
   BugsView,
   bugFlowActionColor,
   bugFlowActionLabel,
-  bugSeverityColor,
-  bugStatusColor,
   formatBugCreatedAt,
   getAttachmentLabel,
   getBugFlowDescription,
@@ -2192,7 +2190,7 @@ function BugRouteEditView({
       <PageTitle
         icon={<BugOutlined />}
         title="编辑 Bug"
-        subtitle="在当前页面修改 Bug 信息，并查看流转记录。"
+        subtitle={`创建时间 ${formatBugCreatedAt(bug.createdAt)} · 在当前页面修改 Bug 信息，并查看流转记录。`}
         extra={
           <Space wrap>
             <Button icon={<ArrowLeftOutlined />} onClick={onBack}>
@@ -2247,27 +2245,6 @@ function BugRouteEditView({
         </Card>
 
         <Space orientation="vertical" size={16} className="bug-edit-side">
-          <Card title="当前状态" className="bug-edit-side-card">
-            <Space orientation="vertical" size={12} className="pm-wide">
-              <Space size={8} wrap>
-                <Tag color={bugSeverityColor[bug.severity]}>{bug.severity}</Tag>
-                <Tag color={bugStatusColor[bug.status]}>{bug.status}</Tag>
-              </Space>
-              <Typography.Title level={4}>{bug.title}</Typography.Title>
-              <Text type="secondary">{bug.versionName ?? "未规划需求池"}</Text>
-              <div className="bug-edit-meta-list">
-                <div>
-                  <Text type="secondary">负责人</Text>
-                  <OwnerInline name={bug.owner} avatarUrl={bug.ownerAvatarUrl} />
-                </div>
-                <div>
-                  <Text type="secondary">创建时间</Text>
-                  <Text>{formatBugCreatedAt(bug.createdAt)}</Text>
-                </div>
-              </div>
-            </Space>
-          </Card>
-
           <Card title="复现材料" className="bug-edit-side-card">
             {bug.attachments?.length ? (
               <div className="bug-attachment-list">
