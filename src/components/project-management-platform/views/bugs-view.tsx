@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Card, Col, Popconfirm, Row, Segmented, Select, Space, Switch, Table, Tag, Tooltip, Typography } from "antd";
+import { Button, Card, Col, Empty, Popconfirm, Row, Segmented, Select, Space, Switch, Table, Tag, Timeline, Tooltip, Typography } from "antd";
 import {
   AlertOutlined,
   BugOutlined,
@@ -41,6 +41,24 @@ const bugStatusColor: Record<BugReport["status"], string> = {
   修复中: "blue",
   待验证: "purple",
   已关闭: "green"
+};
+
+const bugFlowActionLabel: Record<NonNullable<BugReport["flowRecords"]>[number]["action"], string> = {
+  created: "创建 Bug",
+  statusChanged: "状态流转",
+  ownerChanged: "负责人变更",
+  severityChanged: "严重程度变更",
+  versionChanged: "关联版本变更",
+  updated: "更新信息"
+};
+
+const bugFlowActionColor: Record<NonNullable<BugReport["flowRecords"]>[number]["action"], string> = {
+  created: "blue",
+  statusChanged: "purple",
+  ownerChanged: "cyan",
+  severityChanged: "orange",
+  versionChanged: "geekblue",
+  updated: "gray"
 };
 
 function normalizeIdentity(value?: string) {
@@ -100,6 +118,22 @@ function formatAttachmentSize(size: number) {
 
 function getAttachmentLabel(attachment: BugAttachment) {
   return `${attachment.type === "video" ? "视频" : "图片"} · ${formatAttachmentSize(attachment.size)}`;
+}
+
+function getBugFlowRecords(bug: BugReport) {
+  return [...(bug.flowRecords ?? [])].sort((left, right) => dayjs(right.at).valueOf() - dayjs(left.at).valueOf());
+}
+
+function getBugFlowDescription(record: NonNullable<BugReport["flowRecords"]>[number]) {
+  if (record.from && record.to) {
+    return `${record.from} -> ${record.to}`;
+  }
+
+  if (record.to) {
+    return record.to;
+  }
+
+  return record.note ?? "已记录流转";
 }
 
 export function BugsView({
@@ -351,6 +385,32 @@ export function BugsView({
                     </div>
                   </Col>
                 ) : null}
+                <Col span={24}>
+                  <Text strong>流转记录</Text>
+                  {getBugFlowRecords(bug).length ? (
+                    <Timeline
+                      className="bug-flow-timeline"
+                      items={getBugFlowRecords(bug).map((record) => ({
+                        color: bugFlowActionColor[record.action],
+                        content: (
+                          <Space orientation="vertical" size={4}>
+                            <Space size={8} wrap>
+                              <Text strong>{bugFlowActionLabel[record.action]}</Text>
+                              <Tag>{getBugFlowDescription(record)}</Tag>
+                              <Text type="secondary">{dayjs(record.at).format("YYYY-MM-DD HH:mm")}</Text>
+                            </Space>
+                            <Text type="secondary">
+                              {record.operator}
+                              {record.note ? ` · ${record.note}` : ""}
+                            </Text>
+                          </Space>
+                        )
+                      }))}
+                    />
+                  ) : (
+                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无流转记录" />
+                  )}
+                </Col>
               </Row>
             )
           }}

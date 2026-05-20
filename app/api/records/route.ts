@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    return NextResponse.json(await createDashboardRecord(body.type, body.values, body.workspaceId));
+    return NextResponse.json(await createDashboardRecord(body.type, body.values, body.workspaceId, session?.user));
   } catch (error) {
     return NextResponse.json(
       {
@@ -141,7 +141,7 @@ export async function PATCH(request: NextRequest) {
   }
 
   try {
-    return NextResponse.json(await updateDashboardRecord(body.type, body.id, body.values));
+    return NextResponse.json(await updateDashboardRecord(body.type, body.id, body.values, session?.user));
   } catch (error) {
     return NextResponse.json(
       {

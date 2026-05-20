@@ -51,6 +51,18 @@ export type BugAttachment = {
   uploadedAt: string;
 };
 
+export type BugFlowAction = "created" | "statusChanged" | "ownerChanged" | "severityChanged" | "versionChanged" | "updated";
+
+export type BugFlowRecord = {
+  id: string;
+  action: BugFlowAction;
+  at: string;
+  operator: string;
+  from?: string;
+  to?: string;
+  note?: string;
+};
+
 export type Task = {
   id: string;
   workspaceId?: string;
@@ -110,6 +122,7 @@ export type BugReport = {
   expected: string;
   actual: string;
   attachments?: BugAttachment[];
+  flowRecords?: BugFlowRecord[];
   dueDate: string;
 };
 

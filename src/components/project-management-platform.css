@@ -867,6 +867,14 @@
   margin-top: 8px;
 }
 
+.bug-flow-timeline {
+  margin-top: 12px;
+}
+
+.bug-flow-timeline .ant-timeline-item-last {
+  padding-bottom: 0;
+}
+
 .bug-row-actions {
   width: 100%;
   justify-content: center;

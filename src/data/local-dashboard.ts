@@ -63,7 +63,7 @@ function cloneSeedData(): LocalDatabase {
   } as LocalDatabase;
 }
 
-function createLocalId(type: DashboardEntityType | "member" | "milestone" | "notificationChannel" | "workspace") {
+function createLocalId(type: DashboardEntityType | "bugFlow" | "member" | "milestone" | "notificationChannel" | "workspace") {
   return `${type}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
@@ -217,6 +217,108 @@ function asBugAttachments(value: unknown): BugAttachment[] {
     })
     .filter((item): item is BugAttachment => Boolean(item))
     .slice(0, 8);
+}
+
+function normalizeBugFlowAction(value: unknown): NonNullable<BugReport["flowRecords"]>[number]["action"] {
+  const action = asText(value, "updated");
+
+  if (["created", "statusChanged", "ownerChanged", "severityChanged", "versionChanged", "updated"].includes(action)) {
+    return action as NonNullable<BugReport["flowRecords"]>[number]["action"];
+  }
+
+  return "updated";
+}
+
+function getBugFlowOperator(user?: FeishuUser | null, fallback = "系统") {
+  return user?.name || user?.enName || user?.email || user?.openId || fallback;
+}
+
+function createBugFlowRecord({
+  action,
+  at = new Date().toISOString(),
+  from,
+  note,
+  operator,
+  to
+}: {
+  action: NonNullable<BugReport["flowRecords"]>[number]["action"];
+  at?: string;
+  from?: string;
+  note?: string;
+  operator: string;
+  to?: string;
+}): NonNullable<BugReport["flowRecords"]>[number] {
+  return {
+    id: createLocalId("bugFlow"),
+    action,
+    at,
+    operator,
+    from,
+    to,
+    note
+  };
+}
+
+function getFallbackBugFlowAt(values: Record<string, unknown>) {
+  const explicitAt = asText(values.flowRecordAt);
+
+  if (explicitAt) {
+    return explicitAt;
+  }
+
+  const dueDate = asDateString(values.dueDate, dayjs().add(3, "day").format("YYYY-MM-DD"));
+
+  return dayjs(dueDate).subtract(3, "day").startOf("day").toISOString();
+}
+
+function normalizeBugFlowRecords(
+  value: unknown,
+  fallback: {
+    bugId: string;
+    operator: string;
+    status: BugReport["status"];
+    values: Record<string, unknown>;
+  }
+): NonNullable<BugReport["flowRecords"]> {
+  const records = Array.isArray(value)
+    ? value
+        .map((item, index) => {
+          if (!item || typeof item !== "object") {
+            return null;
+          }
+
+          const record = item as Record<string, unknown>;
+          const action = normalizeBugFlowAction(record.action);
+          const at = asText(record.at) || getFallbackBugFlowAt(fallback.values);
+          const operator = asText(record.operator, fallback.operator);
+
+          return {
+            id: asText(record.id, `bugFlow-${fallback.bugId}-${index}`),
+            action,
+            at,
+            operator,
+            ...(asText(record.from) ? { from: asText(record.from) } : {}),
+            ...(asText(record.to) ? { to: asText(record.to) } : {}),
+            ...(asText(record.note) ? { note: asText(record.note) } : {})
+          };
+        })
+        .filter(Boolean) as NonNullable<BugReport["flowRecords"]>
+    : [];
+
+  if (records.length) {
+    return records.slice(-30);
+  }
+
+  return [
+    {
+      id: `bugFlow-${fallback.bugId}-created`,
+      action: "created",
+      at: getFallbackBugFlowAt(fallback.values),
+      operator: fallback.operator,
+      to: fallback.status,
+      note: "创建 Bug"
+    }
+  ];
 }
 
 function asOwnerName(values: Record<string, unknown>) {
@@ -644,23 +746,34 @@ function normalizeExistingTask(task: Task, versions: RequirementVersion[]): Task
 }
 
 function normalizeCreateBug(values: Record<string, unknown>, id = createLocalId("bug")): BugReport {
+  const status = normalizeBugStatus(asText(values.status, "新建"));
+  const owner = asOwnerName(values);
+  const reporter = asText(values.reporter, "未填写");
+  const flowOperator = asText(values.flowRecordOperator, reporter || owner || "系统");
+
   return {
     id,
     workspaceId: asText(values.workspaceId, DEFAULT_WORKSPACE.id),
     title: asText(values.title, "未命名 Bug"),
-    status: normalizeBugStatus(asText(values.status, "新建")),
+    status,
     severity: normalizeBugSeverity(asText(values.severity, "一般")),
     project: asText(values.project, "未关联项目"),
     versionId: asText(values.versionId) || DEFAULT_REQUIREMENT_VERSION.id,
     versionName: asText(values.versionName) || DEFAULT_REQUIREMENT_VERSION.name,
-    reporter: asText(values.reporter, "未填写"),
-    owner: asOwnerName(values),
+    reporter,
+    owner,
     ...createOwnerLink(values),
     environment: asText(values.environment, "未填写"),
     reproduction: asText(values.reproduction, "暂无复现步骤。"),
     expected: asText(values.expected, "暂无预期结果。"),
     actual: asText(values.actual, "暂无实际结果。"),
     attachments: asBugAttachments(values.attachments),
+    flowRecords: normalizeBugFlowRecords(values.flowRecords, {
+      bugId: id,
+      operator: flowOperator,
+      status,
+      values
+    }),
     dueDate: asDateString(values.dueDate, dayjs().add(3, "day").format("YYYY-MM-DD"))
   };
 }
@@ -675,10 +788,85 @@ function normalizeExistingBug(bug: BugReport, versions: RequirementVersion[]): B
       versionId: matchedVersion.id,
       versionName: matchedVersion.name,
       status: bug.status,
-      severity: bug.severity
+      severity: bug.severity,
+      flowRecords: bug.flowRecords,
+      flowRecordOperator: bug.reporter
     },
     bug.id
   );
+}
+
+function buildBugUpdateFlowRecords(previous: BugReport, next: BugReport, operator: string) {
+  const at = new Date().toISOString();
+  const records: NonNullable<BugReport["flowRecords"]> = [];
+
+  if (previous.status !== next.status) {
+    records.push(createBugFlowRecord({
+      action: "statusChanged",
+      at,
+      from: previous.status,
+      operator,
+      to: next.status,
+      note: "状态流转"
+    }));
+  }
+
+  if (previous.owner !== next.owner || previous.ownerMemberId !== next.ownerMemberId) {
+    records.push(createBugFlowRecord({
+      action: "ownerChanged",
+      at,
+      from: previous.owner,
+      operator,
+      to: next.owner,
+      note: "负责人变更"
+    }));
+  }
+
+  if (previous.severity !== next.severity) {
+    records.push(createBugFlowRecord({
+      action: "severityChanged",
+      at,
+      from: previous.severity,
+      operator,
+      to: next.severity,
+      note: "严重程度变更"
+    }));
+  }
+
+  if (previous.versionId !== next.versionId || previous.versionName !== next.versionName) {
+    records.push(createBugFlowRecord({
+      action: "versionChanged",
+      at,
+      from: previous.versionName ?? "未规划",
+      operator,
+      to: next.versionName ?? "未规划",
+      note: "关联版本变更"
+    }));
+  }
+
+  if (!records.length) {
+    records.push(createBugFlowRecord({
+      action: "updated",
+      at,
+      operator,
+      to: next.status,
+      note: "更新 Bug 信息"
+    }));
+  }
+
+  return records;
+}
+
+function appendBugUpdateFlowRecords(previous: BugReport, next: BugReport, operator: string) {
+  const existingRecords = normalizeBugFlowRecords(previous.flowRecords, {
+    bugId: previous.id,
+    operator: previous.reporter || operator,
+    status: previous.status,
+    values: previous as unknown as Record<string, unknown>
+  });
+  const nextRecords = buildBugUpdateFlowRecords(previous, next, operator);
+
+  return [...existingRecords, ...nextRecords].slice(-30);
 }
 
 function normalizeCreateRequirementVersion(
@@ -1880,13 +2068,20 @@ export async function createDashboardWorkspace(values: Record<string, unknown>, 
 export async function createDashboardRecord<T extends DashboardEntityType>(
   type: T,
   values: Record<string, unknown>,
-  workspaceId = DEFAULT_WORKSPACE.id
+  workspaceId = DEFAULT_WORKSPACE.id,
+  user?: FeishuUser
 ): Promise<CreateRecordResult<T>> {
   const data = await readDatabase();
   const workspace = resolveCurrentWorkspace(data, workspaceId).currentWorkspace;
   const baseValues = {
     ...values,
-    workspaceId: workspace.id
+    workspaceId: workspace.id,
+    ...(type === "bug"
+      ? {
+          flowRecordAt: new Date().toISOString(),
+          flowRecordOperator: getBugFlowOperator(user, asText(values.reporter, "系统"))
+        }
+      : {})
   };
   const scopedValues = type === "bug" ? withBugVersionProject(data, baseValues, workspace.id) : baseValues;
   const record = createRecord(type, scopedValues);
@@ -1936,7 +2131,8 @@ export async function createDashboardRecord<T extends DashboardEntityType>(
 export async function updateDashboardRecord<T extends DashboardEntityType>(
   type: T,
   id: string,
-  values: Record<string, unknown>
+  values: Record<string, unknown>,
+  user?: FeishuUser
 ): Promise<CreateRecordResult<T>> {
   const data = await readDatabase();
   const existingRecord = findRecord(data, type, id);
@@ -1952,7 +2148,7 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
   const scopedValues =
     type === "bug" ? withBugVersionProject(data, baseValues, getWorkspaceId(existingRecord)) : baseValues;
   const record = createRecord(type, scopedValues);
-  const typedRecord = {
+  let typedRecord = {
     ...record,
     id
   } as DashboardEntityMap[T];
@@ -1969,6 +2165,14 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
   }
 
   if (type === "bug") {
+    typedRecord = {
+      ...(typedRecord as BugReport),
+      flowRecords: appendBugUpdateFlowRecords(
+        existingRecord as BugReport,
+        typedRecord as BugReport,
+        getBugFlowOperator(user, asText(values.reporter, "系统"))
+      )
+    } as DashboardEntityMap[T];
     data.bugs = data.bugs.map((bug) => bug.id === id ? (typedRecord as BugReport) : bug);
     updated = data.bugs.some((bug) => bug.id === id);
   }
