@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const body = (await request.json().catch(() => null)) as { message?: string } | null;
+  const body = (await request.json().catch(() => null)) as { message?: string; workspaceId?: string } | null;
   const message = body?.message?.trim();
 
   if (!message) {
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const data = await getDashboardData(session?.user);
+    const data = await getDashboardData(session?.user, body?.workspaceId);
     const fallbackReply = createAssistantReply(message, data);
 
     if (!isAiAssistantConfigured()) {

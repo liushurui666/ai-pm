@@ -3,11 +3,21 @@ import path from "node:path";
 import dayjs from "dayjs";
 import { dashboardData } from "@/data/dashboard";
 import { sendFeishuBotTaskCard } from "@/lib/feishu-message";
+import { findWorkspaceMemberForUser, getDashboardPermissions } from "@/lib/permissions";
 import type {
   BugReport,
+  BugAttachment,
   DashboardData,
+  DashboardMember,
+  DashboardWorkspace,
+  DashboardWorkspaceStatus,
   DocumentItem,
   FeishuUser,
+  MemberNotificationChannel,
+  MemberNotificationChannelProvider,
+  MemberNotificationScene,
+  MemberRole,
+  MemberStatus,
   Project,
   ProjectMilestone,
   ProjectMilestoneStatus,
@@ -22,8 +32,17 @@ import type { CreateRecordResult, DashboardEntityMap, DashboardEntityType } from
 
 const DATABASE_DIR = path.join(process.cwd(), ".ai-pm");
 const DATABASE_FILE = path.join(DATABASE_DIR, "app-database.json");
+const DEFAULT_WORKSPACE: DashboardWorkspace = {
+  id: "ws-default",
+  name: "默认工作区",
+  description: "承载当前 AI PM 项目、需求和成员权限配置。",
+  status: "active",
+  createdAt: "2026-05-01T00:00:00.000Z",
+  updatedAt: "2026-05-01T00:00:00.000Z"
+};
 const DEFAULT_REQUIREMENT_VERSION: RequirementVersion = {
   id: "rv-backlog",
+  workspaceId: DEFAULT_WORKSPACE.id,
   name: "未规划需求池",
   project: "跨项目",
   status: "规划中",
@@ -44,7 +63,7 @@ function cloneSeedData(): LocalDatabase {
   } as LocalDatabase;
 }
 
-function createLocalId(type: DashboardEntityType | "milestone") {
+function createLocalId(type: DashboardEntityType | "member" | "milestone" | "notificationChannel" | "workspace") {
   return `${type}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
@@ -83,6 +102,8 @@ async function readDatabase() {
       requirementVersions: Array.isArray(data.requirementVersions) ? data.requirementVersions : seed.requirementVersions,
       requirements: Array.isArray(data.requirements) ? data.requirements : seed.requirements,
       documents: Array.isArray(data.documents) ? data.documents : seed.documents,
+      workspaces: Array.isArray(data.workspaces) ? data.workspaces : seed.workspaces,
+      members: Array.isArray(data.members) ? data.members : seed.members,
       weeklyInsight: Array.isArray(data.weeklyInsight) ? data.weeklyInsight : seed.weeklyInsight,
       updatedAt: asText(data.updatedAt, seed.updatedAt)
     });
@@ -157,16 +178,54 @@ function asTextArray(value: unknown) {
     .slice(0, 12);
 }
 
+function asBugAttachmentType(value: unknown): BugAttachment["type"] {
+  return value === "video" ? "video" : "image";
+}
+
+function asBugAttachments(value: unknown): BugAttachment[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") {
+        return null;
+      }
+
+      const attachment = item as Partial<BugAttachment>;
+      const id = asText(attachment.id);
+      const key = asText(attachment.key);
+      const name = asText(attachment.name);
+      const url = asText(attachment.url);
+      const mimeType = asText(attachment.mimeType);
+
+      if (!id || !key || !name || !url || !mimeType) {
+        return null;
+      }
+
+      return {
+        id,
+        key,
+        name,
+        url,
+        type: asBugAttachmentType(attachment.type),
+        mimeType,
+        size: asNumber(attachment.size, 0),
+        uploadedAt: asDateTimeString(attachment.uploadedAt, dayjs().format("YYYY-MM-DD HH:mm"))
+      };
+    })
+    .filter((item): item is BugAttachment => Boolean(item))
+    .slice(0, 8);
+}
+
 function asOwnerName(values: Record<string, unknown>) {
   return asText(values.owner, "未分配");
 }
 
-function asOwnerOpenId(values: Record<string, unknown>) {
-  return asText(values.ownerOpenId);
-}
-
 function createOwnerLink(values: Record<string, unknown>) {
   return {
+    ownerMemberId: asText(values.ownerMemberId) || undefined,
     ownerOpenId: asText(values.ownerOpenId) || undefined,
     ownerUnionId: asText(values.ownerUnionId) || undefined,
     ownerUserId: asText(values.ownerUserId) || undefined,
@@ -179,6 +238,18 @@ function asNumber(value: unknown, fallback: number) {
   const nextValue = typeof value === "number" ? value : Number(value);
 
   return Number.isFinite(nextValue) ? nextValue : fallback;
+}
+
+function asBoolean(value: unknown, fallback = false) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    return ["1", "true", "yes", "on", "开启", "启用"].includes(value.trim().toLowerCase());
+  }
+
+  return fallback;
 }
 
 function asDateString(value: unknown, fallback = dayjs().format("YYYY-MM-DD")) {
@@ -388,6 +459,7 @@ function normalizeDocumentType(value: string): DocumentItem["type"] {
 function createFallbackMilestones({
   dueDate,
   owner,
+  ownerMemberId,
   ownerAvatarUrl,
   ownerEmail,
   ownerOpenId,
@@ -398,6 +470,7 @@ function createFallbackMilestones({
 }: {
   dueDate: string;
   owner: string;
+  ownerMemberId?: string;
   ownerAvatarUrl?: string;
   ownerEmail?: string;
   ownerOpenId?: string;
@@ -413,6 +486,7 @@ function createFallbackMilestones({
       status: progress > 0 ? "已完成" : "未开始",
       dueDate: asDateString(dayjs(dueDate).subtract(14, "day").format("YYYY-MM-DD")),
       owner,
+      ownerMemberId,
       ownerOpenId,
       ownerUnionId,
       ownerUserId,
@@ -426,6 +500,7 @@ function createFallbackMilestones({
       status: progress >= 100 ? "已完成" : progress >= 60 ? "进行中" : "未开始",
       dueDate,
       owner,
+      ownerMemberId,
       ownerOpenId,
       ownerUnionId,
       ownerUserId,
@@ -439,7 +514,7 @@ function createFallbackMilestones({
 function normalizeProjectMilestone(
   value: unknown,
   index: number,
-  fallback: { dueDate: string; owner: string }
+  fallback: { dueDate: string; owner: string; ownerMemberId?: string }
 ): ProjectMilestone {
   const milestone = typeof value === "object" && value ? (value as Record<string, unknown>) : {};
 
@@ -449,6 +524,7 @@ function normalizeProjectMilestone(
     status: normalizeMilestoneStatus(asText(milestone.status, index === 0 ? "进行中" : "未开始")),
     dueDate: asDateString(milestone.dueDate, fallback.dueDate),
     owner: asText(milestone.owner, fallback.owner),
+    ownerMemberId: asText(milestone.ownerMemberId, fallback.ownerMemberId) || undefined,
     ownerOpenId: asText(milestone.ownerOpenId) || undefined,
     ownerUnionId: asText(milestone.ownerUnionId) || undefined,
     ownerUserId: asText(milestone.ownerUserId) || undefined,
@@ -463,6 +539,7 @@ function normalizeProjectMilestones(
   fallback: {
     dueDate: string;
     owner: string;
+    ownerMemberId?: string;
     ownerAvatarUrl?: string;
     ownerEmail?: string;
     ownerOpenId?: string;
@@ -492,6 +569,7 @@ function normalizeCreateProject(values: Record<string, unknown>, id = createLoca
 
   return {
     id,
+    workspaceId: asText(values.workspaceId, DEFAULT_WORKSPACE.id),
     name,
     owner,
     ...ownerLink,
@@ -505,6 +583,7 @@ function normalizeCreateProject(values: Record<string, unknown>, id = createLoca
     milestones: normalizeProjectMilestones(values.milestones, {
       dueDate,
       owner,
+      ownerMemberId: ownerLink.ownerMemberId,
       ownerAvatarUrl: ownerLink.ownerAvatarUrl,
       ownerEmail: ownerLink.ownerEmail,
       ownerOpenId: ownerLink.ownerOpenId,
@@ -531,6 +610,7 @@ function normalizeCreateTask(values: Record<string, unknown>, id = createLocalId
 
   return {
     id,
+    workspaceId: asText(values.workspaceId, DEFAULT_WORKSPACE.id),
     title: asText(values.title, "未命名任务"),
     stage: normalizeTaskStage(asText(values.stage, "待处理")),
     owner: asOwnerName(values),
@@ -552,6 +632,7 @@ function normalizeExistingTask(task: Task, versions: RequirementVersion[]): Task
 
   return {
     ...task,
+    workspaceId: asText(task.workspaceId, DEFAULT_WORKSPACE.id),
     versionId: matchedVersion.id,
     versionName: matchedVersion.name,
     dueDate,
@@ -565,6 +646,7 @@ function normalizeExistingTask(task: Task, versions: RequirementVersion[]): Task
 function normalizeCreateBug(values: Record<string, unknown>, id = createLocalId("bug")): BugReport {
   return {
     id,
+    workspaceId: asText(values.workspaceId, DEFAULT_WORKSPACE.id),
     title: asText(values.title, "未命名 Bug"),
     status: normalizeBugStatus(asText(values.status, "新建")),
     severity: normalizeBugSeverity(asText(values.severity, "一般")),
@@ -578,6 +660,7 @@ function normalizeCreateBug(values: Record<string, unknown>, id = createLocalId(
     reproduction: asText(values.reproduction, "暂无复现步骤。"),
     expected: asText(values.expected, "暂无预期结果。"),
     actual: asText(values.actual, "暂无实际结果。"),
+    attachments: asBugAttachments(values.attachments),
     dueDate: asDateString(values.dueDate, dayjs().add(3, "day").format("YYYY-MM-DD"))
   };
 }
@@ -604,6 +687,7 @@ function normalizeCreateRequirementVersion(
 ): RequirementVersion {
   return {
     id,
+    workspaceId: asText(values.workspaceId, DEFAULT_WORKSPACE.id),
     name: asText(values.name, "未命名版本"),
     project: asText(values.project, "跨项目"),
     status: normalizeRequirementVersionStatus(asText(values.status, "规划中")),
@@ -623,12 +707,15 @@ function normalizeCreateRequirement(
 ): Requirement {
   return {
     id,
+    workspaceId: asText(values.workspaceId, DEFAULT_WORKSPACE.id),
     title: asText(values.title, "未命名需求"),
     priority: normalizeRequirementPriority(asText(values.priority, "P1")),
     status: normalizeRequirementStatus(asText(values.status, "评审中")),
     project: asText(values.project, "未关联项目"),
     versionId: asText(values.versionId) || DEFAULT_REQUIREMENT_VERSION.id,
     versionName: asText(values.versionName) || DEFAULT_REQUIREMENT_VERSION.name,
+    owner: asOwnerName(values),
+    ...createOwnerLink(values),
     uiLink: asText(values.uiLink),
     documentLink: asText(values.documentLink),
     acceptance: asText(values.acceptance, "暂无验收标准。"),
@@ -658,23 +745,477 @@ function normalizeExistingRequirement(requirement: Requirement, versions: Requir
   );
 }
 
+function normalizeMemberRole(value: unknown): MemberRole {
+  const role = asText(value, "viewer");
+
+  if (["owner", "admin", "productAdmin", "productMember", "frontend", "backend", "qa", "viewer"].includes(role)) {
+    return role as MemberRole;
+  }
+
+  return "viewer";
+}
+
+function normalizeMemberStatus(value: unknown): MemberStatus {
+  return asText(value, "active") === "disabled" ? "disabled" : "active";
+}
+
+function normalizeNotificationProvider(value: unknown): MemberNotificationChannelProvider {
+  const provider = asText(value, "feishu");
+
+  return ["feishu", "email", "webhook", "telegram"].includes(provider) ? provider as MemberNotificationChannelProvider : "feishu";
+}
+
+function normalizeNotificationScenes(value: unknown, fallback: MemberNotificationScene[] = ["taskAssigned", "requirementChanged"]) {
+  const scenes = Array.isArray(value)
+    ? value
+        .map((scene) => asText(scene))
+        .filter((scene): scene is MemberNotificationScene => scene === "taskAssigned" || scene === "requirementChanged")
+    : [];
+
+  return scenes.length ? Array.from(new Set(scenes)) : fallback;
+}
+
+function getLegacyNotificationScenes(notification: Record<string, unknown>, fallback?: DashboardMember["notification"]) {
+  const scenes: MemberNotificationScene[] = [];
+
+  if (asBoolean(notification.taskAssigned, fallback?.taskAssigned ?? true)) {
+    scenes.push("taskAssigned");
+  }
+
+  if (asBoolean(notification.requirementChanged, fallback?.requirementChanged ?? true)) {
+    scenes.push("requirementChanged");
+  }
+
+  return scenes;
+}
+
+function normalizeNotificationChannel(
+  value: unknown,
+  index: number,
+  fallback?: MemberNotificationChannel
+): MemberNotificationChannel | null {
+  const channel = typeof value === "object" && value ? (value as Record<string, unknown>) : {};
+  const provider = normalizeNotificationProvider(channel.provider ?? fallback?.provider);
+  const email = asText(channel.email, fallback?.email) || undefined;
+  const webhookUrl = asText(channel.webhookUrl, fallback?.webhookUrl) || undefined;
+  const telegramChatId = asText(channel.telegramChatId, fallback?.telegramChatId) || undefined;
+  const feishuOpenId = asText(channel.feishuOpenId, fallback?.feishuOpenId) || undefined;
+  const feishuUnionId = asText(channel.feishuUnionId, fallback?.feishuUnionId) || undefined;
+  const feishuUserId = asText(channel.feishuUserId, fallback?.feishuUserId) || undefined;
+  const target = asText(
+    channel.target,
+    fallback?.target ??
+      (provider === "feishu"
+        ? feishuOpenId
+        : provider === "email"
+          ? email
+          : provider === "telegram"
+            ? telegramChatId
+            : webhookUrl)
+  ) || undefined;
+
+  if (provider === "feishu" && !feishuOpenId && !target) {
+    return null;
+  }
+
+  if (provider === "email" && !email && !target) {
+    return null;
+  }
+
+  if (provider === "webhook" && !webhookUrl && !target) {
+    return null;
+  }
+
+  if (provider === "telegram" && !telegramChatId && !target) {
+    return null;
+  }
+
+  return {
+    id: asText(channel.id, fallback?.id ?? createLocalId("notificationChannel")),
+    provider,
+    enabled: asBoolean(channel.enabled, fallback?.enabled ?? true),
+    name: asText(channel.name, fallback?.name) || undefined,
+    target,
+    feishuOpenId,
+    feishuUnionId,
+    feishuUserId,
+    email,
+    webhookUrl,
+    telegramChatId,
+    scenes: normalizeNotificationScenes(channel.scenes, fallback?.scenes)
+  };
+}
+
+function createLegacyFeishuChannel(
+  notification: Record<string, unknown>,
+  fallback?: DashboardMember["notification"]
+): MemberNotificationChannel | null {
+  const feishuOpenId = asText(notification.feishuOpenId, fallback?.feishuOpenId) || undefined;
+
+  if (!feishuOpenId) {
+    return null;
+  }
+
+  return {
+    id: fallback?.channels.find((channel) => channel.provider === "feishu")?.id ?? createLocalId("notificationChannel"),
+    provider: "feishu",
+    enabled: asBoolean(notification.feishuEnabled, fallback?.feishuEnabled ?? true),
+    name: "飞书",
+    target: feishuOpenId,
+    feishuOpenId,
+    feishuUnionId: asText(notification.feishuUnionId, fallback?.feishuUnionId) || undefined,
+    feishuUserId: asText(notification.feishuUserId, fallback?.feishuUserId) || undefined,
+    scenes: getLegacyNotificationScenes(notification, fallback)
+  };
+}
+
+function normalizeNotificationChannels(
+  value: unknown,
+  notification: Record<string, unknown>,
+  fallback?: DashboardMember["notification"]
+) {
+  const fallbackChannels = fallback?.channels ?? [];
+  const channels = Array.isArray(value)
+    ? value
+        .map((channel, index) => normalizeNotificationChannel(channel, index, fallbackChannels[index]))
+        .filter((channel): channel is MemberNotificationChannel => Boolean(channel))
+    : [];
+  const legacyFeishuChannel = createLegacyFeishuChannel(notification, fallback);
+
+  if (!channels.length) {
+    return legacyFeishuChannel ? [legacyFeishuChannel] : [];
+  }
+
+  if (
+    legacyFeishuChannel &&
+    !channels.some((channel) => channel.provider === "feishu" && channel.feishuOpenId === legacyFeishuChannel.feishuOpenId)
+  ) {
+    return [legacyFeishuChannel, ...channels];
+  }
+
+  return channels;
+}
+
+function getPrimaryFeishuChannel(notification: DashboardMember["notification"]) {
+  return notification.channels.find((channel) => channel.provider === "feishu" && (channel.feishuOpenId || channel.target));
+}
+
+function normalizeWorkspaceStatus(value: unknown): DashboardWorkspaceStatus {
+  return asText(value, "active") === "archived" ? "archived" : "active";
+}
+
+function normalizeWorkspace(value: unknown): DashboardWorkspace {
+  const workspace = typeof value === "object" && value ? (value as Record<string, unknown>) : {};
+  const now = new Date().toISOString();
+
+  return {
+    id: asText(workspace.id, DEFAULT_WORKSPACE.id),
+    name: asText(workspace.name, DEFAULT_WORKSPACE.name),
+    description: asText(workspace.description, DEFAULT_WORKSPACE.description) || undefined,
+    status: normalizeWorkspaceStatus(workspace.status),
+    createdAt: asText(workspace.createdAt, now),
+    updatedAt: asText(workspace.updatedAt, now)
+  };
+}
+
+function normalizeWorkspaces(workspaces: unknown[]) {
+  const normalizedWorkspaces = (workspaces.length ? workspaces : [DEFAULT_WORKSPACE]).map(normalizeWorkspace);
+  const hasDefaultWorkspace = normalizedWorkspaces.some((workspace) => workspace.id === DEFAULT_WORKSPACE.id);
+
+  return hasDefaultWorkspace ? normalizedWorkspaces : [DEFAULT_WORKSPACE, ...normalizedWorkspaces];
+}
+
+function normalizeMember(value: unknown, fallbackWorkspaceId = DEFAULT_WORKSPACE.id): DashboardMember {
+  const member = typeof value === "object" && value ? (value as Record<string, unknown>) : {};
+  const notification = typeof member.notification === "object" && member.notification
+    ? (member.notification as Record<string, unknown>)
+    : {};
+  const identities = Array.isArray(member.identities)
+    ? member.identities
+        .map((identity) => (typeof identity === "object" && identity ? (identity as Record<string, unknown>) : null))
+        .filter(Boolean)
+        .map((identity) => ({
+          provider: asText(identity?.provider, "email") as DashboardMember["identities"][number]["provider"],
+          providerUserId: asText(identity?.providerUserId),
+          providerUnionId: asText(identity?.providerUnionId) || undefined,
+          providerTenantUserId: asText(identity?.providerTenantUserId) || undefined,
+          email: asText(identity?.email) || undefined
+        }))
+        .filter((identity) => identity.providerUserId)
+    : [];
+  const channels = normalizeNotificationChannels(notification.channels, notification);
+  const primaryFeishuChannel = getPrimaryFeishuChannel({
+    channels,
+    feishuEnabled: asBoolean(notification.feishuEnabled, Boolean(notification.feishuOpenId)),
+    feishuOpenId: asText(notification.feishuOpenId) || undefined,
+    feishuUnionId: asText(notification.feishuUnionId) || undefined,
+    feishuUserId: asText(notification.feishuUserId) || undefined,
+    taskAssigned: asBoolean(notification.taskAssigned, true),
+    requirementChanged: asBoolean(notification.requirementChanged, true)
+  });
+  const legacyScenes = primaryFeishuChannel?.scenes ?? getLegacyNotificationScenes(notification);
+  const feishuOpenId = primaryFeishuChannel?.feishuOpenId ?? asText(notification.feishuOpenId);
+  const feishuUnionId = primaryFeishuChannel?.feishuUnionId ?? asText(notification.feishuUnionId);
+  const feishuUserId = primaryFeishuChannel?.feishuUserId ?? asText(notification.feishuUserId);
+  const now = new Date().toISOString();
+
+  return {
+    id: asText(member.id, createLocalId("member")),
+    workspaceId: asText(member.workspaceId, fallbackWorkspaceId),
+    name: asText(member.name, "未命名成员"),
+    email: asText(member.email) || undefined,
+    avatarUrl: asText(member.avatarUrl) || undefined,
+    role: normalizeMemberRole(member.role),
+    status: normalizeMemberStatus(member.status),
+    identities,
+    notification: {
+      channels,
+      feishuEnabled: primaryFeishuChannel?.enabled ?? asBoolean(notification.feishuEnabled, Boolean(notification.feishuOpenId)),
+      feishuOpenId: feishuOpenId || undefined,
+      feishuUnionId: feishuUnionId || undefined,
+      feishuUserId: feishuUserId || undefined,
+      taskAssigned: legacyScenes.includes("taskAssigned"),
+      requirementChanged: legacyScenes.includes("requirementChanged")
+    },
+    createdAt: asText(member.createdAt, now),
+    updatedAt: asText(member.updatedAt, now)
+  };
+}
+
+function createMemberFromUser(user: FeishuUser, role: MemberRole, workspaceId = DEFAULT_WORKSPACE.id): DashboardMember {
+  const now = new Date().toISOString();
+  const identities: DashboardMember["identities"] = [];
+
+  if (user.openId) {
+    identities.push({
+      provider: "feishu",
+      providerUserId: user.openId,
+      providerUnionId: user.unionId,
+      providerTenantUserId: user.userId,
+      email: user.email
+    });
+  }
+
+  if (user.email) {
+    identities.push({
+      provider: "email",
+      providerUserId: user.email,
+      email: user.email
+    });
+  }
+
+  return {
+    id: createLocalId("member"),
+    workspaceId,
+    name: user.name || user.enName || user.email || "未命名成员",
+    email: user.email,
+    avatarUrl: user.avatarUrl,
+    role,
+    status: "active",
+    identities,
+    notification: {
+      channels: user.openId
+        ? [
+            {
+              id: createLocalId("notificationChannel"),
+              provider: "feishu",
+              enabled: true,
+              name: "飞书",
+              target: user.openId,
+              feishuOpenId: user.openId,
+              feishuUnionId: user.unionId,
+              feishuUserId: user.userId,
+              scenes: ["taskAssigned", "requirementChanged"]
+            }
+          ]
+        : [],
+      feishuEnabled: Boolean(user.openId),
+      feishuOpenId: user.openId || undefined,
+      feishuUnionId: user.unionId,
+      feishuUserId: user.userId,
+      taskAssigned: true,
+      requirementChanged: true
+    },
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+function syncMemberProfile(member: DashboardMember, user: FeishuUser) {
+  const channels = [...member.notification.channels];
+  const feishuChannelIndex = channels.findIndex((channel) => channel.provider === "feishu");
+
+  if (user.openId && feishuChannelIndex >= 0) {
+    channels[feishuChannelIndex] = {
+      ...channels[feishuChannelIndex],
+      target: channels[feishuChannelIndex].target || user.openId,
+      feishuOpenId: channels[feishuChannelIndex].feishuOpenId || user.openId,
+      feishuUnionId: channels[feishuChannelIndex].feishuUnionId || user.unionId,
+      feishuUserId: channels[feishuChannelIndex].feishuUserId || user.userId
+    };
+  } else if (user.openId) {
+    channels.push({
+      id: createLocalId("notificationChannel"),
+      provider: "feishu",
+      enabled: member.notification.feishuEnabled,
+      name: "飞书",
+      target: user.openId,
+      feishuOpenId: user.openId,
+      feishuUnionId: user.unionId,
+      feishuUserId: user.userId,
+      scenes: getLegacyNotificationScenes({}, member.notification)
+    });
+  }
+
+  const nextMember: DashboardMember = {
+    ...member,
+    name: user.name || member.name,
+    email: user.email || member.email,
+    avatarUrl: user.avatarUrl || member.avatarUrl,
+    identities: [...member.identities],
+    notification: {
+      ...member.notification,
+      channels,
+      feishuOpenId: member.notification.feishuOpenId || user.openId || undefined,
+      feishuUnionId: member.notification.feishuUnionId || user.unionId,
+      feishuUserId: member.notification.feishuUserId || user.userId
+    }
+  };
+  const hasFeishuIdentity = nextMember.identities.some(
+    (identity) => identity.provider === "feishu" && identity.providerUserId === user.openId
+  );
+  const hasEmailIdentity = user.email
+    ? nextMember.identities.some((identity) => identity.provider === "email" && identity.providerUserId === user.email)
+    : true;
+
+  if (user.openId && !hasFeishuIdentity) {
+    nextMember.identities.push({
+      provider: "feishu",
+      providerUserId: user.openId,
+      providerUnionId: user.unionId,
+      providerTenantUserId: user.userId,
+      email: user.email
+    });
+  }
+
+  if (user.email && !hasEmailIdentity) {
+    nextMember.identities.push({
+      provider: "email",
+      providerUserId: user.email,
+      email: user.email
+    });
+  }
+
+  const changed = JSON.stringify(nextMember) !== JSON.stringify(member);
+
+  return changed
+    ? {
+        ...nextMember,
+        updatedAt: new Date().toISOString()
+      }
+    : member;
+}
+
+function resolveCurrentWorkspace(data: LocalDatabase, workspaceId?: string) {
+  const workspaces = normalizeWorkspaces(data.workspaces);
+  const currentWorkspace =
+    workspaces.find((workspace) => workspace.id === workspaceId && workspace.status === "active") ??
+    workspaces.find((workspace) => workspace.status === "active") ??
+    DEFAULT_WORKSPACE;
+  const changed = JSON.stringify(workspaces) !== JSON.stringify(data.workspaces);
+
+  return {
+    data: {
+      ...data,
+      workspaces
+    },
+    changed,
+    currentWorkspace
+  };
+}
+
+function ensureCurrentMember(data: LocalDatabase, workspaceId: string, user?: FeishuUser) {
+  if (!user) {
+    return {
+      data,
+      changed: false,
+      currentMember: undefined
+    };
+  }
+
+  const members = data.members.map((member) => normalizeMember(member, workspaceId));
+  const existingMember = findWorkspaceMemberForUser(members, workspaceId, user);
+
+  if (existingMember) {
+    const syncedMember = syncMemberProfile(existingMember, user);
+    const changed = syncedMember !== existingMember || JSON.stringify(members) !== JSON.stringify(data.members);
+
+    return {
+      data: {
+        ...data,
+        members: members.map((member) => member.id === existingMember.id ? syncedMember : member)
+      },
+      changed,
+      currentMember: syncedMember
+    };
+  }
+
+  const hasActiveMember = members.some((member) => member.workspaceId === workspaceId && member.status === "active");
+  const currentMember = createMemberFromUser(user, hasActiveMember ? "viewer" : "owner", workspaceId);
+
+  return {
+    data: {
+      ...data,
+      members: [currentMember, ...members]
+    },
+    changed: true,
+    currentMember
+  };
+}
+
 function migrateLocalDatabase(data: LocalDatabase): LocalDatabase {
   const normalizedVersions = (data.requirementVersions.length ? data.requirementVersions : [DEFAULT_REQUIREMENT_VERSION])
     .map(normalizeExistingRequirementVersion);
+  const normalizedWorkspaces = normalizeWorkspaces(data.workspaces);
 
   return {
     ...data,
+    workspaces: normalizedWorkspaces,
     projects: data.projects.map(normalizeExistingProject),
     tasks: data.tasks.map((task) => normalizeExistingTask(task, normalizedVersions)),
     bugs: data.bugs.map((bug) => normalizeExistingBug(bug, normalizedVersions)),
     requirementVersions: normalizedVersions,
-    requirements: data.requirements.map((requirement) => normalizeExistingRequirement(requirement, normalizedVersions))
+    requirements: data.requirements.map((requirement) => normalizeExistingRequirement(requirement, normalizedVersions)),
+    members: data.members.map((member) => normalizeMember(member, normalizedWorkspaces[0]?.id ?? DEFAULT_WORKSPACE.id))
+  };
+}
+
+function getWorkspaceId(record: { workspaceId?: string }) {
+  return record.workspaceId || DEFAULT_WORKSPACE.id;
+}
+
+function filterWorkspaceRecords<T extends { workspaceId?: string }>(records: T[], workspaceId: string) {
+  return records.filter((record) => getWorkspaceId(record) === workspaceId);
+}
+
+function scopeDataToWorkspace(data: LocalDatabase, workspaceId: string): LocalDatabase {
+  return {
+    ...data,
+    projects: filterWorkspaceRecords(data.projects, workspaceId),
+    tasks: filterWorkspaceRecords(data.tasks, workspaceId),
+    bugs: filterWorkspaceRecords(data.bugs, workspaceId),
+    risks: filterWorkspaceRecords(data.risks, workspaceId),
+    requirementVersions: filterWorkspaceRecords(data.requirementVersions, workspaceId),
+    requirements: filterWorkspaceRecords(data.requirements, workspaceId),
+    documents: filterWorkspaceRecords(data.documents, workspaceId),
+    members: data.members.filter((member) => member.workspaceId === workspaceId)
   };
 }
 
 function normalizeCreateRisk(values: Record<string, unknown>, id = createLocalId("risk")): Risk {
   return {
     id,
+    workspaceId: asText(values.workspaceId, DEFAULT_WORKSPACE.id),
     title: asText(values.title, "未命名风险"),
     level: normalizeRiskLevel(asText(values.level, "中")),
     owner: asOwnerName(values),
@@ -687,6 +1228,7 @@ function normalizeCreateRisk(values: Record<string, unknown>, id = createLocalId
 function normalizeCreateDocument(values: Record<string, unknown>, id = createLocalId("document")): DocumentItem {
   return {
     id,
+    workspaceId: asText(values.workspaceId, DEFAULT_WORKSPACE.id),
     title: asText(values.title, "未命名文档"),
     type: normalizeDocumentType(asText(values.type, "PRD")),
     updatedAt: asDateTimeString(values.updatedAt),
@@ -943,6 +1485,20 @@ function findRecord<T extends DashboardEntityType>(
   return data.documents.find((document) => document.id === id) as DashboardEntityMap[T] | undefined;
 }
 
+function withBugVersionProject(data: LocalDatabase, values: Record<string, unknown>, workspaceId: string) {
+  const versionId = asText(values.versionId);
+  const version = data.requirementVersions.find(
+    (item) => item.id === versionId && getWorkspaceId(item) === workspaceId
+  ) ?? DEFAULT_REQUIREMENT_VERSION;
+
+  return {
+    ...values,
+    versionId: version.id,
+    versionName: version.name,
+    project: version.project
+  };
+}
+
 function createMetrics(data: Pick<DashboardData, "projects" | "tasks" | "bugs" | "requirements" | "documents">) {
   const activeProjects = data.projects.filter((project) => project.status !== "已完成").length;
   const deliveryRate = data.projects.length
@@ -989,11 +1545,98 @@ function getEntityLabel(type: DashboardEntityType) {
   return labels[type];
 }
 
-async function notifyOwner(type: DashboardEntityType, values: Record<string, unknown>) {
-  const ownerOpenId = asOwnerOpenId(values);
+function getNotificationTargetIdentities(values: Record<string, unknown>) {
+  const ownerName = asOwnerName(values);
+
+  return [
+    values.ownerMemberId,
+    values.ownerOpenId,
+    values.ownerUnionId,
+    values.ownerUserId,
+    values.ownerEmail,
+    ownerName && ownerName !== "未分配" ? ownerName : ""
+  ]
+    .map((value) => asText(value).trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function getMemberNotificationIdentities(member: DashboardMember) {
+  return [
+    member.id,
+    member.name,
+    member.email,
+    member.notification.feishuOpenId,
+    member.notification.feishuUnionId,
+    member.notification.feishuUserId,
+    ...member.notification.channels.flatMap((channel) => [
+      channel.target,
+      channel.feishuOpenId,
+      channel.feishuUnionId,
+      channel.feishuUserId,
+      channel.email
+    ]),
+    ...member.identities.flatMap((identity) => [
+      identity.providerUserId,
+      identity.providerUnionId,
+      identity.providerTenantUserId,
+      identity.email
+    ])
+  ]
+    .map((value) => asText(value).trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function findNotificationMember(data: LocalDatabase, workspaceId: string, values: Record<string, unknown>) {
+  const targetIdentities = getNotificationTargetIdentities(values);
+
+  if (!targetIdentities.length) {
+    return undefined;
+  }
+
+  return data.members.find((member) => {
+    if (member.workspaceId !== workspaceId) {
+      return false;
+    }
+
+    const memberIdentities = getMemberNotificationIdentities(member);
+
+    return targetIdentities.some((identity) => memberIdentities.includes(identity));
+  });
+}
+
+async function notifyOwner(data: LocalDatabase, workspaceId: string, type: DashboardEntityType, values: Record<string, unknown>) {
+  const member = findNotificationMember(data, workspaceId, values);
+  const notificationScene: MemberNotificationScene = type === "requirement" || type === "requirementVersion"
+    ? "requirementChanged"
+    : "taskAssigned";
+  const feishuChannel = member?.notification.channels.find(
+    (channel) => channel.provider === "feishu" && channel.enabled && channel.scenes.includes(notificationScene)
+  );
+  const ownerOpenId = feishuChannel?.feishuOpenId ?? feishuChannel?.target ?? member?.notification.feishuOpenId;
+  const ownerName = asOwnerName(values);
+
+  if (!getNotificationTargetIdentities(values).length) {
+    return "";
+  }
+
+  if (!member) {
+    return `未发送飞书通知：负责人 ${ownerName} 未在成员管理中匹配到成员。`;
+  }
+
+  if (member.status !== "active") {
+    return `未发送飞书通知：成员 ${member.name} 已被禁用。`;
+  }
+
+  if (!member.notification.channels.some((channel) => channel.provider === "feishu" && channel.enabled)) {
+    return `未发送飞书通知：成员 ${member.name} 已关闭飞书通知。`;
+  }
 
   if (!ownerOpenId) {
-    return "";
+    return `未发送飞书通知：成员 ${member.name} 未绑定飞书账号。`;
+  }
+
+  if (!feishuChannel) {
+    return `未发送飞书通知：成员 ${member.name} 已关闭该通知场景。`;
   }
 
   try {
@@ -1010,28 +1653,244 @@ async function notifyOwner(type: DashboardEntityType, values: Record<string, unk
   }
 }
 
-export async function getDashboardData(user?: FeishuUser): Promise<DashboardData> {
-  const data = await readDatabase();
+function getOwnerNotificationSignature(values: Record<string, unknown>) {
+  return getNotificationTargetIdentities(values).join("|");
+}
+
+function shouldNotifyOwnerUpdate(
+  type: DashboardEntityType,
+  previousRecord: DashboardEntityMap[DashboardEntityType],
+  nextValues: Record<string, unknown>
+) {
+  if (!["project", "task", "bug", "risk", "requirement"].includes(type)) {
+    return false;
+  }
+
+  return getOwnerNotificationSignature(previousRecord as Record<string, unknown>) !== getOwnerNotificationSignature(nextValues);
+}
+
+export async function getDashboardData(user?: FeishuUser, workspaceId?: string): Promise<DashboardData> {
+  const baseData = await readDatabase();
+  const workspaceResult = resolveCurrentWorkspace(baseData, workspaceId);
+  const memberResult = ensureCurrentMember(workspaceResult.data, workspaceResult.currentWorkspace.id, user);
+  const data = memberResult.data;
+  const changed = workspaceResult.changed || memberResult.changed;
+  const currentMember = memberResult.currentMember;
+  const scopedData = scopeDataToWorkspace(data, workspaceResult.currentWorkspace.id);
+
+  if (changed) {
+    await writeDatabase(data);
+  }
 
   return {
-    ...data,
-    metrics: createMetrics(data),
+    ...scopedData,
+    workspaces: data.workspaces,
+    metrics: createMetrics(scopedData),
     meta: {
       source: "local",
       user,
+      currentWorkspace: workspaceResult.currentWorkspace,
+      currentMember,
+      permissions: getDashboardPermissions(currentMember),
       storage: DATABASE_FILE,
-      message: "已接入站内项目管理数据源，飞书仅用于登录、负责人选择和机器人通知。"
+      message: "已接入站内项目管理数据源，平台成员负责权限与负责人选择，飞书仅用于登录和机器人通知。"
     }
+  };
+}
+
+function normalizeMemberInput(values: Record<string, unknown>, fallback?: DashboardMember): DashboardMember {
+  const now = new Date().toISOString();
+  const workspaceId = asText(values.workspaceId, fallback?.workspaceId ?? DEFAULT_WORKSPACE.id);
+  const feishuOpenId = asText(values.feishuOpenId, fallback?.notification.feishuOpenId);
+  const feishuUnionId = asText(values.feishuUnionId, fallback?.notification.feishuUnionId);
+  const feishuUserId = asText(values.feishuUserId, fallback?.notification.feishuUserId);
+  const email = asText(values.email, fallback?.email);
+  const identities: DashboardMember["identities"] = [];
+  const notificationInput = {
+    feishuEnabled: values.feishuEnabled,
+    feishuOpenId,
+    feishuUnionId,
+    feishuUserId,
+    taskAssigned: values.taskAssigned,
+    requirementChanged: values.requirementChanged
+  };
+  const channels = normalizeNotificationChannels(values.channels, notificationInput, fallback?.notification);
+  const primaryFeishuChannel = getPrimaryFeishuChannel({
+    channels,
+    feishuEnabled: asBoolean(values.feishuEnabled, fallback?.notification.feishuEnabled ?? Boolean(feishuOpenId)),
+    feishuOpenId: feishuOpenId || undefined,
+    feishuUnionId: feishuUnionId || undefined,
+    feishuUserId: feishuUserId || undefined,
+    taskAssigned: asBoolean(values.taskAssigned, fallback?.notification.taskAssigned ?? true),
+    requirementChanged: asBoolean(values.requirementChanged, fallback?.notification.requirementChanged ?? true)
+  });
+  const legacyScenes = primaryFeishuChannel?.scenes ?? getLegacyNotificationScenes(notificationInput, fallback?.notification);
+  const primaryFeishuOpenId = primaryFeishuChannel?.feishuOpenId ?? feishuOpenId;
+  const primaryFeishuUnionId = primaryFeishuChannel?.feishuUnionId ?? feishuUnionId;
+  const primaryFeishuUserId = primaryFeishuChannel?.feishuUserId ?? feishuUserId;
+
+  if (feishuOpenId) {
+    identities.push({
+      provider: "feishu",
+      providerUserId: feishuOpenId,
+      providerUnionId: feishuUnionId || undefined,
+      providerTenantUserId: feishuUserId || undefined,
+      email: email || undefined
+    });
+  }
+
+  if (email) {
+    identities.push({
+      provider: "email",
+      providerUserId: email,
+      email
+    });
+  }
+
+  return {
+    id: fallback?.id ?? createLocalId("member"),
+    workspaceId,
+    name: asText(values.name, fallback?.name ?? "未命名成员"),
+    email: email || undefined,
+    avatarUrl: asText(values.avatarUrl, fallback?.avatarUrl) || undefined,
+    role: normalizeMemberRole(values.role ?? fallback?.role),
+    status: normalizeMemberStatus(values.status ?? fallback?.status),
+    identities,
+    notification: {
+      channels,
+      feishuEnabled: primaryFeishuChannel?.enabled ?? asBoolean(values.feishuEnabled, fallback?.notification.feishuEnabled ?? Boolean(feishuOpenId)),
+      feishuOpenId: primaryFeishuOpenId || undefined,
+      feishuUnionId: primaryFeishuUnionId || undefined,
+      feishuUserId: primaryFeishuUserId || undefined,
+      taskAssigned: legacyScenes.includes("taskAssigned"),
+      requirementChanged: legacyScenes.includes("requirementChanged")
+    },
+    createdAt: fallback?.createdAt ?? now,
+    updatedAt: now
+  };
+}
+
+export async function createDashboardMember(values: Record<string, unknown>, workspaceId = DEFAULT_WORKSPACE.id) {
+  const data = await readDatabase();
+  const workspace = resolveCurrentWorkspace(data, workspaceId).currentWorkspace;
+  const member = normalizeMemberInput({ ...values, workspaceId: workspace.id });
+  const duplicated = data.members.map((item) => normalizeMember(item)).some((item) =>
+    item.workspaceId === member.workspaceId &&
+    [member.email, member.notification.feishuOpenId]
+      .filter(Boolean)
+      .some((identity) =>
+        item.email === identity ||
+        item.notification.feishuOpenId === identity ||
+        item.identities.some((itemIdentity) => itemIdentity.providerUserId === identity)
+      )
+  );
+
+  if (duplicated) {
+    throw new Error("成员已存在，请直接编辑角色或通知配置");
+  }
+
+  data.members = [member, ...data.members.map((item) => normalizeMember(item))];
+  await writeDatabase(data);
+
+  return {
+    member,
+    message: `已添加成员：${member.name}。`
+  };
+}
+
+export async function updateDashboardMember(id: string, values: Record<string, unknown>) {
+  const data = await readDatabase();
+  const members = data.members.map((item) => normalizeMember(item));
+  const existingMember = members.find((member) => member.id === id);
+
+  if (!existingMember) {
+    throw new Error("成员不存在或已被删除");
+  }
+
+  const member = normalizeMemberInput(values, existingMember);
+  const duplicated = members.some((item) =>
+    item.id !== id &&
+    item.workspaceId === member.workspaceId &&
+    [member.email, member.notification.feishuOpenId]
+      .filter(Boolean)
+      .some((identity) =>
+        item.email === identity ||
+        item.notification.feishuOpenId === identity ||
+        item.identities.some((itemIdentity) => itemIdentity.providerUserId === identity)
+      )
+  );
+  const existingCanManage = existingMember.status === "active" && ["owner", "admin"].includes(existingMember.role);
+  const nextCanManage = member.status === "active" && ["owner", "admin"].includes(member.role);
+  const hasAnotherManager = members.some((item) =>
+    item.id !== id && item.workspaceId === member.workspaceId && item.status === "active" && ["owner", "admin"].includes(item.role)
+  );
+
+  if (duplicated) {
+    throw new Error("成员身份已被其他成员绑定，请检查邮箱或飞书账号");
+  }
+
+  if (existingCanManage && !nextCanManage && !hasAnotherManager) {
+    throw new Error("至少需要保留一个启用的所有者或管理员");
+  }
+
+  data.members = members.map((item) => item.id === id ? member : item);
+  await writeDatabase(data);
+
+  return {
+    member,
+    message: `已更新成员：${member.name}。`
+  };
+}
+
+export async function createDashboardWorkspace(values: Record<string, unknown>, user?: FeishuUser) {
+  const data = await readDatabase();
+  const now = new Date().toISOString();
+  const workspaces = normalizeWorkspaces(data.workspaces);
+  const workspace: DashboardWorkspace = {
+    id: createLocalId("workspace"),
+    name: asText(values.name, "未命名工作区"),
+    description: asText(values.description) || undefined,
+    status: "active",
+    createdAt: now,
+    updatedAt: now
+  };
+
+  if (workspaces.some((item) => item.name === workspace.name && item.status !== "archived")) {
+    throw new Error("工作区名称已存在");
+  }
+
+  data.workspaces = [workspace, ...workspaces];
+
+  let member: DashboardMember | undefined;
+
+  if (user) {
+    member = createMemberFromUser(user, "owner", workspace.id);
+    data.members = [member, ...data.members.map((item) => normalizeMember(item))];
+  }
+
+  await writeDatabase(data);
+
+  return {
+    workspace,
+    member,
+    message: `已创建工作区：${workspace.name}。`
   };
 }
 
 export async function createDashboardRecord<T extends DashboardEntityType>(
   type: T,
-  values: Record<string, unknown>
+  values: Record<string, unknown>,
+  workspaceId = DEFAULT_WORKSPACE.id
 ): Promise<CreateRecordResult<T>> {
   const data = await readDatabase();
-  const record = createRecord(type, values);
-  const notifyMessage = await notifyOwner(type, values);
+  const workspace = resolveCurrentWorkspace(data, workspaceId).currentWorkspace;
+  const baseValues = {
+    ...values,
+    workspaceId: workspace.id
+  };
+  const scopedValues = type === "bug" ? withBugVersionProject(data, baseValues, workspace.id) : baseValues;
+  const record = createRecord(type, scopedValues);
+  const notifyMessage = await notifyOwner(data, workspace.id, type, scopedValues);
 
   if (type === "project") {
     data.projects = [record as Project, ...data.projects];
@@ -1080,7 +1939,19 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
   values: Record<string, unknown>
 ): Promise<CreateRecordResult<T>> {
   const data = await readDatabase();
-  const record = createRecord(type, values);
+  const existingRecord = findRecord(data, type, id);
+
+  if (!existingRecord) {
+    throw new Error("记录不存在或已被删除");
+  }
+
+  const baseValues = {
+    ...values,
+    workspaceId: getWorkspaceId(existingRecord)
+  };
+  const scopedValues =
+    type === "bug" ? withBugVersionProject(data, baseValues, getWorkspaceId(existingRecord)) : baseValues;
+  const record = createRecord(type, scopedValues);
   const typedRecord = {
     ...record,
     id
@@ -1164,6 +2035,9 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
 
   const savedData = applyProjectMetrics(data);
   const savedRecord = findRecord(savedData, type, id) ?? typedRecord;
+  const notifyMessage = shouldNotifyOwnerUpdate(type, existingRecord, scopedValues)
+    ? await notifyOwner(savedData, getWorkspaceId(existingRecord), type, scopedValues)
+    : "";
 
   await writeDatabase(savedData);
 
@@ -1171,7 +2045,7 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
     type,
     record: savedRecord,
     persisted: true,
-    message: `已更新${getEntityLabel(type)}：${getRecordTitle(type, values)}。`
+    message: [`已更新${getEntityLabel(type)}：${getRecordTitle(type, values)}。`, notifyMessage].filter(Boolean).join(" ")
   };
 }
 
@@ -1184,6 +2058,7 @@ export async function deleteDashboardRecord<T extends DashboardEntityType>(type:
   }
 
   let fallbackVersion: RequirementVersion | undefined;
+  const recordWorkspaceId = getWorkspaceId(existingRecord);
 
   if (type === "requirementVersion") {
     if (id === DEFAULT_REQUIREMENT_VERSION_ID) {
@@ -1191,8 +2066,8 @@ export async function deleteDashboardRecord<T extends DashboardEntityType>(type:
     }
 
     fallbackVersion =
-      data.requirementVersions.find((version) => version.id === DEFAULT_REQUIREMENT_VERSION_ID) ??
-      data.requirementVersions.find((version) => version.id !== id);
+      data.requirementVersions.find((version) => version.id === DEFAULT_REQUIREMENT_VERSION_ID && getWorkspaceId(version) === recordWorkspaceId) ??
+      data.requirementVersions.find((version) => version.id !== id && getWorkspaceId(version) === recordWorkspaceId);
 
     if (!fallbackVersion) {
       throw new Error("请至少保留一个需求版本");

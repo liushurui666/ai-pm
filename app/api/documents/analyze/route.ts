@@ -1,13 +1,12 @@
 import dayjs from "dayjs";
 import mammoth from "mammoth";
 import { NextRequest, NextResponse } from "next/server";
-import { createDashboardRecord } from "@/data/local-dashboard";
+import { createDashboardRecord, getDashboardData } from "@/data/local-dashboard";
 import { createAiDocumentTaskBreakdown, isAiAssistantConfigured } from "@/lib/ai-client";
 import { createFallbackDocumentTaskBreakdown } from "@/lib/document-breakdown";
 import { isFeishuAuthConfigured } from "@/lib/feishu-auth";
-import { listFeishuPeople } from "@/lib/feishu-users";
 import { getSession } from "@/lib/session";
-import type { FeishuPerson } from "@/types/dashboard";
+import type { DashboardMember } from "@/types/dashboard";
 import type { DocumentAnalyzeResult, DocumentTaskBreakdown, DocumentTaskDraft } from "@/types/records";
 
 const MAX_UPLOAD_SIZE = 4 * 1024 * 1024;
@@ -66,15 +65,15 @@ function normalizeStartDate(value?: string, dueDate?: string) {
   return dayjs(normalizedDueDate).subtract(3, "day").format("YYYY-MM-DD");
 }
 
-function findMatchedOwner(ownerName: string, people: FeishuPerson[]) {
+function findMatchedOwner(ownerName: string, members: DashboardMember[]) {
   const keyword = ownerName.trim().toLowerCase();
 
   if (!keyword) {
     return null;
   }
 
-  return people.find((person) =>
-    [person.name, person.enName, person.email]
+  return members.find((member) =>
+    [member.name, member.email, member.notification.feishuOpenId, member.notification.feishuUserId]
       .filter(Boolean)
       .some((value) => String(value).toLowerCase() === keyword || String(value).toLowerCase().includes(keyword))
   ) ?? null;
@@ -83,6 +82,7 @@ function findMatchedOwner(ownerName: string, people: FeishuPerson[]) {
 function getFallbackOwner(formData: FormData) {
   return {
     owner: getFormText(formData, "owner"),
+    ownerMemberId: getFormText(formData, "ownerMemberId"),
     ownerOpenId: getFormText(formData, "ownerOpenId"),
     ownerUnionId: getFormText(formData, "ownerUnionId"),
     ownerUserId: getFormText(formData, "ownerUserId"),
@@ -91,24 +91,26 @@ function getFallbackOwner(formData: FormData) {
   };
 }
 
-function resolveTaskOwner(task: DocumentTaskDraft, people: FeishuPerson[], fallbackOwner: ReturnType<typeof getFallbackOwner>) {
-  const matchedOwner = findMatchedOwner(task.owner ?? "", people);
+function resolveTaskOwner(task: DocumentTaskDraft, members: DashboardMember[], fallbackOwner: ReturnType<typeof getFallbackOwner>) {
+  const matchedOwner = findMatchedOwner(task.owner ?? "", members);
 
   if (matchedOwner) {
     return {
       owner: matchedOwner.name,
-      ownerOpenId: matchedOwner.openId,
-      ownerUnionId: matchedOwner.unionId ?? "",
-      ownerUserId: matchedOwner.userId ?? "",
+      ownerMemberId: matchedOwner.id,
+      ownerOpenId: matchedOwner.notification.feishuOpenId ?? "",
+      ownerUnionId: matchedOwner.notification.feishuUnionId ?? "",
+      ownerUserId: matchedOwner.notification.feishuUserId ?? "",
       ownerEmail: matchedOwner.email ?? "",
       ownerAvatarUrl: matchedOwner.avatarUrl ?? ""
     };
   }
 
-  return fallbackOwner.ownerOpenId || fallbackOwner.owner
+  return fallbackOwner.ownerMemberId || fallbackOwner.ownerOpenId || fallbackOwner.owner
     ? fallbackOwner
     : {
         owner: task.owner ?? "未分配",
+        ownerMemberId: "",
         ownerOpenId: "",
         ownerUnionId: "",
         ownerUserId: "",
@@ -122,13 +124,13 @@ async function createBreakdown({
   fileName,
   projectName,
   versionName,
-  people
+  members
 }: {
   documentText: string;
   fileName: string;
   projectName: string;
   versionName: string;
-  people: FeishuPerson[];
+  members: DashboardMember[];
 }) {
   if (!isAiAssistantConfigured()) {
     return {
@@ -146,7 +148,7 @@ async function createBreakdown({
         fileName,
         projectName,
         versionName,
-        peopleNames: people.map((person) => person.name)
+        peopleNames: members.map((member) => member.name)
       })
     };
   } catch (error) {
@@ -205,6 +207,7 @@ export async function POST(request: NextRequest) {
 
   const formData = await request.formData();
   const file = formData.get("file");
+  const workspaceId = getFormText(formData, "workspaceId");
   const projectName = getFormText(formData, "project");
   const versionId = getFormText(formData, "versionId");
   const versionName = getFormText(formData, "versionName");
@@ -256,43 +259,53 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const people = configured ? await listFeishuPeople().catch(() => []) : [];
+    const dashboardData = await getDashboardData(session?.user, workspaceId || undefined);
+    const members = dashboardData.members.filter((member) => member.status === "active");
     const fallbackOwner = getFallbackOwner(formData);
     const { source, breakdown: rawBreakdown, warning } = await createBreakdown({
       documentText,
       fileName: file.name,
       projectName,
       versionName,
-      people
+      members
     });
     const breakdown = ensureUsefulBreakdown(rawBreakdown);
-    const documentResult = await createDashboardRecord("document", {
-      title: breakdown.documentTitle,
-      type: breakdown.documentType,
-      updatedAt: dayjs().format("YYYY-MM-DD HH:mm"),
-      aiSummary: breakdown.summary
-    });
+    const documentResult = await createDashboardRecord(
+      "document",
+      {
+        title: breakdown.documentTitle,
+        type: breakdown.documentType,
+        updatedAt: dayjs().format("YYYY-MM-DD HH:mm"),
+        aiSummary: breakdown.summary
+      },
+      workspaceId
+    );
     const tasks = [];
 
     for (const task of breakdown.tasks) {
-      const owner = resolveTaskOwner(task, people, fallbackOwner);
-      const taskResult = await createDashboardRecord("task", {
-        title: task.title,
-        stage: "待处理",
-        owner: owner.owner,
-        ownerOpenId: owner.ownerOpenId,
-        ownerUnionId: owner.ownerUnionId,
-        ownerUserId: owner.ownerUserId,
-        ownerEmail: owner.ownerEmail,
-        ownerAvatarUrl: owner.ownerAvatarUrl,
-        project: projectName,
-        versionId,
-        versionName,
-        priority: task.priority,
-        startDate: normalizeStartDate(task.startDate, task.dueDate),
-        dueDate: normalizeDueDate(task.dueDate),
-        aiHint: task.aiHint
-      });
+      const owner = resolveTaskOwner(task, members, fallbackOwner);
+      const taskResult = await createDashboardRecord(
+        "task",
+        {
+          title: task.title,
+          stage: "待处理",
+          owner: owner.owner,
+          ownerMemberId: owner.ownerMemberId,
+          ownerOpenId: owner.ownerOpenId,
+          ownerUnionId: owner.ownerUnionId,
+          ownerUserId: owner.ownerUserId,
+          ownerEmail: owner.ownerEmail,
+          ownerAvatarUrl: owner.ownerAvatarUrl,
+          project: projectName,
+          versionId,
+          versionName,
+          priority: task.priority,
+          startDate: normalizeStartDate(task.startDate, task.dueDate),
+          dueDate: normalizeDueDate(task.dueDate),
+          aiHint: task.aiHint
+        },
+        workspaceId
+      );
 
       tasks.push(taskResult.record);
     }

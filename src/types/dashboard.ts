@@ -7,6 +7,7 @@ export type ProjectMilestone = {
   status: ProjectMilestoneStatus;
   dueDate: string;
   owner: string;
+  ownerMemberId?: string;
   ownerOpenId?: string;
   ownerUnionId?: string;
   ownerUserId?: string;
@@ -17,8 +18,10 @@ export type ProjectMilestone = {
 
 export type Project = {
   id: string;
+  workspaceId?: string;
   name: string;
   owner: string;
+  ownerMemberId?: string;
   ownerOpenId?: string;
   ownerUnionId?: string;
   ownerUserId?: string;
@@ -37,12 +40,24 @@ export type Project = {
 export type TaskStage = "待处理" | "进行中" | "评审中" | "已完成";
 export type BugSeverity = "阻塞" | "严重" | "一般" | "轻微";
 export type BugStatus = "新建" | "定位中" | "修复中" | "待验证" | "已关闭";
+export type BugAttachment = {
+  id: string;
+  key: string;
+  name: string;
+  url: string;
+  type: "image" | "video";
+  mimeType: string;
+  size: number;
+  uploadedAt: string;
+};
 
 export type Task = {
   id: string;
+  workspaceId?: string;
   title: string;
   stage: TaskStage;
   owner: string;
+  ownerMemberId?: string;
   ownerOpenId?: string;
   ownerUnionId?: string;
   ownerUserId?: string;
@@ -59,9 +74,11 @@ export type Task = {
 
 export type Risk = {
   id: string;
+  workspaceId?: string;
   title: string;
   level: "高" | "中" | "低";
   owner: string;
+  ownerMemberId?: string;
   ownerOpenId?: string;
   ownerUnionId?: string;
   ownerUserId?: string;
@@ -73,6 +90,7 @@ export type Risk = {
 
 export type BugReport = {
   id: string;
+  workspaceId?: string;
   title: string;
   status: BugStatus;
   severity: BugSeverity;
@@ -81,6 +99,7 @@ export type BugReport = {
   versionName?: string;
   reporter: string;
   owner: string;
+  ownerMemberId?: string;
   ownerOpenId?: string;
   ownerUnionId?: string;
   ownerUserId?: string;
@@ -90,17 +109,26 @@ export type BugReport = {
   reproduction: string;
   expected: string;
   actual: string;
+  attachments?: BugAttachment[];
   dueDate: string;
 };
 
 export type Requirement = {
   id: string;
+  workspaceId?: string;
   title: string;
   priority: "P0" | "P1" | "P2";
   status: "待评审" | "评审中" | "待排期" | "设计中" | "开发中" | "待上线" | "已上线" | "已关闭" | "已驳回";
   project: string;
   versionId?: string;
   versionName?: string;
+  owner: string;
+  ownerMemberId?: string;
+  ownerOpenId?: string;
+  ownerUnionId?: string;
+  ownerUserId?: string;
+  ownerEmail?: string;
+  ownerAvatarUrl?: string;
   uiLink?: string;
   documentLink?: string;
   acceptance: string;
@@ -115,6 +143,7 @@ export type Requirement = {
 
 export type RequirementVersion = {
   id: string;
+  workspaceId?: string;
   name: string;
   project: string;
   status: "规划中" | "进行中" | "已发布" | "已归档";
@@ -125,6 +154,7 @@ export type RequirementVersion = {
 
 export type DocumentItem = {
   id: string;
+  workspaceId?: string;
   title: string;
   type: "PRD" | "会议纪要" | "技术方案" | "复盘";
   updatedAt: string;
@@ -143,6 +173,90 @@ export type FeishuUser = {
 
 export type FeishuPerson = FeishuUser;
 
+export type MemberRole =
+  | "owner"
+  | "admin"
+  | "productAdmin"
+  | "productMember"
+  | "frontend"
+  | "backend"
+  | "qa"
+  | "viewer";
+
+export type MemberStatus = "active" | "disabled";
+
+export type MemberIdentityProvider = "feishu" | "email" | "google" | "github";
+
+export type DashboardWorkspaceStatus = "active" | "archived";
+
+export type DashboardWorkspace = {
+  id: string;
+  name: string;
+  description?: string;
+  status: DashboardWorkspaceStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MemberIdentity = {
+  provider: MemberIdentityProvider;
+  providerUserId: string;
+  providerUnionId?: string;
+  providerTenantUserId?: string;
+  email?: string;
+};
+
+export type MemberNotificationChannelProvider = "feishu" | "email" | "webhook" | "telegram";
+export type MemberNotificationScene = "taskAssigned" | "requirementChanged";
+
+export type MemberNotificationChannel = {
+  id: string;
+  provider: MemberNotificationChannelProvider;
+  enabled: boolean;
+  name?: string;
+  target?: string;
+  feishuOpenId?: string;
+  feishuUnionId?: string;
+  feishuUserId?: string;
+  email?: string;
+  webhookUrl?: string;
+  telegramChatId?: string;
+  scenes: MemberNotificationScene[];
+};
+
+export type MemberNotificationSettings = {
+  channels: MemberNotificationChannel[];
+  feishuEnabled: boolean;
+  feishuOpenId?: string;
+  feishuUnionId?: string;
+  feishuUserId?: string;
+  taskAssigned: boolean;
+  requirementChanged: boolean;
+};
+
+export type DashboardMember = {
+  id: string;
+  workspaceId: string;
+  name: string;
+  email?: string;
+  avatarUrl?: string;
+  role: MemberRole;
+  status: MemberStatus;
+  identities: MemberIdentity[];
+  notification: MemberNotificationSettings;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DashboardPermissions = {
+  canManageMembers: boolean;
+  canCreateRequirements: boolean;
+  canEditRequirements: boolean;
+  canDeleteRequirements: boolean;
+  canDeleteRecords: boolean;
+  deniedReason?: string;
+};
+
 export type DashboardData = {
   metrics: {
     activeProjects: number;
@@ -157,10 +271,15 @@ export type DashboardData = {
   requirementVersions: RequirementVersion[];
   requirements: Requirement[];
   documents: DocumentItem[];
+  workspaces: DashboardWorkspace[];
+  members: DashboardMember[];
   weeklyInsight: string[];
   meta?: {
     source: "local" | "mock";
     user?: FeishuUser;
+    currentWorkspace?: DashboardWorkspace;
+    currentMember?: DashboardMember;
+    permissions?: DashboardPermissions;
     storage?: string;
     message?: string;
   };

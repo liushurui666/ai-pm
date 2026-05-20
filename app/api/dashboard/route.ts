@@ -3,8 +3,9 @@ import { getDashboardData } from "@/data/local-dashboard";
 import { isFeishuAuthConfigured } from "@/lib/feishu-auth";
 import { getSession } from "@/lib/session";
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await getSession();
+  const workspaceId = new URL(request.url).searchParams.get("workspaceId") || undefined;
 
   if (isFeishuAuthConfigured() && !session) {
     return NextResponse.json(
@@ -18,7 +19,7 @@ export async function GET() {
   }
 
   try {
-    return NextResponse.json(await getDashboardData(session?.user));
+    return NextResponse.json(await getDashboardData(session?.user, workspaceId));
   } catch (error) {
     return NextResponse.json(
       {

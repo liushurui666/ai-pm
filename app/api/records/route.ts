@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createDashboardRecord, deleteDashboardRecord, updateDashboardRecord } from "@/data/local-dashboard";
+import { createDashboardRecord, deleteDashboardRecord, getDashboardData, updateDashboardRecord } from "@/data/local-dashboard";
 import { isFeishuAuthConfigured } from "@/lib/feishu-auth";
+import { canPerformAction, getPermissionDeniedReason } from "@/lib/permissions";
 import { getSession } from "@/lib/session";
 import type { DashboardEntityType } from "@/types/records";
 
@@ -13,6 +14,10 @@ const entityTypes = new Set<DashboardEntityType>([
   "requirement",
   "document"
 ]);
+
+function isRequirementManagementType(type: DashboardEntityType) {
+  return type === "requirement" || type === "requirementVersion";
+}
 
 export async function POST(request: NextRequest) {
   const session = await getSession();
@@ -30,6 +35,7 @@ export async function POST(request: NextRequest) {
 
   const body = (await request.json().catch(() => null)) as {
     type?: DashboardEntityType;
+    workspaceId?: string;
     values?: Record<string, unknown>;
   } | null;
 
@@ -44,8 +50,24 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (isRequirementManagementType(body.type)) {
+    const data = await getDashboardData(session?.user, body.workspaceId);
+    const permissions = data.meta?.permissions;
+
+    if (!permissions || !canPerformAction(permissions, "requirement:create")) {
+      return NextResponse.json(
+        {
+          error: permissions ? getPermissionDeniedReason(permissions, "requirement:create") : "无创建权限"
+        },
+        {
+          status: 403
+        }
+      );
+    }
+  }
+
   try {
-    return NextResponse.json(await createDashboardRecord(body.type, body.values));
+    return NextResponse.json(await createDashboardRecord(body.type, body.values, body.workspaceId));
   } catch (error) {
     return NextResponse.json(
       {
@@ -75,6 +97,7 @@ export async function PATCH(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as {
     type?: DashboardEntityType;
     id?: string;
+    workspaceId?: string;
     values?: Record<string, unknown>;
   } | null;
 
@@ -87,6 +110,22 @@ export async function PATCH(request: NextRequest) {
         status: 400
       }
     );
+  }
+
+  if (isRequirementManagementType(body.type)) {
+    const data = await getDashboardData(session?.user, body.workspaceId);
+    const permissions = data.meta?.permissions;
+
+    if (!permissions || !canPerformAction(permissions, "requirement:update")) {
+      return NextResponse.json(
+        {
+          error: permissions ? getPermissionDeniedReason(permissions, "requirement:update") : "无编辑权限"
+        },
+        {
+          status: 403
+        }
+      );
+    }
   }
 
   try {
@@ -120,6 +159,7 @@ export async function DELETE(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as {
     type?: DashboardEntityType;
     id?: string;
+    workspaceId?: string;
   } | null;
 
   if (!body?.type || !entityTypes.has(body.type) || !body.id) {
@@ -129,6 +169,21 @@ export async function DELETE(request: NextRequest) {
       },
       {
         status: 400
+      }
+    );
+  }
+
+  const data = await getDashboardData(session?.user, body.workspaceId);
+  const permissions = data.meta?.permissions;
+  const action = isRequirementManagementType(body.type) ? "requirement:delete" : "member:manage";
+
+  if (!permissions || !canPerformAction(permissions, action)) {
+    return NextResponse.json(
+      {
+        error: permissions ? getPermissionDeniedReason(permissions, action) : "无删除权限"
+      },
+      {
+        status: 403
       }
     );
   }

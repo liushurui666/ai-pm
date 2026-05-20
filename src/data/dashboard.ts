@@ -7,6 +7,17 @@ export const dashboardData: DashboardData = {
     overdueTasks: 7,
     aiSavedHours: 34
   },
+  workspaces: [
+    {
+      id: "ws-default",
+      name: "默认工作区",
+      description: "承载当前 AI PM 项目、需求和成员权限配置。",
+      status: "active",
+      createdAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-01T00:00:00.000Z"
+    }
+  ],
+  members: [],
   projects: [
     {
       id: "p-001",
@@ -265,6 +276,7 @@ export const dashboardData: DashboardData = {
       project: "AI 周报自动化",
       versionId: "rv-2026-05-ai",
       versionName: "2026.05 AI 协同版",
+      owner: "林夏",
       acceptance: "支持按项目、部门、负责人三个维度生成汇报。"
     },
     {
@@ -275,6 +287,7 @@ export const dashboardData: DashboardData = {
       project: "智能项目驾驶舱一期",
       versionId: "rv-1-4",
       versionName: "1.4 项目驾驶舱增强",
+      owner: "韩越",
       acceptance: "至少展示延期概率、关键原因和建议动作。"
     },
     {
@@ -285,6 +298,7 @@ export const dashboardData: DashboardData = {
       project: "需求智能拆解",
       versionId: "rv-2026-05-ai",
       versionName: "2026.05 AI 协同版",
+      owner: "许诺",
       acceptance: "识别待办、负责人、截止时间，允许人工确认后入库。"
     }
   ],
