@@ -266,6 +266,8 @@ export type DashboardPermissions = {
   canCreateRequirements: boolean;
   canEditRequirements: boolean;
   canDeleteRequirements: boolean;
+  canEditBugs: boolean;
+  canEditBugsFully: boolean;
   canDeleteBugs: boolean;
   canDeleteRecords: boolean;
   deniedReason?: string;

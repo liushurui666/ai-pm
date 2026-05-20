@@ -365,6 +365,8 @@ export function ProjectManagementPlatform({
   const canCreateRequirements = Boolean(permissions?.canCreateRequirements);
   const canEditRequirements = Boolean(permissions?.canEditRequirements);
   const canDeleteRequirements = Boolean(permissions?.canDeleteRequirements);
+  const canEditBugs = Boolean(permissions?.canEditBugs);
+  const canEditBugsFully = Boolean(permissions?.canEditBugsFully);
   const canDeleteBugs = Boolean(permissions?.canDeleteBugs);
   const permissionDeniedReason = permissions?.deniedReason ?? "当前角色无此操作权限。";
   const currentWorkspace = data?.meta?.currentWorkspace;
@@ -1817,8 +1819,10 @@ export function ProjectManagementPlatform({
                   {activeView === "bugs" ? (
                     <BugsView
                       bugs={data.bugs}
+                      canEditBugs={canEditBugs}
                       canDeleteBugs={canDeleteBugs}
                       currentUser={data.meta?.user}
+                      editDeniedReason={permissions?.deniedReason ?? "当前角色无 Bug 编辑权限。"}
                       permissionDeniedReason={permissions?.deniedReason ?? "只有所有者、管理员或测试可以删除 Bug。"}
                       versionOptions={requirementVersionOptions}
                       onCreate={() => openCreateDrawer("bug")}
@@ -1829,6 +1833,8 @@ export function ProjectManagementPlatform({
                   {activeView === "bugEdit" ? (
                     <BugRouteEditView
                       bug={routeBug}
+                      canEditBugs={canEditBugs}
+                      canEditBugsFully={canEditBugsFully}
                       canDeleteBugs={canDeleteBugs}
                       form={bugEditForm}
                       people={ownerOptions}
@@ -1917,6 +1923,8 @@ export function ProjectManagementPlatform({
                         canCreateRequirements: false,
                         canEditRequirements: false,
                         canDeleteRequirements: false,
+                        canEditBugs: false,
+                        canEditBugsFully: false,
                         canDeleteBugs: false,
                         canDeleteRecords: false,
                         deniedReason: permissionDeniedReason
@@ -2131,6 +2139,8 @@ export function ProjectManagementPlatform({
 
 function BugRouteEditView({
   bug,
+  canEditBugs,
+  canEditBugsFully,
   canDeleteBugs,
   form,
   onBack,
@@ -2144,6 +2154,8 @@ function BugRouteEditView({
   versionOptions
 }: {
   bug: BugReport | null;
+  canEditBugs: boolean;
+  canEditBugsFully: boolean;
   canDeleteBugs: boolean;
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   onBack: () => void;
@@ -2228,13 +2240,21 @@ function BugRouteEditView({
             </Space>
           }
           extra={
-            <Button type="primary" icon={<SaveOutlined />} loading={submitting} onClick={() => form.submit()}>
+            <Button
+              type="primary"
+              icon={<SaveOutlined />}
+              loading={submitting}
+              disabled={!canEditBugs}
+              onClick={() => form.submit()}
+            >
               保存
             </Button>
           }
         >
           <Form form={form} layout="vertical" onFinish={(values) => onSubmit(bug, values)} requiredMark={false}>
             <BugFields
+              canEditBugs={canEditBugs}
+              canEditBugsFully={canEditBugsFully}
               form={form}
               people={people}
               peopleLoading={peopleLoading}
@@ -3890,6 +3910,7 @@ function OwnerSelect({
   people,
   loading,
   error,
+  disabled = false,
   required = true,
   label = "负责人"
 }: {
@@ -3897,6 +3918,7 @@ function OwnerSelect({
   people: OwnerSelectableMember[];
   loading: boolean;
   error: string;
+  disabled?: boolean;
   required?: boolean;
   label?: string;
 }) {
@@ -3910,7 +3932,7 @@ function OwnerSelect({
         <Select
           showSearch
           loading={loading}
-          disabled={Boolean(error) || !people.length}
+          disabled={disabled || Boolean(error) || !people.length}
           placeholder={required ? "从平台成员选择负责人" : "可选，未匹配负责人时使用"}
           optionFilterProp="displayName"
           optionLabelProp="displayName"
@@ -4271,11 +4293,13 @@ function VersionProjectFields({
 function VersionOnlyField({
   form,
   versionOptions,
+  disabled = false,
   versionLabel = "关联版本",
   versionMessage = "请选择关联版本"
 }: {
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   versionOptions: RequirementVersionOption[];
+  disabled?: boolean;
   versionLabel?: string;
   versionMessage?: string;
 }) {
@@ -4287,6 +4311,7 @@ function VersionOnlyField({
         <Select
           showSearch
           optionFilterProp="label"
+          disabled={disabled}
           placeholder="选择版本"
           notFoundContent="请先在需求管理中新建版本"
           options={versionOptions}
@@ -4407,44 +4432,57 @@ function TaskFields({
 }
 
 function BugFields({
+  canEditBugs = true,
+  canEditBugsFully = true,
   form,
   versionOptions,
   people,
   peopleLoading,
   peopleError
 }: {
+  canEditBugs?: boolean;
+  canEditBugsFully?: boolean;
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   versionOptions: RequirementVersionOption[];
   people: OwnerSelectableMember[];
   peopleLoading: boolean;
   peopleError: string;
 }) {
+  const canEditStatusAndOwner = canEditBugs || canEditBugsFully;
+
   return (
     <>
       <Form.Item label="Bug 标题" name="title" rules={[{ required: true, message: "请输入 Bug 标题" }]}>
-        <Input placeholder="例如：上传文档后任务负责人未自动关联飞书" />
+        <Input disabled={!canEditBugsFully} placeholder="例如：上传文档后任务负责人未自动关联飞书" />
       </Form.Item>
       <Row gutter={12}>
         <Col span={12}>
           <Form.Item label="严重程度" name="severity">
-            <Select options={["阻塞", "严重", "一般", "轻微"].map((value) => ({ value, label: value }))} />
+            <Select
+              disabled={!canEditBugsFully}
+              options={["阻塞", "严重", "一般", "轻微"].map((value) => ({ value, label: value }))}
+            />
           </Form.Item>
         </Col>
         <Col span={12}>
           <Form.Item label="状态" name="status">
-            <Select options={["新建", "定位中", "修复中", "待验证", "已关闭"].map((value) => ({ value, label: value }))} />
+            <Select
+              disabled={!canEditStatusAndOwner}
+              options={["新建", "定位中", "修复中", "待验证", "已关闭"].map((value) => ({ value, label: value }))}
+            />
           </Form.Item>
         </Col>
       </Row>
-      <VersionOnlyField form={form} versionOptions={versionOptions} />
+      <VersionOnlyField disabled={!canEditBugsFully} form={form} versionOptions={versionOptions} />
       <Form.Item
         label="提交人"
         name="reporter"
         rules={[{ required: true, message: "请输入提交人" }]}
       >
-        <Input placeholder="填写提 Bug 的人" />
+        <Input disabled={!canEditBugsFully} placeholder="填写提 Bug 的人" />
       </Form.Item>
       <OwnerSelect
+        disabled={!canEditStatusAndOwner}
         form={form}
         people={people}
         loading={peopleLoading}
@@ -4452,10 +4490,10 @@ function BugFields({
         label="修复负责人"
       />
       <Form.Item label="环境" name="environment" rules={[{ required: true, message: "请输入复现环境" }]}>
-        <Input placeholder="例如：Chrome 124 / macOS / 测试环境" />
+        <Input disabled={!canEditBugsFully} placeholder="例如：Chrome 124 / macOS / 测试环境" />
       </Form.Item>
       <Form.Item label="复现步骤" name="reproduction" rules={[{ required: true, message: "请输入复现步骤" }]}>
-        <Input.TextArea rows={4} placeholder="按 1、2、3 写清楚如何稳定复现" />
+        <Input.TextArea disabled={!canEditBugsFully} rows={4} placeholder="按 1、2、3 写清楚如何稳定复现" />
       </Form.Item>
       <Form.Item
         label="复现材料"
@@ -4481,6 +4519,7 @@ function BugFields({
         <Upload.Dragger
           accept="image/*,video/*"
           customRequest={uploadBugAttachment}
+          disabled={!canEditBugsFully}
           maxCount={8}
           multiple
           onPreview={(file) => {
@@ -4497,10 +4536,10 @@ function BugFields({
         </Upload.Dragger>
       </Form.Item>
       <Form.Item label="预期结果" name="expected">
-        <Input.TextArea rows={3} placeholder="系统应该出现什么结果" />
+        <Input.TextArea disabled={!canEditBugsFully} rows={3} placeholder="系统应该出现什么结果" />
       </Form.Item>
       <Form.Item label="实际结果" name="actual" rules={[{ required: true, message: "请输入实际结果" }]}>
-        <Input.TextArea rows={3} placeholder="实际看到的问题、报错或异常表现" />
+        <Input.TextArea disabled={!canEditBugsFully} rows={3} placeholder="实际看到的问题、报错或异常表现" />
       </Form.Item>
     </>
   );

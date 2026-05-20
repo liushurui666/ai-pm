@@ -3,6 +3,7 @@ import { createDashboardRecord, deleteDashboardRecord, getDashboardData, updateD
 import { isFeishuAuthConfigured } from "@/lib/feishu-auth";
 import { canPerformAction, getPermissionDeniedReason } from "@/lib/permissions";
 import { getSession } from "@/lib/session";
+import type { BugReport } from "@/types/dashboard";
 import type { DashboardEntityType } from "@/types/records";
 
 const entityTypes = new Set<DashboardEntityType>([
@@ -29,6 +30,29 @@ function getDeleteAction(type: DashboardEntityType) {
   }
 
   return "member:manage";
+}
+
+const limitedBugUpdateFields = [
+  "status",
+  "owner",
+  "ownerMemberId",
+  "ownerOpenId",
+  "ownerUnionId",
+  "ownerUserId",
+  "ownerEmail",
+  "ownerAvatarUrl"
+] as const;
+
+function createLimitedBugUpdateValues(existingBug: BugReport, values: Record<string, unknown>) {
+  const nextValues: Record<string, unknown> = { ...existingBug };
+
+  for (const field of limitedBugUpdateFields) {
+    if (Object.prototype.hasOwnProperty.call(values, field)) {
+      nextValues[field] = values[field];
+    }
+  }
+
+  return nextValues;
 }
 
 export async function POST(request: NextRequest) {
@@ -124,6 +148,8 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
+  let updateValues = body.values;
+
   if (isRequirementManagementType(body.type)) {
     const data = await getDashboardData(session?.user, body.workspaceId);
     const permissions = data.meta?.permissions;
@@ -140,8 +166,41 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
+  if (body.type === "bug") {
+    const data = await getDashboardData(session?.user, body.workspaceId);
+    const permissions = data.meta?.permissions;
+
+    if (!permissions || !canPerformAction(permissions, "bug:update")) {
+      return NextResponse.json(
+        {
+          error: permissions ? getPermissionDeniedReason(permissions, "bug:update") : "无编辑权限"
+        },
+        {
+          status: 403
+        }
+      );
+    }
+
+    if (!permissions.canEditBugsFully) {
+      const existingBug = data.bugs.find((bug) => bug.id === body.id);
+
+      if (!existingBug) {
+        return NextResponse.json(
+          {
+            error: "记录不存在或已被删除"
+          },
+          {
+            status: 404
+          }
+        );
+      }
+
+      updateValues = createLimitedBugUpdateValues(existingBug, body.values);
+    }
+  }
+
   try {
-    return NextResponse.json(await updateDashboardRecord(body.type, body.id, body.values, session?.user));
+    return NextResponse.json(await updateDashboardRecord(body.type, body.id, updateValues, session?.user));
   } catch (error) {
     return NextResponse.json(
       {

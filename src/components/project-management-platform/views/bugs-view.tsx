@@ -142,8 +142,10 @@ export function getBugFlowDescription(record: NonNullable<BugReport["flowRecords
 
 export function BugsView({
   bugs,
+  canEditBugs,
   canDeleteBugs,
   currentUser,
+  editDeniedReason,
   permissionDeniedReason,
   versionOptions,
   onCreate,
@@ -151,8 +153,10 @@ export function BugsView({
   onEdit
 }: {
   bugs: BugReport[];
+  canEditBugs: boolean;
   canDeleteBugs: boolean;
   currentUser?: FeishuUser;
+  editDeniedReason: string;
   permissionDeniedReason: string;
   versionOptions: RequirementVersionOption[];
   onCreate: () => void;
@@ -252,18 +256,26 @@ export function BugsView({
       align: "center",
       render: (_, bug) => (
         <Space size={2} className="bug-row-actions">
-          <Tooltip title="编辑 Bug">
-            <Button
-              aria-label="编辑 Bug"
-              type="link"
-              size="small"
-              icon={<EditOutlined />}
-              onClick={(event) => {
-                event.stopPropagation();
-                onEdit(bug);
-              }}
-            />
-          </Tooltip>
+          {canEditBugs ? (
+            <Tooltip title="编辑 Bug">
+              <Button
+                aria-label="编辑 Bug"
+                type="link"
+                size="small"
+                icon={<EditOutlined />}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onEdit(bug);
+                }}
+              />
+            </Tooltip>
+          ) : (
+            <Tooltip title={editDeniedReason}>
+              <span>
+                <Button disabled aria-label="编辑 Bug" type="link" size="small" icon={<EditOutlined />} />
+              </span>
+            </Tooltip>
+          )}
           {canDeleteBugs ? (
             <Popconfirm
               title="删除 Bug"
