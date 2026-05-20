@@ -266,18 +266,6 @@ function getBugCreatedAt(values: Record<string, unknown>) {
     return asDateTimeString(explicitCreatedAt);
   }
 
-  const explicitFlowAt = asText(values.flowRecordAt);
-
-  if (explicitFlowAt) {
-    return asDateTimeString(explicitFlowAt);
-  }
-
-  const legacyDueDate = asText(values.dueDate);
-
-  if (legacyDueDate) {
-    return asDateTimeString(dayjs(legacyDueDate).subtract(3, "day").toISOString());
-  }
-
   return asDateTimeString(new Date().toISOString());
 }
 
@@ -2093,12 +2081,14 @@ export async function createDashboardRecord<T extends DashboardEntityType>(
 ): Promise<CreateRecordResult<T>> {
   const data = await readDatabase();
   const workspace = resolveCurrentWorkspace(data, workspaceId).currentWorkspace;
+  const now = new Date().toISOString();
   const baseValues = {
     ...values,
     workspaceId: workspace.id,
     ...(type === "bug"
       ? {
-          flowRecordAt: new Date().toISOString(),
+          createdAt: now,
+          flowRecordAt: now,
           flowRecordOperator: getBugFlowOperator(user, asText(values.reporter, "系统"))
         }
       : {})
