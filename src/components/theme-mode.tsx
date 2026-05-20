@@ -2,32 +2,84 @@
 
 import { Button, Tooltip, theme } from "antd";
 import { DesktopOutlined, MoonOutlined, SunOutlined } from "@ant-design/icons";
-import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { createContext, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
+import {
+  createThemeSnapshot,
+  defaultThemeSnapshot,
+  isThemeMode,
+  parseThemeSnapshot,
+  themeBackground,
+  themeChangeEventName,
+  themeSnapshotCookieName,
+  themeStorageKey,
+  type EffectiveTheme,
+  type ThemeMode
+} from "@/lib/theme-preference";
 
-export type ThemeMode = "system" | "light" | "dark";
-export type EffectiveTheme = "light" | "dark";
+export type { EffectiveTheme, ThemeMode } from "@/lib/theme-preference";
 
-const themeStorageKey = "ai-pm-theme-mode";
-const themeChangeEventName = "ai-pm-theme-change";
-const serverThemeSnapshot = "system:light";
+const ThemePreferenceContext = createContext(defaultThemeSnapshot);
 const themeModes: ThemeMode[] = ["system", "light", "dark"];
 const themeModeLabel: Record<ThemeMode, string> = {
   system: "跟随系统",
   light: "浅色",
   dark: "深色"
 };
-const themeBackground: Record<EffectiveTheme, string> = {
-  light: "#eef3f8",
-  dark: "#0b1020"
-};
 
-function isThemeMode(value: string | null): value is ThemeMode {
-  return value === "system" || value === "light" || value === "dark";
+// Provider 把服务端 cookie 解析出的主题快照交给所有客户端页面，保证 SSR 和水合首帧一致。
+export function ThemePreferenceProvider({
+  children,
+  initialSnapshot
+}: {
+  children: ReactNode;
+  initialSnapshot: string;
+}) {
+  return <ThemePreferenceContext.Provider value={initialSnapshot}>{children}</ThemePreferenceContext.Provider>;
+}
+
+function readCookieValue(name: string) {
+  if (typeof document === "undefined") {
+    return "";
+  }
+
+  return document.cookie
+    .split("; ")
+    .find((item) => item.startsWith(`${name}=`))
+    ?.split("=")
+    .slice(1)
+    .join("=") ?? "";
+}
+
+function readSnapshotCookie() {
+  const rawSnapshot = readCookieValue(themeSnapshotCookieName);
+
+  if (!rawSnapshot) {
+    return null;
+  }
+
+  try {
+    return parseThemeSnapshot(decodeURIComponent(rawSnapshot));
+  } catch {
+    // cookie 被手动写坏时忽略它，避免刷新首帧被异常值带偏。
+    return null;
+  }
+}
+
+function writeSnapshotCookie(mode: ThemeMode, effectiveTheme: EffectiveTheme) {
+  document.cookie = `${themeSnapshotCookieName}=${encodeURIComponent(
+    createThemeSnapshot(mode, effectiveTheme)
+  )}; Path=/; Max-Age=31536000; SameSite=Lax`;
 }
 
 function getStoredThemeMode(): ThemeMode {
   if (typeof window === "undefined") {
     return "system";
+  }
+
+  const snapshot = readSnapshotCookie();
+
+  if (snapshot) {
+    return snapshot.mode;
   }
 
   try {
@@ -50,19 +102,10 @@ function getSystemTheme(): EffectiveTheme {
 
 // 主题快照把用户选择和系统主题压成稳定字符串，方便 useSyncExternalStore 比较。
 function getThemeSnapshot() {
-  return `${getStoredThemeMode()}:${getSystemTheme()}`;
-}
+  const mode = getStoredThemeMode();
+  const effectiveTheme = mode === "system" ? getSystemTheme() : mode;
 
-// 服务端快照和客户端快照共用解析逻辑，避免水合时按钮文字和图标不一致。
-function parseThemeSnapshot(snapshot: string): { mode: ThemeMode; systemTheme: EffectiveTheme } {
-  const [modeValue, systemThemeValue] = snapshot.split(":");
-  const mode: ThemeMode = isThemeMode(modeValue) ? modeValue : "system";
-  const systemTheme: EffectiveTheme = systemThemeValue === "dark" ? "dark" : "light";
-
-  return {
-    mode,
-    systemTheme
-  };
+  return createThemeSnapshot(mode, effectiveTheme);
 }
 
 // 监听系统主题、本地存储和手动切换事件，让多个标签页和当前页状态保持一致。
@@ -84,18 +127,20 @@ function subscribeThemeSnapshot(onStoreChange: () => void) {
 function applyThemeAttributes(mode: ThemeMode, effectiveTheme: EffectiveTheme) {
   document.documentElement.dataset.theme = effectiveTheme;
   document.documentElement.dataset.themeMode = mode;
+  delete document.documentElement.dataset.themeBootstrapping;
   document.documentElement.style.colorScheme = effectiveTheme;
   document.documentElement.style.backgroundColor = themeBackground[effectiveTheme];
   document.body.dataset.theme = effectiveTheme;
   document.body.dataset.themeMode = mode;
   document.body.style.backgroundColor = themeBackground[effectiveTheme];
+  writeSnapshotCookie(mode, effectiveTheme);
 }
 
 // 主题 hook 统一管理首屏脚本后的 React 状态，避免页面刷新和手动切换出现视觉跳变。
 export function useThemePreference() {
-  const snapshot = useSyncExternalStore(subscribeThemeSnapshot, getThemeSnapshot, () => serverThemeSnapshot);
-  const { mode, systemTheme } = parseThemeSnapshot(snapshot);
-  const effectiveTheme: EffectiveTheme = mode === "system" ? systemTheme : mode;
+  const initialSnapshot = useContext(ThemePreferenceContext);
+  const snapshot = useSyncExternalStore(subscribeThemeSnapshot, getThemeSnapshot, () => initialSnapshot);
+  const { mode, effectiveTheme } = parseThemeSnapshot(snapshot);
 
   useEffect(() => {
     applyThemeAttributes(mode, effectiveTheme);
@@ -103,6 +148,7 @@ export function useThemePreference() {
 
   const cycleMode = () => {
     const nextMode = themeModes[(themeModes.indexOf(mode) + 1) % themeModes.length];
+    const nextEffectiveTheme: EffectiveTheme = nextMode === "system" ? getSystemTheme() : nextMode;
 
     try {
       window.localStorage.setItem(themeStorageKey, nextMode);
@@ -110,6 +156,7 @@ export function useThemePreference() {
       // 本地存储不可用时仍保持当前页面主题，避免隐私模式下切换报错。
     }
 
+    writeSnapshotCookie(nextMode, nextEffectiveTheme);
     window.dispatchEvent(new Event(themeChangeEventName));
   };
 

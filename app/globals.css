@@ -166,6 +166,11 @@ body {
     sans-serif;
 }
 
+/* 旧版仅有 localStorage 主题时先隐藏首屏内容，防止浅色服务端 UI 被用户看到一帧。 */
+html[data-theme-bootstrapping="true"] body {
+  visibility: hidden;
+}
+
 body {
   overflow-x: hidden;
   min-height: 100dvh;

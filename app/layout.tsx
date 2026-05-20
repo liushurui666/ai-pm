@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { AntdRegistry } from "@ant-design/nextjs-registry";
+import { cookies } from "next/headers";
 import { themeInitScript } from "@/components/theme-init-script";
+import { ThemePreferenceProvider } from "@/components/theme-mode";
+import { getInitialThemeSnapshot, parseThemeSnapshot, themeBackground, themeSnapshotCookieName } from "@/lib/theme-preference";
 import "./globals.css";
 import "@/components/project-management-platform.css";
 
@@ -12,19 +15,40 @@ export const metadata: Metadata = {
   }
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const cookieStore = await cookies();
+  const initialThemeSnapshot = getInitialThemeSnapshot(cookieStore.get(themeSnapshotCookieName)?.value);
+  const { mode: initialThemeMode, effectiveTheme } = parseThemeSnapshot(initialThemeSnapshot);
+  const themeStyle = {
+    colorScheme: effectiveTheme,
+    backgroundColor: themeBackground[effectiveTheme]
+  };
+
   return (
-    <html lang="zh-CN" suppressHydrationWarning>
+    <html
+      lang="zh-CN"
+      data-theme={effectiveTheme}
+      data-theme-mode={initialThemeMode}
+      style={themeStyle}
+      suppressHydrationWarning
+    >
       <head>
         {/* 首屏主题脚本必须先于页面内容执行，避免刷新时短暂露出默认白底。 */}
         <script id="ai-pm-theme-init" dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
-      <body suppressHydrationWarning>
-        <AntdRegistry>{children}</AntdRegistry>
+      <body
+        data-theme={effectiveTheme}
+        data-theme-mode={initialThemeMode}
+        style={{ backgroundColor: themeBackground[effectiveTheme] }}
+        suppressHydrationWarning
+      >
+        <AntdRegistry>
+          <ThemePreferenceProvider initialSnapshot={initialThemeSnapshot}>{children}</ThemePreferenceProvider>
+        </AntdRegistry>
       </body>
     </html>
   );
