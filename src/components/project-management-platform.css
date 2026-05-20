@@ -867,6 +867,17 @@
   margin-top: 8px;
 }
 
+.bug-row-actions {
+  width: 100%;
+  justify-content: center;
+}
+
+.bug-row-actions .ant-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
 .pm-list-stack {
   display: flex;
   flex-direction: column;

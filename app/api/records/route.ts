@@ -19,6 +19,18 @@ function isRequirementManagementType(type: DashboardEntityType) {
   return type === "requirement" || type === "requirementVersion";
 }
 
+function getDeleteAction(type: DashboardEntityType) {
+  if (isRequirementManagementType(type)) {
+    return "requirement:delete";
+  }
+
+  if (type === "bug") {
+    return "bug:delete";
+  }
+
+  return "member:manage";
+}
+
 export async function POST(request: NextRequest) {
   const session = await getSession();
 
@@ -175,7 +187,7 @@ export async function DELETE(request: NextRequest) {
 
   const data = await getDashboardData(session?.user, body.workspaceId);
   const permissions = data.meta?.permissions;
-  const action = isRequirementManagementType(body.type) ? "requirement:delete" : "member:manage";
+  const action = getDeleteAction(body.type);
 
   if (!permissions || !canPerformAction(permissions, action)) {
     return NextResponse.json(

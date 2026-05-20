@@ -1,7 +1,16 @@
 "use client";
 
-import { Button, Card, Col, Row, Segmented, Select, Space, Switch, Table, Tag, Tooltip, Typography } from "antd";
-import { AlertOutlined, BugOutlined, CheckCircleOutlined, EditOutlined, PaperClipOutlined, PlusOutlined, UserOutlined } from "@ant-design/icons";
+import { Button, Card, Col, Popconfirm, Row, Segmented, Select, Space, Switch, Table, Tag, Tooltip, Typography } from "antd";
+import {
+  AlertOutlined,
+  BugOutlined,
+  CheckCircleOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  PaperClipOutlined,
+  PlusOutlined,
+  UserOutlined
+} from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo, useState } from "react";
 import dayjs from "dayjs";
@@ -95,15 +104,21 @@ function getAttachmentLabel(attachment: BugAttachment) {
 
 export function BugsView({
   bugs,
+  canDeleteBugs,
   currentUser,
+  permissionDeniedReason,
   versionOptions,
   onCreate,
+  onDelete,
   onEdit
 }: {
   bugs: BugReport[];
+  canDeleteBugs: boolean;
   currentUser?: FeishuUser;
+  permissionDeniedReason: string;
   versionOptions: RequirementVersionOption[];
   onCreate: () => void;
+  onDelete: (bug: BugReport) => void;
   onEdit: (bug: BugReport) => void;
 }) {
   const [statusFilter, setStatusFilter] = useState<"全部" | BugReport["status"]>("全部");
@@ -203,11 +218,40 @@ export function BugsView({
       title: "操作",
       key: "action",
       fixed: "right",
-      width: 90,
+      width: 96,
+      align: "center",
       render: (_, bug) => (
-        <Button type="link" icon={<EditOutlined />} onClick={() => onEdit(bug)}>
-          编辑
-        </Button>
+        <Space size={2} className="bug-row-actions">
+          <Tooltip title="编辑 Bug">
+            <Button
+              aria-label="编辑 Bug"
+              type="text"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => onEdit(bug)}
+            />
+          </Tooltip>
+          {canDeleteBugs ? (
+            <Popconfirm
+              title="删除 Bug"
+              description="删除后该 Bug 记录会从当前版本中移除。"
+              okText="删除"
+              cancelText="取消"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => onDelete(bug)}
+            >
+              <Tooltip title="删除 Bug">
+                <Button danger aria-label="删除 Bug" type="text" size="small" icon={<DeleteOutlined />} />
+              </Tooltip>
+            </Popconfirm>
+          ) : (
+            <Tooltip title={permissionDeniedReason}>
+              <span>
+                <Button danger disabled aria-label="删除 Bug" type="text" size="small" icon={<DeleteOutlined />} />
+              </span>
+            </Tooltip>
+          )}
+        </Space>
       )
     }
   ];
@@ -272,7 +316,7 @@ export function BugsView({
           dataSource={visibleBugs}
           locale={{ emptyText: getBugEmptyText(onlyMine, versionFilter) }}
           pagination={{ pageSize: 12, showSizeChanger: true }}
-          scroll={{ x: 1390 }}
+          scroll={{ x: 1450 }}
           expandable={{
             expandedRowRender: (bug) => (
               <Row gutter={[16, 12]} className="bug-detail-row">

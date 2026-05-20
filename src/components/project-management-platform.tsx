@@ -341,6 +341,7 @@ export function ProjectManagementPlatform({
   const canCreateRequirements = Boolean(permissions?.canCreateRequirements);
   const canEditRequirements = Boolean(permissions?.canEditRequirements);
   const canDeleteRequirements = Boolean(permissions?.canDeleteRequirements);
+  const canDeleteBugs = Boolean(permissions?.canDeleteBugs);
   const permissionDeniedReason = permissions?.deniedReason ?? "当前角色无此操作权限。";
   const currentWorkspace = data?.meta?.currentWorkspace;
   const currentWorkspaceId = currentWorkspace?.id ?? activeWorkspaceId;
@@ -1134,9 +1135,12 @@ export function ProjectManagementPlatform({
   }
 
   async function handleDeleteRecord(type: DashboardEntityType, id: string) {
-    const canDelete = type === "requirement" || type === "requirementVersion"
-      ? canDeleteRequirements
-      : Boolean(permissions?.canDeleteRecords);
+    const canDelete =
+      type === "requirement" || type === "requirementVersion"
+        ? canDeleteRequirements
+        : type === "bug"
+          ? canDeleteBugs
+          : Boolean(permissions?.canDeleteRecords);
 
     if (!canDelete) {
       messageApi.warning(permissionDeniedReason);
@@ -1739,9 +1743,12 @@ export function ProjectManagementPlatform({
                   {activeView === "bugs" ? (
                     <BugsView
                       bugs={data.bugs}
+                      canDeleteBugs={canDeleteBugs}
                       currentUser={data.meta?.user}
+                      permissionDeniedReason={permissions?.deniedReason ?? "只有所有者、管理员或测试可以删除 Bug。"}
                       versionOptions={requirementVersionOptions}
                       onCreate={() => openCreateDrawer("bug")}
+                      onDelete={(bug) => handleDeleteRecord("bug", bug.id)}
                       onEdit={openEditBugDrawer}
                     />
                   ) : null}
@@ -1814,6 +1821,7 @@ export function ProjectManagementPlatform({
                         canCreateRequirements: false,
                         canEditRequirements: false,
                         canDeleteRequirements: false,
+                        canDeleteBugs: false,
                         canDeleteRecords: false,
                         deniedReason: permissionDeniedReason
                       }}
@@ -3008,6 +3016,10 @@ function updateDashboardWithRecordDeletion(data: DashboardData, result: DeleteRe
 
   if (result.type === "requirement") {
     nextData.requirements = nextData.requirements.filter((requirement) => requirement.id !== result.id);
+  }
+
+  if (result.type === "bug") {
+    nextData.bugs = nextData.bugs.filter((bug) => bug.id !== result.id);
   }
 
   if (result.type === "requirementVersion") {

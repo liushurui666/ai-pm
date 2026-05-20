@@ -3,6 +3,7 @@ import type { DashboardMember, DashboardPermissions, FeishuUser, MemberRole } fr
 
 export type DashboardPermissionAction =
   | "member:manage"
+  | "bug:delete"
   | "requirement:create"
   | "requirement:update"
   | "requirement:delete";
@@ -24,6 +25,7 @@ const rolePermissions: Record<MemberRole, Omit<DashboardPermissions, "deniedReas
     canCreateRequirements: true,
     canEditRequirements: true,
     canDeleteRequirements: true,
+    canDeleteBugs: true,
     canDeleteRecords: true
   },
   admin: {
@@ -31,6 +33,7 @@ const rolePermissions: Record<MemberRole, Omit<DashboardPermissions, "deniedReas
     canCreateRequirements: true,
     canEditRequirements: true,
     canDeleteRequirements: true,
+    canDeleteBugs: true,
     canDeleteRecords: true
   },
   productAdmin: {
@@ -38,6 +41,7 @@ const rolePermissions: Record<MemberRole, Omit<DashboardPermissions, "deniedReas
     canCreateRequirements: true,
     canEditRequirements: true,
     canDeleteRequirements: true,
+    canDeleteBugs: false,
     canDeleteRecords: false
   },
   productMember: {
@@ -45,6 +49,7 @@ const rolePermissions: Record<MemberRole, Omit<DashboardPermissions, "deniedReas
     canCreateRequirements: true,
     canEditRequirements: true,
     canDeleteRequirements: false,
+    canDeleteBugs: false,
     canDeleteRecords: false
   },
   frontend: {
@@ -52,6 +57,7 @@ const rolePermissions: Record<MemberRole, Omit<DashboardPermissions, "deniedReas
     canCreateRequirements: false,
     canEditRequirements: false,
     canDeleteRequirements: false,
+    canDeleteBugs: false,
     canDeleteRecords: false
   },
   backend: {
@@ -59,6 +65,7 @@ const rolePermissions: Record<MemberRole, Omit<DashboardPermissions, "deniedReas
     canCreateRequirements: false,
     canEditRequirements: false,
     canDeleteRequirements: false,
+    canDeleteBugs: false,
     canDeleteRecords: false
   },
   qa: {
@@ -66,6 +73,7 @@ const rolePermissions: Record<MemberRole, Omit<DashboardPermissions, "deniedReas
     canCreateRequirements: false,
     canEditRequirements: false,
     canDeleteRequirements: false,
+    canDeleteBugs: true,
     canDeleteRecords: false
   },
   viewer: {
@@ -73,6 +81,7 @@ const rolePermissions: Record<MemberRole, Omit<DashboardPermissions, "deniedReas
     canCreateRequirements: false,
     canEditRequirements: false,
     canDeleteRequirements: false,
+    canDeleteBugs: false,
     canDeleteRecords: false
   }
 };
@@ -82,6 +91,7 @@ const localAdminPermissions: DashboardPermissions = {
   canCreateRequirements: true,
   canEditRequirements: true,
   canDeleteRequirements: true,
+  canDeleteBugs: true,
   canDeleteRecords: true
 };
 
@@ -90,6 +100,7 @@ const noPermission: DashboardPermissions = {
   canCreateRequirements: false,
   canEditRequirements: false,
   canDeleteRequirements: false,
+  canDeleteBugs: false,
   canDeleteRecords: false
 };
 
@@ -175,6 +186,10 @@ export function canPerformAction(permissions: DashboardPermissions, action: Dash
     return permissions.canEditRequirements;
   }
 
+  if (action === "bug:delete") {
+    return permissions.canDeleteBugs;
+  }
+
   return permissions.canDeleteRequirements;
 }
 
@@ -193,6 +208,10 @@ export function getPermissionDeniedReason(permissions: DashboardPermissions, act
 
   if (action === "requirement:update") {
     return "只有产品成员及以上角色可以编辑需求和版本。";
+  }
+
+  if (action === "bug:delete") {
+    return "只有所有者、管理员或测试可以删除 Bug。";
   }
 
   return "只有产品管理员及以上角色可以删除需求和版本。";
