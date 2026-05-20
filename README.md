@@ -26,6 +26,8 @@ cp .env.example .env.local
 - `FEISHU_REDIRECT_URI`
 - `SESSION_SECRET`
 
+需求模块权限由站内“成员管理”维护，并按工作区生效。配置飞书登录后，首个进入某个工作区的用户会自动成为该工作区 `owner`，后续首次进入的用户会作为 `viewer` 只读成员登记，再由 `owner / admin` 调整角色；`owner / admin / productAdmin` 可以删除需求和版本，`productMember` 可以创建和编辑但不能删除，`viewer` 只读。本地演示模式如果还没有成员，会保留完整管理权限，方便开发调试。
+
 飞书开放平台里需要把 `FEISHU_REDIRECT_URI` 配到应用的重定向 URL，例如：
 
 ```txt
@@ -44,7 +46,7 @@ http://localhost:3000/api/auth/feishu/callback
 
 - OAuth 登录，确保用户来自企业内部应用授权。
 - 通讯录负责人选择，保存负责人 `open_id / user_id / union_id / email` 到站内记录。
-- 创建成功后通过飞书机器人给负责人发送通知。
+- 根据成员管理里的通知开关，通过飞书机器人给负责人发送通知。
 
 飞书应用需要开通并发布这些能力：
 
@@ -72,6 +74,28 @@ AI_MODEL=deepseek-chat
 
 `.env.local` 已在 `.gitignore` 中忽略。不要把真实密钥写入仓库；如果密钥已经出现在聊天、截图或提交记录中，建议立即在服务商后台轮换。
 
+## Bug 复现材料上传
+
+Bug 管理支持上传复现步骤的图片或视频材料。文件会通过服务端接口上传到腾讯云 COS，并在 Bug 记录中保存文件 URL、对象 Key、类型和大小。
+
+当前 COS 默认配置：
+
+```txt
+TENCENT_COS_BUCKET=ai-1350977987
+TENCENT_COS_REGION=ap-guangzhou
+TENCENT_COS_DOMAIN=ai-1350977987.cos.ap-guangzhou.myqcloud.com
+TENCENT_COS_BUG_PREFIX=bug-materials
+```
+
+还需要在 `.env.local` 中配置腾讯云 API 密钥：
+
+```txt
+TENCENT_COS_SECRET_ID=AKIDxxxxxxxxxxxxxxxx
+TENCENT_COS_SECRET_KEY=xxxxxxxxxxxxxxxx
+```
+
+默认单文件限制为 200MB，可通过 `BUG_ATTACHMENT_MAX_BYTES` 调整。腾讯云 COS `PUT Object` 支持 5GB 以内对象；更大的视频建议改为分块上传。
+
 ## 功能范围
 
 - 项目驾驶舱
@@ -82,5 +106,6 @@ AI_MODEL=deepseek-chat
 - 飞书 OAuth 登录
 - 站内项目数据源持久化
 - 上传文档自动拆解任务
+- Bug 复现图片/视频材料上传到腾讯云 COS
 - 飞书通讯录负责人关联
 - 飞书机器人负责人通知
