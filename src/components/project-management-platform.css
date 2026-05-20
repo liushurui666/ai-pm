@@ -852,12 +852,17 @@
   margin-top: 2px;
 }
 
-.bug-detail-row {
-  padding: 4px 0;
+.bug-title-cell {
+  min-width: 0;
+  max-width: 100%;
 }
 
-.bug-detail-row .ant-typography {
-  margin-bottom: 4px;
+.bug-table-row {
+  cursor: pointer;
+}
+
+.bug-table-row:hover td {
+  background: color-mix(in srgb, var(--brand) 7%, transparent) !important;
 }
 
 .bug-attachment-list {
@@ -865,6 +870,11 @@
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 8px;
+}
+
+.bug-attachment-list .ant-btn {
+  max-width: 100%;
+  justify-content: flex-start;
 }
 
 .bug-flow-timeline {
@@ -884,6 +894,117 @@
   width: 28px;
   height: 28px;
   padding: 0;
+}
+
+.bug-detail-drawer .ant-drawer-body {
+  padding: 0;
+  overflow-y: auto;
+  background: var(--background);
+}
+
+.bug-detail-panel {
+  width: 100%;
+  padding: 22px;
+}
+
+.bug-detail-hero {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand) 12%, transparent), transparent 62%),
+    var(--surface-elevated);
+}
+
+.bug-detail-hero-main {
+  min-width: 0;
+}
+
+.bug-detail-hero-main .ant-typography {
+  margin: 0;
+}
+
+.bug-detail-actions {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+}
+
+.bug-detail-meta-grid,
+.bug-detail-copy-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.bug-detail-meta-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.bug-detail-meta-item,
+.bug-detail-copy-block,
+.bug-detail-section {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.bug-detail-meta-item {
+  display: flex;
+  min-height: 68px;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: center;
+}
+
+.bug-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bug-detail-copy-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.bug-detail-copy-block .ant-typography {
+  margin-bottom: 0;
+  white-space: pre-line;
+}
+
+.bug-detail-empty {
+  padding: 14px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  background: var(--surface-subtle);
+}
+
+@media (max-width: 720px) {
+  .bug-detail-panel {
+    padding: 16px;
+  }
+
+  .bug-detail-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .bug-detail-hero {
+    flex-direction: column;
+  }
+
+  .bug-detail-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .bug-detail-copy-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .pm-list-stack {

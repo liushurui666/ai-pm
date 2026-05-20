@@ -1,12 +1,13 @@
 "use client";
 
-import { Button, Card, Col, Empty, Popconfirm, Row, Segmented, Select, Space, Switch, Table, Tag, Timeline, Tooltip, Typography } from "antd";
+import { Button, Card, Drawer, Empty, Popconfirm, Row, Segmented, Select, Space, Switch, Table, Tag, Timeline, Tooltip, Typography } from "antd";
 import {
   AlertOutlined,
   BugOutlined,
   CheckCircleOutlined,
   DeleteOutlined,
   EditOutlined,
+  EyeOutlined,
   PaperClipOutlined,
   PlusOutlined,
   UserOutlined
@@ -120,6 +121,10 @@ function getAttachmentLabel(attachment: BugAttachment) {
   return `${attachment.type === "video" ? "视频" : "图片"} · ${formatAttachmentSize(attachment.size)}`;
 }
 
+function isBugOverdue(bug: BugReport) {
+  return bug.status !== "已关闭" && dayjs(bug.dueDate).isBefore(dayjs().startOf("day"));
+}
+
 function getBugFlowRecords(bug: BugReport) {
   return [...(bug.flowRecords ?? [])].sort((left, right) => dayjs(right.at).valueOf() - dayjs(left.at).valueOf());
 }
@@ -158,6 +163,7 @@ export function BugsView({
   const [statusFilter, setStatusFilter] = useState<"全部" | BugReport["status"]>("全部");
   const [versionFilter, setVersionFilter] = useState("全部");
   const [onlyMine, setOnlyMine] = useState(false);
+  const [detailBugId, setDetailBugId] = useState<string | null>(null);
   const scopedBugs = useMemo(
     () => (onlyMine ? bugs.filter((bug) => isMyBug(bug, currentUser)) : bugs),
     [bugs, currentUser, onlyMine]
@@ -172,6 +178,8 @@ export function BugsView({
 
     return statusScopedBugs;
   }, [statusFilter, versionScopedBugs]);
+  const detailBug = useMemo(() => bugs.find((bug) => bug.id === detailBugId) ?? null, [bugs, detailBugId]);
+  const detailFlowRecords = useMemo(() => detailBug ? getBugFlowRecords(detailBug) : [], [detailBug]);
   const openBugCount = versionScopedBugs.filter((bug) => bug.status !== "已关闭").length;
   const blockerCount = versionScopedBugs.filter((bug) => bug.severity === "阻塞" && bug.status !== "已关闭").length;
   const bugColumns: ColumnsType<BugReport> = [
@@ -179,11 +187,13 @@ export function BugsView({
       title: "Bug",
       dataIndex: "title",
       key: "title",
-      fixed: "left",
-      width: 320,
+      width: 360,
       render: (_, bug) => (
-        <Space orientation="vertical" size={4}>
-          <Text strong>{bug.title}</Text>
+        <Space orientation="vertical" size={6} className="bug-title-cell">
+          <Space size={8} wrap>
+            <Text strong>{bug.title}</Text>
+            {isBugOverdue(bug) ? <Tag color="red">已逾期</Tag> : null}
+          </Space>
           <Text type="secondary" ellipsis>{bug.reproduction}</Text>
         </Space>
       )
@@ -227,7 +237,6 @@ export function BugsView({
       width: 180,
       render: (_, bug) => bug.versionName ? <Tag color="blue">{bug.versionName}</Tag> : <Tag>未规划</Tag>
     },
-    { title: "提交人", dataIndex: "reporter", key: "reporter", width: 120 },
     {
       title: "负责人",
       dataIndex: "owner",
@@ -235,7 +244,6 @@ export function BugsView({
       width: 140,
       render: (_, bug) => <OwnerInline name={bug.owner} avatarUrl={bug.ownerAvatarUrl} />
     },
-    { title: "环境", dataIndex: "environment", key: "environment", width: 180 },
     {
       title: "截止日期",
       dataIndex: "dueDate",
@@ -243,7 +251,7 @@ export function BugsView({
       width: 130,
       sorter: (left, right) => dayjs(left.dueDate).valueOf() - dayjs(right.dueDate).valueOf(),
       render: (dueDate: string, bug) => (
-        <Text type={bug.status !== "已关闭" && dayjs(dueDate).isBefore(dayjs().startOf("day")) ? "danger" : "secondary"}>
+        <Text type={isBugOverdue(bug) ? "danger" : "secondary"}>
           {dueDate}
         </Text>
       )
@@ -251,40 +259,22 @@ export function BugsView({
     {
       title: "操作",
       key: "action",
-      fixed: "right",
-      width: 96,
+      width: 100,
       align: "center",
       render: (_, bug) => (
         <Space size={2} className="bug-row-actions">
-          <Tooltip title="编辑 Bug">
+          <Tooltip title="查看详情">
             <Button
-              aria-label="编辑 Bug"
-              type="text"
+              aria-label="查看 Bug 详情"
+              type="link"
               size="small"
-              icon={<EditOutlined />}
-              onClick={() => onEdit(bug)}
+              icon={<EyeOutlined />}
+              onClick={(event) => {
+                event.stopPropagation();
+                setDetailBugId(bug.id);
+              }}
             />
           </Tooltip>
-          {canDeleteBugs ? (
-            <Popconfirm
-              title="删除 Bug"
-              description="删除后该 Bug 记录会从当前版本中移除。"
-              okText="删除"
-              cancelText="取消"
-              okButtonProps={{ danger: true }}
-              onConfirm={() => onDelete(bug)}
-            >
-              <Tooltip title="删除 Bug">
-                <Button danger aria-label="删除 Bug" type="text" size="small" icon={<DeleteOutlined />} />
-              </Tooltip>
-            </Popconfirm>
-          ) : (
-            <Tooltip title={permissionDeniedReason}>
-              <span>
-                <Button danger disabled aria-label="删除 Bug" type="text" size="small" icon={<DeleteOutlined />} />
-              </span>
-            </Tooltip>
-          )}
         </Space>
       )
     }
@@ -350,72 +340,165 @@ export function BugsView({
           dataSource={visibleBugs}
           locale={{ emptyText: getBugEmptyText(onlyMine, versionFilter) }}
           pagination={{ pageSize: 12, showSizeChanger: true }}
-          scroll={{ x: 1450 }}
-          expandable={{
-            expandedRowRender: (bug) => (
-              <Row gutter={[16, 12]} className="bug-detail-row">
-                <Col xs={24} md={8}>
-                  <Text strong>复现步骤</Text>
-                  <Paragraph>{bug.reproduction}</Paragraph>
-                </Col>
-                <Col xs={24} md={8}>
-                  <Text strong>预期结果</Text>
-                  <Paragraph>{bug.expected}</Paragraph>
-                </Col>
-                <Col xs={24} md={8}>
-                  <Text strong>实际结果</Text>
-                  <Paragraph>{bug.actual}</Paragraph>
-                </Col>
-                {bug.attachments?.length ? (
-                  <Col span={24}>
-                    <Text strong>复现材料</Text>
-                    <div className="bug-attachment-list">
-                      {bug.attachments.map((attachment) => (
-                        <Button
-                          href={attachment.url}
-                          icon={<PaperClipOutlined />}
-                          key={attachment.id}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          {attachment.name}
-                          <Text type="secondary"> {getAttachmentLabel(attachment)}</Text>
-                        </Button>
-                      ))}
-                    </div>
-                  </Col>
-                ) : null}
-                <Col span={24}>
-                  <Text strong>流转记录</Text>
-                  {getBugFlowRecords(bug).length ? (
-                    <Timeline
-                      className="bug-flow-timeline"
-                      items={getBugFlowRecords(bug).map((record) => ({
-                        color: bugFlowActionColor[record.action],
-                        content: (
-                          <Space orientation="vertical" size={4}>
-                            <Space size={8} wrap>
-                              <Text strong>{bugFlowActionLabel[record.action]}</Text>
-                              <Tag>{getBugFlowDescription(record)}</Tag>
-                              <Text type="secondary">{dayjs(record.at).format("YYYY-MM-DD HH:mm")}</Text>
-                            </Space>
-                            <Text type="secondary">
-                              {record.operator}
-                              {record.note ? ` · ${record.note}` : ""}
-                            </Text>
-                          </Space>
-                        )
-                      }))}
-                    />
-                  ) : (
-                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无流转记录" />
-                  )}
-                </Col>
-              </Row>
-            )
-          }}
+          scroll={{ x: 1120 }}
+          onRow={(bug) => ({
+            onClick: () => setDetailBugId(bug.id)
+          })}
+          rowClassName="bug-table-row"
         />
       </Card>
+
+      <Drawer
+        className="bug-detail-drawer"
+        title={
+          <Space>
+            <BugOutlined />
+            <span>Bug 详情</span>
+          </Space>
+        }
+        open={Boolean(detailBug)}
+        onClose={() => setDetailBugId(null)}
+        size="large"
+        destroyOnClose
+      >
+        {detailBug ? (
+          <Space orientation="vertical" size={18} className="bug-detail-panel">
+            <div className="bug-detail-hero">
+              <Space orientation="vertical" size={12} className="bug-detail-hero-main">
+                <Space size={8} wrap>
+                  <Tag color={bugSeverityColor[detailBug.severity]}>{detailBug.severity}</Tag>
+                  <Tag color={bugStatusColor[detailBug.status]}>{detailBug.status}</Tag>
+                  {isBugOverdue(detailBug) ? <Tag color="red">已逾期</Tag> : null}
+                </Space>
+                <Typography.Title level={3}>{detailBug.title}</Typography.Title>
+                <Text type="secondary">{detailBug.versionName ?? "未规划需求池"}</Text>
+              </Space>
+              <Space wrap className="bug-detail-actions">
+                <Button
+                  type="primary"
+                  icon={<EditOutlined />}
+                  onClick={() => {
+                    setDetailBugId(null);
+                    onEdit(detailBug);
+                  }}
+                >
+                  编辑
+                </Button>
+                {canDeleteBugs ? (
+                  <Popconfirm
+                    title="删除 Bug"
+                    description="删除后该 Bug 记录会从当前版本中移除。"
+                    okText="删除"
+                    cancelText="取消"
+                    okButtonProps={{ danger: true }}
+                    onConfirm={() => {
+                      onDelete(detailBug);
+                      setDetailBugId(null);
+                    }}
+                  >
+                    <Button danger icon={<DeleteOutlined />}>删除</Button>
+                  </Popconfirm>
+                ) : (
+                  <Tooltip title={permissionDeniedReason}>
+                    <span>
+                      <Button danger disabled icon={<DeleteOutlined />}>删除</Button>
+                    </span>
+                  </Tooltip>
+                )}
+              </Space>
+            </div>
+
+            <div className="bug-detail-meta-grid">
+              <div className="bug-detail-meta-item">
+                <Text type="secondary">负责人</Text>
+                <OwnerInline name={detailBug.owner} avatarUrl={detailBug.ownerAvatarUrl} />
+              </div>
+              <div className="bug-detail-meta-item">
+                <Text type="secondary">提交人</Text>
+                <Text>{detailBug.reporter}</Text>
+              </div>
+              <div className="bug-detail-meta-item">
+                <Text type="secondary">截止日期</Text>
+                <Text type={isBugOverdue(detailBug) ? "danger" : undefined}>{detailBug.dueDate}</Text>
+              </div>
+              <div className="bug-detail-meta-item">
+                <Text type="secondary">环境</Text>
+                <Text>{detailBug.environment}</Text>
+              </div>
+            </div>
+
+            <div className="bug-detail-section">
+              <Text strong>复现信息</Text>
+              <div className="bug-detail-copy-grid">
+                <div className="bug-detail-copy-block">
+                  <Text type="secondary">复现步骤</Text>
+                  <Paragraph>{detailBug.reproduction}</Paragraph>
+                </div>
+                <div className="bug-detail-copy-block">
+                  <Text type="secondary">预期结果</Text>
+                  <Paragraph>{detailBug.expected}</Paragraph>
+                </div>
+                <div className="bug-detail-copy-block">
+                  <Text type="secondary">实际结果</Text>
+                  <Paragraph>{detailBug.actual}</Paragraph>
+                </div>
+              </div>
+            </div>
+
+            <div className="bug-detail-section">
+              <Text strong>复现材料</Text>
+              {detailBug.attachments?.length ? (
+                <div className="bug-attachment-list">
+                  {detailBug.attachments.map((attachment) => (
+                    <Button
+                      href={attachment.url}
+                      icon={<PaperClipOutlined />}
+                      key={attachment.id}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {attachment.name}
+                      <Text type="secondary"> {getAttachmentLabel(attachment)}</Text>
+                    </Button>
+                  ))}
+                </div>
+              ) : (
+                <div className="bug-detail-empty">暂无复现材料</div>
+              )}
+            </div>
+
+            <div className="bug-detail-section">
+              <Space orientation="vertical" size={4}>
+                <Text strong>流转记录</Text>
+                <Text type="secondary">记录创建、状态、负责人、严重程度和版本变化。</Text>
+              </Space>
+              {detailFlowRecords.length ? (
+                <Timeline
+                  className="bug-flow-timeline"
+                  items={detailFlowRecords.map((record) => ({
+                    color: bugFlowActionColor[record.action],
+                    content: (
+                      <Space orientation="vertical" size={4}>
+                        <Space size={8} wrap>
+                          <Text strong>{bugFlowActionLabel[record.action]}</Text>
+                          <Tag>{getBugFlowDescription(record)}</Tag>
+                          <Text type="secondary">{dayjs(record.at).format("YYYY-MM-DD HH:mm")}</Text>
+                        </Space>
+                        <Text type="secondary">
+                          {record.operator}
+                          {record.note ? ` · ${record.note}` : ""}
+                        </Text>
+                      </Space>
+                    )
+                  }))}
+                />
+              ) : (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无流转记录" />
+              )}
+            </div>
+          </Space>
+        ) : null}
+      </Drawer>
     </Space>
   );
 }
