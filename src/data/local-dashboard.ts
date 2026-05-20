@@ -259,6 +259,28 @@ function createBugFlowRecord({
   };
 }
 
+function getBugCreatedAt(values: Record<string, unknown>) {
+  const explicitCreatedAt = asText(values.createdAt);
+
+  if (explicitCreatedAt) {
+    return asDateTimeString(explicitCreatedAt);
+  }
+
+  const explicitFlowAt = asText(values.flowRecordAt);
+
+  if (explicitFlowAt) {
+    return asDateTimeString(explicitFlowAt);
+  }
+
+  const legacyDueDate = asText(values.dueDate);
+
+  if (legacyDueDate) {
+    return asDateTimeString(dayjs(legacyDueDate).subtract(3, "day").toISOString());
+  }
+
+  return asDateTimeString(new Date().toISOString());
+}
+
 function getFallbackBugFlowAt(values: Record<string, unknown>) {
   const explicitAt = asText(values.flowRecordAt);
 
@@ -266,9 +288,7 @@ function getFallbackBugFlowAt(values: Record<string, unknown>) {
     return explicitAt;
   }
 
-  const dueDate = asDateString(values.dueDate, dayjs().add(3, "day").format("YYYY-MM-DD"));
-
-  return dayjs(dueDate).subtract(3, "day").startOf("day").toISOString();
+  return getBugCreatedAt(values);
 }
 
 function normalizeBugFlowRecords(
@@ -768,13 +788,13 @@ function normalizeCreateBug(values: Record<string, unknown>, id = createLocalId(
     expected: asText(values.expected, "暂无预期结果。"),
     actual: asText(values.actual, "暂无实际结果。"),
     attachments: asBugAttachments(values.attachments),
+    createdAt: getBugCreatedAt(values),
     flowRecords: normalizeBugFlowRecords(values.flowRecords, {
       bugId: id,
       operator: flowOperator,
       status,
       values
-    }),
-    dueDate: asDateString(values.dueDate, dayjs().add(3, "day").format("YYYY-MM-DD"))
+    })
   };
 }
 
@@ -2143,7 +2163,12 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
 
   const baseValues = {
     ...values,
-    workspaceId: getWorkspaceId(existingRecord)
+    workspaceId: getWorkspaceId(existingRecord),
+    ...(type === "bug"
+      ? {
+          createdAt: (existingRecord as BugReport).createdAt
+        }
+      : {})
   };
   const scopedValues =
     type === "bug" ? withBugVersionProject(data, baseValues, getWorkspaceId(existingRecord)) : baseValues;

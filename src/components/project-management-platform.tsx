@@ -98,10 +98,10 @@ import {
   bugFlowActionLabel,
   bugSeverityColor,
   bugStatusColor,
+  formatBugCreatedAt,
   getAttachmentLabel,
   getBugFlowDescription,
-  getBugFlowRecords,
-  isBugOverdue
+  getBugFlowRecords
 } from "@/components/project-management-platform/views/bugs-view";
 import { MembersView } from "@/components/project-management-platform/views/members-view";
 import { OverviewView } from "@/components/project-management-platform/views/overview-view";
@@ -2252,7 +2252,6 @@ function BugRouteEditView({
               <Space size={8} wrap>
                 <Tag color={bugSeverityColor[bug.severity]}>{bug.severity}</Tag>
                 <Tag color={bugStatusColor[bug.status]}>{bug.status}</Tag>
-                {isBugOverdue(bug) ? <Tag color="red">已逾期</Tag> : null}
               </Space>
               <Typography.Title level={4}>{bug.title}</Typography.Title>
               <Text type="secondary">{bug.versionName ?? "未规划需求池"}</Text>
@@ -2262,8 +2261,8 @@ function BugRouteEditView({
                   <OwnerInline name={bug.owner} avatarUrl={bug.ownerAvatarUrl} />
                 </div>
                 <div>
-                  <Text type="secondary">截止日期</Text>
-                  <Text type={isBugOverdue(bug) ? "danger" : undefined}>{bug.dueDate}</Text>
+                  <Text type="secondary">创建时间</Text>
+                  <Text>{formatBugCreatedAt(bug.createdAt)}</Text>
                 </div>
               </div>
             </Space>
@@ -2556,7 +2555,7 @@ function createScheduleItems(data: DashboardData): ScheduleItem[] {
     type: "Bug" as const,
     title: bug.title,
     project: bug.project,
-    date: bug.dueDate,
+    date: bug.createdAt,
     owner: bug.owner || bug.reporter,
     ownerAvatarUrl: bug.ownerAvatarUrl,
     ownerEmail: bug.ownerEmail,
@@ -2921,8 +2920,7 @@ function getCreateInitialValues(type: DashboardEntityType, currentUser?: FeishuU
     return {
       status: "新建",
       severity: "一般",
-      reporter: currentUser?.name ?? "",
-      dueDate: dayjs().add(3, "day")
+      reporter: currentUser?.name ?? ""
     };
   }
 
@@ -2975,8 +2973,7 @@ function getTaskFormValues(task: Task) {
 function getBugFormValues(bug: BugReport) {
   return {
     ...bug,
-    attachments: bug.attachments?.map(createBugAttachmentUploadFile) ?? [],
-    dueDate: dayjs(bug.dueDate)
+    attachments: bug.attachments?.map(createBugAttachmentUploadFile) ?? []
   };
 }
 
@@ -4463,22 +4460,13 @@ function BugFields({
         </Col>
       </Row>
       <VersionOnlyField form={form} versionOptions={versionOptions} />
-      <Row gutter={12}>
-        <Col span={12}>
-          <Form.Item
-            label="提交人"
-            name="reporter"
-            rules={[{ required: true, message: "请输入提交人" }]}
-          >
-            <Input placeholder="填写提 Bug 的人" />
-          </Form.Item>
-        </Col>
-        <Col span={12}>
-          <Form.Item label="截止日期" name="dueDate">
-            <DatePicker className="pm-form-control" />
-          </Form.Item>
-        </Col>
-      </Row>
+      <Form.Item
+        label="提交人"
+        name="reporter"
+        rules={[{ required: true, message: "请输入提交人" }]}
+      >
+        <Input placeholder="填写提 Bug 的人" />
+      </Form.Item>
       <OwnerSelect
         form={form}
         people={people}

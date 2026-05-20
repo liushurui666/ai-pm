@@ -120,8 +120,8 @@ export function getAttachmentLabel(attachment: BugAttachment) {
   return `${attachment.type === "video" ? "视频" : "图片"} · ${formatAttachmentSize(attachment.size)}`;
 }
 
-export function isBugOverdue(bug: BugReport) {
-  return bug.status !== "已关闭" && dayjs(bug.dueDate).isBefore(dayjs().startOf("day"));
+export function formatBugCreatedAt(createdAt: string) {
+  return dayjs(createdAt).isValid() ? dayjs(createdAt).format("YYYY-MM-DD HH:mm") : createdAt || "-";
 }
 
 export function getBugFlowRecords(bug: BugReport) {
@@ -186,10 +186,7 @@ export function BugsView({
       width: 360,
       render: (_, bug) => (
         <Space orientation="vertical" size={6} className="bug-title-cell">
-          <Space size={8} wrap>
-            <Text strong>{bug.title}</Text>
-            {isBugOverdue(bug) ? <Tag color="red">已逾期</Tag> : null}
-          </Space>
+          <Text strong>{bug.title}</Text>
           <Text type="secondary" ellipsis>{bug.reproduction}</Text>
         </Space>
       )
@@ -241,16 +238,12 @@ export function BugsView({
       render: (_, bug) => <OwnerInline name={bug.owner} avatarUrl={bug.ownerAvatarUrl} />
     },
     {
-      title: "截止日期",
-      dataIndex: "dueDate",
-      key: "dueDate",
-      width: 130,
-      sorter: (left, right) => dayjs(left.dueDate).valueOf() - dayjs(right.dueDate).valueOf(),
-      render: (dueDate: string, bug) => (
-        <Text type={isBugOverdue(bug) ? "danger" : "secondary"}>
-          {dueDate}
-        </Text>
-      )
+      title: "创建时间",
+      dataIndex: "createdAt",
+      key: "createdAt",
+      width: 160,
+      sorter: (left, right) => dayjs(left.createdAt).valueOf() - dayjs(right.createdAt).valueOf(),
+      render: (createdAt: string) => <Text type="secondary">{formatBugCreatedAt(createdAt)}</Text>
     },
     {
       title: "操作",

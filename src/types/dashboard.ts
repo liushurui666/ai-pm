@@ -123,7 +123,7 @@ export type BugReport = {
   actual: string;
   attachments?: BugAttachment[];
   flowRecords?: BugFlowRecord[];
-  dueDate: string;
+  createdAt: string;
 };
 
 export type Requirement = {

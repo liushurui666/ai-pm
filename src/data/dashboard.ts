@@ -222,7 +222,7 @@ export const dashboardData: DashboardData = {
       reproduction: "上传包含负责人姓名的 PRD，等待 AI 拆解完成后查看任务表负责人关联状态。",
       expected: "负责人能匹配飞书通讯录并保存 open_id，机器人能收到通知。",
       actual: "任务负责人仅展示姓名，飞书关联显示未关联。",
-      dueDate: "2026-05-22"
+      createdAt: "2026-05-19 10:00"
     },
     {
       id: "b-002",
@@ -238,7 +238,7 @@ export const dashboardData: DashboardData = {
       reproduction: "进入任务看板，切到全部任务，在移动端查看表格列。",
       expected: "用户可以明确感知表格支持横向查看全部字段。",
       actual: "右侧字段被截断，用户容易误以为数据缺失。",
-      dueDate: "2026-05-25"
+      createdAt: "2026-05-20 14:30"
     }
   ],
   risks: [
