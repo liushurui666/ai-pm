@@ -1782,9 +1782,7 @@ function getMemberNotificationIdentities(member: DashboardMember) {
     .filter(Boolean);
 }
 
-function findNotificationMember(data: LocalDatabase, workspaceId: string, values: Record<string, unknown>) {
-  const targetIdentities = getNotificationTargetIdentities(values);
-
+function findMemberByNotificationIdentities(data: LocalDatabase, workspaceId: string, targetIdentities: string[]) {
   if (!targetIdentities.length) {
     return undefined;
   }
@@ -1798,6 +1796,10 @@ function findNotificationMember(data: LocalDatabase, workspaceId: string, values
 
     return targetIdentities.some((identity) => memberIdentities.includes(identity));
   });
+}
+
+function findNotificationMember(data: LocalDatabase, workspaceId: string, values: Record<string, unknown>) {
+  return findMemberByNotificationIdentities(data, workspaceId, getNotificationTargetIdentities(values));
 }
 
 async function notifyOwner(data: LocalDatabase, workspaceId: string, type: DashboardEntityType, values: Record<string, unknown>) {
@@ -1846,6 +1848,73 @@ async function notifyOwner(data: LocalDatabase, workspaceId: string, type: Dashb
     return `已通过飞书机器人通知 ${asOwnerName(values)}。`;
   } catch (error) {
     return `机器人通知失败：${error instanceof Error ? error.message : "未知错误"}。`;
+  }
+}
+
+// Bug 修复完成后通知提交人回归验证，避免继续使用“负责人变更”文案造成职责不清。
+async function notifyBugTesterOnReady(
+  data: LocalDatabase,
+  workspaceId: string,
+  previousBug: BugReport,
+  nextBug: BugReport
+) {
+  if (previousBug.status === "待验证" || nextBug.status !== "待验证") {
+    return "";
+  }
+
+  const testerName = asText(nextBug.reporter, "测试人员");
+  const testerIdentities = [nextBug.reporter]
+    .map((value) => asText(value).trim().toLowerCase())
+    .filter(Boolean);
+  const member = findMemberByNotificationIdentities(data, workspaceId, testerIdentities);
+  const feishuChannel = member?.notification.channels.find(
+    (channel) => channel.provider === "feishu" && channel.enabled && channel.scenes.includes("taskAssigned")
+  );
+  const testerOpenId = feishuChannel?.feishuOpenId ?? feishuChannel?.target ?? member?.notification.feishuOpenId;
+
+  if (!testerIdentities.length) {
+    return "";
+  }
+
+  if (!member) {
+    return `未发送测试通知：提交人 ${testerName} 未在成员管理中匹配到成员。`;
+  }
+
+  if (member.status !== "active") {
+    return `未发送测试通知：测试人员 ${member.name} 已被禁用。`;
+  }
+
+  if (!member.notification.channels.some((channel) => channel.provider === "feishu" && channel.enabled)) {
+    return `未发送测试通知：测试人员 ${member.name} 已关闭飞书通知。`;
+  }
+
+  if (!testerOpenId) {
+    return `未发送测试通知：测试人员 ${member.name} 未绑定飞书账号。`;
+  }
+
+  if (!feishuChannel) {
+    return `未发送测试通知：测试人员 ${member.name} 已关闭任务通知场景。`;
+  }
+
+  try {
+    await sendFeishuBotTaskCard({
+      openId: testerOpenId,
+      title: "Bug 修复任务已结束，请回归验证",
+      text: [
+        `**${nextBug.title}**`,
+        "",
+        `修复负责人：${nextBug.owner || "未分配"}`,
+        `关联版本：${nextBug.versionName ?? "未规划"}`,
+        `当前状态：${nextBug.status}`,
+        "",
+        "开发修复任务已结束，请测试人员进入 AI PM 查看复现步骤、预期结果和实际结果，并完成回归验证。"
+      ].join("\n"),
+      view: "bugs"
+    });
+
+    return `已通过飞书机器人通知测试人员 ${member.name} 进行回归验证。`;
+  } catch (error) {
+    return `测试通知失败：${error instanceof Error ? error.message : "未知错误"}。`;
   }
 }
 
@@ -2254,9 +2323,19 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
 
   const savedData = applyProjectMetrics(data);
   const savedRecord = findRecord(savedData, type, id) ?? typedRecord;
-  const notifyMessage = shouldNotifyOwnerUpdate(type, existingRecord, scopedValues)
-    ? await notifyOwner(savedData, getWorkspaceId(existingRecord), type, scopedValues)
-    : "";
+  const notifyMessages = [
+    shouldNotifyOwnerUpdate(type, existingRecord, scopedValues)
+      ? await notifyOwner(savedData, getWorkspaceId(existingRecord), type, scopedValues)
+      : "",
+    type === "bug"
+      ? await notifyBugTesterOnReady(
+          savedData,
+          getWorkspaceId(existingRecord),
+          existingRecord as BugReport,
+          savedRecord as BugReport
+        )
+      : ""
+  ].filter(Boolean);
 
   await writeDatabase(savedData);
 
@@ -2264,7 +2343,7 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
     type,
     record: savedRecord,
     persisted: true,
-    message: [`已更新${getEntityLabel(type)}：${getRecordTitle(type, values)}。`, notifyMessage].filter(Boolean).join(" ")
+    message: [`已更新${getEntityLabel(type)}：${getRecordTitle(type, values)}。`, ...notifyMessages].join(" ")
   };
 }
 
