@@ -105,6 +105,23 @@ function toDate(value: string) {
   return dayjs(value).format("YYYY-MM-DD");
 }
 
+export function getProjectCalendarItemRange(item: ProjectCalendarItem) {
+  const start = dayjs(item.startDate || item.date).startOf("day");
+  const end = dayjs(item.endDate || item.date).startOf("day");
+
+  // 历史数据可能出现起止日期反向，先归一化，避免统计和排期轴各算各的。
+  return end.isBefore(start) ? { start: end, end: start } : { start, end };
+}
+
+export function isCalendarItemVisibleInMonth(item: ProjectCalendarItem, month: dayjs.Dayjs) {
+  const { start, end } = getProjectCalendarItemRange(item);
+  const monthStart = month.startOf("month");
+  const monthEnd = month.endOf("month");
+
+  // 跨月任务只要和当前月份有重叠，就应该进入统计和 Scheduler 排期。
+  return start.isSame(month, "month") || end.isSame(month, "month") || (start.isBefore(monthStart) && end.isAfter(monthEnd));
+}
+
 // 项目日历把任务、里程碑、版本和 Bug 统一转换成按人展示的进度条目。
 export function createProjectCalendarItems({
   bugs,
@@ -209,20 +226,6 @@ export function createProjectCalendarItems({
   return [...projectMilestones, ...taskItems, ...bugItems, ...versionItems].sort(
     (left, right) => dayjs(left.date).valueOf() - dayjs(right.date).valueOf() || right.progress - left.progress
   );
-}
-
-export function getCalendarDays(month: dayjs.Dayjs) {
-  const start = month.startOf("month").startOf("week");
-
-  return Array.from({ length: 42 }, (_, index) => start.add(index, "day"));
-}
-
-export function groupCalendarItemsByDate(items: ProjectCalendarItem[]) {
-  return items.reduce<Record<string, ProjectCalendarItem[]>>((groups, item) => {
-    groups[item.date] = [...(groups[item.date] ?? []), item];
-
-    return groups;
-  }, {});
 }
 
 export function getProjectDateRange(projects: Project[], selectedProject: string) {

@@ -948,229 +948,181 @@
   align-items: start;
 }
 
-.project-calendar-shell {
+.project-scheduler-shell {
   min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
 }
 
-.project-calendar-weekdays,
-.project-calendar-grid {
-  min-width: 896px;
-}
-
-.project-calendar-weekdays,
-.project-calendar-week-days,
-.project-calendar-week-spans {
+.project-scheduler-empty {
   display: grid;
-  grid-template-columns: repeat(7, minmax(128px, 1fr));
+  min-height: 360px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
 }
 
-.project-calendar-weekdays {
-  border-bottom: 1px solid var(--border);
-  background: var(--surface-subtle);
-}
-
-.project-calendar-weekdays > div {
-  padding: 12px 14px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.project-calendar-grid {
-  display: grid;
-}
-
-.project-calendar-week-row {
-  position: relative;
-  min-height: 298px;
-}
-
-.project-calendar-day {
-  min-height: 298px;
-  padding: 12px;
-  border-right: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  background: var(--surface-elevated);
-}
-
-.project-calendar-day:nth-child(7n) {
-  border-right: 0;
-}
-
-.project-calendar-day-muted {
-  background: color-mix(in srgb, var(--surface-subtle) 68%, transparent);
-}
-
-.project-calendar-day-today {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--brand) 10%, transparent), transparent 54%),
-    var(--surface-elevated);
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--brand) 54%, transparent);
-}
-
-.project-calendar-day-head {
-  min-height: 28px;
-  margin-bottom: 10px;
-}
-
-.project-calendar-day-people,
 .project-progress-panel .pm-wide {
   width: 100%;
 }
 
-.project-calendar-day-people {
-  margin-top: 172px;
+.project-scheduler-shell .scheduler_default_main {
+  --dp-scheduler-border-color: var(--border);
+  --dp-scheduler-border-inner-color: var(--border);
+  --dp-scheduler-cell-bg-color: var(--surface-elevated);
+  --dp-scheduler-cell-business-bg-color: var(--surface-elevated);
+  --dp-scheduler-event-border-radius: 8px;
+  --dp-scheduler-event-box-shadow: 0 12px 22px rgb(15 23 42 / 8%);
+  --dp-scheduler-font-family: inherit;
+  --dp-scheduler-font-size: 12px;
+  --dp-scheduler-grid-line-color: color-mix(in srgb, var(--border) 78%, transparent);
+  --dp-scheduler-header-bg-color: var(--surface-subtle);
+  --dp-scheduler-header-color: var(--foreground);
+  --dp-scheduler-rowheader-padding: 0;
+  --dp-scheduler-timeheader-padding: 0;
+  width: 100% !important;
+  border: 0;
+  background: var(--surface);
 }
 
-.project-calendar-week-spans {
-  position: absolute;
-  top: 54px;
-  right: 0;
-  left: 0;
-  z-index: 1;
-  grid-auto-rows: 30px;
-  row-gap: 8px;
-  pointer-events: none;
+.project-scheduler-shell .scheduler_default_main *,
+.project-scheduler-shell .scheduler_default_main *::before,
+.project-scheduler-shell .scheduler_default_main *::after {
+  box-sizing: border-box;
 }
 
-.project-calendar-task-span {
-  position: relative;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  justify-content: space-between;
-  min-width: 0;
-  margin: 0 8px;
-  padding: 0 10px;
+.project-scheduler-shell .scheduler_default_rowheader_inner,
+.project-scheduler-shell .scheduler_default_timeheadergroup_inner,
+.project-scheduler-shell .scheduler_default_timeheadercol_inner,
+.project-scheduler-shell .scheduler_default_corner_inner {
+  border-color: var(--border);
+}
+
+.project-scheduler-shell .scheduler_default_event_inner {
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--brand) 28%, var(--border));
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--brand) 10%, var(--surface-elevated));
+  border-width: 1px;
   box-shadow: 0 10px 24px rgb(15 23 42 / 8%);
-  pointer-events: auto;
 }
 
-.project-calendar-task-span-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: var(--span-progress);
-  background: color-mix(in srgb, var(--brand) 22%, transparent);
+.project-scheduler-cell-weekend .scheduler_default_cell_inner {
+  background: color-mix(in srgb, var(--surface-subtle) 78%, transparent);
 }
 
-.project-calendar-task-span-label,
-.project-calendar-task-span-percent {
-  position: relative;
-  z-index: 1;
+.project-scheduler-cell-today .scheduler_default_cell_inner {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--brand) 12%, transparent), transparent 68%),
+    var(--surface-elevated);
+}
+
+.project-scheduler-day-header {
+  display: grid;
+  gap: 2px;
+  align-content: center;
+  height: 100%;
+  line-height: 1.05;
+}
+
+.project-scheduler-day-header strong {
+  color: var(--foreground);
+  font-size: 13px;
+}
+
+.project-scheduler-day-header span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.project-scheduler-resource-label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  width: 100%;
+  padding: 10px 12px;
+  line-height: 1.15;
+}
+
+.project-scheduler-resource-label strong,
+.project-scheduler-resource-label span,
+.project-scheduler-resource-label em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-scheduler-resource-label strong {
+  color: var(--foreground);
+  font-size: 13px;
+}
+
+.project-scheduler-resource-label span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.project-scheduler-resource-label em {
+  color: color-mix(in srgb, var(--foreground) 72%, var(--muted));
+  font-size: 11px;
+  font-style: normal;
+}
+
+.project-scheduler-event-content {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  height: 100%;
+  padding: 6px 8px 6px 10px;
+}
+
+.project-scheduler-event-main,
+.project-scheduler-event-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.project-scheduler-event-main {
+  gap: 6px;
+}
+
+.project-scheduler-event-main strong {
   min-width: 0;
   overflow: hidden;
   color: var(--foreground);
   font-size: 12px;
   font-weight: 800;
-  line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.project-calendar-task-span-percent {
+.project-scheduler-event-type {
   flex: none;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 62%);
+  color: var(--foreground);
+  font-size: 11px;
+  font-weight: 800;
 }
 
-.project-calendar-task-span-success {
-  border-color: color-mix(in srgb, #16a34a 42%, var(--border));
-  background: color-mix(in srgb, #16a34a 12%, var(--surface-elevated));
+.project-scheduler-event-meta {
+  gap: 8px;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--foreground) 72%, var(--muted));
+  font-size: 11px;
+  white-space: nowrap;
 }
 
-.project-calendar-task-span-success .project-calendar-task-span-fill {
-  background: color-mix(in srgb, #16a34a 28%, transparent);
-}
-
-.project-calendar-task-span-processing {
-  border-color: color-mix(in srgb, #2563eb 42%, var(--border));
-  background: color-mix(in srgb, #2563eb 12%, var(--surface-elevated));
-}
-
-.project-calendar-task-span-processing .project-calendar-task-span-fill {
-  background: color-mix(in srgb, #2563eb 26%, transparent);
-}
-
-.project-calendar-task-span-warning {
-  border-color: color-mix(in srgb, #d97706 48%, var(--border));
-  background: color-mix(in srgb, #d97706 13%, var(--surface-elevated));
-}
-
-.project-calendar-task-span-warning .project-calendar-task-span-fill {
-  background: color-mix(in srgb, #d97706 28%, transparent);
-}
-
-.project-calendar-task-span-danger {
-  border-color: color-mix(in srgb, #dc2626 54%, var(--border));
-  background: color-mix(in srgb, #dc2626 14%, var(--surface-elevated));
-}
-
-.project-calendar-task-span-danger .project-calendar-task-span-fill {
-  background: color-mix(in srgb, #dc2626 28%, transparent);
-}
-
-.project-calendar-span-more {
-  display: flex;
-  grid-column: 1 / 8;
-  grid-row: 4;
-  align-items: center;
-  margin: 0 8px;
-  padding: 0 10px;
-  border: 1px dashed var(--border);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--surface-subtle) 82%, transparent);
-  font-size: 12px;
-  pointer-events: auto;
-}
-
-.project-calendar-person {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-  padding: 8px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-subtle);
-}
-
-.project-calendar-person-success {
-  border-color: color-mix(in srgb, #16a34a 34%, var(--border));
-}
-
-.project-calendar-person-processing {
-  border-color: color-mix(in srgb, #2563eb 34%, var(--border));
-}
-
-.project-calendar-person-warning {
-  border-color: color-mix(in srgb, #d97706 34%, var(--border));
-}
-
-.project-calendar-person-danger {
-  border-color: color-mix(in srgb, #dc2626 48%, var(--border));
-  background: color-mix(in srgb, #dc2626 9%, var(--surface-subtle));
-}
-
-.project-calendar-person-name {
+.project-scheduler-event-meta span {
   min-width: 0;
   overflow: hidden;
-  color: var(--foreground);
-  font-size: 12px;
-  font-weight: 700;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.project-calendar-more {
-  display: block;
-  padding-left: 2px;
-  font-size: 12px;
+.project-scheduler-event-danger .scheduler_default_event_inner {
+  box-shadow: 0 10px 26px rgb(220 38 38 / 14%);
 }
 
 .project-progress-panel {
@@ -1619,17 +1571,12 @@
     grid-template-columns: 1fr;
   }
 
-  .project-calendar-shell {
+  .project-scheduler-shell {
     overflow-x: auto;
   }
 
-  .project-calendar-weekdays,
-  .project-calendar-grid {
-    min-width: 980px;
-  }
-
-  .project-progress-panel {
-    order: -1;
+  .project-scheduler-shell .scheduler_default_main {
+    width: 920px !important;
   }
 
 }

@@ -10,9 +10,9 @@ import {
   createPersonProgress,
   createProjectCalendarItems,
   createProjectRiskHints,
-  getProjectDateRange
+  getProjectDateRange,
+  isCalendarItemVisibleInMonth
 } from "@/components/project-management-platform/views/project-calendar-utils";
-import { isCalendarItemVisibleInMonth } from "@/components/project-management-platform/views/project-calendar-range-utils";
 import { ProjectProgressCalendar } from "@/components/project-management-platform/views/project-progress-calendar";
 import { ProjectProgressPanel } from "@/components/project-management-platform/views/project-progress-panel";
 
@@ -64,7 +64,7 @@ export function ProjectsView({
   return (
     <TableView
       title="项目视图"
-      subtitle="用一个大日历查看项目节奏、每个人的任务进度、Bug 修复和版本交付节点。"
+      subtitle="用人员排期时间轴查看项目节奏、任务跨度、Bug 修复和版本交付节点。"
       icon={<FolderOpenOutlined />}
       extra={
         <Space wrap className="project-calendar-toolbar">
@@ -102,7 +102,7 @@ export function ProjectsView({
           </Space>
           <h3>{selectedProject === "全部" ? "全项目交付日历" : selectedProject}</h3>
           <Text type="secondary">
-            每个日期里的人员卡片展示当日相关任务、里程碑、Bug 或版本节点的完成度；红色表示需要立即关注。
+            左侧按负责人分行，右侧按日期展示任务横条；Bug、版本和里程碑会落到对应日期，红色表示需要立即关注。
           </Text>
         </div>
         <div className="project-calendar-hero-stats">
