@@ -15,10 +15,12 @@ function formatHeaderDate(value: string) {
 // 项目进度日历使用 Scheduler 表达排期，让跨天任务天然横穿日期轴。
 export function ProjectProgressCalendar({
   items,
-  month
+  month,
+  onOpenItem
 }: {
   items: ProjectCalendarItem[];
   month: dayjs.Dayjs;
+  onOpenItem: (item: ProjectCalendarItem) => void;
 }) {
   const schedulerModel = createProjectSchedulerModel(items, month);
 
@@ -42,23 +44,30 @@ export function ProjectProgressCalendar({
         ]}
         resources={schedulerModel.resources}
         events={schedulerModel.events}
-        cellWidth={88}
-        rowHeaderWidth={180}
-        eventHeight={56}
+        cellWidth={118}
+        rowHeaderWidth={210}
+        eventHeight={94}
         durationBarHeight={4}
-        height={680}
+        height={760}
         heightSpec="Max"
         eventBorderRadius={8}
         eventMoveHandling="Disabled"
         eventResizeHandling="Disabled"
         eventDeleteHandling="Disabled"
         eventClickHandling="Enabled"
-        eventTextWrappingEnabled={false}
+        eventTextWrappingEnabled
         floatingEvents={false}
         floatingTimeHeaders={false}
         rowMarginTop={8}
         rowMarginBottom={8}
         theme="scheduler_default"
+        onEventClick={(args) => {
+          const item = args.e.data.tags as ProjectCalendarItem | undefined;
+
+          if (item) {
+            onOpenItem(item);
+          }
+        }}
         onBeforeCellRender={(args) => {
           const date = formatHeaderDate(args.cell.start.toString());
 

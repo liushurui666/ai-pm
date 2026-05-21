@@ -1005,6 +1005,7 @@
   overflow: hidden;
   border-width: 1px;
   box-shadow: 0 10px 24px rgb(15 23 42 / 8%);
+  cursor: pointer;
 }
 
 .project-scheduler-cell-weekend .scheduler_default_cell_inner {
@@ -1070,31 +1071,36 @@
 
 .project-scheduler-event-content {
   display: grid;
-  gap: 4px;
+  gap: 6px;
+  align-content: start;
   min-width: 0;
   height: 100%;
-  padding: 6px 8px 6px 10px;
+  padding: 8px 10px 8px 12px;
 }
 
 .project-scheduler-event-main,
 .project-scheduler-event-meta {
-  display: flex;
   min-width: 0;
-  align-items: center;
 }
 
 .project-scheduler-event-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 6px;
+  align-items: start;
 }
 
 .project-scheduler-event-main strong {
+  display: -webkit-box;
   min-width: 0;
   overflow: hidden;
   color: var(--foreground);
   font-size: 12px;
   font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.3;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  white-space: normal;
 }
 
 .project-scheduler-event-type {
@@ -1108,11 +1114,14 @@
 }
 
 .project-scheduler-event-meta {
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   overflow: hidden;
   color: color-mix(in srgb, var(--foreground) 72%, var(--muted));
   font-size: 11px;
-  white-space: nowrap;
+  line-height: 1.25;
+  white-space: normal;
 }
 
 .project-scheduler-event-meta span {

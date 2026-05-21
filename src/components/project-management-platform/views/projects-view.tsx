@@ -11,7 +11,8 @@ import {
   createProjectCalendarItems,
   createProjectRiskHints,
   getProjectDateRange,
-  isCalendarItemVisibleInMonth
+  isCalendarItemVisibleInMonth,
+  type ProjectCalendarItem
 } from "@/components/project-management-platform/views/project-calendar-utils";
 import { ProjectProgressCalendar } from "@/components/project-management-platform/views/project-progress-calendar";
 import { ProjectProgressPanel } from "@/components/project-management-platform/views/project-progress-panel";
@@ -28,7 +29,8 @@ export function ProjectsView({
   versions,
   onFilterChange,
   onCreate,
-  onEdit
+  onEdit,
+  onOpenCalendarItem
 }: {
   bugs: BugReport[];
   projects: Project[];
@@ -39,6 +41,7 @@ export function ProjectsView({
   onFilterChange: (value: string) => void;
   onCreate: () => void;
   onEdit: (project: Project) => void;
+  onOpenCalendarItem: (item: ProjectCalendarItem) => void;
 }) {
   const projectNames = projects.map((project) => project.name);
   const selectedProject = projectNames.includes(projectFilter) ? projectFilter : "全部";
@@ -113,7 +116,7 @@ export function ProjectsView({
         </div>
       </div>
       <div className="project-calendar-layout">
-        <ProjectProgressCalendar items={calendarItems} month={calendarMonth} />
+        <ProjectProgressCalendar items={calendarItems} month={calendarMonth} onOpenItem={onOpenCalendarItem} />
         <ProjectProgressPanel people={peopleProgress} risks={riskHints} />
       </div>
     </TableView>

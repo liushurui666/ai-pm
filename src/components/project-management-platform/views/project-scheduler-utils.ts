@@ -117,7 +117,7 @@ export function createProjectSchedulerModel(items: ProjectCalendarItem[], month:
       resource: item.owner || "未分配",
       text: `${item.type} · ${item.title}`,
       html: getEventHtml(item),
-      toolTip: `${item.title}｜${item.project}｜${getRangeText(item)}｜${item.status}｜${item.progress}%`,
+      toolTip: `点击编辑｜${item.title}｜${item.project}｜${getRangeText(item)}｜${item.status}｜${item.progress}%`,
       backColor: colors.background,
       barColor: colors.bar,
       borderColor: colors.border,

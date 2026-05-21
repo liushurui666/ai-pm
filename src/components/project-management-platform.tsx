@@ -101,6 +101,7 @@ import { BugsView } from "@/components/project-management-platform/views/bugs-vi
 import { DocumentsView } from "@/components/project-management-platform/views/documents-view";
 import { MembersView } from "@/components/project-management-platform/views/members-view";
 import { OverviewView } from "@/components/project-management-platform/views/overview-view";
+import type { ProjectCalendarItem } from "@/components/project-management-platform/views/project-calendar-utils";
 import { ProjectsView } from "@/components/project-management-platform/views/projects-view";
 import { ReportsView } from "@/components/project-management-platform/views/reports-view";
 import { RequirementsView } from "@/components/project-management-platform/views/requirements-view";
@@ -1085,6 +1086,52 @@ export function ProjectManagementPlatform({
     window.location.assign(`/bugs/${bug.id}${getWorkspaceQueryString()}`);
   }
 
+  function openProjectCalendarItem(item: ProjectCalendarItem) {
+    if (!data) {
+      return;
+    }
+
+    // 项目排期条只存统一日历条目，这里再映射回原始实体，复用现有编辑抽屉和权限校验。
+    if (item.type === "任务") {
+      const task = data.tasks.find((target) => target.id === item.id);
+
+      if (task) {
+        openEditTaskDrawer(task);
+        return;
+      }
+    }
+
+    if (item.type === "Bug") {
+      const bug = data.bugs.find((target) => target.id === item.id);
+
+      if (bug) {
+        navigateToBugEdit(bug);
+        return;
+      }
+    }
+
+    if (item.type === "版本") {
+      const version = requirementVersions.find((target) => target.id === item.id);
+
+      if (version) {
+        openEditRequirementVersionDrawer(version);
+        return;
+      }
+    }
+
+    if (item.type === "里程碑") {
+      const project = data.projects.find((target) => target.name === item.project);
+
+      if (project) {
+        openEditProjectDrawer(project);
+        messageApi.info("项目里程碑已迁移到需求版本里维护，这里先打开所属项目。");
+        return;
+      }
+    }
+
+    messageApi.warning("没有找到可编辑的原始记录。");
+  }
+
   function navigateToView(view: AppView) {
     if (typeof window === "undefined") {
       return;
@@ -1417,6 +1464,7 @@ export function ProjectManagementPlatform({
                       onFilterChange={setProjectFilter}
                       onCreate={() => openCreateDrawer("project")}
                       onEdit={openEditProjectDrawer}
+                      onOpenCalendarItem={openProjectCalendarItem}
                     />
                   ) : null}
                   {activeView === "tasks" ? (
