@@ -9,6 +9,7 @@ import type { RequirementVersionOption } from "@/components/project-management-p
 import { TableView } from "@/components/project-management-platform/shared/page-shell";
 import {
   allProjectCalendarVersionsValue,
+  createProjectDelaySummary,
   createPersonProgress,
   createProjectCalendarItems,
   createProjectRiskHints,
@@ -18,6 +19,7 @@ import {
   type ProjectCalendarItem,
   type ProjectCalendarScheduleChange
 } from "@/components/project-management-platform/views/project-calendar-utils";
+import { ProjectDelaySummary } from "@/components/project-management-platform/views/project-delay-summary";
 import { ProjectProgressCalendar } from "@/components/project-management-platform/views/project-progress-calendar";
 import { ProjectProgressPanel } from "@/components/project-management-platform/views/project-progress-panel";
 
@@ -70,13 +72,21 @@ export function ProjectsView({
     [calendarItems, calendarMonth]
   );
   const peopleProgress = useMemo(() => createPersonProgress(monthItems), [monthItems]);
+  const delaySummary = useMemo(
+    () =>
+      createProjectDelaySummary({
+        items: calendarItems,
+        selectedVersionId: selectedVersion?.id,
+        versions
+      }),
+    [calendarItems, selectedVersion?.id, versions]
+  );
   const riskHints = useMemo(
     () => createProjectRiskHints(risks, versions, selectedVersion?.id),
     [risks, selectedVersion?.id, versions]
   );
   const versionRange = getVersionDateRange(versions, selectedVersion?.id);
   const doneCount = monthItems.filter((item) => item.progress >= 100).length;
-  const riskCount = monthItems.filter((item) => item.riskTone === "danger").length;
   const avgProgress = monthItems.length
     ? Math.round(monthItems.reduce((sum, item) => sum + item.progress, 0) / monthItems.length)
     : 0;
@@ -136,9 +146,10 @@ export function ProjectsView({
           <Statistic title="本月任务" value={monthItems.length} prefix={<CalendarOutlined />} />
           <Statistic title="平均进度" value={avgProgress} suffix="%" prefix={<UserOutlined />} />
           <Statistic title="已完成" value={doneCount} />
-          <Statistic title="风险关注" value={riskCount} prefix={<WarningOutlined />} />
+          <Statistic title="需延期" value={delaySummary.total} prefix={<WarningOutlined />} />
         </div>
       </div>
+      <ProjectDelaySummary summary={delaySummary} />
       <div className="project-calendar-layout">
         <ProjectProgressCalendar
           items={calendarItems}

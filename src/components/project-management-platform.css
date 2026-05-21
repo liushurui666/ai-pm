@@ -941,6 +941,79 @@
   background: var(--surface-subtle);
 }
 
+.project-delay-summary {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.project-delay-summary-stable {
+  border-color: color-mix(in srgb, var(--teal) 36%, var(--border));
+  background: color-mix(in srgb, var(--teal) 10%, var(--surface));
+}
+
+.project-delay-summary-risk {
+  border-color: color-mix(in srgb, var(--danger) 36%, var(--border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--danger) 12%, transparent), transparent 56%),
+    var(--surface);
+}
+
+.project-delay-summary .ant-typography-secondary {
+  display: block;
+  margin-top: 4px;
+}
+
+.project-delay-summary-icon {
+  margin-top: 3px;
+  color: var(--danger);
+  font-size: 18px;
+}
+
+.project-delay-risk-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.project-delay-risk-tag {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--danger) 26%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-elevated) 88%, var(--danger) 12%);
+}
+
+.project-delay-risk-tag span {
+  overflow: hidden;
+  color: var(--foreground);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-delay-risk-tag em {
+  grid-column: 2;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-delay-summary-more {
+  border-radius: 8px;
+}
+
 .project-calendar-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 340px;

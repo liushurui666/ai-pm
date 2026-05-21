@@ -38,6 +38,23 @@ export type ProjectPersonProgress = {
   riskCount: number;
 };
 
+export type ProjectDelayRiskItem = {
+  id: string;
+  title: string;
+  owner: string;
+  versionName: string;
+  date: string;
+  days: number;
+  reason: "任务已逾期" | "超出版本发布日期" | "版本发布日期已过";
+};
+
+export type ProjectDelaySummary = {
+  total: number;
+  overdueTasks: ProjectDelayRiskItem[];
+  scheduleOverflowTasks: ProjectDelayRiskItem[];
+  delayedVersions: ProjectDelayRiskItem[];
+};
+
 function normalizeProjectName(value?: string) {
   return value?.trim().toLowerCase() ?? "";
 }
@@ -112,6 +129,10 @@ function toDate(value: string) {
   return dayjs(value).format("YYYY-MM-DD");
 }
 
+function getDelayDays(later: dayjs.Dayjs, earlier: dayjs.Dayjs) {
+  return Math.max(1, later.startOf("day").diff(earlier.startOf("day"), "day"));
+}
+
 export function getProjectCalendarItemRange(item: ProjectCalendarItem) {
   const start = dayjs(item.startDate || item.date).startOf("day");
   const end = dayjs(item.endDate || item.date).startOf("day");
@@ -182,6 +203,74 @@ export function getVersionDateRange(versions: RequirementVersion[], selectedVers
   const sortedDates = dates.map((date) => dayjs(date)).sort((left, right) => left.valueOf() - right.valueOf());
 
   return `${sortedDates[0]?.format("MM/DD") ?? "--"} - ${sortedDates.at(-1)?.format("MM/DD") ?? "--"}`;
+}
+
+export function createProjectDelaySummary({
+  items,
+  selectedVersionId,
+  versions
+}: {
+  items: ProjectCalendarItem[];
+  selectedVersionId?: string | null;
+  versions: RequirementVersion[];
+}): ProjectDelaySummary {
+  const today = dayjs().startOf("day");
+  const scopedVersions = getScopedVersions(versions, selectedVersionId);
+  const versionById = new Map(scopedVersions.map((version) => [version.id, version]));
+  const unfinishedItems = items.filter((item) => item.status !== "已完成");
+  const overdueTasks = unfinishedItems
+    .filter((item) => dayjs(item.endDate).isBefore(today, "day"))
+    .map<ProjectDelayRiskItem>((item) => ({
+      id: item.id,
+      title: item.title,
+      owner: item.owner,
+      versionName: item.versionName || item.project,
+      date: item.endDate,
+      days: getDelayDays(today, dayjs(item.endDate)),
+      reason: "任务已逾期"
+    }));
+  const scheduleOverflowTasks = unfinishedItems
+    .filter((item) => {
+      const version = item.versionId ? versionById.get(item.versionId) : undefined;
+
+      return Boolean(version && !dayjs(item.endDate).isBefore(today, "day") && dayjs(item.endDate).isAfter(version.releaseDate, "day"));
+    })
+    .map<ProjectDelayRiskItem>((item) => {
+      const version = item.versionId ? versionById.get(item.versionId) : undefined;
+
+      return {
+        id: item.id,
+        title: item.title,
+        owner: item.owner,
+        versionName: item.versionName || item.project,
+        date: item.endDate,
+        days: version ? getDelayDays(dayjs(item.endDate), dayjs(version.releaseDate)) : 1,
+        reason: "超出版本发布日期"
+      };
+    });
+  const delayedVersions = scopedVersions
+    .filter((version) => version.status !== "已发布" && version.status !== "已归档" && dayjs(version.releaseDate).isBefore(today, "day"))
+    .map<ProjectDelayRiskItem>((version) => {
+      const unfinishedCount = unfinishedItems.filter((item) => item.versionId === version.id).length;
+
+      // 版本级延期用未完成任务数补充判断依据，项目经理能马上知道延期影响面。
+      return {
+        id: version.id,
+        title: `${version.name}${unfinishedCount ? ` · ${unfinishedCount} 项未完成` : ""}`,
+        owner: version.devOwner || version.productOwner || version.uiOwner || "未配置",
+        versionName: version.name,
+        date: version.releaseDate,
+        days: getDelayDays(today, dayjs(version.releaseDate)),
+        reason: "版本发布日期已过"
+      };
+    });
+
+  return {
+    total: overdueTasks.length + scheduleOverflowTasks.length + delayedVersions.length,
+    overdueTasks,
+    scheduleOverflowTasks,
+    delayedVersions
+  };
 }
 
 export function createPersonProgress(items: ProjectCalendarItem[]) {
