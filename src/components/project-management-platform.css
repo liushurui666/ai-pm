@@ -949,6 +949,8 @@
 }
 
 .project-scheduler-shell {
+  --project-scheduler-event-height: 94px;
+  --project-scheduler-row-gap: 8px;
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -1014,6 +1016,27 @@
 
 .project-scheduler-event-task .scheduler_default_event_inner:active {
   cursor: grabbing;
+}
+
+/* DayPilot 的拖拽阴影默认按整行高度绘制，这里压回任务条高度，避免拖拽时整片网格变灰。 */
+.project-scheduler-shell .scheduler_default_shadow {
+  overflow: hidden;
+  height: var(--project-scheduler-event-height) !important;
+  border-radius: 8px;
+  box-shadow: 0 14px 30px rgb(22 163 74 / 18%);
+  transform: translateY(var(--project-scheduler-row-gap));
+}
+
+.project-scheduler-shell .scheduler_default_shadow_inner {
+  height: 100% !important;
+  border: 1px solid color-mix(in srgb, #16a34a 42%, var(--border)) !important;
+  border-radius: 8px;
+  background: color-mix(in srgb, #16a34a 18%, var(--surface-elevated)) !important;
+  opacity: 0.88 !important;
+}
+
+.project-scheduler-shell .scheduler_default_event_moving_source {
+  opacity: 0.24 !important;
 }
 
 .project-scheduler-cell-weekend .scheduler_default_cell_inner {
