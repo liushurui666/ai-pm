@@ -13,6 +13,7 @@ import {
   createPersonProgress,
   createProjectCalendarItems,
   createProjectRiskHints,
+  getProjectCalendarFallbackMonth,
   getVersionDateRange,
   getVersionScopeProjects,
   isCalendarItemVisibleInMonth,
@@ -58,6 +59,7 @@ export function ProjectsView({
   const scopeProjectNames = getVersionScopeProjects(versions, selectedVersion?.id);
   const projectCount = selectedVersion ? scopeProjectNames.length : projects.length;
   const [calendarMonth, setCalendarMonth] = useState(() => dayjs());
+  const [manualCalendarMonthKey, setManualCalendarMonthKey] = useState("");
   const calendarItems = useMemo(
     () =>
       createProjectCalendarItems({
@@ -67,9 +69,28 @@ export function ProjectsView({
       }),
     [selectedVersion?.id, tasks, versions]
   );
+  const calendarAutoMonthKey = useMemo(
+    () =>
+      [
+        selectedVersion?.id ?? allProjectCalendarVersionsValue,
+        ...calendarItems.map((item) => `${item.id}:${item.startDate}:${item.endDate}`)
+      ].join("|"),
+    [calendarItems, selectedVersion?.id]
+  );
+  const displayedCalendarMonth = useMemo(() => {
+    if (!calendarItems.length || manualCalendarMonthKey === calendarAutoMonthKey) {
+      return calendarMonth;
+    }
+
+    if (calendarItems.some((item) => isCalendarItemVisibleInMonth(item, calendarMonth))) {
+      return calendarMonth;
+    }
+
+    return getProjectCalendarFallbackMonth(calendarItems, calendarMonth);
+  }, [calendarAutoMonthKey, calendarItems, calendarMonth, manualCalendarMonthKey]);
   const monthItems = useMemo(
-    () => calendarItems.filter((item) => isCalendarItemVisibleInMonth(item, calendarMonth)),
-    [calendarItems, calendarMonth]
+    () => calendarItems.filter((item) => isCalendarItemVisibleInMonth(item, displayedCalendarMonth)),
+    [calendarItems, displayedCalendarMonth]
   );
   const peopleProgress = useMemo(() => createPersonProgress(monthItems), [monthItems]);
   const delaySummary = useMemo(
@@ -115,8 +136,11 @@ export function ProjectsView({
           />
           <DatePicker
             picker="month"
-            value={calendarMonth}
-            onChange={(value) => setCalendarMonth(value ?? dayjs())}
+            value={displayedCalendarMonth}
+            onChange={(value) => {
+              setCalendarMonth(value ?? dayjs());
+              setManualCalendarMonthKey(calendarAutoMonthKey);
+            }}
             allowClear={false}
           />
           {selectedVersion ? (
@@ -133,7 +157,7 @@ export function ProjectsView({
       <div className="project-calendar-hero">
         <div className="project-calendar-hero-copy">
           <Space size={10} wrap>
-            <Tag icon={<CalendarOutlined />}>{calendarMonth.format("YYYY 年 MM 月")}</Tag>
+            <Tag icon={<CalendarOutlined />}>{displayedCalendarMonth.format("YYYY 年 MM 月")}</Tag>
             {versionRange ? <Tag>{versionRange}</Tag> : null}
             <Tag>{projectCount} 个关联项目</Tag>
           </Space>
@@ -153,7 +177,7 @@ export function ProjectsView({
       <div className="project-calendar-layout">
         <ProjectProgressCalendar
           items={calendarItems}
-          month={calendarMonth}
+          month={displayedCalendarMonth}
           onOpenItem={onOpenCalendarItem}
           onRescheduleItem={onRescheduleCalendarItem}
         />

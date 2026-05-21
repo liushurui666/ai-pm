@@ -150,6 +150,21 @@ export function isCalendarItemVisibleInMonth(item: ProjectCalendarItem, month: d
   return start.isSame(month, "month") || end.isSame(month, "month") || (start.isBefore(monthStart) && end.isAfter(monthEnd));
 }
 
+export function getProjectCalendarFallbackMonth(items: ProjectCalendarItem[], preferredMonth: dayjs.Dayjs) {
+  const preferred = preferredMonth.startOf("month");
+  const ranges = items
+    .map((item) => getProjectCalendarItemRange(item))
+    .sort((left, right) => {
+      const leftDistance = Math.abs(left.start.startOf("month").diff(preferred, "month"));
+      const rightDistance = Math.abs(right.start.startOf("month").diff(preferred, "month"));
+
+      // 优先跳到离当前月份最近的任务月份，避免子版本筛选后看起来像没有同步任务。
+      return leftDistance - rightDistance || left.start.valueOf() - right.start.valueOf();
+    });
+
+  return ranges[0]?.start.startOf("month") ?? preferredMonth;
+}
+
 // 项目交付日历只展示任务，避免 Bug、版本和里程碑混入后干扰排期判断。
 export function createProjectCalendarItems({
   selectedVersionId,
