@@ -245,6 +245,7 @@ export function ProjectProgressCalendar({
         eventBorderRadius={8}
         eventMoveHandling="Update"
         eventResizeHandling="Update"
+        eventResizeMargin={0}
         eventDeleteHandling="Disabled"
         eventClickHandling="Enabled"
         eventTextWrappingEnabled

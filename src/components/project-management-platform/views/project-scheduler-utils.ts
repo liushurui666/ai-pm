@@ -19,6 +19,7 @@ const toneColors: Record<ProjectCalendarItem["riskTone"], { background: string; 
   warning: { background: "#fffbeb", bar: "#d97706", border: "#fde68a" },
   danger: { background: "#fef2f2", bar: "#dc2626", border: "#fecaca" }
 };
+const resizeHandleWidth = 14;
 
 function escapeHtml(value: string) {
   // DayPilot 的资源和事件支持 html 字段，统一转义可避免用户输入影响页面结构。
@@ -93,6 +94,38 @@ function getEventHtml(item: ProjectCalendarItem) {
   `;
 }
 
+function getEventResizeAreas(item: ProjectCalendarItem): DayPilot.AreaData[] {
+  if (item.type !== "任务") {
+    return [];
+  }
+
+  // 主体区域只负责拖动改期，只有左右两侧手柄才允许拉伸开始/结束日期。
+  return [
+    {
+      action: "ResizeStart",
+      bottom: 4,
+      cssClass: "project-scheduler-resize-handle project-scheduler-resize-handle-start",
+      cursor: "w-resize",
+      left: 0,
+      toolTip: "拖动调整开始日期",
+      top: 4,
+      visibility: "Visible",
+      width: resizeHandleWidth
+    },
+    {
+      action: "ResizeEnd",
+      bottom: 4,
+      cssClass: "project-scheduler-resize-handle project-scheduler-resize-handle-end",
+      cursor: "e-resize",
+      right: 0,
+      toolTip: "拖动调整截止日期",
+      top: 4,
+      visibility: "Visible",
+      width: resizeHandleWidth
+    }
+  ];
+}
+
 // Scheduler 需要资源行和事件条；这里统一把项目日历条目适配成 DayPilot 可消费的数据。
 export function createProjectSchedulerModel(items: ProjectCalendarItem[], month: dayjs.Dayjs) {
   const visibleItems = items.filter((item) => isCalendarItemVisibleInMonth(item, month)).sort(compareProjectSchedulerItems);
@@ -133,6 +166,7 @@ export function createProjectSchedulerModel(items: ProjectCalendarItem[], month:
       barColor: colors.bar,
       borderColor: colors.border,
       cssClass: `project-scheduler-event project-scheduler-event-${item.riskTone} project-scheduler-event-${typeClassMap[item.type]}`,
+      areas: getEventResizeAreas(item),
       tags: item
     };
   });

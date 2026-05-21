@@ -1091,6 +1091,41 @@
   cursor: grabbing;
 }
 
+.project-scheduler-resize-handle {
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: transparent;
+  opacity: 0.58;
+  transition: background-color 0.16s ease, opacity 0.16s ease;
+}
+
+.project-scheduler-resize-handle::before {
+  width: 3px;
+  height: 34px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 46%, transparent);
+  content: "";
+}
+
+.project-scheduler-resize-handle:hover,
+.project-scheduler-event-task .scheduler_default_event_inner:hover .project-scheduler-resize-handle {
+  opacity: 1;
+}
+
+.project-scheduler-resize-handle:hover {
+  background: color-mix(in srgb, var(--brand) 16%, transparent);
+}
+
+.project-scheduler-resize-handle-start {
+  cursor: w-resize;
+}
+
+.project-scheduler-resize-handle-end {
+  cursor: e-resize;
+}
+
 /* DayPilot 的拖拽定位层默认是空阴影，这里让它承载原卡片内容，视觉上就是直接拖动任务条。 */
 .project-scheduler-shell .scheduler_default_shadow {
   overflow: hidden;
@@ -1196,7 +1231,7 @@
   align-content: start;
   min-width: 0;
   height: 100%;
-  padding: 8px 10px 8px 12px;
+  padding: 8px 20px;
 }
 
 .project-scheduler-event-main,
