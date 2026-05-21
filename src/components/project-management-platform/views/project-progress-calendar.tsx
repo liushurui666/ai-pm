@@ -2,8 +2,12 @@
 
 import { Empty } from "antd";
 import { DayPilotScheduler } from "@daypilot/daypilot-lite-react";
+import type { DayPilot } from "@daypilot/daypilot-lite-react";
 import dayjs from "dayjs";
-import type { ProjectCalendarItem } from "@/components/project-management-platform/views/project-calendar-utils";
+import type {
+  ProjectCalendarItem,
+  ProjectCalendarScheduleChange
+} from "@/components/project-management-platform/views/project-calendar-utils";
 import { createProjectSchedulerModel } from "@/components/project-management-platform/views/project-scheduler-utils";
 
 const weekdayLabels = ["日", "一", "二", "三", "四", "五", "六"];
@@ -12,17 +16,57 @@ function formatHeaderDate(value: string) {
   return dayjs(value).format("YYYY-MM-DD");
 }
 
+function getScheduleChange(start: DayPilot.Date, end: DayPilot.Date, resource: DayPilot.ResourceId): ProjectCalendarScheduleChange {
+  const startDate = dayjs(start.toString()).startOf("day");
+  const exclusiveEndDate = dayjs(end.toString()).subtract(1, "day").startOf("day");
+  const safeEndDate = exclusiveEndDate.isBefore(startDate) ? startDate : exclusiveEndDate;
+
+  // Scheduler 的结束时间是右边界独占值，这里转回业务里可编辑的截止日期。
+  return {
+    startDate: startDate.format("YYYY-MM-DD"),
+    endDate: safeEndDate.format("YYYY-MM-DD"),
+    owner: String(resource)
+  };
+}
+
 // 项目进度日历使用 Scheduler 表达排期，让跨天任务天然横穿日期轴。
 export function ProjectProgressCalendar({
   items,
   month,
-  onOpenItem
+  onOpenItem,
+  onRescheduleItem
 }: {
   items: ProjectCalendarItem[];
   month: dayjs.Dayjs;
   onOpenItem: (item: ProjectCalendarItem) => void;
+  onRescheduleItem: (item: ProjectCalendarItem, change: ProjectCalendarScheduleChange) => Promise<boolean>;
 }) {
   const schedulerModel = createProjectSchedulerModel(items, month);
+
+  function handleScheduleUpdate(args: DayPilot.SchedulerEventMoveArgs | DayPilot.SchedulerEventResizeArgs) {
+    const item = args.e.data.tags as ProjectCalendarItem | undefined;
+    const newResource = "newResource" in args ? args.newResource : args.e.data.resource ?? item?.owner ?? "未分配";
+
+    if (!item) {
+      args.preventDefault();
+      return;
+    }
+
+    args.async = true;
+
+    void onRescheduleItem(item, getScheduleChange(args.newStart, args.newEnd, newResource))
+      .then((saved) => {
+        if (!saved) {
+          args.preventDefault();
+        }
+
+        args.loaded();
+      })
+      .catch(() => {
+        args.preventDefault();
+        args.loaded();
+      });
+  }
 
   if (!schedulerModel.visibleItems.length) {
     return (
@@ -51,8 +95,8 @@ export function ProjectProgressCalendar({
         height={760}
         heightSpec="Max"
         eventBorderRadius={8}
-        eventMoveHandling="Disabled"
-        eventResizeHandling="Disabled"
+        eventMoveHandling="Update"
+        eventResizeHandling="Update"
         eventDeleteHandling="Disabled"
         eventClickHandling="Enabled"
         eventTextWrappingEnabled
@@ -61,6 +105,8 @@ export function ProjectProgressCalendar({
         rowMarginTop={8}
         rowMarginBottom={8}
         theme="scheduler_default"
+        onEventMove={handleScheduleUpdate}
+        onEventResize={handleScheduleUpdate}
         onEventClick={(args) => {
           const item = args.e.data.tags as ProjectCalendarItem | undefined;
 

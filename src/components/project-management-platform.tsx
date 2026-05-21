@@ -101,7 +101,10 @@ import { BugsView } from "@/components/project-management-platform/views/bugs-vi
 import { DocumentsView } from "@/components/project-management-platform/views/documents-view";
 import { MembersView } from "@/components/project-management-platform/views/members-view";
 import { OverviewView } from "@/components/project-management-platform/views/overview-view";
-import type { ProjectCalendarItem } from "@/components/project-management-platform/views/project-calendar-utils";
+import type {
+  ProjectCalendarItem,
+  ProjectCalendarScheduleChange
+} from "@/components/project-management-platform/views/project-calendar-utils";
 import { ProjectsView } from "@/components/project-management-platform/views/projects-view";
 import { ReportsView } from "@/components/project-management-platform/views/reports-view";
 import { RequirementsView } from "@/components/project-management-platform/views/requirements-view";
@@ -610,6 +613,88 @@ export function ProjectManagementPlatform({
       messageApi.error(error instanceof Error ? error.message : "更新任务失败");
     } finally {
       setEditSubmitting(false);
+    }
+  }
+
+  async function handleRescheduleProjectCalendarItem(
+    item: ProjectCalendarItem,
+    change: ProjectCalendarScheduleChange
+  ) {
+    if (!data) {
+      return false;
+    }
+
+    if (item.type !== "任务") {
+      messageApi.warning("当前只支持拖拽任务改期，版本、里程碑和 Bug 请进入详情编辑。");
+
+      return false;
+    }
+
+    const task = data.tasks.find((target) => target.id === item.id);
+
+    if (!task) {
+      messageApi.warning("没有找到要改期的任务。");
+
+      return false;
+    }
+
+    if (change.owner !== (item.owner || "未分配")) {
+      messageApi.warning("拖拽改期暂不支持跨负责人移动，请在任务编辑抽屉里调整负责人。");
+
+      return false;
+    }
+
+    if (task.startDate === change.startDate && task.dueDate === change.endDate) {
+      return true;
+    }
+
+    try {
+      // 记录接口会按 values 重建任务，拖拽改期只覆盖日期，其余字段必须沿用原任务。
+      const rescheduledTaskValues = {
+        ...task,
+        dueDate: change.endDate,
+        startDate: change.startDate
+      };
+      const response = await fetch("/api/records", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          workspaceId: currentWorkspaceId,
+          type: "task",
+          id: task.id,
+          values: serializeCreateValues(rescheduledTaskValues)
+        })
+      });
+      const payload = (await response.json()) as CreateRecordResult | { error?: string };
+
+      if (response.status === 401) {
+        window.location.assign("/login");
+
+        return false;
+      }
+
+      if (!response.ok) {
+        throw new Error("error" in payload ? payload.error || "拖拽更新任务排期失败" : "拖拽更新任务排期失败");
+      }
+
+      if ("error" in payload) {
+        throw new Error(payload.error || "拖拽更新任务排期失败");
+      }
+
+      const result = payload as CreateRecordResult;
+
+      // 排期拖拽需要保持画布不中断，先乐观更新，再静默刷新校准服务端数据。
+      setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
+      void refreshDashboardState();
+      showRecordResultMessage(result.message);
+
+      return true;
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "拖拽更新任务排期失败");
+
+      return false;
     }
   }
 
@@ -1337,12 +1422,12 @@ export function ProjectManagementPlatform({
                   arrow={false}
                   classNames={{ root: "pm-avatar-popover" }}
                   content={
-                    <Space className="pm-avatar-menu" direction="vertical" size={12}>
+                    <Space className="pm-avatar-menu" orientation="vertical" size={12}>
                       <Space className="pm-avatar-profile" size={10}>
                         <Avatar className="pm-avatar" src={data?.meta?.user?.avatarUrl}>
                           {userInitial}
                         </Avatar>
-                        <Space direction="vertical" size={0}>
+                        <Space orientation="vertical" size={0}>
                           <Text strong>{userName}</Text>
                           <Text type="secondary">账户设置</Text>
                         </Space>
@@ -1465,6 +1550,7 @@ export function ProjectManagementPlatform({
                       onCreate={() => openCreateDrawer("project")}
                       onEdit={openEditProjectDrawer}
                       onOpenCalendarItem={openProjectCalendarItem}
+                      onRescheduleCalendarItem={handleRescheduleProjectCalendarItem}
                     />
                   ) : null}
                   {activeView === "tasks" ? (

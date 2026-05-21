@@ -24,7 +24,7 @@ export function ProjectProgressPanel({
         </Space>
         <Tag>{people.length} 人</Tag>
       </Flex>
-      <Space direction="vertical" size={12} className="pm-wide">
+      <Space orientation="vertical" size={12} className="pm-wide">
         {people.slice(0, 8).map((person) => (
           <div className="project-person-progress" key={person.owner}>
             <Flex align="center" justify="space-between" gap={10}>
@@ -49,18 +49,18 @@ export function ProjectProgressPanel({
           <AlertOutlined />
           <Text strong>项目风险提示</Text>
         </Flex>
-        <Space direction="vertical" size={10} className="pm-wide">
+        <Space orientation="vertical" size={10} className="pm-wide">
           {risks.slice(0, 4).map((risk) => (
             <Alert
               key={risk.id}
               type={risk.level === "高" ? "error" : risk.level === "中" ? "warning" : "info"}
               showIcon
-              message={`${risk.project} · ${risk.title}`}
+              title={`${risk.project} · ${risk.title}`}
               description={risk.mitigation}
             />
           ))}
           {!risks.length ? (
-            <Alert type="success" showIcon icon={<CheckCircleOutlined />} message="当前项目暂无登记风险" />
+            <Alert type="success" showIcon icon={<CheckCircleOutlined />} title="当前项目暂无登记风险" />
           ) : null}
         </Space>
       </div>

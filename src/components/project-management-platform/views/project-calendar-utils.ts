@@ -18,6 +18,12 @@ export type ProjectCalendarItem = {
   riskTone: "success" | "processing" | "warning" | "danger";
 };
 
+export type ProjectCalendarScheduleChange = {
+  startDate: string;
+  endDate: string;
+  owner: string;
+};
+
 export type ProjectPersonProgress = {
   owner: string;
   avatarUrl?: string;

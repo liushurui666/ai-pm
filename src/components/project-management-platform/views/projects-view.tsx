@@ -12,7 +12,8 @@ import {
   createProjectRiskHints,
   getProjectDateRange,
   isCalendarItemVisibleInMonth,
-  type ProjectCalendarItem
+  type ProjectCalendarItem,
+  type ProjectCalendarScheduleChange
 } from "@/components/project-management-platform/views/project-calendar-utils";
 import { ProjectProgressCalendar } from "@/components/project-management-platform/views/project-progress-calendar";
 import { ProjectProgressPanel } from "@/components/project-management-platform/views/project-progress-panel";
@@ -30,7 +31,8 @@ export function ProjectsView({
   onFilterChange,
   onCreate,
   onEdit,
-  onOpenCalendarItem
+  onOpenCalendarItem,
+  onRescheduleCalendarItem
 }: {
   bugs: BugReport[];
   projects: Project[];
@@ -42,6 +44,7 @@ export function ProjectsView({
   onCreate: () => void;
   onEdit: (project: Project) => void;
   onOpenCalendarItem: (item: ProjectCalendarItem) => void;
+  onRescheduleCalendarItem: (item: ProjectCalendarItem, change: ProjectCalendarScheduleChange) => Promise<boolean>;
 }) {
   const projectNames = projects.map((project) => project.name);
   const selectedProject = projectNames.includes(projectFilter) ? projectFilter : "全部";
@@ -116,7 +119,12 @@ export function ProjectsView({
         </div>
       </div>
       <div className="project-calendar-layout">
-        <ProjectProgressCalendar items={calendarItems} month={calendarMonth} onOpenItem={onOpenCalendarItem} />
+        <ProjectProgressCalendar
+          items={calendarItems}
+          month={calendarMonth}
+          onOpenItem={onOpenCalendarItem}
+          onRescheduleItem={onRescheduleCalendarItem}
+        />
         <ProjectProgressPanel people={peopleProgress} risks={riskHints} />
       </div>
     </TableView>
