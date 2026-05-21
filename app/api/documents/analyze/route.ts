@@ -6,11 +6,13 @@ import { createAiDocumentTaskBreakdown, isAiAssistantConfigured } from "@/lib/ai
 import { createFallbackDocumentTaskBreakdown } from "@/lib/document-breakdown";
 import { isFeishuAuthConfigured } from "@/lib/feishu-auth";
 import { getSession } from "@/lib/session";
-import type { DashboardMember } from "@/types/dashboard";
+import type { DashboardMember, RequirementVersion } from "@/types/dashboard";
 import type { DocumentAnalyzeResult, DocumentTaskBreakdown, DocumentTaskDraft } from "@/types/records";
 
 const MAX_UPLOAD_SIZE = 4 * 1024 * 1024;
 const MAX_TEXT_LENGTH = 30_000;
+
+class DocumentAnalyzeInputError extends Error {}
 
 function getFormText(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -119,6 +121,35 @@ function resolveTaskOwner(task: DocumentTaskDraft, members: DashboardMember[], f
       };
 }
 
+function resolveBreakdownVersion({
+  formProjectName,
+  versionId,
+  versions,
+  workspaceId
+}: {
+  formProjectName: string;
+  versionId: string;
+  versions: RequirementVersion[];
+  workspaceId: string;
+}) {
+  const targetVersion = versions.find((version) => version.id === versionId && (version.workspaceId || "ws-default") === workspaceId);
+
+  if (!targetVersion) {
+    throw new DocumentAnalyzeInputError("目标版本不存在或不属于当前工作区，请刷新后重新选择版本。");
+  }
+
+  if (targetVersion.project === "跨项目" && !formProjectName) {
+    throw new DocumentAnalyzeInputError("跨项目版本需要选择本次拆解任务的归属项目。");
+  }
+
+  // 入库时以服务端解析出来的版本为准，避免子版本入口的隐藏字段同步慢一步导致任务落到父版本或未规划版本。
+  return {
+    projectName: targetVersion.project === "跨项目" ? formProjectName : targetVersion.project,
+    versionId: targetVersion.id,
+    versionName: targetVersion.name
+  };
+}
+
 async function createBreakdown({
   documentText,
   fileName,
@@ -208,9 +239,8 @@ export async function POST(request: NextRequest) {
   const formData = await request.formData();
   const file = formData.get("file");
   const workspaceId = getFormText(formData, "workspaceId");
-  const projectName = getFormText(formData, "project");
+  const formProjectName = getFormText(formData, "project");
   const versionId = getFormText(formData, "versionId");
-  const versionName = getFormText(formData, "versionName");
 
   if (!(file instanceof File)) {
     return NextResponse.json(
@@ -223,18 +253,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (!projectName) {
-    return NextResponse.json(
-      {
-        error: "请选择文档所属项目"
-      },
-      {
-        status: 400
-      }
-    );
-  }
-
-  if (!versionId || !versionName) {
+  if (!versionId) {
     return NextResponse.json(
       {
         error: "请选择文档拆解的目标版本"
@@ -262,11 +281,17 @@ export async function POST(request: NextRequest) {
     const dashboardData = await getDashboardData(session?.user, workspaceId || undefined);
     const members = dashboardData.members.filter((member) => member.status === "active");
     const fallbackOwner = getFallbackOwner(formData);
+    const targetVersion = resolveBreakdownVersion({
+      formProjectName,
+      versionId,
+      versions: dashboardData.requirementVersions,
+      workspaceId: dashboardData.meta?.currentWorkspace?.id ?? (workspaceId || "ws-default")
+    });
     const { source, breakdown: rawBreakdown, warning } = await createBreakdown({
       documentText,
       fileName: file.name,
-      projectName,
-      versionName,
+      projectName: targetVersion.projectName,
+      versionName: targetVersion.versionName,
       members
     });
     const breakdown = ensureUsefulBreakdown(rawBreakdown);
@@ -296,9 +321,9 @@ export async function POST(request: NextRequest) {
           ownerUserId: owner.ownerUserId,
           ownerEmail: owner.ownerEmail,
           ownerAvatarUrl: owner.ownerAvatarUrl,
-          project: projectName,
-          versionId,
-          versionName,
+          project: targetVersion.projectName,
+          versionId: targetVersion.versionId,
+          versionName: targetVersion.versionName,
           priority: task.priority,
           startDate: normalizeStartDate(task.startDate, task.dueDate),
           dueDate: normalizeDueDate(task.dueDate),
@@ -315,7 +340,7 @@ export async function POST(request: NextRequest) {
       tasks,
       source,
       extractedChars: documentText.length,
-      message: `已围绕「${versionName}」拆解 ${tasks.length} 个任务，并保存到任务看板。`,
+      message: `已围绕「${targetVersion.versionName}」拆解 ${tasks.length} 个任务，并保存到任务看板。`,
       warning
     } satisfies DocumentAnalyzeResult);
   } catch (error) {
@@ -324,7 +349,7 @@ export async function POST(request: NextRequest) {
         error: error instanceof Error ? error.message : "文档拆解失败"
       },
       {
-        status: 502
+        status: error instanceof DocumentAnalyzeInputError ? 400 : 502
       }
     );
   }
