@@ -12,6 +12,7 @@ import {
   createProjectRiskHints,
   getProjectDateRange
 } from "@/components/project-management-platform/views/project-calendar-utils";
+import { isCalendarItemVisibleInMonth } from "@/components/project-management-platform/views/project-calendar-range-utils";
 import { ProjectProgressCalendar } from "@/components/project-management-platform/views/project-progress-calendar";
 import { ProjectProgressPanel } from "@/components/project-management-platform/views/project-progress-panel";
 
@@ -48,7 +49,7 @@ export function ProjectsView({
     [bugs, projects, selectedProject, tasks, versions]
   );
   const monthItems = useMemo(
-    () => calendarItems.filter((item) => dayjs(item.date).isSame(calendarMonth, "month")),
+    () => calendarItems.filter((item) => isCalendarItemVisibleInMonth(item, calendarMonth)),
     [calendarItems, calendarMonth]
   );
   const peopleProgress = useMemo(() => createPersonProgress(monthItems), [monthItems]);

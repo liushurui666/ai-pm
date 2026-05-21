@@ -8,6 +8,8 @@ export type ProjectCalendarItem = {
   type: ProjectCalendarItemType;
   title: string;
   date: string;
+  startDate: string;
+  endDate: string;
   owner: string;
   ownerAvatarUrl?: string;
   project: string;
@@ -128,6 +130,8 @@ export function createProjectCalendarItems({
           type: "里程碑",
           title: milestone.title,
           date: toDate(milestone.dueDate),
+          startDate: toDate(milestone.dueDate),
+          endDate: toDate(milestone.dueDate),
           owner: milestone.owner || project.owner || "未分配",
           ownerAvatarUrl: milestone.ownerAvatarUrl || project.ownerAvatarUrl,
           project: project.name,
@@ -148,6 +152,8 @@ export function createProjectCalendarItems({
         type: "任务",
         title: task.title,
         date: toDate(task.dueDate),
+        startDate: toDate(task.startDate),
+        endDate: toDate(task.dueDate),
         owner: task.owner || "未分配",
         ownerAvatarUrl: task.ownerAvatarUrl,
         project: task.project,
@@ -168,6 +174,8 @@ export function createProjectCalendarItems({
         type: "Bug",
         title: bug.title,
         date: toDate(bug.createdAt),
+        startDate: toDate(bug.createdAt),
+        endDate: toDate(bug.createdAt),
         owner: bug.owner || "未分配",
         ownerAvatarUrl: bug.ownerAvatarUrl,
         project: bug.project,
@@ -187,6 +195,8 @@ export function createProjectCalendarItems({
         type: "版本",
         title: version.name,
         date: toDate(version.releaseDate),
+        startDate: toDate(version.releaseDate),
+        endDate: toDate(version.releaseDate),
         owner: version.productOwner || version.devOwner || version.uiOwner || "未分配",
         ownerAvatarUrl: version.productOwnerAvatarUrl || version.devOwnerAvatarUrl || version.uiOwnerAvatarUrl,
         project: version.project,
