@@ -60,15 +60,15 @@ function compareProjectSchedulerItems(left: ProjectCalendarItem, right: ProjectC
 }
 
 function getResourceHtml(owner: string, items: ProjectCalendarItem[]) {
-  const projects = Array.from(new Set(items.map((item) => item.project))).slice(0, 2);
+  const versions = Array.from(new Set(items.map((item) => item.versionName || item.project))).slice(0, 2);
   const progress = Math.round(items.reduce((sum, item) => sum + item.progress, 0) / items.length);
   const riskCount = items.filter((item) => item.riskTone === "danger").length;
 
-  // 资源行用紧凑信息密度展示负责人、项目范围和风险，保留 Scheduler 主画布空间。
+  // 资源行用紧凑信息密度展示负责人、版本范围和风险，保留 Scheduler 主画布空间。
   return `
     <div class="project-scheduler-resource-label">
       <strong>${escapeHtml(owner)}</strong>
-      <span>${escapeHtml(projects.join(" / ") || "暂无项目")}</span>
+      <span>${escapeHtml(versions.join(" / ") || "暂无版本")}</span>
       <em>${progress}% · ${items.length} 项${riskCount ? ` · 风险 ${riskCount}` : ""}</em>
     </div>
   `;
@@ -83,7 +83,7 @@ function getEventHtml(item: ProjectCalendarItem) {
         <strong>${escapeHtml(item.title)}</strong>
       </div>
       <div class="project-scheduler-event-meta">
-        <span>${escapeHtml(item.project)}</span>
+        <span>${escapeHtml(item.versionName || item.project)}</span>
         <span>${escapeHtml(item.status)}</span>
         <span>${item.progress}%</span>
       </div>
@@ -126,7 +126,7 @@ export function createProjectSchedulerModel(items: ProjectCalendarItem[], month:
       resource: item.owner || "未分配",
       text: `${item.type} · ${item.title}`,
       html: getEventHtml(item),
-      toolTip: `${item.type === "任务" ? "拖拽改期，点击编辑" : "点击编辑"}｜${item.title}｜${item.project}｜${getRangeText(item)}｜${item.status}｜${item.progress}%`,
+      toolTip: `${item.type === "任务" ? "拖拽改期，点击编辑" : "点击编辑"}｜${item.title}｜${item.versionName || item.project}｜${getRangeText(item)}｜${item.status}｜${item.progress}%`,
       backColor: colors.background,
       barColor: colors.bar,
       borderColor: colors.border,

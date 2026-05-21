@@ -47,7 +47,7 @@ export function ProjectProgressPanel({
       <div className="project-progress-risks">
         <Flex align="center" gap={8}>
           <AlertOutlined />
-          <Text strong>项目风险提示</Text>
+          <Text strong>版本关联项目风险</Text>
         </Flex>
         <Space orientation="vertical" size={10} className="pm-wide">
           {risks.slice(0, 4).map((risk) => (
@@ -59,9 +59,7 @@ export function ProjectProgressPanel({
               description={risk.mitigation}
             />
           ))}
-          {!risks.length ? (
-            <Alert type="success" showIcon icon={<CheckCircleOutlined />} title="当前项目暂无登记风险" />
-          ) : null}
+          {!risks.length ? <Alert type="success" showIcon icon={<CheckCircleOutlined />} title="当前版本关联项目暂无登记风险" /> : null}
         </Space>
       </div>
     </aside>

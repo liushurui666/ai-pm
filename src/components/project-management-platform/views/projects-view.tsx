@@ -4,13 +4,16 @@ import { Button, DatePicker, Select, Space, Statistic, Tag, Typography } from "a
 import { CalendarOutlined, FolderOpenOutlined, PlusOutlined, UserOutlined, WarningOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { useMemo, useState } from "react";
-import type { Project, Risk, Task } from "@/types/dashboard";
+import type { Project, RequirementVersion, Risk, Task } from "@/types/dashboard";
+import type { RequirementVersionOption } from "@/components/project-management-platform/types";
 import { TableView } from "@/components/project-management-platform/shared/page-shell";
 import {
+  allProjectCalendarVersionsValue,
   createPersonProgress,
   createProjectCalendarItems,
   createProjectRiskHints,
-  getProjectDateRange,
+  getVersionDateRange,
+  getVersionScopeProjects,
   isCalendarItemVisibleInMonth,
   type ProjectCalendarItem,
   type ProjectCalendarScheduleChange
@@ -20,43 +23,58 @@ import { ProjectProgressPanel } from "@/components/project-management-platform/v
 
 const { Text } = Typography;
 
-// 项目视图以大日历作为主画布，把每个人的交付进度放回日期上下文里看。
+// 项目视图以版本为交付维度，把每个人的任务排期放回日期上下文里看。
 export function ProjectsView({
   projects,
-  projectFilter,
   risks,
   tasks,
-  onFilterChange,
-  onCreate,
-  onEdit,
+  versionFilter,
+  versionOptions,
+  versions,
+  onCreateVersion,
+  onEditVersion,
   onOpenCalendarItem,
-  onRescheduleCalendarItem
+  onRescheduleCalendarItem,
+  onVersionFilterChange
 }: {
   projects: Project[];
-  projectFilter: string;
   risks: Risk[];
   tasks: Task[];
-  onFilterChange: (value: string) => void;
-  onCreate: () => void;
-  onEdit: (project: Project) => void;
+  versionFilter: string;
+  versionOptions: RequirementVersionOption[];
+  versions: RequirementVersion[];
+  onCreateVersion: () => void;
+  onEditVersion: (version: RequirementVersion) => void;
   onOpenCalendarItem: (item: ProjectCalendarItem) => void;
   onRescheduleCalendarItem: (item: ProjectCalendarItem, change: ProjectCalendarScheduleChange) => Promise<boolean>;
+  onVersionFilterChange: (value: string) => void;
 }) {
-  const projectNames = projects.map((project) => project.name);
-  const selectedProject = projectNames.includes(projectFilter) ? projectFilter : "全部";
-  const selectedProjectRecord = projects.find((project) => project.name === selectedProject);
+  const selectedVersionId = versions.some((version) => version.id === versionFilter) ? versionFilter : allProjectCalendarVersionsValue;
+  const selectedVersion = selectedVersionId === allProjectCalendarVersionsValue
+    ? null
+    : versions.find((version) => version.id === selectedVersionId) ?? null;
+  const scopeProjectNames = getVersionScopeProjects(versions, selectedVersion?.id);
+  const projectCount = selectedVersion ? scopeProjectNames.length : projects.length;
   const [calendarMonth, setCalendarMonth] = useState(() => dayjs());
   const calendarItems = useMemo(
-    () => createProjectCalendarItems({ selectedProject, tasks }),
-    [selectedProject, tasks]
+    () =>
+      createProjectCalendarItems({
+        selectedVersionId: selectedVersion?.id,
+        tasks,
+        versions
+      }),
+    [selectedVersion?.id, tasks, versions]
   );
   const monthItems = useMemo(
     () => calendarItems.filter((item) => isCalendarItemVisibleInMonth(item, calendarMonth)),
     [calendarItems, calendarMonth]
   );
   const peopleProgress = useMemo(() => createPersonProgress(monthItems), [monthItems]);
-  const riskHints = useMemo(() => createProjectRiskHints(risks, selectedProject), [risks, selectedProject]);
-  const projectRange = getProjectDateRange(projects, selectedProject);
+  const riskHints = useMemo(
+    () => createProjectRiskHints(risks, versions, selectedVersion?.id),
+    [risks, selectedVersion?.id, versions]
+  );
+  const versionRange = getVersionDateRange(versions, selectedVersion?.id);
   const doneCount = monthItems.filter((item) => item.progress >= 100).length;
   const riskCount = monthItems.filter((item) => item.riskTone === "danger").length;
   const avgProgress = monthItems.length
@@ -66,17 +84,23 @@ export function ProjectsView({
   return (
     <TableView
       title="项目视图"
-      subtitle="用人员排期时间轴查看项目任务节奏、任务跨度和交付风险。"
+      subtitle="按版本查看任务节奏、人员排期、任务跨度和交付风险。"
       icon={<FolderOpenOutlined />}
       extra={
         <Space wrap className="project-calendar-toolbar">
           <Select
             className="project-calendar-project-select"
-            value={selectedProject}
-            onChange={onFilterChange}
+            value={selectedVersionId}
+            onChange={onVersionFilterChange}
+            placeholder="选择版本"
+            showSearch
+            optionFilterProp="label"
             options={[
-              { value: "全部", label: "全部项目" },
-              ...projectNames.map((project) => ({ value: project, label: project }))
+              { value: allProjectCalendarVersionsValue, label: "全部版本" },
+              ...versionOptions.map((version) => ({
+                value: version.value,
+                label: version.label
+              }))
             ]}
           />
           <DatePicker
@@ -85,13 +109,13 @@ export function ProjectsView({
             onChange={(value) => setCalendarMonth(value ?? dayjs())}
             allowClear={false}
           />
-          {selectedProjectRecord ? (
-            <Button onClick={() => onEdit(selectedProjectRecord)}>
-              编辑项目
+          {selectedVersion ? (
+            <Button onClick={() => onEditVersion(selectedVersion)}>
+              编辑版本
             </Button>
           ) : null}
-          <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>
-            新建项目
+          <Button type="primary" icon={<PlusOutlined />} onClick={onCreateVersion}>
+            新建版本
           </Button>
         </Space>
       }
@@ -100,11 +124,12 @@ export function ProjectsView({
         <div className="project-calendar-hero-copy">
           <Space size={10} wrap>
             <Tag icon={<CalendarOutlined />}>{calendarMonth.format("YYYY 年 MM 月")}</Tag>
-            {projectRange ? <Tag>{projectRange}</Tag> : null}
+            {versionRange ? <Tag>{versionRange}</Tag> : null}
+            <Tag>{projectCount} 个关联项目</Tag>
           </Space>
-          <h3>{selectedProject === "全部" ? "全项目交付日历" : selectedProject}</h3>
+          <h3>{selectedVersion ? selectedVersion.name : "全版本交付日历"}</h3>
           <Text type="secondary">
-            左侧按负责人分行，右侧仅展示任务横条；Bug、里程碑和版本节点不进入交付日历。
+            左侧按负责人分行，右侧仅展示当前版本范围内的任务横条；Bug、里程碑和版本节点不进入交付日历。
           </Text>
         </div>
         <div className="project-calendar-hero-stats">

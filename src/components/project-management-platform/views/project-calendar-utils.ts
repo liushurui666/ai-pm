@@ -1,5 +1,7 @@
 import dayjs from "dayjs";
-import type { Project, Risk, Task } from "@/types/dashboard";
+import type { RequirementVersion, Risk, Task } from "@/types/dashboard";
+
+export const allProjectCalendarVersionsValue = "__all_versions__";
 
 export type ProjectCalendarItemType = "任务" | "里程碑" | "Bug" | "版本";
 
@@ -13,6 +15,8 @@ export type ProjectCalendarItem = {
   owner: string;
   ownerAvatarUrl?: string;
   project: string;
+  versionId?: string;
+  versionName?: string;
   status: string;
   progress: number;
   riskTone: "success" | "processing" | "warning" | "danger";
@@ -38,12 +42,43 @@ function normalizeProjectName(value?: string) {
   return value?.trim().toLowerCase() ?? "";
 }
 
-function isSameProject(projectName: string, value?: string) {
-  return Boolean(value && normalizeProjectName(projectName) === normalizeProjectName(value));
+function getVersionScopeIds(versions: RequirementVersion[], selectedVersionId?: string | null) {
+  if (!selectedVersionId) {
+    return null;
+  }
+
+  const scopeIds = new Set<string>([selectedVersionId]);
+  let hasNewChild = true;
+
+  // 父版本视角需要自然包含子版本，避免 1.4 和 1.4.2 的交付任务被拆开看。
+  while (hasNewChild) {
+    hasNewChild = false;
+    versions.forEach((version) => {
+      if (version.parentVersionId && scopeIds.has(version.parentVersionId) && !scopeIds.has(version.id)) {
+        scopeIds.add(version.id);
+        hasNewChild = true;
+      }
+    });
+  }
+
+  return scopeIds;
 }
 
-function inSelectedProject(projectName: string, selectedProject: string) {
-  return selectedProject === "全部" || isSameProject(selectedProject, projectName);
+function getScopedVersions(versions: RequirementVersion[], selectedVersionId?: string | null) {
+  const scopeIds = getVersionScopeIds(versions, selectedVersionId);
+
+  return scopeIds ? versions.filter((version) => scopeIds.has(version.id)) : versions;
+}
+
+export function getVersionScopeProjects(versions: RequirementVersion[], selectedVersionId?: string | null) {
+  // 版本日历的风险仍来自项目风险表，只把当前版本范围关联到的项目拿出来做过滤和展示。
+  return Array.from(new Set(getScopedVersions(versions, selectedVersionId).map((version) => version.project).filter(Boolean)));
+}
+
+function inSelectedVersion(task: Task, versions: RequirementVersion[], selectedVersionId?: string | null) {
+  const scopeIds = getVersionScopeIds(versions, selectedVersionId);
+
+  return !scopeIds || Boolean(task.versionId && scopeIds.has(task.versionId));
 }
 
 function getTaskProgress(stage: Task["stage"]) {
@@ -96,14 +131,16 @@ export function isCalendarItemVisibleInMonth(item: ProjectCalendarItem, month: d
 
 // 项目交付日历只展示任务，避免 Bug、版本和里程碑混入后干扰排期判断。
 export function createProjectCalendarItems({
-  selectedProject,
-  tasks
+  selectedVersionId,
+  tasks,
+  versions
 }: {
-  selectedProject: string;
+  selectedVersionId?: string | null;
   tasks: Task[];
+  versions: RequirementVersion[];
 }) {
   const taskItems = tasks
-    .filter((task) => inSelectedProject(task.project, selectedProject))
+    .filter((task) => inSelectedVersion(task, versions, selectedVersionId))
     .map<ProjectCalendarItem>((task) => {
       const progress = getTaskProgress(task.stage);
 
@@ -117,6 +154,8 @@ export function createProjectCalendarItems({
         owner: task.owner || "未分配",
         ownerAvatarUrl: task.ownerAvatarUrl,
         project: task.project,
+        versionId: task.versionId,
+        versionName: task.versionName,
         status: task.stage,
         progress,
         riskTone: getRiskTone(progress, task.stage !== "已完成" && isPast(task.dueDate))
@@ -128,11 +167,12 @@ export function createProjectCalendarItems({
   );
 }
 
-export function getProjectDateRange(projects: Project[], selectedProject: string) {
-  const scopedProjects = projects.filter((project) => inSelectedProject(project.name, selectedProject));
-  const dates = scopedProjects.flatMap((project) => [
-    project.dueDate,
-    ...project.milestones.map((milestone) => milestone.dueDate)
+export function getVersionDateRange(versions: RequirementVersion[], selectedVersionId?: string | null) {
+  const scopedVersions = getScopedVersions(versions, selectedVersionId);
+  const dates = scopedVersions.flatMap((version) => [
+    version.startDate,
+    version.releaseDate,
+    ...version.milestones.map((milestone) => milestone.dueDate)
   ]);
 
   if (!dates.length) {
@@ -158,7 +198,7 @@ export function createPersonProgress(items: ProjectCalendarItem[]) {
       return {
         owner,
         avatarUrl: ownerItems.find((item) => item.ownerAvatarUrl)?.ownerAvatarUrl,
-        projects: Array.from(new Set(ownerItems.map((item) => item.project))),
+        projects: Array.from(new Set(ownerItems.map((item) => item.versionName || item.project))),
         items: ownerItems,
         progress,
         doneCount: ownerItems.filter((item) => item.progress >= 100).length,
@@ -168,9 +208,11 @@ export function createPersonProgress(items: ProjectCalendarItem[]) {
     .sort((left, right) => right.riskCount - left.riskCount || left.progress - right.progress || right.items.length - left.items.length);
 }
 
-export function createProjectRiskHints(risks: Risk[], selectedProject: string) {
+export function createProjectRiskHints(risks: Risk[], versions: RequirementVersion[], selectedVersionId?: string | null) {
+  const scopedProjects = new Set(getVersionScopeProjects(versions, selectedVersionId).map(normalizeProjectName));
+
   return risks
-    .filter((risk) => inSelectedProject(risk.project, selectedProject))
+    .filter((risk) => !selectedVersionId || scopedProjects.has(normalizeProjectName(risk.project)))
     .sort((left, right) => {
       const levelWeight: Record<Risk["level"], number> = { 高: 3, 中: 2, 低: 1 };
 

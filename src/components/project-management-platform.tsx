@@ -101,9 +101,10 @@ import { BugsView } from "@/components/project-management-platform/views/bugs-vi
 import { DocumentsView } from "@/components/project-management-platform/views/documents-view";
 import { MembersView } from "@/components/project-management-platform/views/members-view";
 import { OverviewView } from "@/components/project-management-platform/views/overview-view";
-import type {
-  ProjectCalendarItem,
-  ProjectCalendarScheduleChange
+import {
+  allProjectCalendarVersionsValue,
+  type ProjectCalendarItem,
+  type ProjectCalendarScheduleChange
 } from "@/components/project-management-platform/views/project-calendar-utils";
 import { ProjectsView } from "@/components/project-management-platform/views/projects-view";
 import { ReportsView } from "@/components/project-management-platform/views/reports-view";
@@ -150,7 +151,7 @@ export function ProjectManagementPlatform({
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const [breakdownSubmitting, setBreakdownSubmitting] = useState(false);
   const [activeView, setActiveView] = useState<AppView>(validViews.has(initialView) ? initialView : "overview");
-  const [projectFilter, setProjectFilter] = useState("全部");
+  const [projectCalendarVersionId, setProjectCalendarVersionId] = useState(allProjectCalendarVersionsValue);
   const [selectedRequirementVersionId, setSelectedRequirementVersionId] = useState<string | null>(null);
   const [people, setPeople] = useState<FeishuPerson[]>([]);
   const [peopleLoading, setPeopleLoading] = useState(false);
@@ -1253,6 +1254,7 @@ export function ProjectManagementPlatform({
   async function switchWorkspace(workspaceId: string) {
     setActiveWorkspaceId(workspaceId);
     setSelectedRequirementVersionId(null);
+    setProjectCalendarVersionId(allProjectCalendarVersionsValue);
 
     try {
       const nextData = await fetchDashboardFromApi(workspaceId);
@@ -1543,12 +1545,14 @@ export function ProjectManagementPlatform({
                       projects={filteredProjects}
                       risks={data.risks}
                       tasks={data.tasks}
-                      projectFilter={projectFilter}
-                      onFilterChange={setProjectFilter}
-                      onCreate={() => openCreateDrawer("project")}
-                      onEdit={openEditProjectDrawer}
+                      versionFilter={projectCalendarVersionId}
+                      versionOptions={requirementVersionOptions}
+                      versions={requirementVersions}
+                      onCreateVersion={() => openCreateDrawer("requirementVersion")}
+                      onEditVersion={openEditRequirementVersionDrawer}
                       onOpenCalendarItem={openProjectCalendarItem}
                       onRescheduleCalendarItem={handleRescheduleProjectCalendarItem}
+                      onVersionFilterChange={setProjectCalendarVersionId}
                     />
                   ) : null}
                   {activeView === "tasks" ? (
