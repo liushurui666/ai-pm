@@ -157,12 +157,35 @@ export type Requirement = {
 export type RequirementVersion = {
   id: string;
   workspaceId?: string;
+  parentVersionId?: string;
+  parentVersionName?: string;
   name: string;
   project: string;
   status: "规划中" | "进行中" | "已发布" | "已归档";
   startDate: string;
   releaseDate: string;
   goal: string;
+  productOwner?: string;
+  productOwnerMemberId?: string;
+  productOwnerOpenId?: string;
+  productOwnerUnionId?: string;
+  productOwnerUserId?: string;
+  productOwnerEmail?: string;
+  productOwnerAvatarUrl?: string;
+  uiOwner?: string;
+  uiOwnerMemberId?: string;
+  uiOwnerOpenId?: string;
+  uiOwnerUnionId?: string;
+  uiOwnerUserId?: string;
+  uiOwnerEmail?: string;
+  uiOwnerAvatarUrl?: string;
+  devOwner?: string;
+  devOwnerMemberId?: string;
+  devOwnerOpenId?: string;
+  devOwnerUnionId?: string;
+  devOwnerUserId?: string;
+  devOwnerEmail?: string;
+  devOwnerAvatarUrl?: string;
   milestones: ProjectMilestone[];
 };
 

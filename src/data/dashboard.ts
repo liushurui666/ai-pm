@@ -311,6 +311,9 @@ export const dashboardData: DashboardData = {
       startDate: "2026-05-01",
       releaseDate: "2026-06-01",
       goal: "集中交付健康度解释、风险聚合和管理层视图，提升项目状态透明度。",
+      productOwner: "林夏",
+      uiOwner: "韩越",
+      devOwner: "周铭",
       milestones: [
         {
           id: "rv-1-4-m-1",
@@ -331,6 +334,30 @@ export const dashboardData: DashboardData = {
       ]
     },
     {
+      id: "rv-1-4-mobile",
+      parentVersionId: "rv-1-4",
+      parentVersionName: "1.4 项目驾驶舱增强",
+      name: "1.4.1 移动端验收补丁",
+      project: "智能项目驾驶舱一期",
+      status: "规划中",
+      startDate: "2026-05-20",
+      releaseDate: "2026-06-05",
+      goal: "补齐需求版本页和风险页移动端验收问题，作为 1.4 的子版本独立跟进。",
+      productOwner: "林夏",
+      uiOwner: "韩越",
+      devOwner: "周铭",
+      milestones: [
+        {
+          id: "rv-1-4-mobile-m-1",
+          title: "移动端走查",
+          status: "未开始",
+          dueDate: "2026-05-28",
+          owner: "韩越",
+          note: "完成需求管理、Bug 管理和项目风险页移动端走查。"
+        }
+      ]
+    },
+    {
       id: "rv-2026-05-ai",
       name: "2026.05 AI 协同版",
       project: "AI 周报自动化",
@@ -338,6 +365,9 @@ export const dashboardData: DashboardData = {
       startDate: "2026-05-10",
       releaseDate: "2026-06-15",
       goal: "把文档拆解、AI 周报和任务联动纳入一个可验收版本。",
+      productOwner: "许诺",
+      uiOwner: "许诺",
+      devOwner: "陈澈",
       milestones: [
         {
           id: "rv-2026-05-ai-m-1",

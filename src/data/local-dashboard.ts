@@ -356,6 +356,19 @@ function createOwnerLink(values: Record<string, unknown>) {
   };
 }
 
+function createVersionRoleOwnerLink(values: Record<string, unknown>, prefix: "product" | "ui" | "dev") {
+  const field = `${prefix}Owner`;
+
+  return {
+    [`${field}MemberId`]: asText(values[`${field}MemberId`]) || undefined,
+    [`${field}OpenId`]: asText(values[`${field}OpenId`]) || undefined,
+    [`${field}UnionId`]: asText(values[`${field}UnionId`]) || undefined,
+    [`${field}UserId`]: asText(values[`${field}UserId`]) || undefined,
+    [`${field}Email`]: asText(values[`${field}Email`]) || undefined,
+    [`${field}AvatarUrl`]: asText(values[`${field}AvatarUrl`]) || undefined
+  };
+}
+
 function asNumber(value: unknown, fallback: number) {
   const nextValue = typeof value === "number" ? value : Number(value);
 
@@ -953,16 +966,25 @@ function normalizeCreateRequirementVersion(
   const status = normalizeRequirementVersionStatus(asText(values.status, "规划中"));
   const startDate = asDateString(values.startDate, dayjs().format("YYYY-MM-DD"));
   const releaseDate = asDateString(values.releaseDate, dayjs().add(30, "day").format("YYYY-MM-DD"));
+  const parentVersionId = asText(values.parentVersionId);
 
   return {
     id,
     workspaceId: asText(values.workspaceId, DEFAULT_WORKSPACE.id),
+    parentVersionId: parentVersionId && parentVersionId !== id ? parentVersionId : undefined,
+    parentVersionName: parentVersionId && parentVersionId !== id ? asText(values.parentVersionName) || undefined : undefined,
     name,
     project: asText(values.project, "跨项目"),
     status,
     startDate,
     releaseDate,
     goal: asText(values.goal, "暂无版本目标。"),
+    productOwner: asText(values.productOwner) || undefined,
+    ...createVersionRoleOwnerLink(values, "product"),
+    uiOwner: asText(values.uiOwner) || undefined,
+    ...createVersionRoleOwnerLink(values, "ui"),
+    devOwner: asText(values.devOwner) || undefined,
+    ...createVersionRoleOwnerLink(values, "dev"),
     milestones: normalizeRequirementVersionMilestones(values.milestones, {
       name,
       releaseDate,
@@ -1468,16 +1490,28 @@ function ensureCurrentMember(data: LocalDatabase, workspaceId: string, user?: Fe
 function migrateLocalDatabase(data: LocalDatabase): LocalDatabase {
   const normalizedVersions = (data.requirementVersions.length ? data.requirementVersions : [DEFAULT_REQUIREMENT_VERSION])
     .map(normalizeExistingRequirementVersion);
+  const versionsWithParentNames = normalizedVersions.map((version) => {
+    const parentVersion = version.parentVersionId
+      ? normalizedVersions.find((item) => item.id === version.parentVersionId)
+      : undefined;
+
+    return parentVersion && !version.parentVersionName
+      ? {
+          ...version,
+          parentVersionName: parentVersion.name
+        }
+      : version;
+  });
   const normalizedWorkspaces = normalizeWorkspaces(data.workspaces);
 
   return {
     ...data,
     workspaces: normalizedWorkspaces,
     projects: data.projects.map(normalizeExistingProject),
-    tasks: data.tasks.map((task) => normalizeExistingTask(task, normalizedVersions)),
-    bugs: data.bugs.map((bug) => normalizeExistingBug(bug, normalizedVersions)),
-    requirementVersions: normalizedVersions,
-    requirements: data.requirements.map((requirement) => normalizeExistingRequirement(requirement, normalizedVersions)),
+    tasks: data.tasks.map((task) => normalizeExistingTask(task, versionsWithParentNames)),
+    bugs: data.bugs.map((bug) => normalizeExistingBug(bug, versionsWithParentNames)),
+    requirementVersions: versionsWithParentNames,
+    requirements: data.requirements.map((requirement) => normalizeExistingRequirement(requirement, versionsWithParentNames)),
     members: data.members.map((member) => normalizeMember(member, normalizedWorkspaces[0]?.id ?? DEFAULT_WORKSPACE.id))
   };
 }
@@ -2408,8 +2442,15 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
   if (type === "requirementVersion") {
     const version = typedRecord as RequirementVersion;
 
-    data.requirementVersions = data.requirementVersions.map((version) =>
-      version.id === id ? (typedRecord as RequirementVersion) : version
+    data.requirementVersions = data.requirementVersions.map((item) =>
+      item.id === id
+        ? (typedRecord as RequirementVersion)
+        : item.parentVersionId === id
+          ? {
+              ...item,
+              parentVersionName: version.name
+            }
+          : item
     );
     updated = data.requirementVersions.some((version) => version.id === id);
 
@@ -2522,7 +2563,17 @@ export async function deleteDashboardRecord<T extends DashboardEntityType>(type:
 
     const migrationVersion = fallbackVersion;
 
-    data.requirementVersions = data.requirementVersions.filter((version) => version.id !== id);
+    data.requirementVersions = data.requirementVersions
+      .filter((version) => version.id !== id)
+      .map((version) =>
+        version.parentVersionId === id
+          ? {
+              ...version,
+              parentVersionId: undefined,
+              parentVersionName: undefined
+            }
+          : version
+      );
     data.requirements = data.requirements.map((requirement) =>
       requirement.versionId === id
         ? {
@@ -2578,7 +2629,7 @@ export async function deleteDashboardRecord<T extends DashboardEntityType>(type:
     fallbackVersion,
     message:
       type === "requirementVersion" && fallbackVersion
-        ? `已删除${getEntityLabel(type)}，关联记录已迁移到「${fallbackVersion.name}」。`
+        ? `已删除${getEntityLabel(type)}，关联记录已迁移到「${fallbackVersion.name}」，子版本已提升为一级版本。`
         : `已删除${getEntityLabel(type)}。`
   };
 }

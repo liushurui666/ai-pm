@@ -53,6 +53,7 @@ export type RequirementVersionOption = {
   label: string;
   versionName: string;
   project: string;
+  parentVersionId?: string;
 };
 
 export type OwnerSelectableMember = {

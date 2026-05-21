@@ -470,6 +470,53 @@
   gap: 6px;
 }
 
+.requirement-version-children {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.requirement-version-children-header {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.requirement-version-children-list {
+  width: 100%;
+}
+
+.requirement-version-child-row {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.requirement-version-child-row > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.requirement-version-children-empty {
+  margin-bottom: 16px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
 .requirement-version-meta,
 .requirement-version-summary {
   display: grid;
@@ -498,8 +545,12 @@
   margin-bottom: 16px;
 }
 
+.requirement-version-owner-summary {
+  grid-column: span 2;
+}
+
 .requirement-version-milestones {
-  margin-bottom: 16px;
+  margin: 16px 0;
   padding: 14px 16px 2px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -1253,5 +1304,9 @@
   .project-risk-focus-grid,
   .version-task-grid {
     grid-template-columns: 1fr;
+  }
+
+  .requirement-version-owner-summary {
+    grid-column: span 1;
   }
 }

@@ -5,6 +5,8 @@ import { useEffect } from "react";
 import dayjs from "dayjs";
 import type { OwnerSelectableMember, RequirementVersionOption } from "@/components/project-management-platform/types";
 import { MilestoneFields } from "@/components/project-management-platform/forms/milestone-fields";
+import { VersionOwnerFields } from "@/components/project-management-platform/forms/version-owner-fields";
+import { VersionParentField } from "@/components/project-management-platform/forms/version-parent-field";
 
 // 复用站内项目名称，避免任务、风险和版本表单各自维护一套项目选项。
 export function ProjectOptionSelect({
@@ -181,13 +183,17 @@ export function RequirementVersionFields({
   people,
   peopleError,
   peopleLoading,
-  projectOptions
+  projectOptions,
+  versionOptions,
+  editingVersionId
 }: {
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   people: OwnerSelectableMember[];
   peopleError: string;
   peopleLoading: boolean;
   projectOptions: string[];
+  versionOptions: RequirementVersionOption[];
+  editingVersionId?: string;
 }) {
   return (
     <>
@@ -206,6 +212,13 @@ export function RequirementVersionFields({
           </Form.Item>
         </Col>
       </Row>
+      <VersionParentField form={form} versionOptions={versionOptions} editingVersionId={editingVersionId} />
+      <VersionOwnerFields
+        form={form}
+        people={people}
+        peopleError={peopleError}
+        peopleLoading={peopleLoading}
+      />
       <Row gutter={12}>
         <Col span={12}>
           <Form.Item label="开始日期" name="startDate">

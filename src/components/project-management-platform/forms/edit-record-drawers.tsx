@@ -249,6 +249,7 @@ export function RequirementVersionEditDrawer({
   peopleLoading,
   peopleError,
   projectOptions,
+  versionOptions,
   onClose,
   onSubmit
 }: {
@@ -259,6 +260,7 @@ export function RequirementVersionEditDrawer({
   peopleLoading: boolean;
   peopleError: string;
   projectOptions: string[];
+  versionOptions: RequirementVersionOption[];
   onClose: () => void;
   onSubmit: (values: Record<string, unknown>) => void;
 }) {
@@ -291,6 +293,8 @@ export function RequirementVersionEditDrawer({
             peopleLoading={peopleLoading}
             peopleError={peopleError}
             projectOptions={projectOptions}
+            versionOptions={versionOptions}
+            editingVersionId={version.id}
           />
         </Form>
       ) : null}

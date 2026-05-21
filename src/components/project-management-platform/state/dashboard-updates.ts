@@ -113,7 +113,16 @@ export function updateDashboardWithRecordUpdate(data: DashboardData, result: Cre
 
   if (result.type === "requirementVersion") {
     const version = result.record as RequirementVersion;
-    nextData.requirementVersions = nextData.requirementVersions.map((item) => item.id === version.id ? version : item);
+    nextData.requirementVersions = nextData.requirementVersions.map((item) =>
+      item.id === version.id
+        ? version
+        : item.parentVersionId === version.id
+          ? {
+              ...item,
+              parentVersionName: version.name
+            }
+          : item
+    );
     nextData.requirements = nextData.requirements.map((requirement) =>
       requirement.versionId === version.id
         ? {
@@ -188,7 +197,17 @@ export function updateDashboardWithRecordDeletion(data: DashboardData, result: D
       nextData.requirementVersions.find((version) => version.id === fallbackRequirementVersionId) ??
       nextData.requirementVersions.find((version) => version.id !== result.id);
 
-    nextData.requirementVersions = nextData.requirementVersions.filter((version) => version.id !== result.id);
+    nextData.requirementVersions = nextData.requirementVersions
+      .filter((version) => version.id !== result.id)
+      .map((version) =>
+        version.parentVersionId === result.id
+          ? {
+              ...version,
+              parentVersionId: undefined,
+              parentVersionName: undefined
+            }
+          : version
+      );
 
     if (fallbackVersion) {
       nextData.requirements = nextData.requirements.map((requirement) =>

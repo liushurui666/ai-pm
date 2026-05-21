@@ -225,7 +225,7 @@ export function MilestoneOwnerSelect({
         {...restField}
         label="负责人"
         name={[name, "ownerMemberId"]}
-        rules={!peopleError && people.length ? [{ required: true, message: "请选择平台成员" }] : undefined}
+        extra="可选；需要通知到人时再选择平台成员。"
       >
         <Select
           showSearch

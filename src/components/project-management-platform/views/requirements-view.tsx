@@ -1,25 +1,18 @@
 "use client";
 
-import { Button, Empty, Flex, Popconfirm, Progress, Space, Table, Tag, Timeline, Tooltip, Typography } from "antd";
-import { CalendarOutlined, DeleteOutlined, EditOutlined, NodeIndexOutlined, PlusOutlined } from "@ant-design/icons";
+import { Button, Empty, Space, Tooltip } from "antd";
+import { NodeIndexOutlined, PlusOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
-import dayjs from "dayjs";
 import type { BugReport, Requirement, RequirementVersion, Task } from "@/types/dashboard";
-import { milestoneColor } from "@/components/project-management-platform/constants";
-import { PageTitle, TableView } from "@/components/project-management-platform/shared/page-shell";
+import { PageTitle } from "@/components/project-management-platform/shared/page-shell";
+import { RequirementVersionCard } from "@/components/project-management-platform/requirements/requirement-version-card";
+import { RequirementVersionDetail } from "@/components/project-management-platform/requirements/requirement-version-detail";
+import {
+  getChildRequirementVersions,
+  getRootRequirementVersions
+} from "@/components/project-management-platform/requirements/version-utils";
 
-const { Text, Paragraph } = Typography;
-
-const fallbackRequirementVersionId = "rv-backlog";
-
-const requirementVersionColor: Record<RequirementVersion["status"], string> = {
-  规划中: "blue",
-  进行中: "cyan",
-  已发布: "green",
-  已归档: "default"
-};
-const requirementReadinessTip = "按该版本下「待上线 / 已上线」需求占总需求数计算，用于快速判断版本就绪度。";
-
+// 需求管理主视图只负责版本树入口，版本详情和卡片已拆到独立组件。
 export function RequirementsView({
   bugs,
   canCreateRequirements,
@@ -34,6 +27,7 @@ export function RequirementsView({
   onBack,
   onCreateRequirement,
   onCreateVersion,
+  onCreateSubVersion,
   onBreakdownVersion,
   onDeleteVersion,
   onEditVersion,
@@ -52,6 +46,7 @@ export function RequirementsView({
   onBack: () => void;
   onCreateRequirement: (version: RequirementVersion) => void;
   onCreateVersion: () => void;
+  onCreateSubVersion: (version: RequirementVersion) => void;
   onBreakdownVersion: (version: RequirementVersion) => void;
   onDeleteVersion: (version: RequirementVersion) => void;
   onEditVersion: (version: RequirementVersion) => void;
@@ -66,6 +61,7 @@ export function RequirementsView({
         canCreateRequirements={canCreateRequirements}
         canDeleteRequirements={canDeleteRequirements}
         canEditRequirements={canEditRequirements}
+        childVersions={getChildRequirementVersions(versions, selectedVersion.id)}
         columns={columns}
         permissionDeniedReason={permissionDeniedReason}
         requirements={requirements}
@@ -74,18 +70,22 @@ export function RequirementsView({
         onBack={onBack}
         onBreakdownVersion={onBreakdownVersion}
         onCreateRequirement={onCreateRequirement}
+        onCreateSubVersion={onCreateSubVersion}
         onDeleteVersion={onDeleteVersion}
         onEditVersion={onEditVersion}
+        onSelectVersion={onSelectVersion}
       />
     );
   }
+
+  const rootVersions = getRootRequirementVersions(versions);
 
   return (
     <Space orientation="vertical" size={18} className="pm-page-stack">
       <PageTitle
         icon={<NodeIndexOutlined />}
         title="需求版本"
-        subtitle="给产品同学维护版本范围、需求优先级、验收标准和上线状态。"
+        subtitle="给产品同学维护版本范围、子版本、角色负责人、需求优先级和上线状态。"
         extra={
           canCreateRequirements ? (
             <Button type="primary" icon={<PlusOutlined />} onClick={onCreateVersion}>
@@ -102,19 +102,22 @@ export function RequirementsView({
           )
         }
       />
-      {versions.length ? (
+      {rootVersions.length ? (
         <div className="requirement-version-grid">
-          {versions.map((version) => (
+          {rootVersions.map((version) => (
             <RequirementVersionCard
               bugs={bugs}
+              canCreateRequirements={canCreateRequirements}
               canDeleteRequirements={canDeleteRequirements}
               canEditRequirements={canEditRequirements}
+              childVersions={getChildRequirementVersions(versions, version.id)}
               permissionDeniedReason={permissionDeniedReason}
               key={version.id}
               requirements={requirements}
               tasks={tasks}
               version={version}
               onBreakdownVersion={onBreakdownVersion}
+              onCreateSubVersion={onCreateSubVersion}
               onDeleteVersion={onDeleteVersion}
               onEditVersion={onEditVersion}
               onSelectVersion={onSelectVersion}
@@ -127,382 +130,5 @@ export function RequirementsView({
         </div>
       )}
     </Space>
-  );
-}
-
-function getVersionStats({
-  bugs,
-  requirements,
-  tasks,
-  version
-}: {
-  bugs: BugReport[];
-  requirements: Requirement[];
-  tasks: Task[];
-  version: RequirementVersion;
-}) {
-  const scopedRequirements = requirements.filter((requirement) => requirement.versionId === version.id);
-  const scopedTasks = tasks.filter((task) => task.versionId === version.id);
-  const scopedBugs = bugs.filter((bug) => bug.versionId === version.id);
-  const readyCount = scopedRequirements.filter(
-    (requirement) => requirement.status === "待上线" || requirement.status === "已上线"
-  ).length;
-  const reviewCount = scopedRequirements.filter((requirement) => requirement.status === "评审中").length;
-  const highPriorityCount = scopedRequirements.filter((requirement) => requirement.priority !== "P2").length;
-  const milestones = version.milestones ?? [];
-  const finishedMilestoneCount = milestones.filter((milestone) => milestone.status === "已完成").length;
-  const progress = version.status === "已发布"
-    ? 100
-    : scopedRequirements.length
-      ? Math.round((readyCount / scopedRequirements.length) * 100)
-      : 0;
-
-  return {
-    scopedBugs,
-    scopedRequirements,
-    scopedTasks,
-    milestones,
-    finishedMilestoneCount,
-    reviewCount,
-    highPriorityCount,
-    progress
-  };
-}
-
-function RequirementVersionDetail({
-  bugs,
-  canCreateRequirements,
-  canDeleteRequirements,
-  canEditRequirements,
-  columns,
-  permissionDeniedReason,
-  requirements,
-  selectedVersion,
-  tasks,
-  onBack,
-  onBreakdownVersion,
-  onCreateRequirement,
-  onDeleteVersion,
-  onEditVersion
-}: {
-  bugs: BugReport[];
-  canCreateRequirements: boolean;
-  canDeleteRequirements: boolean;
-  canEditRequirements: boolean;
-  columns: ColumnsType<Requirement>;
-  permissionDeniedReason: string;
-  requirements: Requirement[];
-  selectedVersion: RequirementVersion;
-  tasks: Task[];
-  onBack: () => void;
-  onBreakdownVersion: (version: RequirementVersion) => void;
-  onCreateRequirement: (version: RequirementVersion) => void;
-  onDeleteVersion: (version: RequirementVersion) => void;
-  onEditVersion: (version: RequirementVersion) => void;
-}) {
-  const stats = getVersionStats({ bugs, requirements, tasks, version: selectedVersion });
-  const detailColumns = columns.filter((column) => column.key !== "versionName");
-
-  return (
-    <TableView
-      title={selectedVersion.name}
-      subtitle={selectedVersion.goal}
-      icon={<NodeIndexOutlined />}
-      extra={
-        <Space wrap>
-          <Button onClick={onBack}>返回版本</Button>
-          {canEditRequirements ? (
-            <Button icon={<EditOutlined />} onClick={() => onEditVersion(selectedVersion)}>
-              编辑版本
-            </Button>
-          ) : (
-            <Tooltip title={permissionDeniedReason}>
-              <span>
-                <Button disabled icon={<EditOutlined />}>
-                  编辑版本
-                </Button>
-              </span>
-            </Tooltip>
-          )}
-          {selectedVersion.id !== fallbackRequirementVersionId ? (
-            canDeleteRequirements ? (
-              <Popconfirm
-                title="删除版本"
-                description="删除后，该版本下的需求、任务和 Bug 会迁移到未规划需求池。"
-                okText="删除"
-                cancelText="取消"
-                okButtonProps={{ danger: true }}
-                onConfirm={() => onDeleteVersion(selectedVersion)}
-              >
-                <Button danger icon={<DeleteOutlined />}>
-                  删除版本
-                </Button>
-              </Popconfirm>
-            ) : (
-              <Tooltip title={permissionDeniedReason}>
-                <span>
-                  <Button danger disabled icon={<DeleteOutlined />}>
-                    删除版本
-                  </Button>
-                </span>
-              </Tooltip>
-            )
-          ) : null}
-          {canCreateRequirements ? (
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => onCreateRequirement(selectedVersion)}>
-              绑定需求
-            </Button>
-          ) : (
-            <Tooltip title={permissionDeniedReason}>
-              <span>
-                <Button type="primary" disabled icon={<PlusOutlined />}>
-                  绑定需求
-                </Button>
-              </span>
-            </Tooltip>
-          )}
-          {canCreateRequirements ? (
-            <Button icon={<PlusOutlined />} onClick={() => onBreakdownVersion(selectedVersion)}>
-              拆任务
-            </Button>
-          ) : (
-            <Tooltip title={permissionDeniedReason}>
-              <span>
-                <Button disabled icon={<PlusOutlined />}>
-                  拆任务
-                </Button>
-              </span>
-            </Tooltip>
-          )}
-        </Space>
-      }
-    >
-      <VersionSummary version={selectedVersion} stats={stats} />
-      <VersionMilestoneTimeline version={selectedVersion} stats={stats} />
-      <Table
-        className="requirement-detail-table"
-        rowKey="id"
-        columns={detailColumns}
-        dataSource={stats.scopedRequirements}
-        pagination={false}
-        scroll={{ x: 1040 }}
-        locale={{ emptyText: "该版本暂无需求，点击右上角绑定需求" }}
-      />
-    </TableView>
-  );
-}
-
-function VersionSummary({
-  version,
-  stats
-}: {
-  version: RequirementVersion;
-  stats: ReturnType<typeof getVersionStats>;
-}) {
-  return (
-    <div className="requirement-version-summary">
-      <div className="requirement-version-summary-item">
-        <Text type="secondary">版本归属项目</Text>
-        <Text strong>{version.project}</Text>
-      </div>
-      <div className="requirement-version-summary-item">
-        <Text type="secondary">版本状态</Text>
-        <Tag color={requirementVersionColor[version.status]}>{version.status}</Tag>
-      </div>
-      <div className="requirement-version-summary-item">
-        <Text type="secondary">版本周期</Text>
-        <Text strong>{version.startDate} - {version.releaseDate}</Text>
-      </div>
-      <div className="requirement-version-summary-item">
-        <Tooltip title={requirementReadinessTip}>
-          <Text type="secondary">需求就绪</Text>
-        </Tooltip>
-        <Progress percent={stats.progress} size="small" />
-      </div>
-      <div className="requirement-version-summary-item">
-        <Text type="secondary">总数 / 评审中 / 高优</Text>
-        <Text strong>
-          {stats.scopedRequirements.length} / {stats.reviewCount} / {stats.highPriorityCount}
-        </Text>
-      </div>
-      <div className="requirement-version-summary-item">
-        <Text type="secondary">研发任务 / Bug</Text>
-        <Text strong>
-          {stats.scopedTasks.length} / {stats.scopedBugs.length}
-        </Text>
-      </div>
-      <div className="requirement-version-summary-item">
-        <Text type="secondary">里程碑</Text>
-        <Text strong>
-          {stats.finishedMilestoneCount} / {stats.milestones.length}
-        </Text>
-      </div>
-    </div>
-  );
-}
-
-// 版本详情页直接展示创建版本时录入的里程碑，让版本成为真实交付检查点。
-function VersionMilestoneTimeline({
-  version,
-  stats
-}: {
-  version: RequirementVersion;
-  stats: ReturnType<typeof getVersionStats>;
-}) {
-  const milestones = [...stats.milestones].sort(
-    (left, right) => dayjs(left.dueDate).valueOf() - dayjs(right.dueDate).valueOf()
-  );
-
-  if (!milestones.length) {
-    return null;
-  }
-
-  return (
-    <div className="requirement-version-milestones">
-      <Flex justify="space-between" align="center" className="requirement-version-milestones-header">
-        <Space>
-          <CalendarOutlined />
-          <Text strong>版本里程碑</Text>
-        </Space>
-        <Tag>{version.name}</Tag>
-      </Flex>
-      <Timeline
-        items={milestones.map((milestone) => ({
-          color: milestoneColor[milestone.status] === "default" ? "gray" : milestoneColor[milestone.status],
-          content: (
-            <Space orientation="vertical" size={4}>
-              <Space wrap>
-                <Text strong>{milestone.title}</Text>
-                <Tag color={milestoneColor[milestone.status]}>{milestone.status}</Tag>
-                <Tag icon={<CalendarOutlined />}>{milestone.dueDate}</Tag>
-                {milestone.owner ? <Tag>{milestone.owner}</Tag> : null}
-              </Space>
-              <Text type="secondary">{milestone.note}</Text>
-            </Space>
-          )
-        }))}
-      />
-    </div>
-  );
-}
-
-function RequirementVersionCard({
-  bugs,
-  canDeleteRequirements,
-  canEditRequirements,
-  permissionDeniedReason,
-  requirements,
-  tasks,
-  version,
-  onBreakdownVersion,
-  onDeleteVersion,
-  onEditVersion,
-  onSelectVersion
-}: {
-  bugs: BugReport[];
-  canDeleteRequirements: boolean;
-  canEditRequirements: boolean;
-  permissionDeniedReason: string;
-  requirements: Requirement[];
-  tasks: Task[];
-  version: RequirementVersion;
-  onBreakdownVersion: (version: RequirementVersion) => void;
-  onDeleteVersion: (version: RequirementVersion) => void;
-  onEditVersion: (version: RequirementVersion) => void;
-  onSelectVersion: (id: string) => void;
-}) {
-  const stats = getVersionStats({ bugs, requirements, tasks, version });
-
-  return (
-    <div className="requirement-version-card">
-      <Flex align="flex-start" justify="space-between" gap={12}>
-        <Space orientation="vertical" size={4}>
-          <Text strong>{version.name}</Text>
-          <Text type="secondary">{version.project}</Text>
-        </Space>
-        <Tag color={requirementVersionColor[version.status]}>{version.status}</Tag>
-      </Flex>
-      <Paragraph className="requirement-version-goal" type="secondary">
-        {version.goal}
-      </Paragraph>
-      <div className="requirement-version-progress">
-        <Flex justify="space-between" align="center">
-          <Tooltip title={requirementReadinessTip}>
-            <Text type="secondary">需求就绪</Text>
-          </Tooltip>
-          <Text strong>{stats.progress}%</Text>
-        </Flex>
-        <Progress percent={stats.progress} size="small" showInfo={false} />
-      </div>
-      <div className="requirement-version-meta">
-        <div>
-          <Text type="secondary">需求数</Text>
-          <Text strong>{stats.scopedRequirements.length}</Text>
-        </div>
-        <div>
-          <Text type="secondary">评审中</Text>
-          <Text strong>{stats.reviewCount}</Text>
-        </div>
-        <div>
-          <Text type="secondary">高优先级</Text>
-          <Text strong>{stats.highPriorityCount}</Text>
-        </div>
-        <div>
-          <Text type="secondary">里程碑</Text>
-          <Text strong>{stats.finishedMilestoneCount}/{stats.milestones.length}</Text>
-        </div>
-        <div>
-          <Text type="secondary">任务/Bug</Text>
-          <Text strong>{stats.scopedTasks.length}/{stats.scopedBugs.length}</Text>
-        </div>
-      </div>
-      <Button block onClick={() => onSelectVersion(version.id)}>
-        进入版本
-      </Button>
-      <div className="requirement-version-actions">
-        {canEditRequirements ? (
-          <Button icon={<PlusOutlined />} onClick={() => onBreakdownVersion(version)}>
-            拆任务
-          </Button>
-        ) : null}
-        {canEditRequirements ? (
-          <Button icon={<EditOutlined />} onClick={() => onEditVersion(version)}>
-            编辑
-          </Button>
-        ) : (
-          <Tooltip title={permissionDeniedReason}>
-            <span>
-              <Button disabled icon={<EditOutlined />}>
-                编辑
-              </Button>
-            </span>
-          </Tooltip>
-        )}
-        {version.id !== fallbackRequirementVersionId ? (
-          canDeleteRequirements ? (
-            <Popconfirm
-              title="删除版本"
-              description="删除后，该版本下的需求、任务和 Bug 会迁移到未规划需求池。"
-              okText="删除"
-              cancelText="取消"
-              okButtonProps={{ danger: true }}
-              onConfirm={() => onDeleteVersion(version)}
-            >
-              <Button danger icon={<DeleteOutlined />}>
-                删除
-              </Button>
-            </Popconfirm>
-          ) : (
-            <Tooltip title={permissionDeniedReason}>
-              <span>
-                <Button danger disabled icon={<DeleteOutlined />}>
-                  删除
-                </Button>
-              </span>
-            </Tooltip>
-          )
-        ) : null}
-      </div>
-    </div>
   );
 }

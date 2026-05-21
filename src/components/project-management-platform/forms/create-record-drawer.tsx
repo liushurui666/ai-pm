@@ -91,6 +91,7 @@ export function CreateRecordDrawer({
               peopleLoading={peopleLoading}
               peopleError={peopleError}
               projectOptions={projectOptions}
+              versionOptions={requirementVersionOptions}
             />
           ) : null}
           {type === "requirement" ? (

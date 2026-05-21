@@ -95,6 +95,7 @@ import type {
   OwnerSelectableMember,
   SearchResult
 } from "@/components/project-management-platform/types";
+import { formatRequirementVersionOptionLabel } from "@/components/project-management-platform/requirements/version-utils";
 import { BugRouteEditView } from "@/components/project-management-platform/views/bug-route-edit-view";
 import { BugsView } from "@/components/project-management-platform/views/bugs-view";
 import { DocumentsView } from "@/components/project-management-platform/views/documents-view";
@@ -435,6 +436,15 @@ export function ProjectManagementPlatform({
     openDocumentBreakdownDrawer({
       versionId: version.id,
       versionName: version.name,
+      project: version.project === "跨项目" ? undefined : version.project
+    });
+  }
+
+  // 子版本从父版本入口创建时预填层级和项目，确保版本树不会和需求项目脱节。
+  function openCreateSubRequirementVersionDrawer(version: RequirementVersion) {
+    openCreateDrawer("requirementVersion", {
+      parentVersionId: version.id,
+      parentVersionName: version.name,
       project: version.project === "跨项目" ? undefined : version.project
     });
   }
@@ -1042,9 +1052,10 @@ export function ProjectManagementPlatform({
     () =>
       requirementVersions.map((version) => ({
         value: version.id,
-        label: `${version.name} · ${version.project}`,
+        label: formatRequirementVersionOptionLabel(version, requirementVersions),
         versionName: version.name,
-        project: version.project
+        project: version.project,
+        parentVersionId: version.parentVersionId
       })),
     [requirementVersions]
   );
@@ -1476,6 +1487,7 @@ export function ProjectManagementPlatform({
                         })
                       }
                       onCreateVersion={() => openCreateDrawer("requirementVersion")}
+                      onCreateSubVersion={openCreateSubRequirementVersionDrawer}
                       onBreakdownVersion={openVersionBreakdownDrawer}
                       onDeleteVersion={(version) => handleDeleteRecord("requirementVersion", version.id)}
                       onEditVersion={openEditRequirementVersionDrawer}
@@ -1610,6 +1622,7 @@ export function ProjectManagementPlatform({
             peopleLoading={ownerSelectLoading}
             peopleError={ownerSelectError}
             projectOptions={projectOptions}
+            versionOptions={requirementVersionOptions}
             onClose={() => setEditingRequirementVersion(null)}
             onSubmit={handleUpdateRequirementVersion}
           />
