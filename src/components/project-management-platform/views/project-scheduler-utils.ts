@@ -50,12 +50,14 @@ function compareProjectSchedulerItems(left: ProjectCalendarItem, right: ProjectC
   const leftRange = getProjectCalendarItemRange(left);
   const rightRange = getProjectCalendarItemRange(right);
 
-  // 同一负责人下按起止时间稳定排序，避免拖拽刷新后 DayPilot 重新排线时出现跳行错乱。
+  // 同一负责人下用业务身份稳定排序，不把最新日期放在主排序位，避免拖拽改期后事件线位突然重排。
   return (
     left.owner.localeCompare(right.owner, "zh-Hans-CN") ||
+    (left.versionName || left.project).localeCompare(right.versionName || right.project, "zh-Hans-CN") ||
+    left.title.localeCompare(right.title, "zh-Hans-CN") ||
+    left.id.localeCompare(right.id, "zh-Hans-CN") ||
     leftRange.start.valueOf() - rightRange.start.valueOf() ||
-    leftRange.end.valueOf() - rightRange.end.valueOf() ||
-    left.title.localeCompare(right.title, "zh-Hans-CN")
+    leftRange.end.valueOf() - rightRange.end.valueOf()
   );
 }
 

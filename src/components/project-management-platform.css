@@ -1095,10 +1095,13 @@
 .project-scheduler-shell .scheduler_default_shadow {
   overflow: hidden;
   height: var(--project-scheduler-event-height) !important;
+  border: 0 !important;
   border-radius: 8px;
+  background: transparent !important;
   box-shadow: none;
+  opacity: 1 !important;
   pointer-events: none;
-  transform: translateY(var(--project-scheduler-drag-offset, var(--project-scheduler-row-gap)));
+  transform: none !important;
 }
 
 .project-scheduler-shell .scheduler_default_shadow_inner {
@@ -1109,6 +1112,7 @@
   border-radius: 8px;
   box-shadow: none;
   cursor: grabbing;
+  filter: none !important;
   opacity: 1 !important;
 }
 

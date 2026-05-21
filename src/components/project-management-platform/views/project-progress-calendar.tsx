@@ -12,7 +12,8 @@ import type {
 import { createProjectSchedulerModel } from "@/components/project-management-platform/views/project-scheduler-utils";
 
 const weekdayLabels = ["日", "一", "二", "三", "四", "五", "六"];
-const dragClickSuppressMs = 800;
+const dragClickSuppressMs = 1200;
+const dragMoveThreshold = 6;
 
 function formatHeaderDate(value: string) {
   return dayjs(value).format("YYYY-MM-DD");
@@ -29,19 +30,6 @@ function getScheduleChange(start: DayPilot.Date, end: DayPilot.Date, resource: D
     endDate: safeEndDate.format("YYYY-MM-DD"),
     owner: String(resource)
   };
-}
-
-function getSchedulerPixelValue(root: HTMLElement, propertyName: string, fallback: number) {
-  const parsedValue = Number.parseFloat(getComputedStyle(root).getPropertyValue(propertyName));
-
-  return Number.isFinite(parsedValue) ? parsedValue : fallback;
-}
-
-function getEventLineIndex(source: HTMLElement) {
-  const lineClass = Array.from(source.classList).find((className) => className.startsWith("scheduler_default_event_line"));
-  const parsedIndex = Number.parseInt(lineClass?.replace("scheduler_default_event_line", "") ?? "0", 10);
-
-  return Number.isFinite(parsedIndex) ? parsedIndex : 0;
 }
 
 function addClassOnce(element: HTMLElement, className: string) {
@@ -66,16 +54,18 @@ function syncDraggingEventPreview(root: HTMLElement) {
     return false;
   }
 
-  const sourceKey = source.getAttribute("title") ?? sourceInner.textContent ?? "";
-  const eventHeight = getSchedulerPixelValue(root, "--project-scheduler-event-height", 94);
-  const rowGap = getSchedulerPixelValue(root, "--project-scheduler-row-gap", 8);
-  const lineOffset = rowGap + getEventLineIndex(source) * eventHeight;
+  const sourceKey = [
+    source.getAttribute("title") ?? sourceInner.textContent ?? "",
+    source.getAttribute("class") ?? "",
+    source.getAttribute("style") ?? "",
+    sourceInner.getAttribute("style") ?? ""
+  ].join("|");
 
-  setStylePropertyOnce(shadow, "--project-scheduler-drag-offset", `${lineOffset}px`);
-
-  // DayPilot 的 shadow 只负责定位，视觉内容复用原卡片，拖动时才像“拿起这个任务条”。
+  // DayPilot 会创建跟随鼠标的 shadow；这里只复用它的位置，不再额外改线位，避免拖拽时整条任务被推错行。
   addClassOnce(shadow, "project-scheduler-drag-card");
   addClassOnce(shadowInner, "project-scheduler-drag-card-inner");
+  setStylePropertyOnce(shadow, "opacity", "1");
+  setStylePropertyOnce(shadow, "transform", "none");
 
   if (shadowInner.dataset.projectDragSource === sourceKey) {
     return true;
@@ -84,6 +74,7 @@ function syncDraggingEventPreview(root: HTMLElement) {
   shadowInner.dataset.projectDragSource = sourceKey;
   shadowInner.innerHTML = sourceInner.innerHTML;
   shadowInner.setAttribute("style", sourceInner.getAttribute("style") ?? "");
+  setStylePropertyOnce(shadowInner, "opacity", "1");
 
   return true;
 }
@@ -102,6 +93,7 @@ export function ProjectProgressCalendar({
 }) {
   const shellRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef({ active: false, lastEndedAt: 0 });
+  const pointerDragRef = useRef({ active: false, moved: false, startX: 0, startY: 0 });
   const schedulerModel = createProjectSchedulerModel(items, month);
 
   function markDragEnded() {
@@ -114,6 +106,47 @@ export function ProjectProgressCalendar({
 
     if (!shell) {
       return undefined;
+    }
+
+    function isTaskEvent(target: EventTarget | null) {
+      return target instanceof HTMLElement && Boolean(target.closest(".project-scheduler-event-task"));
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      if (!isTaskEvent(event.target)) {
+        return;
+      }
+
+      pointerDragRef.current = {
+        active: true,
+        moved: false,
+        startX: event.clientX,
+        startY: event.clientY
+      };
+    }
+
+    function handlePointerMove(event: PointerEvent) {
+      const pointerState = pointerDragRef.current;
+
+      if (!pointerState.active || pointerState.moved) {
+        return;
+      }
+
+      const movedEnough = Math.hypot(event.clientX - pointerState.startX, event.clientY - pointerState.startY) > dragMoveThreshold;
+
+      if (movedEnough) {
+        // click 和 drag 是两条独立链路，提前记录真实拖动，避免 DayPilot 松手后补发 click 打开抽屉。
+        pointerDragRef.current.moved = true;
+        dragStateRef.current.active = true;
+      }
+    }
+
+    function handlePointerEnd() {
+      if (pointerDragRef.current.moved) {
+        markDragEnded();
+      }
+
+      pointerDragRef.current = { active: false, moved: false, startX: 0, startY: 0 };
     }
 
     const schedulerRoot = shell;
@@ -143,9 +176,17 @@ export function ProjectProgressCalendar({
       childList: true,
       subtree: true
     });
+    shell.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerEnd);
+    window.addEventListener("pointercancel", handlePointerEnd);
 
     return () => {
       observer.disconnect();
+      shell.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerEnd);
+      window.removeEventListener("pointercancel", handlePointerEnd);
     };
   }, []);
 
