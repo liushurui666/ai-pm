@@ -1025,7 +1025,7 @@ export function ProjectManagementPlatform({
 
   const menuItems = [
     { key: "overview", icon: <DashboardOutlined />, label: "工作台" },
-    { key: "projects", icon: <ProjectOutlined />, label: "项目风险" },
+    { key: "projects", icon: <ProjectOutlined />, label: "项目视图" },
     { key: "tasks", icon: <CheckCircleOutlined />, label: "任务看板" },
     { key: "bugs", icon: <BugOutlined />, label: "Bug 管理" },
     { key: "requirements", icon: <NodeIndexOutlined />, label: "需求管理" },

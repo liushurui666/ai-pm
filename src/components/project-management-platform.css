@@ -889,6 +889,203 @@
   padding: 4px 0;
 }
 
+.project-calendar-toolbar {
+  max-width: 100%;
+  justify-content: flex-end;
+}
+
+.project-calendar-project-select {
+  width: 260px !important;
+  max-width: 100%;
+}
+
+.project-calendar-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(420px, 0.78fr);
+  gap: 18px;
+  align-items: stretch;
+  margin-bottom: 18px;
+}
+
+.project-calendar-hero-copy {
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  min-height: 150px;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand) 14%, transparent), transparent 55%),
+    linear-gradient(180deg, var(--surface-elevated), var(--surface));
+}
+
+.project-calendar-hero-copy h3 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 28px;
+  line-height: 1.15;
+}
+
+.project-calendar-hero-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.project-calendar-hero-stats .ant-statistic {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.project-calendar-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 18px;
+  align-items: start;
+}
+
+.project-calendar-shell {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.project-calendar-weekdays,
+.project-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(128px, 1fr));
+}
+
+.project-calendar-weekdays {
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-subtle);
+}
+
+.project-calendar-weekdays > div {
+  padding: 12px 14px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.project-calendar-day {
+  min-height: 170px;
+  padding: 12px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-elevated);
+}
+
+.project-calendar-day:nth-child(7n) {
+  border-right: 0;
+}
+
+.project-calendar-day-muted {
+  background: color-mix(in srgb, var(--surface-subtle) 68%, transparent);
+}
+
+.project-calendar-day-today {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--brand) 10%, transparent), transparent 54%),
+    var(--surface-elevated);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--brand) 54%, transparent);
+}
+
+.project-calendar-day-head {
+  min-height: 28px;
+  margin-bottom: 10px;
+}
+
+.project-calendar-day-people,
+.project-progress-panel .pm-wide {
+  width: 100%;
+}
+
+.project-calendar-person {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.project-calendar-person-success {
+  border-color: color-mix(in srgb, #16a34a 34%, var(--border));
+}
+
+.project-calendar-person-processing {
+  border-color: color-mix(in srgb, #2563eb 34%, var(--border));
+}
+
+.project-calendar-person-warning {
+  border-color: color-mix(in srgb, #d97706 34%, var(--border));
+}
+
+.project-calendar-person-danger {
+  border-color: color-mix(in srgb, #dc2626 48%, var(--border));
+  background: color-mix(in srgb, #dc2626 9%, var(--surface-subtle));
+}
+
+.project-calendar-person-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-calendar-more {
+  display: block;
+  padding-left: 2px;
+  font-size: 12px;
+}
+
+.project-progress-panel {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, var(--surface-elevated), var(--surface));
+}
+
+.project-person-progress {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.project-person-progress .ant-space-item:last-child {
+  display: grid;
+}
+
+.project-person-projects {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-progress-risks {
+  display: grid;
+  gap: 12px;
+  padding-top: 4px;
+}
+
 .version-task-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -1294,6 +1491,24 @@
     width: 100%;
   }
 
+  .project-calendar-hero,
+  .project-calendar-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .project-calendar-shell {
+    overflow-x: auto;
+  }
+
+  .project-calendar-weekdays,
+  .project-calendar-grid {
+    min-width: 980px;
+  }
+
+  .project-progress-panel {
+    order: -1;
+  }
+
 }
 
 @media (max-width: 520px) {
@@ -1308,5 +1523,28 @@
 
   .requirement-version-owner-summary {
     grid-column: span 1;
+  }
+
+  .project-calendar-hero {
+    gap: 12px;
+  }
+
+  .project-calendar-hero-copy {
+    min-height: auto;
+    padding: 16px;
+  }
+
+  .project-calendar-hero-copy h3 {
+    font-size: 24px;
+  }
+
+  .project-calendar-hero-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .project-calendar-toolbar,
+  .project-calendar-toolbar .ant-picker,
+  .project-calendar-project-select {
+    width: 100% !important;
   }
 }
