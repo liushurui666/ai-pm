@@ -4,7 +4,7 @@ import { Button, DatePicker, Select, Space, Statistic, Tag, Typography } from "a
 import { CalendarOutlined, FolderOpenOutlined, PlusOutlined, UserOutlined, WarningOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { useMemo, useState } from "react";
-import type { BugReport, Project, RequirementVersion, Risk, Task } from "@/types/dashboard";
+import type { Project, Risk, Task } from "@/types/dashboard";
 import { TableView } from "@/components/project-management-platform/shared/page-shell";
 import {
   createPersonProgress,
@@ -22,24 +22,20 @@ const { Text } = Typography;
 
 // 项目视图以大日历作为主画布，把每个人的交付进度放回日期上下文里看。
 export function ProjectsView({
-  bugs,
   projects,
   projectFilter,
   risks,
   tasks,
-  versions,
   onFilterChange,
   onCreate,
   onEdit,
   onOpenCalendarItem,
   onRescheduleCalendarItem
 }: {
-  bugs: BugReport[];
   projects: Project[];
   projectFilter: string;
   risks: Risk[];
   tasks: Task[];
-  versions: RequirementVersion[];
   onFilterChange: (value: string) => void;
   onCreate: () => void;
   onEdit: (project: Project) => void;
@@ -51,8 +47,8 @@ export function ProjectsView({
   const selectedProjectRecord = projects.find((project) => project.name === selectedProject);
   const [calendarMonth, setCalendarMonth] = useState(() => dayjs());
   const calendarItems = useMemo(
-    () => createProjectCalendarItems({ bugs, projects, selectedProject, tasks, versions }),
-    [bugs, projects, selectedProject, tasks, versions]
+    () => createProjectCalendarItems({ selectedProject, tasks }),
+    [selectedProject, tasks]
   );
   const monthItems = useMemo(
     () => calendarItems.filter((item) => isCalendarItemVisibleInMonth(item, calendarMonth)),
@@ -70,7 +66,7 @@ export function ProjectsView({
   return (
     <TableView
       title="项目视图"
-      subtitle="用人员排期时间轴查看项目节奏、任务跨度、Bug 修复和版本交付节点。"
+      subtitle="用人员排期时间轴查看项目任务节奏、任务跨度和交付风险。"
       icon={<FolderOpenOutlined />}
       extra={
         <Space wrap className="project-calendar-toolbar">
@@ -108,11 +104,11 @@ export function ProjectsView({
           </Space>
           <h3>{selectedProject === "全部" ? "全项目交付日历" : selectedProject}</h3>
           <Text type="secondary">
-            左侧按负责人分行，右侧按日期展示任务横条；Bug、版本和里程碑会落到对应日期，红色表示需要立即关注。
+            左侧按负责人分行，右侧仅展示任务横条；Bug、里程碑和版本节点不进入交付日历。
           </Text>
         </div>
         <div className="project-calendar-hero-stats">
-          <Statistic title="本月事项" value={monthItems.length} prefix={<CalendarOutlined />} />
+          <Statistic title="本月任务" value={monthItems.length} prefix={<CalendarOutlined />} />
           <Statistic title="平均进度" value={avgProgress} suffix="%" prefix={<UserOutlined />} />
           <Statistic title="已完成" value={doneCount} />
           <Statistic title="风险关注" value={riskCount} prefix={<WarningOutlined />} />

@@ -121,7 +121,7 @@ export function ProjectProgressCalendar({
   if (!schedulerModel.visibleItems.length) {
     return (
       <div className="project-scheduler-empty">
-        <Empty description="当前月份暂无项目排期" />
+        <Empty description="当前月份暂无任务排期" />
       </div>
     );
   }

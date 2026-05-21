@@ -1541,10 +1541,8 @@ export function ProjectManagementPlatform({
                   {activeView === "projects" ? (
                     <ProjectsView
                       projects={filteredProjects}
-                      bugs={data.bugs}
                       risks={data.risks}
                       tasks={data.tasks}
-                      versions={requirementVersions}
                       projectFilter={projectFilter}
                       onFilterChange={setProjectFilter}
                       onCreate={() => openCreateDrawer("project")}

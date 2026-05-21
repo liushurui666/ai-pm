@@ -1,5 +1,5 @@
 import dayjs from "dayjs";
-import type { BugReport, Project, ProjectMilestone, RequirementVersion, Risk, Task } from "@/types/dashboard";
+import type { Project, Risk, Task } from "@/types/dashboard";
 
 export type ProjectCalendarItemType = "任务" | "里程碑" | "Bug" | "版本";
 
@@ -57,40 +57,6 @@ function getTaskProgress(stage: Task["stage"]) {
   return progressMap[stage];
 }
 
-function getMilestoneProgress(status: ProjectMilestone["status"]) {
-  const progressMap: Record<ProjectMilestone["status"], number> = {
-    未开始: 10,
-    进行中: 58,
-    已完成: 100,
-    延期: 32
-  };
-
-  return progressMap[status];
-}
-
-function getBugProgress(status: BugReport["status"]) {
-  const progressMap: Record<BugReport["status"], number> = {
-    新建: 8,
-    定位中: 35,
-    修复中: 62,
-    待验证: 86,
-    已关闭: 100
-  };
-
-  return progressMap[status];
-}
-
-function getVersionProgress(status: RequirementVersion["status"]) {
-  const progressMap: Record<RequirementVersion["status"], number> = {
-    规划中: 18,
-    进行中: 62,
-    已发布: 100,
-    已归档: 100
-  };
-
-  return progressMap[status];
-}
-
 function getRiskTone(progress: number, isRisky: boolean): ProjectCalendarItem["riskTone"] {
   if (isRisky) {
     return "danger";
@@ -128,43 +94,14 @@ export function isCalendarItemVisibleInMonth(item: ProjectCalendarItem, month: d
   return start.isSame(month, "month") || end.isSame(month, "month") || (start.isBefore(monthStart) && end.isAfter(monthEnd));
 }
 
-// 项目日历把任务、里程碑、版本和 Bug 统一转换成按人展示的进度条目。
+// 项目交付日历只展示任务，避免 Bug、版本和里程碑混入后干扰排期判断。
 export function createProjectCalendarItems({
-  bugs,
-  projects,
   selectedProject,
-  tasks,
-  versions
+  tasks
 }: {
-  bugs: BugReport[];
-  projects: Project[];
   selectedProject: string;
   tasks: Task[];
-  versions: RequirementVersion[];
 }) {
-  const projectMilestones = projects
-    .filter((project) => inSelectedProject(project.name, selectedProject))
-    .flatMap((project) =>
-      project.milestones.map<ProjectCalendarItem>((milestone) => {
-        const progress = getMilestoneProgress(milestone.status);
-
-        return {
-          id: milestone.id,
-          type: "里程碑",
-          title: milestone.title,
-          date: toDate(milestone.dueDate),
-          startDate: toDate(milestone.dueDate),
-          endDate: toDate(milestone.dueDate),
-          owner: milestone.owner || project.owner || "未分配",
-          ownerAvatarUrl: milestone.ownerAvatarUrl || project.ownerAvatarUrl,
-          project: project.name,
-          status: milestone.status,
-          progress,
-          riskTone: getRiskTone(progress, milestone.status === "延期" || (progress < 100 && isPast(milestone.dueDate)))
-        };
-      })
-    );
-
   const taskItems = tasks
     .filter((task) => inSelectedProject(task.project, selectedProject))
     .map<ProjectCalendarItem>((task) => {
@@ -186,50 +123,7 @@ export function createProjectCalendarItems({
       };
     });
 
-  const bugItems = bugs
-    .filter((bug) => inSelectedProject(bug.project, selectedProject))
-    .map<ProjectCalendarItem>((bug) => {
-      const progress = getBugProgress(bug.status);
-      const isSevere = bug.severity === "阻塞" || bug.severity === "严重";
-
-      return {
-        id: bug.id,
-        type: "Bug",
-        title: bug.title,
-        date: toDate(bug.createdAt),
-        startDate: toDate(bug.createdAt),
-        endDate: toDate(bug.createdAt),
-        owner: bug.owner || "未分配",
-        ownerAvatarUrl: bug.ownerAvatarUrl,
-        project: bug.project,
-        status: `${bug.severity} / ${bug.status}`,
-        progress,
-        riskTone: getRiskTone(progress, bug.status !== "已关闭" && isSevere)
-      };
-    });
-
-  const versionItems = versions
-    .filter((version) => inSelectedProject(version.project, selectedProject))
-    .map<ProjectCalendarItem>((version) => {
-      const progress = getVersionProgress(version.status);
-
-      return {
-        id: version.id,
-        type: "版本",
-        title: version.name,
-        date: toDate(version.releaseDate),
-        startDate: toDate(version.releaseDate),
-        endDate: toDate(version.releaseDate),
-        owner: version.productOwner || version.devOwner || version.uiOwner || "未分配",
-        ownerAvatarUrl: version.productOwnerAvatarUrl || version.devOwnerAvatarUrl || version.uiOwnerAvatarUrl,
-        project: version.project,
-        status: version.status,
-        progress,
-        riskTone: getRiskTone(progress, !["已发布", "已归档"].includes(version.status) && isPast(version.releaseDate))
-      };
-    });
-
-  return [...projectMilestones, ...taskItems, ...bugItems, ...versionItems].sort(
+  return taskItems.sort(
     (left, right) => dayjs(left.date).valueOf() - dayjs(right.date).valueOf() || right.progress - left.progress
   );
 }
