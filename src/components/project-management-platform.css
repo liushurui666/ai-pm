@@ -1025,7 +1025,7 @@
   border-radius: 8px;
   box-shadow: none;
   pointer-events: none;
-  transform: translateY(var(--project-scheduler-row-gap));
+  transform: translateY(var(--project-scheduler-drag-offset, var(--project-scheduler-row-gap)));
 }
 
 .project-scheduler-shell .scheduler_default_shadow_inner {

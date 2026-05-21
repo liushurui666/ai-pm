@@ -46,6 +46,19 @@ function getRangeText(item: ProjectCalendarItem) {
   return start.isSame(end, "day") ? start.format("MM/DD") : `${start.format("MM/DD")} - ${end.format("MM/DD")}`;
 }
 
+function compareProjectSchedulerItems(left: ProjectCalendarItem, right: ProjectCalendarItem) {
+  const leftRange = getProjectCalendarItemRange(left);
+  const rightRange = getProjectCalendarItemRange(right);
+
+  // 同一负责人下按起止时间稳定排序，避免拖拽刷新后 DayPilot 重新排线时出现跳行错乱。
+  return (
+    left.owner.localeCompare(right.owner, "zh-Hans-CN") ||
+    leftRange.start.valueOf() - rightRange.start.valueOf() ||
+    leftRange.end.valueOf() - rightRange.end.valueOf() ||
+    left.title.localeCompare(right.title, "zh-Hans-CN")
+  );
+}
+
 function getResourceHtml(owner: string, items: ProjectCalendarItem[]) {
   const projects = Array.from(new Set(items.map((item) => item.project))).slice(0, 2);
   const progress = Math.round(items.reduce((sum, item) => sum + item.progress, 0) / items.length);
@@ -80,7 +93,7 @@ function getEventHtml(item: ProjectCalendarItem) {
 
 // Scheduler 需要资源行和事件条；这里统一把项目日历条目适配成 DayPilot 可消费的数据。
 export function createProjectSchedulerModel(items: ProjectCalendarItem[], month: dayjs.Dayjs) {
-  const visibleItems = items.filter((item) => isCalendarItemVisibleInMonth(item, month));
+  const visibleItems = items.filter((item) => isCalendarItemVisibleInMonth(item, month)).sort(compareProjectSchedulerItems);
   const groupedByOwner = visibleItems.reduce<Record<string, ProjectCalendarItem[]>>((groups, item) => {
     const owner = item.owner || "未分配";
 
@@ -100,12 +113,8 @@ export function createProjectSchedulerModel(items: ProjectCalendarItem[], month:
         progress: Math.round(ownerItems.reduce((sum, item) => sum + item.progress, 0) / ownerItems.length)
       }
     }))
-    .sort((left, right) => {
-      const leftTags = left.tags as { progress: number; riskCount: number };
-      const rightTags = right.tags as { progress: number; riskCount: number };
-
-      return rightTags.riskCount - leftTags.riskCount || leftTags.progress - rightTags.progress;
-    });
+    // 负责人行固定按名称展示，避免拖拽改期触发风险状态变化后整行顺序跳动。
+    .sort((left, right) => left.name.localeCompare(right.name, "zh-Hans-CN"));
 
   const events: DayPilot.EventData[] = visibleItems.map((item) => {
     const colors = toneColors[item.riskTone];

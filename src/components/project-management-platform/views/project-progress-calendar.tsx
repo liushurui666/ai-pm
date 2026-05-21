@@ -12,6 +12,7 @@ import type {
 import { createProjectSchedulerModel } from "@/components/project-management-platform/views/project-scheduler-utils";
 
 const weekdayLabels = ["日", "一", "二", "三", "四", "五", "六"];
+const dragClickSuppressMs = 800;
 
 function formatHeaderDate(value: string) {
   return dayjs(value).format("YYYY-MM-DD");
@@ -30,6 +31,31 @@ function getScheduleChange(start: DayPilot.Date, end: DayPilot.Date, resource: D
   };
 }
 
+function getSchedulerPixelValue(root: HTMLElement, propertyName: string, fallback: number) {
+  const parsedValue = Number.parseFloat(getComputedStyle(root).getPropertyValue(propertyName));
+
+  return Number.isFinite(parsedValue) ? parsedValue : fallback;
+}
+
+function getEventLineIndex(source: HTMLElement) {
+  const lineClass = Array.from(source.classList).find((className) => className.startsWith("scheduler_default_event_line"));
+  const parsedIndex = Number.parseInt(lineClass?.replace("scheduler_default_event_line", "") ?? "0", 10);
+
+  return Number.isFinite(parsedIndex) ? parsedIndex : 0;
+}
+
+function addClassOnce(element: HTMLElement, className: string) {
+  if (!element.classList.contains(className)) {
+    element.classList.add(className);
+  }
+}
+
+function setStylePropertyOnce(element: HTMLElement, propertyName: string, value: string) {
+  if (element.style.getPropertyValue(propertyName) !== value) {
+    element.style.setProperty(propertyName, value);
+  }
+}
+
 function syncDraggingEventPreview(root: HTMLElement) {
   const source = root.querySelector<HTMLElement>(".scheduler_default_event_moving_source");
   const sourceInner = source?.querySelector<HTMLElement>(".scheduler_default_event_inner");
@@ -37,21 +63,29 @@ function syncDraggingEventPreview(root: HTMLElement) {
   const shadowInner = shadow?.querySelector<HTMLElement>(".scheduler_default_shadow_inner");
 
   if (!source || !sourceInner || !shadow || !shadowInner) {
-    return;
+    return false;
   }
 
   const sourceKey = source.getAttribute("title") ?? sourceInner.textContent ?? "";
+  const eventHeight = getSchedulerPixelValue(root, "--project-scheduler-event-height", 94);
+  const rowGap = getSchedulerPixelValue(root, "--project-scheduler-row-gap", 8);
+  const lineOffset = rowGap + getEventLineIndex(source) * eventHeight;
 
-  if (shadowInner.dataset.projectDragSource === sourceKey) {
-    return;
-  }
+  setStylePropertyOnce(shadow, "--project-scheduler-drag-offset", `${lineOffset}px`);
 
   // DayPilot 的 shadow 只负责定位，视觉内容复用原卡片，拖动时才像“拿起这个任务条”。
-  shadow.classList.add("project-scheduler-drag-card");
-  shadowInner.classList.add("project-scheduler-drag-card-inner");
+  addClassOnce(shadow, "project-scheduler-drag-card");
+  addClassOnce(shadowInner, "project-scheduler-drag-card-inner");
+
+  if (shadowInner.dataset.projectDragSource === sourceKey) {
+    return true;
+  }
+
   shadowInner.dataset.projectDragSource = sourceKey;
   shadowInner.innerHTML = sourceInner.innerHTML;
   shadowInner.setAttribute("style", sourceInner.getAttribute("style") ?? "");
+
+  return true;
 }
 
 // 项目进度日历使用 Scheduler 表达排期，让跨天任务天然横穿日期轴。
@@ -67,7 +101,13 @@ export function ProjectProgressCalendar({
   onRescheduleItem: (item: ProjectCalendarItem, change: ProjectCalendarScheduleChange) => Promise<boolean>;
 }) {
   const shellRef = useRef<HTMLDivElement | null>(null);
+  const dragStateRef = useRef({ active: false, lastEndedAt: 0 });
   const schedulerModel = createProjectSchedulerModel(items, month);
+
+  function markDragEnded() {
+    dragStateRef.current.active = false;
+    dragStateRef.current.lastEndedAt = Date.now();
+  }
 
   useEffect(() => {
     const shell = shellRef.current;
@@ -76,13 +116,29 @@ export function ProjectProgressCalendar({
       return undefined;
     }
 
-    syncDraggingEventPreview(shell);
+    const schedulerRoot = shell;
+
+    function syncDragState() {
+      const hasDraggingPreview = syncDraggingEventPreview(schedulerRoot);
+
+      if (hasDraggingPreview) {
+        dragStateRef.current.active = true;
+        return;
+      }
+
+      // DayPilot 松手后会移除拖拽 DOM，借这个瞬间屏蔽紧随其后的 click，避免误开编辑抽屉。
+      if (dragStateRef.current.active) {
+        markDragEnded();
+      }
+    }
+
+    syncDragState();
 
     const observer = new MutationObserver(() => {
-      syncDraggingEventPreview(shell);
+      syncDragState();
     });
 
-    observer.observe(shell, {
+    observer.observe(schedulerRoot, {
       attributes: true,
       childList: true,
       subtree: true
@@ -103,6 +159,7 @@ export function ProjectProgressCalendar({
     }
 
     args.async = true;
+    markDragEnded();
 
     void onRescheduleItem(item, getScheduleChange(args.newStart, args.newEnd, newResource))
       .then((saved) => {
@@ -158,6 +215,11 @@ export function ProjectProgressCalendar({
         onEventMove={handleScheduleUpdate}
         onEventResize={handleScheduleUpdate}
         onEventClick={(args) => {
+          if (dragStateRef.current.active || Date.now() - dragStateRef.current.lastEndedAt < dragClickSuppressMs) {
+            args.preventDefault();
+            return;
+          }
+
           const item = args.e.data.tags as ProjectCalendarItem | undefined;
 
           if (item) {
