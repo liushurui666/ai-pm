@@ -54,7 +54,7 @@ export function DocumentsView({
       extra={
         <Space wrap>
           <Button icon={<UploadOutlined />} onClick={onUpload}>
-            上传文档拆任务
+            按版本拆任务
           </Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>
             新建文档

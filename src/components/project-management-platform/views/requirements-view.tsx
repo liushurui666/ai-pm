@@ -34,6 +34,7 @@ export function RequirementsView({
   onBack,
   onCreateRequirement,
   onCreateVersion,
+  onBreakdownVersion,
   onDeleteVersion,
   onEditVersion,
   onSelectVersion
@@ -51,6 +52,7 @@ export function RequirementsView({
   onBack: () => void;
   onCreateRequirement: (version: RequirementVersion) => void;
   onCreateVersion: () => void;
+  onBreakdownVersion: (version: RequirementVersion) => void;
   onDeleteVersion: (version: RequirementVersion) => void;
   onEditVersion: (version: RequirementVersion) => void;
   onSelectVersion: (id: string) => void;
@@ -70,6 +72,7 @@ export function RequirementsView({
         selectedVersion={selectedVersion}
         tasks={tasks}
         onBack={onBack}
+        onBreakdownVersion={onBreakdownVersion}
         onCreateRequirement={onCreateRequirement}
         onDeleteVersion={onDeleteVersion}
         onEditVersion={onEditVersion}
@@ -111,6 +114,7 @@ export function RequirementsView({
               requirements={requirements}
               tasks={tasks}
               version={version}
+              onBreakdownVersion={onBreakdownVersion}
               onDeleteVersion={onDeleteVersion}
               onEditVersion={onEditVersion}
               onSelectVersion={onSelectVersion}
@@ -176,6 +180,7 @@ function RequirementVersionDetail({
   selectedVersion,
   tasks,
   onBack,
+  onBreakdownVersion,
   onCreateRequirement,
   onDeleteVersion,
   onEditVersion
@@ -190,6 +195,7 @@ function RequirementVersionDetail({
   selectedVersion: RequirementVersion;
   tasks: Task[];
   onBack: () => void;
+  onBreakdownVersion: (version: RequirementVersion) => void;
   onCreateRequirement: (version: RequirementVersion) => void;
   onDeleteVersion: (version: RequirementVersion) => void;
   onEditVersion: (version: RequirementVersion) => void;
@@ -251,6 +257,19 @@ function RequirementVersionDetail({
               <span>
                 <Button type="primary" disabled icon={<PlusOutlined />}>
                   绑定需求
+                </Button>
+              </span>
+            </Tooltip>
+          )}
+          {canCreateRequirements ? (
+            <Button icon={<PlusOutlined />} onClick={() => onBreakdownVersion(selectedVersion)}>
+              拆任务
+            </Button>
+          ) : (
+            <Tooltip title={permissionDeniedReason}>
+              <span>
+                <Button disabled icon={<PlusOutlined />}>
+                  拆任务
                 </Button>
               </span>
             </Tooltip>
@@ -375,6 +394,7 @@ function RequirementVersionCard({
   requirements,
   tasks,
   version,
+  onBreakdownVersion,
   onDeleteVersion,
   onEditVersion,
   onSelectVersion
@@ -386,6 +406,7 @@ function RequirementVersionCard({
   requirements: Requirement[];
   tasks: Task[];
   version: RequirementVersion;
+  onBreakdownVersion: (version: RequirementVersion) => void;
   onDeleteVersion: (version: RequirementVersion) => void;
   onEditVersion: (version: RequirementVersion) => void;
   onSelectVersion: (id: string) => void;
@@ -439,6 +460,11 @@ function RequirementVersionCard({
         进入版本
       </Button>
       <div className="requirement-version-actions">
+        {canEditRequirements ? (
+          <Button icon={<PlusOutlined />} onClick={() => onBreakdownVersion(version)}>
+            拆任务
+          </Button>
+        ) : null}
         {canEditRequirements ? (
           <Button icon={<EditOutlined />} onClick={() => onEditVersion(version)}>
             编辑

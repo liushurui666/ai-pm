@@ -8,6 +8,7 @@ import dayjs from "dayjs";
 import type { FeishuUser, Task, TaskStage } from "@/types/dashboard";
 import { OwnerAvatar, OwnerInline } from "@/components/project-management-platform/shared/owner-inline";
 import { PageTitle } from "@/components/project-management-platform/shared/page-shell";
+import { priorityColor, sortTasksForDelivery, VersionTaskBoard } from "@/components/project-management-platform/views/version-task-board";
 
 const { Text } = Typography;
 
@@ -19,11 +20,6 @@ type RequirementVersionOption = {
 };
 
 const taskStages: TaskStage[] = ["待处理", "进行中", "评审中", "已完成"];
-const priorityColor: Record<Task["priority"], string> = {
-  高: "red",
-  中: "gold",
-  低: "green"
-};
 
 function normalizeIdentity(value?: string) {
   return value?.trim().toLowerCase() ?? "";
@@ -63,7 +59,7 @@ export function TasksView({
   onCreate: () => void;
   onEdit: (task: Task) => void;
 }) {
-  const [viewMode, setViewMode] = useState<"table" | "owner">("table");
+  const [viewMode, setViewMode] = useState<"version" | "table" | "owner">("version");
   const [onlyMine, setOnlyMine] = useState(false);
   const visibleTasks = useMemo(
     () => (onlyMine ? tasks.filter((task) => isMyTask(task, currentUser)) : tasks),
@@ -85,15 +81,7 @@ export function TasksView({
       .map(([owner, group]) => ({
         avatarUrl: group.avatarUrl,
         owner,
-        tasks: group.tasks.sort((left, right) => {
-          const stageDelta = taskStages.indexOf(left.stage) - taskStages.indexOf(right.stage);
-
-          if (stageDelta !== 0) {
-            return stageDelta;
-          }
-
-          return dayjs(left.dueDate).valueOf() - dayjs(right.dueDate).valueOf();
-        })
+        tasks: group.tasks.sort(sortTasksForDelivery)
       }))
       .sort((left, right) => right.tasks.length - left.tasks.length || left.owner.localeCompare(right.owner, "zh-CN"));
   }, [visibleTasks]);
@@ -191,13 +179,14 @@ export function TasksView({
       <PageTitle
         icon={<CheckCircleOutlined />}
         title="任务看板"
-        subtitle="给研发同学按项目、版本和负责人推进交付任务，文档拆解后的执行项统一进入这里。"
+        subtitle="围绕需求版本拆解和推进交付任务，文档拆解后的执行项会进入对应版本。"
         extra={
           <Space wrap>
             <Segmented
               value={viewMode}
-              onChange={(value) => setViewMode(value as "table" | "owner")}
+              onChange={(value) => setViewMode(value as "version" | "table" | "owner")}
               options={[
+                { label: "按版本", value: "version", icon: <CheckCircleOutlined /> },
                 { label: "全部任务", value: "table", icon: <UnorderedListOutlined /> },
                 { label: "按负责人", value: "owner", icon: <UserOutlined /> }
               ]}
@@ -215,7 +204,9 @@ export function TasksView({
         }
       />
 
-      {viewMode === "table" ? (
+      {viewMode === "version" ? (
+        <VersionTaskBoard onlyMine={onlyMine} tasks={visibleTasks} versionOptions={versionOptions} onEdit={onEdit} />
+      ) : viewMode === "table" ? (
         <Card>
           <Table
             rowKey="id"
@@ -267,7 +258,7 @@ export function TasksView({
                         className="task-ai-hint"
                         type={task.priority === "高" ? "warning" : "info"}
                         showIcon
-                        title={task.aiHint}
+                        message={task.aiHint}
                       />
                     </div>
                   ))}

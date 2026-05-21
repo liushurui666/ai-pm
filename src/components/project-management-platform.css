@@ -813,6 +813,46 @@
   justify-content: flex-end;
 }
 
+.project-risk-metrics,
+.project-risk-focus-grid {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.project-risk-metrics {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.project-risk-focus-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.project-risk-focus-card,
+.project-risk-metrics .ant-card {
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+}
+
+.project-risk-expand {
+  padding: 4px 0;
+}
+
+.version-task-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.version-task-column {
+  border: 1px solid var(--border);
+  background: var(--surface-subtle);
+}
+
+.version-task-column .ant-card-head-title {
+  min-width: 0;
+}
+
 .owner-kanban-grid {
   display: grid;
   grid-auto-columns: minmax(300px, 360px);
@@ -1208,7 +1248,10 @@
 @media (max-width: 520px) {
   .requirement-version-grid,
   .requirement-version-summary,
-  .requirement-version-meta {
+  .requirement-version-meta,
+  .project-risk-metrics,
+  .project-risk-focus-grid,
+  .version-task-grid {
     grid-template-columns: 1fr;
   }
 }

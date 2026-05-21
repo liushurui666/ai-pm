@@ -23,7 +23,7 @@ export function ProjectOptionSelect({
       onChange={onChange}
       optionFilterProp="label"
       placeholder="选择站内已有项目"
-      notFoundContent="请先在项目管理中新建项目"
+      notFoundContent="请先新建项目"
       options={projectOptions.map((project) => ({
         value: project,
         label: project

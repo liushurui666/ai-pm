@@ -8,7 +8,7 @@ import { OwnerSelect } from "@/components/project-management-platform/forms/owne
 import { VersionProjectFields } from "@/components/project-management-platform/forms/form-fields";
 import { DrawerFooterActions } from "@/components/project-management-platform/forms/drawer-footer-actions";
 
-// 文档拆解抽屉封装上传、版本归属和默认负责人，保持 AI 拆解流程独立。
+// 文档拆解抽屉以版本为主上下文，确保 AI 任务拆解直接落到选定版本。
 export function DocumentBreakdownDrawer({
   form,
   open,
@@ -38,7 +38,7 @@ export function DocumentBreakdownDrawer({
       title={
         <Space>
           <UploadOutlined />
-          <span>上传文档拆任务</span>
+          <span>按版本拆任务</span>
         </Space>
       }
       open={open}
@@ -58,8 +58,8 @@ export function DocumentBreakdownDrawer({
           className="pm-form-alert"
           type="info"
           showIcon
-          title="上传后会自动生成任务"
-          description="系统会读取文档内容，调用 AI 拆解执行任务，并保存到任务看板。AI 识别到的负责人会优先匹配平台成员，未匹配时使用默认负责人。"
+          title="上传后会按目标版本生成任务"
+          description="系统会读取文档内容，围绕你选择的版本拆解前端、后端、测试任务，并保存到任务看板。AI 识别到的负责人会优先匹配平台成员，未匹配时使用默认负责人。"
         />
         <VersionProjectFields
           form={form}

@@ -54,7 +54,6 @@ import type {
 import type { CreateRecordResult, DashboardEntityType, DeleteRecordResult, DocumentAnalyzeResult } from "@/types/records";
 import { getAntdThemeConfig, ThemeToggleButton, useThemePreference } from "@/components/theme-mode";
 import { fetchDashboardFromApi, type PeopleResponse } from "@/components/project-management-platform/api";
-import { createProjectColumns } from "@/components/project-management-platform/columns/project-columns";
 import { createRequirementColumns } from "@/components/project-management-platform/columns/requirement-columns";
 import { validViews } from "@/components/project-management-platform/constants";
 import { AssistantDrawer } from "@/components/project-management-platform/drawers/assistant-drawer";
@@ -281,12 +280,8 @@ export function ProjectManagementPlatform({
       return [];
     }
 
-    if (projectFilter === "全部") {
-      return data.projects;
-    }
-
-    return data.projects.filter((project) => project.status === projectFilter);
-  }, [data, projectFilter]);
+    return data.projects;
+  }, [data]);
 
   const ownerOptions = useMemo<OwnerSelectableMember[]>(() => {
     return (data?.members ?? [])
@@ -305,7 +300,6 @@ export function ProjectManagementPlatform({
   const ownerSelectLoading = loading;
   const ownerSelectError = !ownerSelectLoading && data && !ownerOptions.length ? "暂无可选平台成员，请先在成员管理添加成员。" : "";
 
-  const projectColumns = createProjectColumns({ onEdit: openEditProjectDrawer });
   const requirementColumns = createRequirementColumns({
     canDeleteRequirements,
     canEditRequirements,
@@ -434,6 +428,15 @@ export function ProjectManagementPlatform({
     setBreakdownOpen(true);
     breakdownForm.resetFields();
     breakdownForm.setFieldsValue(hydrateOwnerFormValues(initialValues, ownerOptions));
+  }
+
+  // 版本页发起拆任务时直接带入版本上下文，确保 AI 拆解不会跑到项目维度之外。
+  function openVersionBreakdownDrawer(version: RequirementVersion) {
+    openDocumentBreakdownDrawer({
+      versionId: version.id,
+      versionName: version.name,
+      project: version.project === "跨项目" ? undefined : version.project
+    });
   }
 
   async function handleCreateRecord(values: Record<string, unknown>) {
@@ -1012,7 +1015,7 @@ export function ProjectManagementPlatform({
 
   const menuItems = [
     { key: "overview", icon: <DashboardOutlined />, label: "工作台" },
-    { key: "projects", icon: <ProjectOutlined />, label: "项目管理" },
+    { key: "projects", icon: <ProjectOutlined />, label: "项目风险" },
     { key: "tasks", icon: <CheckCircleOutlined />, label: "任务看板" },
     { key: "bugs", icon: <BugOutlined />, label: "Bug 管理" },
     { key: "requirements", icon: <NodeIndexOutlined />, label: "需求管理" },
@@ -1394,11 +1397,15 @@ export function ProjectManagementPlatform({
                   ) : null}
                   {activeView === "projects" ? (
                     <ProjectsView
-                      columns={projectColumns}
                       projects={filteredProjects}
+                      bugs={data.bugs}
+                      risks={data.risks}
+                      tasks={data.tasks}
+                      versions={requirementVersions}
                       projectFilter={projectFilter}
                       onFilterChange={setProjectFilter}
                       onCreate={() => openCreateDrawer("project")}
+                      onEdit={openEditProjectDrawer}
                     />
                   ) : null}
                   {activeView === "tasks" ? (
@@ -1469,6 +1476,7 @@ export function ProjectManagementPlatform({
                         })
                       }
                       onCreateVersion={() => openCreateDrawer("requirementVersion")}
+                      onBreakdownVersion={openVersionBreakdownDrawer}
                       onDeleteVersion={(version) => handleDeleteRecord("requirementVersion", version.id)}
                       onEditVersion={openEditRequirementVersionDrawer}
                       onSelectVersion={setSelectedRequirementVersionId}

@@ -315,7 +315,7 @@ export async function POST(request: NextRequest) {
       tasks,
       source,
       extractedChars: documentText.length,
-      message: `已从文档拆解 ${tasks.length} 个任务，并保存到任务看板。`,
+      message: `已围绕「${versionName}」拆解 ${tasks.length} 个任务，并保存到任务看板。`,
       warning
     } satisfies DocumentAnalyzeResult);
   } catch (error) {
