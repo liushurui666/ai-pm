@@ -31,13 +31,17 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#39;");
 }
 
-function getEventDateRange(item: ProjectCalendarItem) {
+function getEventDateRange(item: ProjectCalendarItem, month: dayjs.Dayjs) {
   const { start, end } = getProjectCalendarItemRange(item);
+  const monthStart = month.startOf("month");
+  const monthEnd = month.endOf("month");
+  const visibleStart = start.isBefore(monthStart, "day") ? monthStart : start;
+  const visibleEnd = end.isAfter(monthEnd, "day") ? monthEnd : end;
 
-  // Scheduler 的结束日期按排期条右边界处理，所以单日事项需要向后补一天才有可见宽度。
+  // Scheduler 拖拽时会保留事件完整跨度；跨月任务需裁成当前月可见段，避免拖动时把隐藏月份也展开到画布上。
   return {
-    start: start.format("YYYY-MM-DD"),
-    end: end.add(1, "day").format("YYYY-MM-DD")
+    start: visibleStart.format("YYYY-MM-DD"),
+    end: visibleEnd.add(1, "day").format("YYYY-MM-DD")
   };
 }
 
@@ -153,7 +157,7 @@ export function createProjectSchedulerModel(items: ProjectCalendarItem[], month:
 
   const events: DayPilot.EventData[] = visibleItems.map((item) => {
     const colors = toneColors[item.riskTone];
-    const range = getEventDateRange(item);
+    const range = getEventDateRange(item, month);
 
     return {
       ...range,
