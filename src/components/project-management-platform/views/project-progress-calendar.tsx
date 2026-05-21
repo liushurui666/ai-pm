@@ -4,6 +4,7 @@ import { Empty } from "antd";
 import { DayPilotScheduler } from "@daypilot/daypilot-lite-react";
 import type { DayPilot } from "@daypilot/daypilot-lite-react";
 import dayjs from "dayjs";
+import { useEffect, useRef } from "react";
 import type {
   ProjectCalendarItem,
   ProjectCalendarScheduleChange
@@ -29,6 +30,30 @@ function getScheduleChange(start: DayPilot.Date, end: DayPilot.Date, resource: D
   };
 }
 
+function syncDraggingEventPreview(root: HTMLElement) {
+  const source = root.querySelector<HTMLElement>(".scheduler_default_event_moving_source");
+  const sourceInner = source?.querySelector<HTMLElement>(".scheduler_default_event_inner");
+  const shadow = root.querySelector<HTMLElement>(".scheduler_default_shadow");
+  const shadowInner = shadow?.querySelector<HTMLElement>(".scheduler_default_shadow_inner");
+
+  if (!source || !sourceInner || !shadow || !shadowInner) {
+    return;
+  }
+
+  const sourceKey = source.getAttribute("title") ?? sourceInner.textContent ?? "";
+
+  if (shadowInner.dataset.projectDragSource === sourceKey) {
+    return;
+  }
+
+  // DayPilot 的 shadow 只负责定位，视觉内容复用原卡片，拖动时才像“拿起这个任务条”。
+  shadow.classList.add("project-scheduler-drag-card");
+  shadowInner.classList.add("project-scheduler-drag-card-inner");
+  shadowInner.dataset.projectDragSource = sourceKey;
+  shadowInner.innerHTML = sourceInner.innerHTML;
+  shadowInner.setAttribute("style", sourceInner.getAttribute("style") ?? "");
+}
+
 // 项目进度日历使用 Scheduler 表达排期，让跨天任务天然横穿日期轴。
 export function ProjectProgressCalendar({
   items,
@@ -41,7 +66,32 @@ export function ProjectProgressCalendar({
   onOpenItem: (item: ProjectCalendarItem) => void;
   onRescheduleItem: (item: ProjectCalendarItem, change: ProjectCalendarScheduleChange) => Promise<boolean>;
 }) {
+  const shellRef = useRef<HTMLDivElement | null>(null);
   const schedulerModel = createProjectSchedulerModel(items, month);
+
+  useEffect(() => {
+    const shell = shellRef.current;
+
+    if (!shell) {
+      return undefined;
+    }
+
+    syncDraggingEventPreview(shell);
+
+    const observer = new MutationObserver(() => {
+      syncDraggingEventPreview(shell);
+    });
+
+    observer.observe(shell, {
+      attributes: true,
+      childList: true,
+      subtree: true
+    });
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
 
   function handleScheduleUpdate(args: DayPilot.SchedulerEventMoveArgs | DayPilot.SchedulerEventResizeArgs) {
     const item = args.e.data.tags as ProjectCalendarItem | undefined;
@@ -77,7 +127,7 @@ export function ProjectProgressCalendar({
   }
 
   return (
-    <div className="project-scheduler-shell">
+    <div className="project-scheduler-shell" ref={shellRef}>
       <DayPilotScheduler
         startDate={schedulerModel.startDate}
         days={schedulerModel.days}

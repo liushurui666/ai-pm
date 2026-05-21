@@ -1018,25 +1018,38 @@
   cursor: grabbing;
 }
 
-/* DayPilot 的拖拽阴影默认按整行高度绘制，这里压回任务条高度，避免拖拽时整片网格变灰。 */
+/* DayPilot 的拖拽定位层默认是空阴影，这里让它承载原卡片内容，视觉上就是直接拖动任务条。 */
 .project-scheduler-shell .scheduler_default_shadow {
   overflow: hidden;
   height: var(--project-scheduler-event-height) !important;
   border-radius: 8px;
-  box-shadow: 0 14px 30px rgb(22 163 74 / 18%);
+  box-shadow: none;
+  pointer-events: none;
   transform: translateY(var(--project-scheduler-row-gap));
 }
 
 .project-scheduler-shell .scheduler_default_shadow_inner {
   height: 100% !important;
-  border: 1px solid color-mix(in srgb, #16a34a 42%, var(--border)) !important;
+  overflow: hidden;
+  border-width: 1px !important;
+  border-style: solid !important;
   border-radius: 8px;
-  background: color-mix(in srgb, #16a34a 18%, var(--surface-elevated)) !important;
-  opacity: 0.88 !important;
+  box-shadow: none;
+  cursor: grabbing;
+  opacity: 1 !important;
+}
+
+.project-scheduler-shell .scheduler_default_shadow_inner:empty {
+  border-color: transparent !important;
+  background: transparent !important;
+}
+
+.project-scheduler-shell .project-scheduler-drag-card-inner .project-scheduler-event-content {
+  height: 100%;
 }
 
 .project-scheduler-shell .scheduler_default_event_moving_source {
-  opacity: 0.24 !important;
+  opacity: 0 !important;
 }
 
 .project-scheduler-cell-weekend .scheduler_default_cell_inner {
