@@ -9,6 +9,13 @@ import type {
   ProjectCalendarItem,
   ProjectCalendarScheduleChange
 } from "@/components/project-management-platform/views/project-calendar-utils";
+import type { ResizePreviewSource } from "@/components/project-management-platform/views/project-scheduler-preview-utils";
+import {
+  clearResizePreviewSource,
+  getResizePreviewSource,
+  syncDraggingEventPreview,
+  syncResizingEventPreview
+} from "@/components/project-management-platform/views/project-scheduler-preview-utils";
 import { createProjectSchedulerModel } from "@/components/project-management-platform/views/project-scheduler-utils";
 
 const weekdayLabels = ["日", "一", "二", "三", "四", "五", "六"];
@@ -32,53 +39,6 @@ function getScheduleChange(start: DayPilot.Date, end: DayPilot.Date, resource: D
   };
 }
 
-function addClassOnce(element: HTMLElement, className: string) {
-  if (!element.classList.contains(className)) {
-    element.classList.add(className);
-  }
-}
-
-function setStylePropertyOnce(element: HTMLElement, propertyName: string, value: string) {
-  if (element.style.getPropertyValue(propertyName) !== value) {
-    element.style.setProperty(propertyName, value);
-  }
-}
-
-function syncDraggingEventPreview(root: HTMLElement) {
-  const source = root.querySelector<HTMLElement>(".scheduler_default_event_moving_source");
-  const sourceInner = source?.querySelector<HTMLElement>(".scheduler_default_event_inner");
-  const shadow = root.querySelector<HTMLElement>(".scheduler_default_shadow");
-  const shadowInner = shadow?.querySelector<HTMLElement>(".scheduler_default_shadow_inner");
-
-  if (!source || !sourceInner || !shadow || !shadowInner) {
-    return false;
-  }
-
-  const sourceKey = [
-    source.getAttribute("title") ?? sourceInner.textContent ?? "",
-    source.getAttribute("class") ?? "",
-    source.getAttribute("style") ?? "",
-    sourceInner.getAttribute("style") ?? ""
-  ].join("|");
-
-  // DayPilot 会创建跟随鼠标的 shadow；这里只复用它的位置，不再额外改线位，避免拖拽时整条任务被推错行。
-  addClassOnce(shadow, "project-scheduler-drag-card");
-  addClassOnce(shadowInner, "project-scheduler-drag-card-inner");
-  setStylePropertyOnce(shadow, "opacity", "1");
-  setStylePropertyOnce(shadow, "transform", "none");
-
-  if (shadowInner.dataset.projectDragSource === sourceKey) {
-    return true;
-  }
-
-  shadowInner.dataset.projectDragSource = sourceKey;
-  shadowInner.innerHTML = sourceInner.innerHTML;
-  shadowInner.setAttribute("style", sourceInner.getAttribute("style") ?? "");
-  setStylePropertyOnce(shadowInner, "opacity", "1");
-
-  return true;
-}
-
 // 项目进度日历使用 Scheduler 表达排期，让跨天任务天然横穿日期轴。
 export function ProjectProgressCalendar({
   items,
@@ -94,6 +54,7 @@ export function ProjectProgressCalendar({
   const shellRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef({ active: false, lastEndedAt: 0 });
   const pointerDragRef = useRef({ active: false, moved: false, startX: 0, startY: 0 });
+  const resizePreviewRef = useRef<ResizePreviewSource | null>(null);
   const schedulerModel = createProjectSchedulerModel(items, month);
 
   function markDragEnded() {
@@ -117,6 +78,8 @@ export function ProjectProgressCalendar({
         return;
       }
 
+      clearResizePreviewSource(resizePreviewRef.current);
+      resizePreviewRef.current = getResizePreviewSource(event.target);
       pointerDragRef.current = {
         active: true,
         moved: false,
@@ -138,6 +101,7 @@ export function ProjectProgressCalendar({
         // click 和 drag 是两条独立链路，提前记录真实拖动，避免 DayPilot 松手后补发 click 打开抽屉。
         pointerDragRef.current.moved = true;
         dragStateRef.current.active = true;
+        syncDragState();
       }
     }
 
@@ -146,16 +110,22 @@ export function ProjectProgressCalendar({
         markDragEnded();
       }
 
+      clearResizePreviewSource(resizePreviewRef.current);
+      resizePreviewRef.current = null;
       pointerDragRef.current = { active: false, moved: false, startX: 0, startY: 0 };
     }
 
     const schedulerRoot = shell;
 
     function syncDragState() {
-      const hasDraggingPreview = syncDraggingEventPreview(schedulerRoot);
+      const hasDraggingPreview = syncDraggingEventPreview(schedulerRoot) || syncResizingEventPreview(schedulerRoot, resizePreviewRef.current);
 
       if (hasDraggingPreview) {
         dragStateRef.current.active = true;
+        return;
+      }
+
+      if (resizePreviewRef.current && pointerDragRef.current.active) {
         return;
       }
 

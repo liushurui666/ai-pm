@@ -1160,7 +1160,12 @@
   height: 100%;
 }
 
-.project-scheduler-shell .scheduler_default_event_moving_source {
+.project-scheduler-shell .project-scheduler-resize-card-inner .project-scheduler-event-content {
+  height: 100%;
+}
+
+.project-scheduler-shell .scheduler_default_event_moving_source,
+.project-scheduler-shell .project-scheduler-event-resizing-source {
   opacity: 0 !important;
 }
 
