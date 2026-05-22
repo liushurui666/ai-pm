@@ -20,6 +20,16 @@ function setStylePropertyOnce(element: HTMLElement, propertyName: string, value:
   }
 }
 
+function applyShadowInnerStyle(element: HTMLElement, sourceInnerStyle: string, cursor: string) {
+  if (element.dataset.projectInnerStyle !== sourceInnerStyle) {
+    element.setAttribute("style", sourceInnerStyle);
+    element.dataset.projectInnerStyle = sourceInnerStyle;
+  }
+
+  setStylePropertyOnce(element, "cursor", cursor);
+  setStylePropertyOnce(element, "opacity", "1");
+}
+
 function getEventPreviewKey(source: HTMLElement, sourceInner: HTMLElement) {
   // 预览身份只关心内容和主题类名；拖拽/拉伸中外层 style 会被 DayPilot 高频改写，放进 key 会导致每帧重灌 DOM。
   return [
@@ -89,15 +99,14 @@ function syncShadowContent({
   setStylePropertyOnce(shadow, "transform", "none");
 
   if (shadowInner.dataset.projectDragSource === sourceKey) {
-    setStylePropertyOnce(shadowInner, "cursor", cursor);
+    // 普通拖拽的 shadow 可能先出现、后补齐内联样式；内容相同时仍要同步样式，避免拖动中退回默认灰块。
+    applyShadowInnerStyle(shadowInner, sourceInnerStyle, cursor);
     return true;
   }
 
   shadowInner.dataset.projectDragSource = sourceKey;
   shadowInner.innerHTML = sourceInnerHtml;
-  shadowInner.setAttribute("style", sourceInnerStyle);
-  setStylePropertyOnce(shadowInner, "cursor", cursor);
-  setStylePropertyOnce(shadowInner, "opacity", "1");
+  applyShadowInnerStyle(shadowInner, sourceInnerStyle, cursor);
 
   return true;
 }

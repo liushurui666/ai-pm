@@ -117,6 +117,10 @@ export function ProjectProgressCalendar({
       syncFrame = window.requestAnimationFrame(() => {
         syncFrame = 0;
         syncDragState();
+
+        if (pointerDragRef.current.active && pointerDragRef.current.moved) {
+          scheduleSyncDragState();
+        }
       });
     }
 
