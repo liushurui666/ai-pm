@@ -5,6 +5,7 @@ import {
   getFeishuAuthorizeUrl,
   isFeishuAuthConfigured
 } from "@/lib/feishu-auth";
+import { shouldUseSecureCookie } from "@/lib/session";
 
 export async function GET(request: NextRequest) {
   if (!isFeishuAuthConfigured()) {
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
     maxAge: 60 * 10,
     path: "/",
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production"
+    secure: shouldUseSecureCookie(request.url, request.headers.get("x-forwarded-proto"))
   });
 
   return response;

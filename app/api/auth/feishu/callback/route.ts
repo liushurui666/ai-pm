@@ -16,7 +16,11 @@ export async function GET(request: NextRequest) {
     const session = await createSessionFromFeishuCode(code);
     const response = NextResponse.redirect(new URL("/", request.url));
 
-    response.cookies.set(SESSION_COOKIE_NAME, createSessionToken(session), getSessionCookieOptions());
+    response.cookies.set(
+      SESSION_COOKIE_NAME,
+      createSessionToken(session),
+      getSessionCookieOptions(request.url, request.headers.get("x-forwarded-proto"))
+    );
     response.cookies.delete(FEISHU_STATE_COOKIE_NAME);
 
     return response;

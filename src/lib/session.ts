@@ -72,12 +72,29 @@ export async function getSession() {
   return parseSessionToken(cookieStore.get(SESSION_COOKIE_NAME)?.value);
 }
 
-export function getSessionCookieOptions() {
+export function shouldUseSecureCookie(requestUrl?: string | URL, forwardedProto?: string | null) {
+  const normalizedProto = forwardedProto?.split(",")[0]?.trim().toLowerCase();
+
+  if (normalizedProto) {
+    return normalizedProto === "https";
+  }
+
+  if (requestUrl) {
+    const url = requestUrl instanceof URL ? requestUrl : new URL(requestUrl);
+
+    return url.protocol === "https:";
+  }
+
+  return process.env.NODE_ENV === "production";
+}
+
+export function getSessionCookieOptions(requestUrl?: string | URL, forwardedProto?: string | null) {
   return {
     httpOnly: true,
     maxAge: SESSION_MAX_AGE_SECONDS,
     path: "/",
     sameSite: "lax" as const,
-    secure: process.env.NODE_ENV === "production"
+    // 本地用 next start 跑生产包时仍是 http，固定 Secure 会导致刷新后会话 Cookie 丢失。
+    secure: shouldUseSecureCookie(requestUrl, forwardedProto)
   };
 }
