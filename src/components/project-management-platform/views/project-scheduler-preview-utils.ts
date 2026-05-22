@@ -21,11 +21,12 @@ function setStylePropertyOnce(element: HTMLElement, propertyName: string, value:
 }
 
 function getEventPreviewKey(source: HTMLElement, sourceInner: HTMLElement) {
+  // 预览身份只关心内容和主题类名；拖拽/拉伸中外层 style 会被 DayPilot 高频改写，放进 key 会导致每帧重灌 DOM。
   return [
     source.getAttribute("title") ?? sourceInner.textContent ?? "",
     source.getAttribute("class") ?? "",
-    source.getAttribute("style") ?? "",
-    sourceInner.getAttribute("style") ?? ""
+    sourceInner.innerHTML,
+    sourceInner.getAttribute("class") ?? ""
   ].join("|");
 }
 

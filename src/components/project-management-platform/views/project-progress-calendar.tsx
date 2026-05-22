@@ -88,34 +88,7 @@ export function ProjectProgressCalendar({
       };
     }
 
-    function handlePointerMove(event: PointerEvent) {
-      const pointerState = pointerDragRef.current;
-
-      if (!pointerState.active || pointerState.moved) {
-        return;
-      }
-
-      const movedEnough = Math.hypot(event.clientX - pointerState.startX, event.clientY - pointerState.startY) > dragMoveThreshold;
-
-      if (movedEnough) {
-        // click 和 drag 是两条独立链路，提前记录真实拖动，避免 DayPilot 松手后补发 click 打开抽屉。
-        pointerDragRef.current.moved = true;
-        dragStateRef.current.active = true;
-        syncDragState();
-      }
-    }
-
-    function handlePointerEnd() {
-      if (pointerDragRef.current.moved) {
-        markDragEnded();
-      }
-
-      clearResizePreviewSource(resizePreviewRef.current);
-      resizePreviewRef.current = null;
-      pointerDragRef.current = { active: false, moved: false, startX: 0, startY: 0 };
-    }
-
-    const schedulerRoot = shell;
+    let syncFrame = 0;
 
     function syncDragState() {
       const hasDraggingPreview = syncDraggingEventPreview(schedulerRoot) || syncResizingEventPreview(schedulerRoot, resizePreviewRef.current);
@@ -135,14 +108,64 @@ export function ProjectProgressCalendar({
       }
     }
 
+    function scheduleSyncDragState() {
+      if (syncFrame) {
+        return;
+      }
+
+      // DayPilot 拉伸时会连续改 shadow 宽度，预览同步按帧执行，避免 MutationObserver 高频重排卡住页面。
+      syncFrame = window.requestAnimationFrame(() => {
+        syncFrame = 0;
+        syncDragState();
+      });
+    }
+
+    function handlePointerMove(event: PointerEvent) {
+      const pointerState = pointerDragRef.current;
+
+      if (!pointerState.active) {
+        return;
+      }
+
+      if (pointerState.moved) {
+        scheduleSyncDragState();
+        return;
+      }
+
+      const movedEnough = Math.hypot(event.clientX - pointerState.startX, event.clientY - pointerState.startY) > dragMoveThreshold;
+
+      if (movedEnough) {
+        // click 和 drag 是两条独立链路，提前记录真实拖动，避免 DayPilot 松手后补发 click 打开抽屉。
+        pointerDragRef.current.moved = true;
+        dragStateRef.current.active = true;
+        scheduleSyncDragState();
+      }
+    }
+
+    function handlePointerEnd() {
+      if (syncFrame) {
+        window.cancelAnimationFrame(syncFrame);
+        syncFrame = 0;
+      }
+
+      if (pointerDragRef.current.moved) {
+        markDragEnded();
+      }
+
+      clearResizePreviewSource(resizePreviewRef.current);
+      resizePreviewRef.current = null;
+      pointerDragRef.current = { active: false, moved: false, startX: 0, startY: 0 };
+    }
+
+    const schedulerRoot = shell;
+
     syncDragState();
 
     const observer = new MutationObserver(() => {
-      syncDragState();
+      scheduleSyncDragState();
     });
 
     observer.observe(schedulerRoot, {
-      attributes: true,
       childList: true,
       subtree: true
     });
@@ -152,6 +175,10 @@ export function ProjectProgressCalendar({
     window.addEventListener("pointercancel", handlePointerEnd);
 
     return () => {
+      if (syncFrame) {
+        window.cancelAnimationFrame(syncFrame);
+      }
+
       observer.disconnect();
       shell.removeEventListener("pointerdown", handlePointerDown);
       window.removeEventListener("pointermove", handlePointerMove);
