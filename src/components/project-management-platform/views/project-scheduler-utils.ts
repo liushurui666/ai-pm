@@ -14,10 +14,26 @@ const typeClassMap: Record<ProjectCalendarItemType, string> = {
 };
 
 const toneColors: Record<ProjectCalendarItem["riskTone"], { background: string; bar: string; border: string }> = {
-  success: { background: "#ecfdf3", bar: "#16a34a", border: "#86efac" },
-  processing: { background: "#eff6ff", bar: "#2563eb", border: "#bfdbfe" },
-  warning: { background: "#fffbeb", bar: "#d97706", border: "#fde68a" },
-  danger: { background: "#fef2f2", bar: "#dc2626", border: "#fecaca" }
+  success: {
+    background: "var(--scheduler-event-success-bg)",
+    bar: "var(--scheduler-event-success-bar)",
+    border: "var(--scheduler-event-success-border)"
+  },
+  processing: {
+    background: "var(--scheduler-event-processing-bg)",
+    bar: "var(--scheduler-event-processing-bar)",
+    border: "var(--scheduler-event-processing-border)"
+  },
+  warning: {
+    background: "var(--scheduler-event-warning-bg)",
+    bar: "var(--scheduler-event-warning-bar)",
+    border: "var(--scheduler-event-warning-border)"
+  },
+  danger: {
+    background: "var(--scheduler-event-danger-bg)",
+    bar: "var(--scheduler-event-danger-bar)",
+    border: "var(--scheduler-event-danger-border)"
+  }
 };
 const resizeHandleWidth = 14;
 

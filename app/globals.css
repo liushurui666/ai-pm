@@ -9,6 +9,8 @@
   --control-bg: rgba(255, 255, 255, 0.88);
   --text-primary: #172033;
   --text-secondary: #667085;
+  --foreground: var(--text-primary);
+  --muted: var(--text-secondary);
   --border: #dfe7f2;
   --border-strong: #cbd6e6;
   --brand: #2563eb;
@@ -46,6 +48,8 @@
     --control-bg: rgba(20, 30, 50, 0.9);
     --text-primary: #e7edf7;
     --text-secondary: #9aa8bd;
+    --foreground: var(--text-primary);
+    --muted: var(--text-secondary);
     --border: #25314a;
     --border-strong: #34415c;
     --brand: #5b8cff;
@@ -84,6 +88,8 @@ body[data-theme="light"] {
   --control-bg: rgba(255, 255, 255, 0.88);
   --text-primary: #172033;
   --text-secondary: #667085;
+  --foreground: var(--text-primary);
+  --muted: var(--text-secondary);
   --border: #dfe7f2;
   --border-strong: #cbd6e6;
   --brand: #2563eb;
@@ -121,6 +127,8 @@ body[data-theme="dark"] {
   --control-bg: rgba(20, 30, 50, 0.9);
   --text-primary: #e7edf7;
   --text-secondary: #9aa8bd;
+  --foreground: var(--text-primary);
+  --muted: var(--text-secondary);
   --border: #25314a;
   --border-strong: #34415c;
   --brand: #5b8cff;

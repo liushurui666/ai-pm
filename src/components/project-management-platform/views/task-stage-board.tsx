@@ -1,0 +1,285 @@
+"use client";
+
+import { Badge, Button, Card, Flex, Progress, Space, Tag, Tooltip, Typography } from "antd";
+import { CalendarOutlined, EditOutlined, HolderOutlined } from "@ant-design/icons";
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  closestCorners,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+  type DraggableAttributes,
+  type DraggableSyntheticListeners
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import dayjs from "dayjs";
+import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import type { Task, TaskStage } from "@/types/dashboard";
+import { OwnerInline } from "@/components/project-management-platform/shared/owner-inline";
+import { priorityColor, taskStages } from "@/components/project-management-platform/constants";
+import { sortTasksForDelivery } from "@/components/project-management-platform/views/version-task-board";
+
+const { Text } = Typography;
+
+const stageToneClass: Record<TaskStage, string> = {
+  待处理: "task-stage-column-pending",
+  进行中: "task-stage-column-progress",
+  评审中: "task-stage-column-review",
+  已完成: "task-stage-column-done"
+};
+
+function getTaskOverdue(task: Task) {
+  return task.stage !== "已完成" && dayjs(task.dueDate).isBefore(dayjs().startOf("day"));
+}
+
+function getColumnPercent(tasks: Task[]) {
+  if (!tasks.length) {
+    return 0;
+  }
+
+  return Math.round((tasks.filter((task) => task.stage === "已完成").length / tasks.length) * 100);
+}
+
+function getStageFromDropId(id: string) {
+  const stage = id.replace(/^stage:/, "") as TaskStage;
+
+  return taskStages.includes(stage) ? stage : null;
+}
+
+// 阶段列同时是空列投放区，避免某个阶段没有任务时无法拖入。
+function TaskStageColumn({
+  children,
+  stage,
+  tasks
+}: {
+  children: ReactNode;
+  stage: TaskStage;
+  tasks: Task[];
+}) {
+  const { isOver, setNodeRef } = useDroppable({ id: `stage:${stage}` });
+  const overdueCount = tasks.filter(getTaskOverdue).length;
+  const donePercent = getColumnPercent(tasks);
+
+  return (
+    <div ref={setNodeRef} className="task-stage-column-shell">
+      <Card
+        className={`task-stage-column ${stageToneClass[stage]}${isOver ? " task-stage-column-over" : ""}`}
+        title={
+          <Flex justify="space-between" align="center" gap={8}>
+            <Space size={8}>
+              <span className="task-stage-dot" />
+              <Text strong>{stage}</Text>
+            </Space>
+            <Badge count={tasks.length} color="var(--brand)" />
+          </Flex>
+        }
+        extra={overdueCount ? <Tag color="red">{overdueCount} 延期</Tag> : null}
+      >
+        <div className="task-stage-progress-bar">
+          <Progress percent={donePercent} size="small" showInfo={false} />
+        </div>
+        <SortableContext items={tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
+          <div className="task-stage-list">
+            {children}
+            {!tasks.length ? <div className="task-stage-empty">拖入任务</div> : null}
+          </div>
+        </SortableContext>
+      </Card>
+    </div>
+  );
+}
+
+function TaskStageCard({
+  dragAttributes,
+  dragListeners,
+  dragging,
+  onEdit,
+  setDragHandleRef,
+  task
+}: {
+  dragAttributes?: DraggableAttributes;
+  dragListeners?: DraggableSyntheticListeners;
+  dragging?: boolean;
+  onEdit: (task: Task) => void;
+  setDragHandleRef?: (element: HTMLElement | null) => void;
+  task: Task;
+}) {
+  const taskOverdue = getTaskOverdue(task);
+
+  return (
+    <div className={`task-stage-card${dragging ? " task-stage-card-dragging" : ""}`}>
+      <Flex justify="space-between" align="start" gap={10}>
+        <Space size={8} align="start" className="task-stage-card-title">
+          <span
+            ref={setDragHandleRef}
+            className="task-stage-card-handle"
+            {...dragAttributes}
+            {...dragListeners}
+          >
+            <HolderOutlined />
+          </span>
+          <Text strong>{task.title}</Text>
+        </Space>
+        <Tooltip title="编辑任务">
+          <Button size="small" type="text" icon={<EditOutlined />} onClick={() => onEdit(task)} />
+        </Tooltip>
+      </Flex>
+      <Space wrap size={[6, 6]} className="task-meta-tags">
+        <Tag color={priorityColor[task.priority]}>{task.priority}</Tag>
+        {task.versionName ? <Tag color="blue">{task.versionName}</Tag> : <Tag>未规划</Tag>}
+        <Tag icon={<CalendarOutlined />} color={taskOverdue ? "red" : undefined}>
+          {task.dueDate}
+        </Tag>
+      </Space>
+      <Flex justify="space-between" align="center" gap={8} className="task-stage-card-footer">
+        <OwnerInline name={task.owner} avatarUrl={task.ownerAvatarUrl} />
+        <Text type="secondary">{task.project}</Text>
+      </Flex>
+      <Text type="secondary" className="task-stage-ai-hint">
+        {task.aiHint}
+      </Text>
+    </div>
+  );
+}
+
+function SortableTaskCard({
+  onEdit,
+  task
+}: {
+  onEdit: (task: Task) => void;
+  task: Task;
+}) {
+  const {
+    attributes,
+    isDragging,
+    listeners,
+    setActivatorNodeRef,
+    setNodeRef,
+    transform,
+    transition
+  } = useSortable({
+    data: {
+      stage: task.stage,
+      type: "task"
+    },
+    id: task.id
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={isDragging ? "task-stage-sortable task-stage-sortable-active" : "task-stage-sortable"}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition
+      }}
+    >
+      <TaskStageCard
+        dragAttributes={attributes}
+        dragListeners={listeners}
+        dragging={isDragging}
+        setDragHandleRef={setActivatorNodeRef}
+        task={task}
+        onEdit={onEdit}
+      />
+    </div>
+  );
+}
+
+// dnd-kit 阶段看板只负责阶段流转，业务更新交给父容器复用现有记录接口。
+export function TaskStageBoard({
+  onlyMine,
+  onEdit,
+  onStageChange,
+  tasks
+}: {
+  onlyMine: boolean;
+  onEdit: (task: Task) => void;
+  onStageChange: (task: Task, stage: TaskStage) => Promise<boolean>;
+  tasks: Task[];
+}) {
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 6
+      }
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates
+    })
+  );
+  const tasksByStage = useMemo(
+    () =>
+      taskStages.reduce<Record<TaskStage, Task[]>>((groups, stage) => {
+        groups[stage] = tasks.filter((task) => task.stage === stage).sort(sortTasksForDelivery);
+
+        return groups;
+      }, {} as Record<TaskStage, Task[]>),
+    [tasks]
+  );
+  const activeTask = activeTaskId ? tasks.find((task) => task.id === activeTaskId) ?? null : null;
+
+  function handleDragStart(event: DragStartEvent) {
+    setActiveTaskId(String(event.active.id));
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    setActiveTaskId(null);
+
+    const task = tasks.find((item) => item.id === event.active.id);
+    const overId = event.over?.id ? String(event.over.id) : "";
+    const overTask = tasks.find((item) => item.id === overId);
+    const targetStage = getStageFromDropId(overId) ?? overTask?.stage ?? null;
+
+    if (!task || !targetStage || task.stage === targetStage) {
+      return;
+    }
+
+    await onStageChange(task, targetStage);
+  }
+
+  return (
+    <DndContext
+      collisionDetection={closestCorners}
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragCancel={() => setActiveTaskId(null)}
+    >
+      <div className="task-stage-board">
+        {taskStages.map((stage) => (
+          <TaskStageColumn key={stage} stage={stage} tasks={tasksByStage[stage]}>
+            {tasksByStage[stage].map((task) => (
+              <SortableTaskCard key={task.id} task={task} onEdit={onEdit} />
+            ))}
+          </TaskStageColumn>
+        ))}
+      </div>
+      <DragOverlay dropAnimation={null}>
+        {activeTask ? (
+          <div className="task-stage-drag-overlay">
+            <TaskStageCard task={activeTask} onEdit={onEdit} dragging />
+          </div>
+        ) : null}
+      </DragOverlay>
+      {!tasks.length ? (
+        <Card className="pm-wide">
+          <Text type="secondary">{onlyMine ? "暂无分配给你的任务" : "暂无任务，上传文档后会自动生成"}</Text>
+        </Card>
+      ) : null}
+    </DndContext>
+  );
+}

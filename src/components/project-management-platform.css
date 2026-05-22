@@ -1024,6 +1024,18 @@
 .project-scheduler-shell {
   --project-scheduler-event-height: 94px;
   --project-scheduler-row-gap: 8px;
+  --scheduler-event-success-bg: color-mix(in srgb, var(--teal) 10%, var(--surface));
+  --scheduler-event-success-bar: var(--teal);
+  --scheduler-event-success-border: color-mix(in srgb, var(--teal) 36%, var(--border));
+  --scheduler-event-processing-bg: color-mix(in srgb, var(--brand) 10%, var(--surface));
+  --scheduler-event-processing-bar: var(--brand);
+  --scheduler-event-processing-border: color-mix(in srgb, var(--brand) 34%, var(--border));
+  --scheduler-event-warning-bg: color-mix(in srgb, var(--amber) 13%, var(--surface));
+  --scheduler-event-warning-bar: var(--amber);
+  --scheduler-event-warning-border: color-mix(in srgb, var(--amber) 40%, var(--border));
+  --scheduler-event-danger-bg: color-mix(in srgb, var(--danger) 11%, var(--surface));
+  --scheduler-event-danger-bar: var(--danger);
+  --scheduler-event-danger-border: color-mix(in srgb, var(--danger) 38%, var(--border));
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -1079,7 +1091,8 @@
 .project-scheduler-shell .scheduler_default_event_inner {
   overflow: hidden;
   border-width: 1px;
-  box-shadow: 0 10px 24px rgb(15 23 42 / 8%);
+  color: var(--foreground) !important;
+  box-shadow: var(--shadow-card);
   cursor: pointer;
 }
 
@@ -1268,7 +1281,7 @@
   flex: none;
   padding: 2px 6px;
   border-radius: 999px;
-  background: rgb(255 255 255 / 62%);
+  background: color-mix(in srgb, var(--surface-elevated) 74%, transparent);
   color: var(--foreground);
   font-size: 11px;
   font-weight: 800;
@@ -1292,7 +1305,7 @@
 }
 
 .project-scheduler-event-danger .scheduler_default_event_inner {
-  box-shadow: 0 10px 26px rgb(220 38 38 / 14%);
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--danger) 18%, transparent);
 }
 
 .project-progress-panel {
@@ -1373,6 +1386,166 @@
 
 .task-card .ant-divider {
   margin: 12px 0;
+}
+
+.task-stage-board {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(260px, 1fr));
+  gap: 14px;
+  align-items: start;
+  overflow-x: auto;
+  padding: 2px 2px 8px;
+}
+
+.task-stage-column-shell {
+  min-width: 260px;
+}
+
+.task-stage-column {
+  min-height: 520px;
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--task-stage-tone) 8%, transparent), transparent 220px),
+    var(--surface-subtle);
+}
+
+.task-stage-column .ant-card-body {
+  display: grid;
+  gap: 12px;
+}
+
+.task-stage-column-pending {
+  --task-stage-tone: var(--muted);
+}
+
+.task-stage-column-progress {
+  --task-stage-tone: var(--brand);
+}
+
+.task-stage-column-review {
+  --task-stage-tone: var(--violet);
+}
+
+.task-stage-column-done {
+  --task-stage-tone: var(--teal);
+}
+
+.task-stage-column-over {
+  border-color: color-mix(in srgb, var(--task-stage-tone) 52%, var(--border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--task-stage-tone) 14%, transparent), transparent 240px),
+    var(--surface);
+}
+
+.task-stage-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--task-stage-tone);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--task-stage-tone) 15%, transparent);
+}
+
+.task-stage-progress-bar {
+  margin-top: -2px;
+}
+
+.task-stage-list {
+  display: grid;
+  gap: 10px;
+  min-height: 360px;
+}
+
+.task-stage-empty {
+  display: grid;
+  min-height: 96px;
+  place-items: center;
+  border: 1px dashed color-mix(in srgb, var(--task-stage-tone) 38%, var(--border));
+  border-radius: 8px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--surface) 76%, var(--task-stage-tone) 8%);
+}
+
+.task-stage-sortable {
+  min-width: 0;
+}
+
+.task-stage-sortable-active {
+  opacity: 0.32;
+}
+
+.task-stage-drag-overlay {
+  width: min(360px, 72vw);
+  cursor: grabbing;
+}
+
+.task-stage-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand) 5%, transparent), transparent 70%),
+    var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.task-stage-card-dragging {
+  border-color: color-mix(in srgb, var(--brand) 46%, var(--border));
+  box-shadow: 0 18px 34px color-mix(in srgb, var(--brand) 16%, transparent);
+}
+
+.task-stage-card-title {
+  min-width: 0;
+}
+
+.task-stage-card-title .ant-typography {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.task-stage-card-handle {
+  display: inline-grid;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: grab;
+}
+
+.task-stage-card-handle:hover {
+  color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.task-stage-card-handle:active {
+  cursor: grabbing;
+}
+
+.task-stage-card-footer {
+  min-width: 0;
+}
+
+.task-stage-card-footer > .ant-typography {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-stage-ai-hint {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .task-meta-tags {

@@ -4,18 +4,12 @@ import { Alert, Button, Card, Flex, Space, Tag, Tooltip, Typography } from "antd
 import { CalendarOutlined, EditOutlined } from "@ant-design/icons";
 import { useMemo } from "react";
 import dayjs from "dayjs";
-import type { Task, TaskStage } from "@/types/dashboard";
+import type { Task } from "@/types/dashboard";
 import type { RequirementVersionOption } from "@/components/project-management-platform/types";
 import { OwnerInline } from "@/components/project-management-platform/shared/owner-inline";
+import { priorityColor, taskStages } from "@/components/project-management-platform/constants";
 
 const { Text } = Typography;
-
-const taskStages: TaskStage[] = ["待处理", "进行中", "评审中", "已完成"];
-const priorityColor: Record<Task["priority"], string> = {
-  高: "red",
-  中: "gold",
-  低: "green"
-};
 
 function sortTasksForDelivery(left: Task, right: Task) {
   const stageDelta = taskStages.indexOf(left.stage) - taskStages.indexOf(right.stage);
@@ -144,4 +138,4 @@ export function VersionTaskBoard({
   );
 }
 
-export { priorityColor, sortTasksForDelivery };
+export { sortTasksForDelivery };

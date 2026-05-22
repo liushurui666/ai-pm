@@ -8,7 +8,9 @@ import dayjs from "dayjs";
 import type { FeishuUser, Task, TaskStage } from "@/types/dashboard";
 import { OwnerAvatar, OwnerInline } from "@/components/project-management-platform/shared/owner-inline";
 import { PageTitle } from "@/components/project-management-platform/shared/page-shell";
-import { priorityColor, sortTasksForDelivery, VersionTaskBoard } from "@/components/project-management-platform/views/version-task-board";
+import { priorityColor, taskStages } from "@/components/project-management-platform/constants";
+import { TaskStageBoard } from "@/components/project-management-platform/views/task-stage-board";
+import { sortTasksForDelivery, VersionTaskBoard } from "@/components/project-management-platform/views/version-task-board";
 
 const { Text } = Typography;
 
@@ -18,8 +20,6 @@ type RequirementVersionOption = {
   versionName: string;
   project: string;
 };
-
-const taskStages: TaskStage[] = ["待处理", "进行中", "评审中", "已完成"];
 
 function normalizeIdentity(value?: string) {
   return value?.trim().toLowerCase() ?? "";
@@ -51,15 +51,17 @@ export function TasksView({
   currentUser,
   versionOptions,
   onCreate,
-  onEdit
+  onEdit,
+  onStageChange
 }: {
   tasks: Task[];
   currentUser?: FeishuUser;
   versionOptions: RequirementVersionOption[];
   onCreate: () => void;
   onEdit: (task: Task) => void;
+  onStageChange: (task: Task, stage: TaskStage) => Promise<boolean>;
 }) {
-  const [viewMode, setViewMode] = useState<"version" | "table" | "owner">("version");
+  const [viewMode, setViewMode] = useState<"stage" | "version" | "table" | "owner">("stage");
   const [onlyMine, setOnlyMine] = useState(false);
   const visibleTasks = useMemo(
     () => (onlyMine ? tasks.filter((task) => isMyTask(task, currentUser)) : tasks),
@@ -184,9 +186,10 @@ export function TasksView({
           <Space wrap>
             <Segmented
               value={viewMode}
-              onChange={(value) => setViewMode(value as "version" | "table" | "owner")}
+              onChange={(value) => setViewMode(value as "stage" | "version" | "table" | "owner")}
               options={[
-                { label: "按版本", value: "version", icon: <CheckCircleOutlined /> },
+                { label: "按阶段", value: "stage", icon: <CheckCircleOutlined /> },
+                { label: "按版本", value: "version", icon: <CalendarOutlined /> },
                 { label: "全部任务", value: "table", icon: <UnorderedListOutlined /> },
                 { label: "按负责人", value: "owner", icon: <UserOutlined /> }
               ]}
@@ -204,7 +207,9 @@ export function TasksView({
         }
       />
 
-      {viewMode === "version" ? (
+      {viewMode === "stage" ? (
+        <TaskStageBoard onlyMine={onlyMine} tasks={visibleTasks} onEdit={onEdit} onStageChange={onStageChange} />
+      ) : viewMode === "version" ? (
         <VersionTaskBoard onlyMine={onlyMine} tasks={visibleTasks} versionOptions={versionOptions} onEdit={onEdit} />
       ) : viewMode === "table" ? (
         <Card>

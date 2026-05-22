@@ -49,7 +49,8 @@ import type {
   Project,
   Requirement,
   RequirementVersion,
-  Task
+  Task,
+  TaskStage
 } from "@/types/dashboard";
 import type { CreateRecordResult, DashboardEntityType, DeleteRecordResult, DocumentAnalyzeResult } from "@/types/records";
 import { getAntdThemeConfig, ThemeToggleButton, useThemePreference } from "@/components/theme-mode";
@@ -614,6 +615,62 @@ export function ProjectManagementPlatform({
       messageApi.error(error instanceof Error ? error.message : "更新任务失败");
     } finally {
       setEditSubmitting(false);
+    }
+  }
+
+  async function handleUpdateTaskStage(task: Task, stage: TaskStage) {
+    if (!data) {
+      return false;
+    }
+
+    if (task.stage === stage) {
+      return true;
+    }
+
+    try {
+      // 阶段拖拽只改任务流转状态，其余字段沿用原任务，避免 PATCH 时丢失版本、负责人和日期。
+      const response = await fetch("/api/records", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          workspaceId: currentWorkspaceId,
+          type: "task",
+          id: task.id,
+          values: serializeCreateValues({
+            ...task,
+            stage
+          })
+        })
+      });
+      const payload = (await response.json()) as CreateRecordResult | { error?: string };
+
+      if (response.status === 401) {
+        window.location.assign("/login");
+
+        return false;
+      }
+
+      if (!response.ok) {
+        throw new Error("error" in payload ? payload.error || "更新任务阶段失败" : "更新任务阶段失败");
+      }
+
+      if ("error" in payload) {
+        throw new Error(payload.error || "更新任务阶段失败");
+      }
+
+      const result = payload as CreateRecordResult;
+
+      setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
+      void refreshDashboardState();
+      showRecordResultMessage(result.message);
+
+      return true;
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "更新任务阶段失败");
+
+      return false;
     }
   }
 
@@ -1562,6 +1619,7 @@ export function ProjectManagementPlatform({
                       versionOptions={requirementVersionOptions}
                       onCreate={() => openCreateDrawer("task")}
                       onEdit={openEditTaskDrawer}
+                      onStageChange={handleUpdateTaskStage}
                     />
                   ) : null}
                   {activeView === "bugs" ? (
