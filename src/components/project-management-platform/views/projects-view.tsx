@@ -163,7 +163,7 @@ export function ProjectsView({
           </Space>
           <h3>{selectedVersion ? selectedVersion.name : "全版本交付日历"}</h3>
           <Text type="secondary">
-            左侧按负责人分行，右侧仅展示当前版本范围内的任务横条；Bug、里程碑和版本节点不进入交付日历。
+            左侧按版本分组并固定到任务行，右侧只展示可拖拽改期的任务时间条；Bug、里程碑和版本节点不进入交付日历。
           </Text>
         </div>
         <div className="project-calendar-hero-stats">

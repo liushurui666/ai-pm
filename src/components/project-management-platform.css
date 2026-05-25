@@ -1022,8 +1022,8 @@
 }
 
 .project-scheduler-shell {
-  --project-scheduler-event-height: 94px;
-  --project-scheduler-row-gap: 8px;
+  --project-scheduler-event-height: 52px;
+  --project-scheduler-row-gap: 10px;
   --scheduler-event-success-bg: color-mix(in srgb, var(--teal) 10%, var(--surface));
   --scheduler-event-success-bar: var(--teal);
   --scheduler-event-success-border: color-mix(in srgb, var(--teal) 36%, var(--border));
@@ -1212,10 +1212,9 @@
 
 .project-scheduler-resource-label {
   display: grid;
-  gap: 4px;
   min-width: 0;
   width: 100%;
-  padding: 10px 12px;
+  height: 100%;
   line-height: 1.15;
 }
 
@@ -1229,7 +1228,7 @@
 
 .project-scheduler-resource-label strong {
   color: var(--foreground);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .project-scheduler-resource-label span {
@@ -1243,18 +1242,73 @@
   font-style: normal;
 }
 
+.project-scheduler-resource-version {
+  gap: 3px;
+  align-content: center;
+  padding: 9px 14px;
+  border-left: 3px solid var(--brand);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--brand) 14%, transparent), transparent 62%),
+    var(--surface-subtle);
+}
+
+.project-scheduler-resource-version strong {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.project-scheduler-resource-task {
+  gap: 4px;
+  align-content: center;
+  padding: 8px 14px 8px 26px;
+  background: var(--surface);
+}
+
+.project-scheduler-resource-task strong {
+  display: -webkit-box;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+}
+
 .project-scheduler-event-content {
   display: grid;
-  gap: 6px;
-  align-content: start;
+  align-content: center;
   min-width: 0;
   height: 100%;
-  padding: 8px 20px;
+  padding: 8px 22px;
 }
 
 .project-scheduler-event-main,
-.project-scheduler-event-meta {
+.project-scheduler-event-meta,
+.project-scheduler-event-time {
   min-width: 0;
+}
+
+.project-scheduler-event-time {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.project-scheduler-event-time strong,
+.project-scheduler-event-time span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-scheduler-event-time strong {
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.project-scheduler-event-time span {
+  color: color-mix(in srgb, var(--foreground) 70%, var(--muted));
+  font-size: 11px;
 }
 
 .project-scheduler-event-main {

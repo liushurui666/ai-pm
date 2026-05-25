@@ -16,7 +16,10 @@ import {
   syncDraggingEventPreview,
   syncResizingEventPreview
 } from "@/components/project-management-platform/views/project-scheduler-preview-utils";
-import { createProjectSchedulerModel } from "@/components/project-management-platform/views/project-scheduler-utils";
+import {
+  createProjectSchedulerModel,
+  isProjectSchedulerTaskResource
+} from "@/components/project-management-platform/views/project-scheduler-utils";
 
 const weekdayLabels = ["日", "一", "二", "三", "四", "五", "六"];
 const dragClickSuppressMs = 1200;
@@ -26,7 +29,7 @@ function formatHeaderDate(value: string) {
   return dayjs(value).format("YYYY-MM-DD");
 }
 
-function getScheduleChange(start: DayPilot.Date, end: DayPilot.Date, resource: DayPilot.ResourceId): ProjectCalendarScheduleChange {
+function getScheduleChange(start: DayPilot.Date, end: DayPilot.Date, owner: string): ProjectCalendarScheduleChange {
   const startDate = dayjs(start.toString()).startOf("day");
   const exclusiveEndDate = dayjs(end.toString()).subtract(1, "day").startOf("day");
   const safeEndDate = exclusiveEndDate.isBefore(startDate) ? startDate : exclusiveEndDate;
@@ -35,7 +38,7 @@ function getScheduleChange(start: DayPilot.Date, end: DayPilot.Date, resource: D
   return {
     startDate: startDate.format("YYYY-MM-DD"),
     endDate: safeEndDate.format("YYYY-MM-DD"),
-    owner: String(resource)
+    owner
   };
 }
 
@@ -193,9 +196,13 @@ export function ProjectProgressCalendar({
 
   function handleScheduleUpdate(args: DayPilot.SchedulerEventMoveArgs | DayPilot.SchedulerEventResizeArgs) {
     const item = args.e.data.tags as ProjectCalendarItem | undefined;
-    const newResource = "newResource" in args ? args.newResource : args.e.data.resource ?? item?.owner ?? "未分配";
 
     if (!item) {
+      args.preventDefault();
+      return;
+    }
+
+    if ("newResource" in args && !isProjectSchedulerTaskResource(args.newResource, item)) {
       args.preventDefault();
       return;
     }
@@ -203,7 +210,7 @@ export function ProjectProgressCalendar({
     args.async = true;
     markDragEnded();
 
-    void onRescheduleItem(item, getScheduleChange(args.newStart, args.newEnd, newResource))
+    void onRescheduleItem(item, getScheduleChange(args.newStart, args.newEnd, item.owner || "未分配"))
       .then((saved) => {
         if (!saved) {
           args.preventDefault();
@@ -238,8 +245,8 @@ export function ProjectProgressCalendar({
         resources={schedulerModel.resources}
         events={schedulerModel.events}
         cellWidth={118}
-        rowHeaderWidth={210}
-        eventHeight={94}
+        rowHeaderWidth={320}
+        eventHeight={52}
         durationBarHeight={4}
         height={760}
         heightSpec="Max"
@@ -252,8 +259,8 @@ export function ProjectProgressCalendar({
         eventTextWrappingEnabled
         floatingEvents={false}
         floatingTimeHeaders={false}
-        rowMarginTop={8}
-        rowMarginBottom={8}
+        rowMarginTop={10}
+        rowMarginBottom={10}
         theme="scheduler_default"
         onEventMove={handleScheduleUpdate}
         onEventResize={handleScheduleUpdate}

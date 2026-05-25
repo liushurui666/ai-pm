@@ -36,6 +36,17 @@ const toneColors: Record<ProjectCalendarItem["riskTone"], { background: string; 
   }
 };
 const resizeHandleWidth = 14;
+const taskResourcePrefix = "task:";
+const versionResourcePrefix = "version:";
+const taskRowHeight = 72;
+const versionRowHeight = 54;
+
+type ProjectSchedulerVersionGroup = {
+  id: string;
+  name: string;
+  project: string;
+  items: ProjectCalendarItem[];
+};
 
 function escapeHtml(value: string) {
   // DayPilot 的资源和事件支持 html 字段，统一转义可避免用户输入影响页面结构。
@@ -71,9 +82,8 @@ function compareProjectSchedulerItems(left: ProjectCalendarItem, right: ProjectC
   const leftRange = getProjectCalendarItemRange(left);
   const rightRange = getProjectCalendarItemRange(right);
 
-  // 同一负责人下用业务身份稳定排序，不把最新日期放在主排序位，避免拖拽改期后事件线位突然重排。
+  // 任务行按版本和标题稳定排序，拖拽改期后不因为日期变化导致行位跳动。
   return (
-    left.owner.localeCompare(right.owner, "zh-Hans-CN") ||
     (left.versionName || left.project).localeCompare(right.versionName || right.project, "zh-Hans-CN") ||
     left.title.localeCompare(right.title, "zh-Hans-CN") ||
     left.id.localeCompare(right.id, "zh-Hans-CN") ||
@@ -82,36 +92,99 @@ function compareProjectSchedulerItems(left: ProjectCalendarItem, right: ProjectC
   );
 }
 
-function getResourceHtml(owner: string, items: ProjectCalendarItem[]) {
-  const versions = Array.from(new Set(items.map((item) => item.versionName || item.project))).slice(0, 2);
-  const progress = Math.round(items.reduce((sum, item) => sum + item.progress, 0) / items.length);
-  const riskCount = items.filter((item) => item.riskTone === "danger").length;
+function getTaskResourceId(item: ProjectCalendarItem) {
+  return `${taskResourcePrefix}${item.id}`;
+}
 
-  // 资源行用紧凑信息密度展示负责人、版本范围和风险，保留 Scheduler 主画布空间。
+export function isProjectSchedulerTaskResource(resource: DayPilot.ResourceId, item: ProjectCalendarItem) {
+  return String(resource) === getTaskResourceId(item);
+}
+
+function getVersionGroupId(item: ProjectCalendarItem) {
+  return item.versionId || `unplanned-${item.versionName || item.project}`;
+}
+
+function createVersionGroups(items: ProjectCalendarItem[]) {
+  const groups = items.reduce<Record<string, ProjectSchedulerVersionGroup>>((nextGroups, item) => {
+    const id = getVersionGroupId(item);
+    const current = nextGroups[id] ?? {
+      id,
+      name: item.versionName || "未规划",
+      project: item.project || "跨项目",
+      items: []
+    };
+
+    return {
+      ...nextGroups,
+      [id]: {
+        ...current,
+        items: [...current.items, item]
+      }
+    };
+  }, {});
+
+  return Object.values(groups)
+    .map((group) => ({
+      ...group,
+      items: group.items.sort(compareProjectSchedulerItems)
+    }))
+    .sort((left, right) => {
+      const leftFirst = getProjectCalendarItemRange(left.items[0]);
+      const rightFirst = getProjectCalendarItemRange(right.items[0]);
+
+      return (
+        left.name.localeCompare(right.name, "zh-Hans-CN") ||
+        left.project.localeCompare(right.project, "zh-Hans-CN") ||
+        leftFirst.start.valueOf() - rightFirst.start.valueOf()
+      );
+    });
+}
+
+function getVersionResourceHtml(group: ProjectSchedulerVersionGroup) {
+  const progress = Math.round(group.items.reduce((sum, item) => sum + item.progress, 0) / group.items.length);
+  const riskCount = group.items.filter((item) => item.riskTone === "danger").length;
+
+  // 版本分组行只承担目录作用，任务本身拆到下方固定行，避免左侧出现一大块空白。
   return `
-    <div class="project-scheduler-resource-label">
-      <strong>${escapeHtml(owner)}</strong>
-      <span>${escapeHtml(versions.join(" / ") || "暂无版本")}</span>
-      <em>${progress}% · ${items.length} 项${riskCount ? ` · 风险 ${riskCount}` : ""}</em>
+    <div class="project-scheduler-resource-label project-scheduler-resource-version">
+      <strong>${escapeHtml(group.name)}</strong>
+      <span>${escapeHtml(group.project)}</span>
+      <em>${progress}% · ${group.items.length} 项任务${riskCount ? ` · 风险 ${riskCount}` : ""}</em>
+    </div>
+  `;
+}
+
+function getTaskResourceHtml(item: ProjectCalendarItem) {
+  const rangeText = getRangeText(item);
+
+  // 任务标题放到左侧固定行，右侧时间条只保留拖拽排期职责。
+  return `
+    <div class="project-scheduler-resource-label project-scheduler-resource-task">
+      <strong>${escapeHtml(item.title)}</strong>
+      <span>${escapeHtml(item.owner || "未分配")} · ${escapeHtml(item.status)} · ${item.progress}%</span>
+      <em>${escapeHtml(rangeText)}</em>
     </div>
   `;
 }
 
 function getEventHtml(item: ProjectCalendarItem) {
-  // 事件条里的信息按“类型、标题、项目/状态/进度”分层，横向压缩时也能读到重点。
+  const rangeText = getRangeText(item);
+
+  // 时间条保持轻量，避免和左侧任务标题重复，拖拽时更像在调整时间跨度。
   return `
     <div class="project-scheduler-event-content">
-      <div class="project-scheduler-event-main">
-        <span class="project-scheduler-event-type">${escapeHtml(item.type)}</span>
-        <strong>${escapeHtml(item.title)}</strong>
-      </div>
-      <div class="project-scheduler-event-meta">
-        <span>${escapeHtml(item.versionName || item.project)}</span>
-        <span>${escapeHtml(item.status)}</span>
-        <span>${item.progress}%</span>
+      <div class="project-scheduler-event-time">
+        <strong>${escapeHtml(rangeText)}</strong>
+        <span>${escapeHtml(item.status)} · ${item.progress}%</span>
       </div>
     </div>
   `;
+}
+
+function getGroupProgress(items: ProjectCalendarItem[]) {
+  const progress = Math.round(items.reduce((sum, item) => sum + item.progress, 0) / items.length);
+
+  return Number.isFinite(progress) ? progress : 0;
 }
 
 function getEventResizeAreas(item: ProjectCalendarItem): DayPilot.AreaData[] {
@@ -149,27 +222,36 @@ function getEventResizeAreas(item: ProjectCalendarItem): DayPilot.AreaData[] {
 // Scheduler 需要资源行和事件条；这里统一把项目日历条目适配成 DayPilot 可消费的数据。
 export function createProjectSchedulerModel(items: ProjectCalendarItem[], month: dayjs.Dayjs) {
   const visibleItems = items.filter((item) => isCalendarItemVisibleInMonth(item, month)).sort(compareProjectSchedulerItems);
-  const groupedByOwner = visibleItems.reduce<Record<string, ProjectCalendarItem[]>>((groups, item) => {
-    const owner = item.owner || "未分配";
-
-    groups[owner] = [...(groups[owner] ?? []), item];
-
-    return groups;
-  }, {});
-
-  const resources: DayPilot.ResourceData[] = Object.entries(groupedByOwner)
-    .map(([owner, ownerItems]) => ({
-      id: owner,
-      name: owner,
-      html: getResourceHtml(owner, ownerItems),
-      toolTip: `${owner}｜${ownerItems.length} 项事项`,
+  const versionGroups = createVersionGroups(visibleItems);
+  const resources: DayPilot.ResourceData[] = versionGroups.flatMap((group) => [
+    {
+      id: `${versionResourcePrefix}${group.id}`,
+      name: group.name,
+      cssClass: "project-scheduler-row-version",
+      height: versionRowHeight,
+      html: getVersionResourceHtml(group),
+      toolTip: `${group.name}｜${group.items.length} 项任务`,
       tags: {
-        riskCount: ownerItems.filter((item) => item.riskTone === "danger").length,
-        progress: Math.round(ownerItems.reduce((sum, item) => sum + item.progress, 0) / ownerItems.length)
+        progress: getGroupProgress(group.items),
+        riskCount: group.items.filter((item) => item.riskTone === "danger").length,
+        type: "version"
+      }
+    },
+    ...group.items.map((item) => ({
+      id: getTaskResourceId(item),
+      name: item.title,
+      cssClass: "project-scheduler-row-task",
+      height: taskRowHeight,
+      html: getTaskResourceHtml(item),
+      toolTip: `${item.title}｜${item.owner || "未分配"}｜${item.status}｜${getRangeText(item)}`,
+      tags: {
+        itemId: item.id,
+        progress: item.progress,
+        riskTone: item.riskTone,
+        type: "task"
       }
     }))
-    // 负责人行固定按名称展示，避免拖拽改期触发风险状态变化后整行顺序跳动。
-    .sort((left, right) => left.name.localeCompare(right.name, "zh-Hans-CN"));
+  ]);
 
   const events: DayPilot.EventData[] = visibleItems.map((item) => {
     const colors = toneColors[item.riskTone];
@@ -178,10 +260,10 @@ export function createProjectSchedulerModel(items: ProjectCalendarItem[], month:
     return {
       ...range,
       id: `${item.type}-${item.id}`,
-      resource: item.owner || "未分配",
+      resource: getTaskResourceId(item),
       text: `${item.type} · ${item.title}`,
       html: getEventHtml(item),
-      toolTip: `${item.type === "任务" ? "拖拽改期，点击编辑" : "点击编辑"}｜${item.title}｜${item.versionName || item.project}｜${getRangeText(item)}｜${item.status}｜${item.progress}%`,
+      toolTip: `拖拽改期，点击编辑｜${item.title}｜${item.versionName || item.project}｜${getRangeText(item)}｜${item.status}｜${item.progress}%`,
       backColor: colors.background,
       barColor: colors.bar,
       borderColor: colors.border,
