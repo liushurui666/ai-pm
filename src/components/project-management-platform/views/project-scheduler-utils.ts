@@ -66,6 +66,17 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#39;");
 }
 
+function getOwnerAvatarHtml(group: ProjectSchedulerOwnerGroup) {
+  const ownerInitial = Array.from(group.owner.trim())[0] ?? "?";
+
+  // 负责人层级用头像节点做视觉锚点，比单纯缩进更容易扫出“版本下分人”的结构。
+  if (group.avatarUrl) {
+    return `<img class="project-scheduler-owner-avatar" src="${escapeHtml(group.avatarUrl)}" alt="${escapeHtml(group.owner)}" />`;
+  }
+
+  return `<span class="project-scheduler-owner-avatar project-scheduler-owner-avatar-fallback">${escapeHtml(ownerInitial)}</span>`;
+}
+
 function getEventDateRange(item: ProjectCalendarItem, month: dayjs.Dayjs) {
   const { start, end } = getProjectCalendarItemRange(item);
   const monthStart = month.startOf("month");
@@ -182,8 +193,11 @@ function getVersionResourceHtml(group: ProjectSchedulerVersionGroup) {
   // 版本分组行是第一层目录，下面继续按负责人分组，方便看清版本内责任边界。
   return `
     <div class="project-scheduler-resource-label project-scheduler-resource-version">
-      <strong>${escapeHtml(group.name)}</strong>
-      <span>${escapeHtml(group.project)}</span>
+      <div class="project-scheduler-resource-heading">
+        <span class="project-scheduler-resource-kind">版本</span>
+        <strong>${escapeHtml(group.name)}</strong>
+      </div>
+      <span class="project-scheduler-resource-subtitle">${escapeHtml(group.project)}</span>
       <em>${progress}% · ${items.length} 项任务 · ${group.ownerGroups.length} 人${riskCount ? ` · 风险 ${riskCount}` : ""}</em>
     </div>
   `;
@@ -197,8 +211,14 @@ function getOwnerResourceHtml(group: ProjectSchedulerOwnerGroup) {
   // 负责人行是第二层目录，任务行只承载具体交付事项。
   return `
     <div class="project-scheduler-resource-label project-scheduler-resource-owner">
-      <strong>${escapeHtml(group.owner)}</strong>
-      <span>${group.items.length} 项任务 · 完成 ${doneCount}</span>
+      ${getOwnerAvatarHtml(group)}
+      <div class="project-scheduler-resource-owner-copy">
+        <div class="project-scheduler-resource-heading">
+          <span class="project-scheduler-resource-kind">负责人</span>
+          <strong>${escapeHtml(group.owner)}</strong>
+        </div>
+        <span class="project-scheduler-resource-subtitle">${group.items.length} 项任务 · 完成 ${doneCount}</span>
+      </div>
       <em>${progress}%${riskCount ? ` · 风险 ${riskCount}` : ""}</em>
     </div>
   `;
@@ -210,9 +230,14 @@ function getTaskResourceHtml(item: ProjectCalendarItem) {
   // 任务标题放到左侧固定行，右侧时间条只保留拖拽排期职责。
   return `
     <div class="project-scheduler-resource-label project-scheduler-resource-task">
-      <strong>${escapeHtml(item.title)}</strong>
-      <span>${escapeHtml(item.status)} · ${item.progress}%</span>
-      <em>${escapeHtml(rangeText)}</em>
+      <span class="project-scheduler-task-node" aria-hidden="true"></span>
+      <div class="project-scheduler-resource-task-copy">
+        <div class="project-scheduler-resource-heading">
+          <span class="project-scheduler-resource-kind">任务</span>
+          <strong>${escapeHtml(item.title)}</strong>
+        </div>
+        <span class="project-scheduler-resource-subtitle">${escapeHtml(item.status)} · ${item.progress}% · ${escapeHtml(rangeText)}</span>
+      </div>
     </div>
   `;
 }
