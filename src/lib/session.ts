@@ -73,6 +73,15 @@ export async function getSession() {
 }
 
 export function shouldUseSecureCookie(requestUrl?: string | URL, forwardedProto?: string | null) {
+  if (requestUrl) {
+    const url = requestUrl instanceof URL ? requestUrl : new URL(requestUrl);
+
+    // 本地 http 调试时不设置 Secure，避免 OAuth 回跳后浏览器不回传会话 Cookie。
+    if (url.protocol === "http:" && ["localhost", "127.0.0.1", "::1"].includes(url.hostname)) {
+      return false;
+    }
+  }
+
   const normalizedProto = forwardedProto?.split(",")[0]?.trim().toLowerCase();
 
   if (normalizedProto) {

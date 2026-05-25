@@ -9,7 +9,8 @@ const { Title, Text, Paragraph } = Typography;
 
 const errorMessageMap: Record<string, string> = {
   missing_feishu_config: "飞书登录尚未配置，请先补充 FEISHU_APP_ID 和 FEISHU_APP_SECRET。",
-  invalid_state: "登录状态校验失败，请重新发起飞书登录。"
+  invalid_state: "登录状态校验失败，请重新发起飞书登录。",
+  session_expired: "登录会话已失效，请重新使用飞书登录。"
 };
 
 export function FeishuLoginPage({ configured, error }: { configured: boolean; error?: string }) {

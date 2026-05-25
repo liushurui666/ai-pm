@@ -6,6 +6,13 @@ export type PeopleResponse = {
   error?: string;
 };
 
+function redirectToLogin() {
+  const loginUrl = new URL("/login", window.location.origin);
+
+  loginUrl.searchParams.set("error", "session_expired");
+  window.location.assign(loginUrl.toString());
+}
+
 // 统一封装仪表盘读取逻辑，确保工作区切换和首屏加载使用同一套登录态处理。
 export async function fetchDashboardFromApi(workspaceId?: string | null) {
   const url = new URL("/api/dashboard", window.location.origin);
@@ -14,13 +21,17 @@ export async function fetchDashboardFromApi(workspaceId?: string | null) {
     url.searchParams.set("workspaceId", workspaceId);
   }
 
-  const response = await fetch(url.toString());
+  // 明确携带同源 Cookie，避免登录后首屏接口因会话未带上而停留在空加载态。
+  const response = await fetch(url.toString(), {
+    cache: "no-store",
+    credentials: "same-origin"
+  });
   const nextData = (await response.json()) as DashboardData & { error?: string };
 
   if (response.status === 401) {
-    window.location.assign("/login");
+    redirectToLogin();
 
-    return null;
+    throw new Error("登录状态已失效，请重新登录。");
   }
 
   if (!response.ok) {
