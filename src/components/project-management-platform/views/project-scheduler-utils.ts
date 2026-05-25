@@ -38,14 +38,22 @@ const toneColors: Record<ProjectCalendarItem["riskTone"], { background: string; 
 const resizeHandleWidth = 14;
 const taskResourcePrefix = "task:";
 const versionResourcePrefix = "version:";
+const ownerResourcePrefix = "owner:";
 const taskRowHeight = 72;
+const ownerRowHeight = 44;
 const versionRowHeight = 54;
+
+type ProjectSchedulerOwnerGroup = {
+  owner: string;
+  avatarUrl?: string;
+  items: ProjectCalendarItem[];
+};
 
 type ProjectSchedulerVersionGroup = {
   id: string;
   name: string;
   project: string;
-  items: ProjectCalendarItem[];
+  ownerGroups: ProjectSchedulerOwnerGroup[];
 };
 
 function escapeHtml(value: string) {
@@ -111,14 +119,28 @@ function createVersionGroups(items: ProjectCalendarItem[]) {
       id,
       name: item.versionName || "未规划",
       project: item.project || "跨项目",
+      ownerGroups: []
+    };
+    const owner = item.owner || "未分配";
+    const ownerGroup = current.ownerGroups.find((group) => group.owner === owner) ?? {
+      owner,
+      avatarUrl: item.ownerAvatarUrl,
       items: []
+    };
+    const nextOwnerGroup = {
+      ...ownerGroup,
+      avatarUrl: ownerGroup.avatarUrl || item.ownerAvatarUrl,
+      items: [...ownerGroup.items, item]
     };
 
     return {
       ...nextGroups,
       [id]: {
         ...current,
-        items: [...current.items, item]
+        ownerGroups: [
+          ...current.ownerGroups.filter((group) => group.owner !== owner),
+          nextOwnerGroup
+        ]
       }
     };
   }, {});
@@ -126,30 +148,58 @@ function createVersionGroups(items: ProjectCalendarItem[]) {
   return Object.values(groups)
     .map((group) => ({
       ...group,
-      items: group.items.sort(compareProjectSchedulerItems)
+      ownerGroups: group.ownerGroups
+        .map((ownerGroup) => ({
+          ...ownerGroup,
+          items: ownerGroup.items.sort(compareProjectSchedulerItems)
+        }))
+        .sort((left, right) => {
+          const leftTitle = left.items[0]?.title ?? left.owner;
+          const rightTitle = right.items[0]?.title ?? right.owner;
+
+          return left.owner.localeCompare(right.owner, "zh-Hans-CN") || leftTitle.localeCompare(rightTitle, "zh-Hans-CN");
+        })
     }))
     .sort((left, right) => {
-      const leftFirst = getProjectCalendarItemRange(left.items[0]);
-      const rightFirst = getProjectCalendarItemRange(right.items[0]);
+      const leftFirstItem = left.ownerGroups[0]?.items[0];
+      const rightFirstItem = right.ownerGroups[0]?.items[0];
+      const leftFirstStart = leftFirstItem ? getProjectCalendarItemRange(leftFirstItem).start.valueOf() : 0;
+      const rightFirstStart = rightFirstItem ? getProjectCalendarItemRange(rightFirstItem).start.valueOf() : 0;
 
       return (
         left.name.localeCompare(right.name, "zh-Hans-CN") ||
         left.project.localeCompare(right.project, "zh-Hans-CN") ||
-        leftFirst.start.valueOf() - rightFirst.start.valueOf()
+        leftFirstStart - rightFirstStart
       );
     });
 }
 
 function getVersionResourceHtml(group: ProjectSchedulerVersionGroup) {
-  const progress = Math.round(group.items.reduce((sum, item) => sum + item.progress, 0) / group.items.length);
-  const riskCount = group.items.filter((item) => item.riskTone === "danger").length;
+  const items = group.ownerGroups.flatMap((ownerGroup) => ownerGroup.items);
+  const progress = Math.round(items.reduce((sum, item) => sum + item.progress, 0) / items.length);
+  const riskCount = items.filter((item) => item.riskTone === "danger").length;
 
-  // 版本分组行只承担目录作用，任务本身拆到下方固定行，避免左侧出现一大块空白。
+  // 版本分组行是第一层目录，下面继续按负责人分组，方便看清版本内责任边界。
   return `
     <div class="project-scheduler-resource-label project-scheduler-resource-version">
       <strong>${escapeHtml(group.name)}</strong>
       <span>${escapeHtml(group.project)}</span>
-      <em>${progress}% · ${group.items.length} 项任务${riskCount ? ` · 风险 ${riskCount}` : ""}</em>
+      <em>${progress}% · ${items.length} 项任务 · ${group.ownerGroups.length} 人${riskCount ? ` · 风险 ${riskCount}` : ""}</em>
+    </div>
+  `;
+}
+
+function getOwnerResourceHtml(group: ProjectSchedulerOwnerGroup) {
+  const progress = getGroupProgress(group.items);
+  const doneCount = group.items.filter((item) => item.progress >= 100).length;
+  const riskCount = group.items.filter((item) => item.riskTone === "danger").length;
+
+  // 负责人行是第二层目录，任务行只承载具体交付事项。
+  return `
+    <div class="project-scheduler-resource-label project-scheduler-resource-owner">
+      <strong>${escapeHtml(group.owner)}</strong>
+      <span>${group.items.length} 项任务 · 完成 ${doneCount}</span>
+      <em>${progress}%${riskCount ? ` · 风险 ${riskCount}` : ""}</em>
     </div>
   `;
 }
@@ -161,7 +211,7 @@ function getTaskResourceHtml(item: ProjectCalendarItem) {
   return `
     <div class="project-scheduler-resource-label project-scheduler-resource-task">
       <strong>${escapeHtml(item.title)}</strong>
-      <span>${escapeHtml(item.owner || "未分配")} · ${escapeHtml(item.status)} · ${item.progress}%</span>
+      <span>${escapeHtml(item.status)} · ${item.progress}%</span>
       <em>${escapeHtml(rangeText)}</em>
     </div>
   `;
@@ -230,27 +280,43 @@ export function createProjectSchedulerModel(items: ProjectCalendarItem[], month:
       cssClass: "project-scheduler-row-version",
       height: versionRowHeight,
       html: getVersionResourceHtml(group),
-      toolTip: `${group.name}｜${group.items.length} 项任务`,
+      toolTip: `${group.name}｜${group.ownerGroups.length} 人负责`,
       tags: {
-        progress: getGroupProgress(group.items),
-        riskCount: group.items.filter((item) => item.riskTone === "danger").length,
+        progress: getGroupProgress(group.ownerGroups.flatMap((ownerGroup) => ownerGroup.items)),
+        riskCount: group.ownerGroups.flatMap((ownerGroup) => ownerGroup.items).filter((item) => item.riskTone === "danger").length,
         type: "version"
       }
     },
-    ...group.items.map((item) => ({
-      id: getTaskResourceId(item),
-      name: item.title,
-      cssClass: "project-scheduler-row-task",
-      height: taskRowHeight,
-      html: getTaskResourceHtml(item),
-      toolTip: `${item.title}｜${item.owner || "未分配"}｜${item.status}｜${getRangeText(item)}`,
-      tags: {
-        itemId: item.id,
-        progress: item.progress,
-        riskTone: item.riskTone,
-        type: "task"
-      }
-    }))
+    ...group.ownerGroups.flatMap((ownerGroup) => [
+      {
+        id: `${ownerResourcePrefix}${group.id}:${ownerGroup.owner}`,
+        name: ownerGroup.owner,
+        cssClass: "project-scheduler-row-owner",
+        height: ownerRowHeight,
+        html: getOwnerResourceHtml(ownerGroup),
+        toolTip: `${ownerGroup.owner}｜${ownerGroup.items.length} 项任务`,
+        tags: {
+          owner: ownerGroup.owner,
+          progress: getGroupProgress(ownerGroup.items),
+          riskCount: ownerGroup.items.filter((item) => item.riskTone === "danger").length,
+          type: "owner"
+        }
+      },
+      ...ownerGroup.items.map((item) => ({
+        id: getTaskResourceId(item),
+        name: item.title,
+        cssClass: "project-scheduler-row-task",
+        height: taskRowHeight,
+        html: getTaskResourceHtml(item),
+        toolTip: `${item.title}｜${item.owner || "未分配"}｜${item.status}｜${getRangeText(item)}`,
+        tags: {
+          itemId: item.id,
+          progress: item.progress,
+          riskTone: item.riskTone,
+          type: "task"
+        }
+      }))
+    ])
   ]);
 
   const events: DayPilot.EventData[] = visibleItems.map((item) => {

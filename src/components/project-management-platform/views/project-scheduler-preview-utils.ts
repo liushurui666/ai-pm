@@ -20,6 +20,15 @@ function setStylePropertyOnce(element: HTMLElement, propertyName: string, value:
   }
 }
 
+function getSourceTop(source: HTMLElement) {
+  return source.style.getPropertyValue("top") || `${source.offsetTop}px`;
+}
+
+function lockShadowToSourceRow(shadow: HTMLElement, source: HTMLElement) {
+  // 任务排期只允许横向改时间，拖拽预览的纵向位置必须锁回源任务行，避免中间态看起来像换了负责人或任务。
+  setStylePropertyOnce(shadow, "top", getSourceTop(source));
+}
+
 function applyShadowInnerStyle(element: HTMLElement, sourceInnerStyle: string, cursor: string) {
   if (element.dataset.projectInnerStyle !== sourceInnerStyle) {
     element.setAttribute("style", sourceInnerStyle);
@@ -70,6 +79,7 @@ function syncShadowContent({
   cursor,
   mode,
   root,
+  sourceElement,
   sourceInnerHtml,
   sourceInnerStyle,
   sourceKey
@@ -77,6 +87,7 @@ function syncShadowContent({
   cursor: string;
   mode: "drag" | "resize";
   root: HTMLElement;
+  sourceElement: HTMLElement;
   sourceInnerHtml: string;
   sourceInnerStyle: string;
   sourceKey: string;
@@ -88,13 +99,14 @@ function syncShadowContent({
     return false;
   }
 
-  // DayPilot 会创建跟随鼠标的 shadow；这里只复用它的位置，不再额外改线位，避免拖拽时整条任务被推错行。
+  // DayPilot 会创建跟随鼠标的 shadow；这里保留横向位移，同时把纵向位置固定到源行。
   addClassOnce(shadow, "project-scheduler-drag-card");
   addClassOnce(shadowInner, "project-scheduler-drag-card-inner");
   if (mode === "resize") {
     addClassOnce(shadow, "project-scheduler-resize-card");
     addClassOnce(shadowInner, "project-scheduler-resize-card-inner");
   }
+  lockShadowToSourceRow(shadow, sourceElement);
   setStylePropertyOnce(shadow, "opacity", "1");
   setStylePropertyOnce(shadow, "transform", "none");
 
@@ -123,6 +135,7 @@ export function syncDraggingEventPreview(root: HTMLElement) {
     cursor: "grabbing",
     mode: "drag",
     root,
+    sourceElement: source,
     sourceInnerHtml: sourceInner.innerHTML,
     sourceInnerStyle: sourceInner.getAttribute("style") ?? "",
     sourceKey: getEventPreviewKey(source, sourceInner)
@@ -138,6 +151,7 @@ export function syncResizingEventPreview(root: HTMLElement, preview: ResizePrevi
     cursor: preview.cursor,
     mode: "resize",
     root,
+    sourceElement: preview.eventElement,
     sourceInnerHtml: preview.innerHtml,
     sourceInnerStyle: preview.innerStyle,
     sourceKey: preview.sourceKey

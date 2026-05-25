@@ -1141,6 +1141,7 @@
 
 /* DayPilot 的拖拽定位层默认是空阴影，这里让它承载原卡片内容，视觉上就是直接拖动任务条。 */
 .project-scheduler-shell .scheduler_default_shadow {
+  z-index: 9;
   overflow: hidden;
   height: var(--project-scheduler-event-height) !important;
   border: 0 !important;
@@ -1179,7 +1180,7 @@
 
 .project-scheduler-shell .scheduler_default_event_moving_source,
 .project-scheduler-shell .project-scheduler-event-resizing-source {
-  opacity: 0 !important;
+  opacity: 0.22 !important;
 }
 
 .project-scheduler-cell-weekend .scheduler_default_cell_inner {
@@ -1257,10 +1258,29 @@
   font-weight: 800;
 }
 
+.project-scheduler-resource-owner {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  align-content: center;
+  padding: 8px 14px 8px 26px;
+  border-left: 3px solid color-mix(in srgb, var(--teal) 68%, var(--brand));
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--teal) 11%, transparent), transparent 58%),
+    var(--surface);
+}
+
+.project-scheduler-resource-owner strong {
+  font-weight: 760;
+}
+
+.project-scheduler-resource-owner em {
+  justify-self: end;
+}
+
 .project-scheduler-resource-task {
   gap: 4px;
   align-content: center;
-  padding: 8px 14px 8px 26px;
+  padding: 8px 14px 8px 44px;
   background: var(--surface);
 }
 
