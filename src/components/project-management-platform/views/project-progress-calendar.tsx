@@ -245,7 +245,14 @@ export function ProjectProgressCalendar({
         resources={schedulerModel.resources}
         events={schedulerModel.events}
         cellWidth={118}
-        rowHeaderWidth={400}
+        rowHeaderWidth={560}
+        cornerHtml={`
+          <div class="project-scheduler-resource-corner">
+            <span>版本</span>
+            <span>负责人</span>
+            <span>任务</span>
+          </div>
+        `}
         eventHeight={52}
         durationBarHeight={4}
         height={760}

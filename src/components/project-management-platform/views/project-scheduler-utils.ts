@@ -192,9 +192,8 @@ function getVersionResourceHtml(group: ProjectSchedulerVersionGroup) {
 
   // 版本分组行是第一层目录，下面继续按负责人分组，方便看清版本内责任边界。
   return `
-    <div class="project-scheduler-resource-label project-scheduler-resource-version">
-      <span class="project-scheduler-level-marker project-scheduler-level-marker-version">1</span>
-      <div class="project-scheduler-resource-content">
+    <div class="project-scheduler-resource-label project-scheduler-resource-table project-scheduler-resource-version">
+      <div class="project-scheduler-resource-cell project-scheduler-resource-cell-version">
         <div class="project-scheduler-resource-heading">
           <span class="project-scheduler-resource-kind">版本</span>
           <strong>${escapeHtml(group.name)}</strong>
@@ -202,6 +201,8 @@ function getVersionResourceHtml(group: ProjectSchedulerVersionGroup) {
         <span class="project-scheduler-resource-subtitle">${escapeHtml(group.project)}</span>
         <em>${progress}% · ${items.length} 项任务 · ${group.ownerGroups.length} 人${riskCount ? ` · 风险 ${riskCount}` : ""}</em>
       </div>
+      <div class="project-scheduler-resource-cell project-scheduler-resource-cell-owner project-scheduler-resource-empty-cell"></div>
+      <div class="project-scheduler-resource-cell project-scheduler-resource-cell-task project-scheduler-resource-empty-cell"></div>
     </div>
   `;
 }
@@ -213,10 +214,9 @@ function getOwnerResourceHtml(group: ProjectSchedulerOwnerGroup) {
 
   // 负责人行是第二层目录，任务行只承载具体交付事项。
   return `
-    <div class="project-scheduler-resource-label project-scheduler-resource-owner">
-      <span class="project-scheduler-tree-connector project-scheduler-tree-connector-owner" aria-hidden="true"></span>
-      <div class="project-scheduler-owner-card">
-        <span class="project-scheduler-level-marker project-scheduler-level-marker-owner">2</span>
+    <div class="project-scheduler-resource-label project-scheduler-resource-table project-scheduler-resource-owner">
+      <div class="project-scheduler-resource-cell project-scheduler-resource-cell-version project-scheduler-resource-empty-cell"></div>
+      <div class="project-scheduler-resource-cell project-scheduler-resource-cell-owner">
         ${getOwnerAvatarHtml(group)}
         <div class="project-scheduler-resource-owner-copy">
           <div class="project-scheduler-resource-heading">
@@ -227,6 +227,7 @@ function getOwnerResourceHtml(group: ProjectSchedulerOwnerGroup) {
         </div>
         <em>${progress}%${riskCount ? ` · 风险 ${riskCount}` : ""}</em>
       </div>
+      <div class="project-scheduler-resource-cell project-scheduler-resource-cell-task project-scheduler-resource-empty-cell"></div>
     </div>
   `;
 }
@@ -236,10 +237,10 @@ function getTaskResourceHtml(item: ProjectCalendarItem) {
 
   // 任务标题放到左侧固定行，右侧时间条只保留拖拽排期职责。
   return `
-    <div class="project-scheduler-resource-label project-scheduler-resource-task">
-      <span class="project-scheduler-tree-connector project-scheduler-tree-connector-task" aria-hidden="true"></span>
-      <div class="project-scheduler-task-card">
-        <span class="project-scheduler-level-marker project-scheduler-level-marker-task">3</span>
+    <div class="project-scheduler-resource-label project-scheduler-resource-table project-scheduler-resource-task">
+      <div class="project-scheduler-resource-cell project-scheduler-resource-cell-version project-scheduler-resource-empty-cell"></div>
+      <div class="project-scheduler-resource-cell project-scheduler-resource-cell-owner project-scheduler-resource-empty-cell"></div>
+      <div class="project-scheduler-resource-cell project-scheduler-resource-cell-task">
         <span class="project-scheduler-task-node" aria-hidden="true"></span>
         <div class="project-scheduler-resource-task-copy">
           <div class="project-scheduler-resource-heading">
