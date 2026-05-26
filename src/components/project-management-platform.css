@@ -1574,11 +1574,15 @@
   margin: 0;
   pointer-events: none;
   transform-origin: top left;
+  will-change: transform;
   border-color: color-mix(in srgb, var(--brand) 46%, var(--border));
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--brand) 13%, transparent), transparent 74%),
     var(--surface);
-  box-shadow: 0 18px 36px color-mix(in srgb, var(--brand) 20%, transparent);
+  box-shadow: 0 14px 30px color-mix(in srgb, var(--brand) 18%, transparent);
+  color: var(--foreground);
+  font-size: 12px;
+  line-height: 1.15;
   opacity: 0.96;
 }
 
@@ -1609,6 +1613,48 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   white-space: normal;
+}
+
+/* 拖拽浮层挂在 body 下，需自带任务行字号，避免脱离左侧容器后字体被放大。 */
+.project-scheduler-row-drag-preview,
+.project-scheduler-row-drag-preview * {
+  box-sizing: border-box;
+}
+
+.project-scheduler-row-drag-preview .project-scheduler-resource-heading,
+.project-scheduler-row-drag-preview .project-scheduler-resource-task-copy,
+.project-scheduler-row-drag-preview .project-scheduler-resource-subtitle {
+  min-width: 0;
+}
+
+.project-scheduler-row-drag-preview strong,
+.project-scheduler-row-drag-preview span,
+.project-scheduler-row-drag-preview em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-scheduler-row-drag-preview strong {
+  display: -webkit-box;
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+}
+
+.project-scheduler-row-drag-preview .project-scheduler-resource-kind {
+  font-size: 10px;
+  line-height: 1;
+}
+
+.project-scheduler-row-drag-preview .project-scheduler-resource-subtitle {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.1;
+  white-space: nowrap;
 }
 
 .project-scheduler-event-content {
