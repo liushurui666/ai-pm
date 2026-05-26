@@ -1508,10 +1508,12 @@
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--brand) 7%, transparent), transparent 72%),
     var(--surface);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease, transform 0.16s ease;
 }
 
 .project-scheduler-row-sorting {
   cursor: ns-resize;
+  user-select: none;
 }
 
 .project-scheduler-row-sort-handle {
@@ -1540,7 +1542,7 @@
 
 .project-scheduler-resource-panel-task.project-scheduler-row-sort-active {
   border-style: dashed;
-  opacity: 0.58;
+  opacity: 0.18;
 }
 
 .project-scheduler-resource-panel-task.project-scheduler-row-drop-before::before,
@@ -1562,6 +1564,26 @@
 
 .project-scheduler-resource-panel-task.project-scheduler-row-drop-after::after {
   bottom: -7px;
+}
+
+.project-scheduler-row-drag-preview {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9999;
+  margin: 0;
+  pointer-events: none;
+  transform-origin: top left;
+  border-color: color-mix(in srgb, var(--brand) 46%, var(--border));
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--brand) 13%, transparent), transparent 74%),
+    var(--surface);
+  box-shadow: 0 18px 36px color-mix(in srgb, var(--brand) 20%, transparent);
+  opacity: 0.96;
+}
+
+.project-scheduler-row-drag-preview .project-scheduler-row-sort-handle {
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
 }
 
 .project-scheduler-task-node {

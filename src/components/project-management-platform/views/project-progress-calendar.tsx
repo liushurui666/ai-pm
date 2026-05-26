@@ -19,24 +19,13 @@ import {
 import {
   createProjectSchedulerModel,
   isProjectSchedulerTaskResource,
-  type ProjectSchedulerTaskOrder,
-  type ProjectSchedulerTaskOrderChange
+  type ProjectSchedulerTaskOrder
 } from "@/components/project-management-platform/views/project-scheduler-utils";
+import { attachProjectSchedulerRowSort } from "@/components/project-management-platform/views/project-scheduler-row-sort";
 
 const weekdayLabels = ["日", "一", "二", "三", "四", "五", "六"];
 const dragClickSuppressMs = 1200;
 const dragMoveThreshold = 6;
-
-type RowSortDragState = {
-  activeId: string;
-  moved: boolean;
-  owner: string;
-  overId: string | null;
-  placement: ProjectSchedulerTaskOrderChange["placement"];
-  sourcePanel: HTMLElement;
-  startY: number;
-};
-type RowSortPointerEvent = PointerEvent | MouseEvent;
 
 function formatHeaderDate(value: string) {
   return dayjs(value).format("YYYY-MM-DD");
@@ -68,13 +57,12 @@ export function ProjectProgressCalendar({
   month: dayjs.Dayjs;
   onOpenItem: (item: ProjectCalendarItem) => void;
   onRescheduleItem: (item: ProjectCalendarItem, change: ProjectCalendarScheduleChange) => Promise<boolean>;
-  onTaskOrderChange: (change: ProjectSchedulerTaskOrderChange) => void;
+  onTaskOrderChange: Parameters<typeof attachProjectSchedulerRowSort>[0]["onTaskOrderChange"];
   taskOrderByOwner: ProjectSchedulerTaskOrder;
 }) {
   const shellRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef({ active: false, lastEndedAt: 0 });
   const pointerDragRef = useRef({ active: false, moved: false, startX: 0, startY: 0 });
-  const rowSortDragRef = useRef<RowSortDragState | null>(null);
   const onTaskOrderChangeRef = useRef(onTaskOrderChange);
   const resizePreviewRef = useRef<ResizePreviewSource | null>(null);
   const schedulerModel = createProjectSchedulerModel(items, month, taskOrderByOwner);
@@ -226,153 +214,11 @@ export function ProjectProgressCalendar({
       return undefined;
     }
 
-    const shellElement: HTMLDivElement = schedulerShell;
-
-    function getTaskPanel(target: EventTarget | null) {
-      return target instanceof HTMLElement
-        ? target.closest<HTMLElement>(".project-scheduler-resource-panel-task")
-        : null;
-    }
-
-    function clearDropTarget() {
-      shellElement
-        .querySelectorAll(".project-scheduler-row-drop-before, .project-scheduler-row-drop-after")
-        .forEach((node) => {
-          node.classList.remove("project-scheduler-row-drop-before", "project-scheduler-row-drop-after");
-        });
-    }
-
-    function resetRowSortDrag() {
-      const state = rowSortDragRef.current;
-
-      clearDropTarget();
-      state?.sourcePanel.classList.remove("project-scheduler-row-sort-active");
-      shellElement.classList.remove("project-scheduler-row-sorting");
-      rowSortDragRef.current = null;
-    }
-
-    function findPanelAtPointer(event: RowSortPointerEvent) {
-      return document
-        .elementsFromPoint(event.clientX, event.clientY)
-        .map((element) => element.closest?.(".project-scheduler-resource-panel-task") ?? null)
-        .find((element): element is HTMLElement => element instanceof HTMLElement) ?? null;
-    }
-
-    function updateDropTarget(event: RowSortPointerEvent) {
-      const state = rowSortDragRef.current;
-
-      if (!state) {
-        return;
-      }
-
-      const targetPanel = findPanelAtPointer(event);
-      const targetId = targetPanel?.dataset.projectTaskId;
-      const targetOwner = targetPanel?.dataset.projectTaskOwner;
-
-      clearDropTarget();
-
-      if (!targetPanel || !targetId || !targetOwner || targetId === state.activeId || targetOwner !== state.owner) {
-        state.overId = null;
-        return;
-      }
-
-      const targetRect = targetPanel.getBoundingClientRect();
-      const placement: ProjectSchedulerTaskOrderChange["placement"] =
-        event.clientY > targetRect.top + targetRect.height / 2 ? "after" : "before";
-
-      targetPanel.classList.add(placement === "after" ? "project-scheduler-row-drop-after" : "project-scheduler-row-drop-before");
-      state.overId = targetId;
-      state.placement = placement;
-    }
-
-    function handlePointerDown(event: RowSortPointerEvent) {
-      if (rowSortDragRef.current) {
-        return;
-      }
-
-      const handle = event.target instanceof HTMLElement
-        ? event.target.closest<HTMLElement>(".project-scheduler-row-sort-handle")
-        : null;
-
-      if (!handle) {
-        return;
-      }
-
-      const sourcePanel = getTaskPanel(handle);
-      const activeId = sourcePanel?.dataset.projectTaskId;
-      const owner = sourcePanel?.dataset.projectTaskOwner;
-
-      if (!sourcePanel || !activeId || !owner) {
-        return;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-      rowSortDragRef.current = {
-        activeId,
-        moved: false,
-        owner,
-        overId: null,
-        placement: "before",
-        sourcePanel,
-        startY: event.clientY
-      };
-      sourcePanel.classList.add("project-scheduler-row-sort-active");
-      shellElement.classList.add("project-scheduler-row-sorting");
-    }
-
-    function handlePointerMove(event: RowSortPointerEvent) {
-      const state = rowSortDragRef.current;
-
-      if (!state) {
-        return;
-      }
-
-      event.preventDefault();
-
-      if (!state.moved && Math.abs(event.clientY - state.startY) > dragMoveThreshold) {
-        // 手动排序只监听竖向移动，避免轻点手柄时误触发排序。
-        state.moved = true;
-      }
-
-      if (state.moved) {
-        updateDropTarget(event);
-      }
-    }
-
-    function handlePointerEnd() {
-      const state = rowSortDragRef.current;
-
-      if (state?.moved && state.overId) {
-        onTaskOrderChangeRef.current({
-          activeId: state.activeId,
-          overId: state.overId,
-          owner: state.owner,
-          placement: state.placement
-        });
-      }
-
-      resetRowSortDrag();
-    }
-
-    shellElement.addEventListener("pointerdown", handlePointerDown);
-    shellElement.addEventListener("mousedown", handlePointerDown);
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("mousemove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerEnd);
-    window.addEventListener("mouseup", handlePointerEnd);
-    window.addEventListener("pointercancel", handlePointerEnd);
-
-    return () => {
-      resetRowSortDrag();
-      shellElement.removeEventListener("pointerdown", handlePointerDown);
-      shellElement.removeEventListener("mousedown", handlePointerDown);
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("mousemove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerEnd);
-      window.removeEventListener("mouseup", handlePointerEnd);
-      window.removeEventListener("pointercancel", handlePointerEnd);
-    };
+    return attachProjectSchedulerRowSort({
+      dragMoveThreshold,
+      onTaskOrderChange: (change) => onTaskOrderChangeRef.current(change),
+      shell: schedulerShell
+    });
   }, []);
 
   function handleScheduleUpdate(args: DayPilot.SchedulerEventMoveArgs | DayPilot.SchedulerEventResizeArgs) {
