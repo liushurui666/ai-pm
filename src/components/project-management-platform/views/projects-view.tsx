@@ -4,15 +4,13 @@ import { Button, DatePicker, Select, Space, Statistic, Tag, Typography } from "a
 import { CalendarOutlined, FolderOpenOutlined, PlusOutlined, UserOutlined, WarningOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { useMemo, useState } from "react";
-import type { Project, RequirementVersion, Risk, Task } from "@/types/dashboard";
+import type { Project, RequirementVersion, Task } from "@/types/dashboard";
 import type { RequirementVersionOption } from "@/components/project-management-platform/types";
 import { TableView } from "@/components/project-management-platform/shared/page-shell";
 import {
   allProjectCalendarVersionsValue,
   createProjectDelaySummary,
-  createPersonProgress,
   createProjectCalendarItems,
-  createProjectRiskHints,
   getProjectCalendarFallbackMonth,
   getVersionDateRange,
   getVersionScopeProjects,
@@ -22,14 +20,12 @@ import {
 } from "@/components/project-management-platform/views/project-calendar-utils";
 import { ProjectDelaySummary } from "@/components/project-management-platform/views/project-delay-summary";
 import { ProjectProgressCalendar } from "@/components/project-management-platform/views/project-progress-calendar";
-import { ProjectProgressPanel } from "@/components/project-management-platform/views/project-progress-panel";
 
 const { Text } = Typography;
 
-// 项目视图以版本为交付维度，把每个人的任务排期放回日期上下文里看。
+// 项目视图把版本收进筛选器，主排期表只保留负责人和任务两层，尽量释放时间轴宽度。
 export function ProjectsView({
   projects,
-  risks,
   tasks,
   versionFilter,
   versionOptions,
@@ -41,7 +37,6 @@ export function ProjectsView({
   onVersionFilterChange
 }: {
   projects: Project[];
-  risks: Risk[];
   tasks: Task[];
   versionFilter: string;
   versionOptions: RequirementVersionOption[];
@@ -92,7 +87,6 @@ export function ProjectsView({
     () => calendarItems.filter((item) => isCalendarItemVisibleInMonth(item, displayedCalendarMonth)),
     [calendarItems, displayedCalendarMonth]
   );
-  const peopleProgress = useMemo(() => createPersonProgress(monthItems), [monthItems]);
   const delaySummary = useMemo(
     () =>
       createProjectDelaySummary({
@@ -101,10 +95,6 @@ export function ProjectsView({
         versions
       }),
     [calendarItems, selectedVersion?.id, versions]
-  );
-  const riskHints = useMemo(
-    () => createProjectRiskHints(risks, versions, selectedVersion?.id),
-    [risks, selectedVersion?.id, versions]
   );
   const versionRange = getVersionDateRange(versions, selectedVersion?.id);
   const doneCount = monthItems.filter((item) => item.progress >= 100).length;
@@ -119,21 +109,25 @@ export function ProjectsView({
       icon={<FolderOpenOutlined />}
       extra={
         <Space wrap className="project-calendar-toolbar">
-          <Select
-            className="project-calendar-project-select"
-            value={selectedVersionId}
-            onChange={onVersionFilterChange}
-            placeholder="选择版本"
-            showSearch
-            optionFilterProp="label"
-            options={[
-              { value: allProjectCalendarVersionsValue, label: "全部版本" },
-              ...versionOptions.map((version) => ({
-                value: version.value,
-                label: version.label
-              }))
-            ]}
-          />
+          <div className="project-calendar-filter-field">
+            <Text type="secondary">版本</Text>
+            <Select
+              className="project-calendar-project-select"
+              value={selectedVersionId}
+              onChange={onVersionFilterChange}
+              placeholder="选择版本"
+              showSearch
+              optionFilterProp="label"
+              aria-label="版本筛选"
+              options={[
+                { value: allProjectCalendarVersionsValue, label: "全部版本" },
+                ...versionOptions.map((version) => ({
+                  value: version.value,
+                  label: version.label
+                }))
+              ]}
+            />
+          </div>
           <DatePicker
             picker="month"
             value={displayedCalendarMonth}
@@ -163,7 +157,7 @@ export function ProjectsView({
           </Space>
           <h3>{selectedVersion ? selectedVersion.name : "全版本交付日历"}</h3>
           <Text type="secondary">
-            左侧按版本、负责人、任务三层固定分组，右侧只展示可横向拖拽改期的任务时间条；Bug、里程碑和版本节点不进入交付日历。
+            版本已收进筛选器，左侧只按负责人固定分组，右侧尽量留给可横向拖拽改期的任务时间条。
           </Text>
         </div>
         <div className="project-calendar-hero-stats">
@@ -181,7 +175,6 @@ export function ProjectsView({
           onOpenItem={onOpenCalendarItem}
           onRescheduleItem={onRescheduleCalendarItem}
         />
-        <ProjectProgressPanel people={peopleProgress} risks={riskHints} />
       </div>
     </TableView>
   );

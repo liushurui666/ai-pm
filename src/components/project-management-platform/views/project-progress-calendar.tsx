@@ -244,12 +244,11 @@ export function ProjectProgressCalendar({
         ]}
         resources={schedulerModel.resources}
         events={schedulerModel.events}
-        cellWidth={118}
-        rowHeaderWidth={470}
+        cellWidth={96}
+        rowHeaderWidth={360}
         eventHeight={52}
         durationBarHeight={4}
-        height={760}
-        heightSpec="Max"
+        heightSpec="Auto"
         eventBorderRadius={8}
         eventMoveHandling="Update"
         eventResizeHandling="Update"
@@ -259,8 +258,8 @@ export function ProjectProgressCalendar({
         eventTextWrappingEnabled
         floatingEvents={false}
         floatingTimeHeaders={false}
-        rowMarginTop={10}
-        rowMarginBottom={10}
+        rowMarginTop={6}
+        rowMarginBottom={6}
         theme="scheduler_default"
         onEventMove={handleScheduleUpdate}
         onEventResize={handleScheduleUpdate}

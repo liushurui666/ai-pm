@@ -1600,7 +1600,6 @@ export function ProjectManagementPlatform({
                   {activeView === "projects" ? (
                     <ProjectsView
                       projects={filteredProjects}
-                      risks={data.risks}
                       tasks={data.tasks}
                       versionFilter={projectCalendarVersionId}
                       versionOptions={requirementVersionOptions}

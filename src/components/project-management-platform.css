@@ -894,6 +894,18 @@
   justify-content: flex-end;
 }
 
+.project-calendar-filter-field {
+  display: inline-grid;
+  grid-template-columns: auto minmax(220px, 320px);
+  gap: 8px;
+  align-items: center;
+}
+
+.project-calendar-filter-field > span {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .project-calendar-project-select {
   width: 320px !important;
   max-width: 100%;
@@ -1016,16 +1028,16 @@
 
 .project-calendar-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
-  gap: 18px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
   align-items: start;
 }
 
 .project-scheduler-shell {
   --project-scheduler-event-height: 52px;
   --project-scheduler-level-version-indent: 6px;
-  --project-scheduler-level-owner-indent: 20px;
-  --project-scheduler-level-task-indent: 34px;
+  --project-scheduler-level-owner-indent: 0px;
+  --project-scheduler-level-task-indent: 20px;
   --project-scheduler-row-gap: 10px;
   --scheduler-event-success-bg: color-mix(in srgb, var(--teal) 10%, var(--surface));
   --scheduler-event-success-bar: var(--teal);
@@ -1097,6 +1109,10 @@
   color: var(--foreground) !important;
   box-shadow: var(--shadow-card);
   cursor: pointer;
+}
+
+.project-scheduler-shell .scheduler_default_scrollable {
+  overflow-y: hidden !important;
 }
 
 .project-scheduler-event-task .scheduler_default_event_inner {
@@ -1283,7 +1299,7 @@
   align-content: center;
   min-width: 0;
   height: 100%;
-  padding: 5px 10px;
+  padding: 4px 8px;
   background: var(--surface);
 }
 
@@ -1344,7 +1360,7 @@
 
 .project-scheduler-resource-body {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
+  grid-template-columns: 24px minmax(0, 1fr);
   gap: 6px;
   align-items: center;
   min-width: 0;
@@ -1376,7 +1392,7 @@
 .project-scheduler-hierarchy-rail::before {
   top: -12px;
   bottom: -12px;
-  left: 12px;
+  left: 10px;
   width: 2px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--border) 82%, transparent);
@@ -1384,8 +1400,8 @@
 
 .project-scheduler-hierarchy-rail::after {
   top: 50%;
-  left: 12px;
-  width: 14px;
+  left: 10px;
+  width: 12px;
   height: 2px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--border) 82%, transparent);
@@ -1437,9 +1453,9 @@
 .project-scheduler-resource-panel-owner {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr) auto;
-  gap: 8px;
+  gap: 7px;
   align-items: center;
-  padding: 7px 10px;
+  padding: 6px 9px;
   border: 1px solid color-mix(in srgb, var(--teal) 24%, var(--border));
   border-left: 5px solid color-mix(in srgb, var(--teal) 74%, var(--brand));
   background:
@@ -1484,9 +1500,9 @@
 .project-scheduler-resource-panel-task {
   display: grid;
   grid-template-columns: 14px minmax(0, 1fr);
-  gap: 8px;
+  gap: 7px;
   align-items: center;
-  padding: 8px 10px;
+  padding: 7px 9px;
   border: 1px solid color-mix(in srgb, var(--brand) 14%, var(--border));
   border-left: 4px solid color-mix(in srgb, var(--brand) 70%, var(--teal));
   background:
@@ -2257,8 +2273,17 @@
   }
 
   .project-calendar-toolbar,
+  .project-calendar-filter-field,
   .project-calendar-toolbar .ant-picker,
   .project-calendar-project-select {
     width: 100% !important;
+  }
+
+  .project-calendar-toolbar > .ant-space-item {
+    width: 100%;
+  }
+
+  .project-calendar-filter-field {
+    grid-template-columns: 1fr;
   }
 }
