@@ -41,10 +41,14 @@ const ownerResourcePrefix = "owner:";
 const taskRowHeight = 58;
 const ownerRowHeight = 54;
 
-export type ProjectSchedulerTaskSort = "startAsc" | "endAsc" | "priorityDesc" | "progressAsc" | "default";
+export type ProjectSchedulerTaskOrder = Record<string, string[]>;
 
-const defaultTaskSort: ProjectSchedulerTaskSort = "startAsc";
-const priorityWeight: Record<string, number> = { 高: 3, 中: 2, 低: 1 };
+export type ProjectSchedulerTaskOrderChange = {
+  activeId: string;
+  overId: string;
+  owner: string;
+  placement: "before" | "after";
+};
 
 type ProjectSchedulerOwnerGroup = {
   owner: string;
@@ -93,49 +97,46 @@ function getRangeText(item: ProjectCalendarItem) {
   return start.isSame(end, "day") ? start.format("MM/DD") : `${start.format("MM/DD")} - ${end.format("MM/DD")}`;
 }
 
-function compareStableTaskFields(left: ProjectCalendarItem, right: ProjectCalendarItem) {
+function compareProjectSchedulerItems(left: ProjectCalendarItem, right: ProjectCalendarItem) {
+  const leftRange = getProjectCalendarItemRange(left);
+  const rightRange = getProjectCalendarItemRange(right);
+
+  // 默认顺序不再跟日期优先绑定，避免拖拽时间条后任务行自动跳位。
   return (
     (left.versionName || left.project).localeCompare(right.versionName || right.project, "zh-Hans-CN") ||
     left.title.localeCompare(right.title, "zh-Hans-CN") ||
-    left.id.localeCompare(right.id, "zh-Hans-CN")
+    left.id.localeCompare(right.id, "zh-Hans-CN") ||
+    leftRange.start.valueOf() - rightRange.start.valueOf() ||
+    leftRange.end.valueOf() - rightRange.end.valueOf()
   );
 }
 
-function compareProjectSchedulerItems(
-  left: ProjectCalendarItem,
-  right: ProjectCalendarItem,
-  taskSort: ProjectSchedulerTaskSort = defaultTaskSort
+function getOrderedProjectSchedulerItems(
+  items: ProjectCalendarItem[],
+  owner: string,
+  taskOrderByOwner: ProjectSchedulerTaskOrder
 ) {
-  const leftRange = getProjectCalendarItemRange(left);
-  const rightRange = getProjectCalendarItemRange(right);
-  const leftStart = leftRange.start.valueOf();
-  const rightStart = rightRange.start.valueOf();
-  const leftEnd = leftRange.end.valueOf();
-  const rightEnd = rightRange.end.valueOf();
-  const stableCompare = compareStableTaskFields(left, right);
+  const order = taskOrderByOwner[owner] ?? [];
+  const orderIndex = new Map(order.map((id, index) => [id, index]));
 
-  // 项目视图的任务行排序只影响同一负责人的上下顺序，右侧任务条仍只负责日期拖拽。
-  if (taskSort === "startAsc") {
-    return leftStart - rightStart || leftEnd - rightEnd || stableCompare;
-  }
+  return [...items].sort((left, right) => {
+    const leftIndex = orderIndex.get(left.id);
+    const rightIndex = orderIndex.get(right.id);
 
-  if (taskSort === "endAsc") {
-    return leftEnd - rightEnd || leftStart - rightStart || stableCompare;
-  }
+    if (typeof leftIndex === "number" && typeof rightIndex === "number") {
+      return leftIndex - rightIndex;
+    }
 
-  if (taskSort === "priorityDesc") {
-    return (
-      (priorityWeight[right.priority ?? ""] ?? 0) - (priorityWeight[left.priority ?? ""] ?? 0) ||
-      leftEnd - rightEnd ||
-      stableCompare
-    );
-  }
+    if (typeof leftIndex === "number") {
+      return -1;
+    }
 
-  if (taskSort === "progressAsc") {
-    return left.progress - right.progress || leftEnd - rightEnd || stableCompare;
-  }
+    if (typeof rightIndex === "number") {
+      return 1;
+    }
 
-  return stableCompare || leftStart - rightStart || leftEnd - rightEnd;
+    return compareProjectSchedulerItems(left, right);
+  });
 }
 
 function getTaskResourceId(item: ProjectCalendarItem) {
@@ -146,7 +147,7 @@ export function isProjectSchedulerTaskResource(resource: DayPilot.ResourceId, it
   return String(resource) === getTaskResourceId(item);
 }
 
-function createOwnerGroups(items: ProjectCalendarItem[], taskSort: ProjectSchedulerTaskSort) {
+function createOwnerGroups(items: ProjectCalendarItem[], taskOrderByOwner: ProjectSchedulerTaskOrder) {
   const groups = items.reduce<Record<string, ProjectSchedulerOwnerGroup>>((nextGroups, item) => {
     const owner = item.owner || "未分配";
     const ownerGroup = nextGroups[owner] ?? {
@@ -169,7 +170,7 @@ function createOwnerGroups(items: ProjectCalendarItem[], taskSort: ProjectSchedu
   return Object.values(groups)
     .map((ownerGroup) => ({
       ...ownerGroup,
-      items: [...ownerGroup.items].sort((left, right) => compareProjectSchedulerItems(left, right, taskSort))
+      items: getOrderedProjectSchedulerItems(ownerGroup.items, ownerGroup.owner, taskOrderByOwner)
     }))
     .sort((left, right) => {
       const leftFirstItem = left.items[0];
@@ -211,14 +212,16 @@ function getOwnerResourceHtml(group: ProjectSchedulerOwnerGroup) {
 
 function getTaskResourceHtml(item: ProjectCalendarItem) {
   const rangeText = getRangeText(item);
+  const owner = item.owner || "未分配";
 
   // 任务标题放到左侧固定行，右侧时间条只保留拖拽排期职责。
   return `
     <div class="project-scheduler-resource-label project-scheduler-resource-stack project-scheduler-resource-task">
       <div class="project-scheduler-resource-body project-scheduler-resource-body-task">
         <span class="project-scheduler-hierarchy-rail project-scheduler-hierarchy-rail-task" aria-hidden="true"></span>
-        <div class="project-scheduler-resource-panel project-scheduler-resource-panel-task">
+        <div class="project-scheduler-resource-panel project-scheduler-resource-panel-task" data-project-task-id="${escapeHtml(item.id)}" data-project-task-owner="${escapeHtml(owner)}">
           <span class="project-scheduler-task-node" aria-hidden="true"></span>
+          <span class="project-scheduler-row-sort-handle" role="button" aria-label="上下拖动调整任务顺序" title="上下拖动调整任务顺序"></span>
           <div class="project-scheduler-resource-task-copy">
             <div class="project-scheduler-resource-heading">
               <strong>${escapeHtml(item.title)}</strong>
@@ -287,12 +290,12 @@ function getEventResizeAreas(item: ProjectCalendarItem): DayPilot.AreaData[] {
 export function createProjectSchedulerModel(
   items: ProjectCalendarItem[],
   month: dayjs.Dayjs,
-  taskSort: ProjectSchedulerTaskSort = defaultTaskSort
+  taskOrderByOwner: ProjectSchedulerTaskOrder = {}
 ) {
   const visibleItems = items
     .filter((item) => isCalendarItemVisibleInMonth(item, month))
-    .sort((left, right) => compareProjectSchedulerItems(left, right, taskSort));
-  const ownerGroups = createOwnerGroups(visibleItems, taskSort);
+    .sort(compareProjectSchedulerItems);
+  const ownerGroups = createOwnerGroups(visibleItems, taskOrderByOwner);
   const resources: DayPilot.ResourceData[] = ownerGroups.flatMap((ownerGroup) => [
     {
       id: `${ownerResourcePrefix}${ownerGroup.owner}`,
@@ -350,5 +353,46 @@ export function createProjectSchedulerModel(
     resources,
     startDate: month.startOf("month").format("YYYY-MM-DD"),
     visibleItems
+  };
+}
+
+export function applyProjectSchedulerTaskOrderChange({
+  change,
+  items,
+  month,
+  taskOrderByOwner
+}: {
+  change: ProjectSchedulerTaskOrderChange;
+  items: ProjectCalendarItem[];
+  month: dayjs.Dayjs;
+  taskOrderByOwner: ProjectSchedulerTaskOrder;
+}) {
+  const ownerItems = items.filter((item) => (item.owner || "未分配") === change.owner && isCalendarItemVisibleInMonth(item, month));
+  const orderedIds = getOrderedProjectSchedulerItems(ownerItems, change.owner, taskOrderByOwner).map((item) => item.id);
+  const activeIndex = orderedIds.indexOf(change.activeId);
+  const overIndex = orderedIds.indexOf(change.overId);
+
+  if (activeIndex < 0 || overIndex < 0 || change.activeId === change.overId) {
+    return taskOrderByOwner;
+  }
+
+  const nextVisibleIds = [...orderedIds];
+  const [activeId] = nextVisibleIds.splice(activeIndex, 1);
+
+  if (!activeId) {
+    return taskOrderByOwner;
+  }
+
+  const nextOverIndex = nextVisibleIds.indexOf(change.overId);
+  const insertIndex = change.placement === "after" ? nextOverIndex + 1 : nextOverIndex;
+  nextVisibleIds.splice(Math.max(insertIndex, 0), 0, activeId);
+
+  const visibleIdSet = new Set(orderedIds);
+  const hiddenOrderedIds = (taskOrderByOwner[change.owner] ?? []).filter((id) => !visibleIdSet.has(id));
+
+  // 只重排当前可见月份里同一负责人的任务，其他月份已有手动顺序继续保留。
+  return {
+    ...taskOrderByOwner,
+    [change.owner]: [...nextVisibleIds, ...hiddenOrderedIds]
   };
 }

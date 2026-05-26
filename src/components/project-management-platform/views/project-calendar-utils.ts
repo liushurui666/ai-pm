@@ -18,7 +18,6 @@ export type ProjectCalendarItem = {
   versionId?: string;
   versionName?: string;
   status: string;
-  priority?: Task["priority"];
   progress: number;
   riskTone: "success" | "processing" | "warning" | "danger";
 };
@@ -194,7 +193,6 @@ export function createProjectCalendarItems({
         versionId: task.versionId,
         versionName: task.versionName,
         status: task.stage,
-        priority: task.priority,
         progress,
         riskTone: getRiskTone(progress, task.stage !== "已完成" && isPast(task.dueDate))
       };

@@ -3,7 +3,7 @@
 import { Button, DatePicker, Select, Space, Statistic, Tag, Typography } from "antd";
 import { CalendarOutlined, FolderOpenOutlined, PlusOutlined, UserOutlined, WarningOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Project, RequirementVersion, Task } from "@/types/dashboard";
 import type { RequirementVersionOption } from "@/components/project-management-platform/types";
 import { TableView } from "@/components/project-management-platform/shared/page-shell";
@@ -20,18 +20,28 @@ import {
 } from "@/components/project-management-platform/views/project-calendar-utils";
 import { ProjectDelaySummary } from "@/components/project-management-platform/views/project-delay-summary";
 import { ProjectProgressCalendar } from "@/components/project-management-platform/views/project-progress-calendar";
-import type { ProjectSchedulerTaskSort } from "@/components/project-management-platform/views/project-scheduler-utils";
+import {
+  applyProjectSchedulerTaskOrderChange,
+  type ProjectSchedulerTaskOrder,
+  type ProjectSchedulerTaskOrderChange
+} from "@/components/project-management-platform/views/project-scheduler-utils";
 
 const { Text } = Typography;
+const projectTaskOrderStorageKey = "ai-pm.project-scheduler-task-order.v1";
 
-// 排序只作用于负责人下面的任务行，不改变版本筛选、人员分组和右侧日期拖拽语义。
-const projectTaskSortOptions: Array<{ value: ProjectSchedulerTaskSort; label: string }> = [
-  { value: "startAsc", label: "开始时间" },
-  { value: "endAsc", label: "截止时间" },
-  { value: "priorityDesc", label: "优先级" },
-  { value: "progressAsc", label: "进度最低" },
-  { value: "default", label: "默认稳定" }
-];
+function getStoredProjectTaskOrder(): ProjectSchedulerTaskOrder {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const storedValue = window.localStorage.getItem(projectTaskOrderStorageKey);
+
+    return storedValue ? JSON.parse(storedValue) as ProjectSchedulerTaskOrder : {};
+  } catch {
+    return {};
+  }
+}
 
 // 项目视图把版本收进筛选器，主排期表只保留负责人和任务两层，尽量释放时间轴宽度。
 export function ProjectsView({
@@ -65,7 +75,7 @@ export function ProjectsView({
   const projectCount = selectedVersion ? scopeProjectNames.length : projects.length;
   const [calendarMonth, setCalendarMonth] = useState(() => dayjs());
   const [manualCalendarMonthKey, setManualCalendarMonthKey] = useState("");
-  const [taskSort, setTaskSort] = useState<ProjectSchedulerTaskSort>("startAsc");
+  const [taskOrderByOwner, setTaskOrderByOwner] = useState<ProjectSchedulerTaskOrder>(getStoredProjectTaskOrder);
   const calendarItems = useMemo(
     () =>
       createProjectCalendarItems({
@@ -113,6 +123,22 @@ export function ProjectsView({
     ? Math.round(monthItems.reduce((sum, item) => sum + item.progress, 0) / monthItems.length)
     : 0;
 
+  useEffect(() => {
+    // 手动排序属于排期视图偏好，先保存在浏览器本地，避免刷新后马上丢失。
+    window.localStorage.setItem(projectTaskOrderStorageKey, JSON.stringify(taskOrderByOwner));
+  }, [taskOrderByOwner]);
+
+  function handleTaskOrderChange(change: ProjectSchedulerTaskOrderChange) {
+    setTaskOrderByOwner((currentOrder) =>
+      applyProjectSchedulerTaskOrderChange({
+        change,
+        items: calendarItems,
+        month: displayedCalendarMonth,
+        taskOrderByOwner: currentOrder
+      })
+    );
+  }
+
   return (
     <TableView
       title="项目视图"
@@ -137,16 +163,6 @@ export function ProjectsView({
                   label: version.label
                 }))
               ]}
-            />
-          </div>
-          <div className="project-calendar-filter-field project-calendar-sort-field">
-            <Text type="secondary">任务排序</Text>
-            <Select
-              className="project-calendar-sort-select"
-              value={taskSort}
-              onChange={setTaskSort}
-              aria-label="任务排序"
-              options={projectTaskSortOptions}
             />
           </div>
           <DatePicker
@@ -195,7 +211,8 @@ export function ProjectsView({
           month={displayedCalendarMonth}
           onOpenItem={onOpenCalendarItem}
           onRescheduleItem={onRescheduleCalendarItem}
-          taskSort={taskSort}
+          onTaskOrderChange={handleTaskOrderChange}
+          taskOrderByOwner={taskOrderByOwner}
         />
       </div>
     </TableView>
