@@ -258,6 +258,11 @@
   align-items: stretch;
 }
 
+/* 个人工作台不和右侧优先队列强制等高，避免操作按钮下方出现大片空白。 */
+.overview-personal-command {
+  align-items: start;
+}
+
 .overview-command-main,
 .overview-risk-panel {
   padding: 20px;
@@ -300,6 +305,7 @@
 }
 
 .overview-personal-main {
+  min-height: 0;
   justify-content: flex-start;
   border-color: color-mix(in srgb, var(--brand) 18%, var(--border));
   background:
