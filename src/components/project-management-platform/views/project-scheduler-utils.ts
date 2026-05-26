@@ -39,9 +39,11 @@ const resizeHandleWidth = 14;
 const taskResourcePrefix = "task:";
 const versionResourcePrefix = "version:";
 const ownerResourcePrefix = "owner:";
-const taskRowHeight = 82;
-const ownerRowHeight = 68;
-const versionRowHeight = 74;
+const levelTitleResourcePrefix = "level:";
+const levelTitleRowHeight = 30;
+const taskRowHeight = 66;
+const ownerRowHeight = 56;
+const versionRowHeight = 58;
 
 type ProjectSchedulerOwnerGroup = {
   owner: string;
@@ -123,6 +125,15 @@ function getVersionGroupId(item: ProjectCalendarItem) {
   return item.versionId || `unplanned-${item.versionName || item.project}`;
 }
 
+function getLevelTitleResourceHtml(label: "版本" | "人" | "任务", level: "version" | "owner" | "task") {
+  // 层级标题单独作为一行资源，而不是塞进内容行，便于用户先扫结构、再看具体内容。
+  return `
+    <div class="project-scheduler-resource-label project-scheduler-level-row project-scheduler-level-row-${level}">
+      <span>${label}</span>
+    </div>
+  `;
+}
+
 function createVersionGroups(items: ProjectCalendarItem[]) {
   const groups = items.reduce<Record<string, ProjectSchedulerVersionGroup>>((nextGroups, item) => {
     const id = getVersionGroupId(item);
@@ -193,7 +204,6 @@ function getVersionResourceHtml(group: ProjectSchedulerVersionGroup) {
   // 版本分组行是第一层目录，下面继续按负责人分组，方便看清版本内责任边界。
   return `
     <div class="project-scheduler-resource-label project-scheduler-resource-stack project-scheduler-resource-version">
-      <span class="project-scheduler-level-title project-scheduler-level-title-version">版本</span>
       <div class="project-scheduler-resource-body project-scheduler-resource-body-version">
         <span class="project-scheduler-hierarchy-rail project-scheduler-hierarchy-rail-version" aria-hidden="true"></span>
         <div class="project-scheduler-resource-panel project-scheduler-resource-panel-version">
@@ -216,7 +226,6 @@ function getOwnerResourceHtml(group: ProjectSchedulerOwnerGroup) {
   // 负责人行是第二层目录，任务行只承载具体交付事项。
   return `
     <div class="project-scheduler-resource-label project-scheduler-resource-stack project-scheduler-resource-owner">
-      <span class="project-scheduler-level-title project-scheduler-level-title-owner">人</span>
       <div class="project-scheduler-resource-body project-scheduler-resource-body-owner">
         <span class="project-scheduler-hierarchy-rail project-scheduler-hierarchy-rail-owner" aria-hidden="true"></span>
         <div class="project-scheduler-resource-panel project-scheduler-resource-panel-owner">
@@ -240,7 +249,6 @@ function getTaskResourceHtml(item: ProjectCalendarItem) {
   // 任务标题放到左侧固定行，右侧时间条只保留拖拽排期职责。
   return `
     <div class="project-scheduler-resource-label project-scheduler-resource-stack project-scheduler-resource-task">
-      <span class="project-scheduler-level-title project-scheduler-level-title-task">任务</span>
       <div class="project-scheduler-resource-body project-scheduler-resource-body-task">
         <span class="project-scheduler-hierarchy-rail project-scheduler-hierarchy-rail-task" aria-hidden="true"></span>
         <div class="project-scheduler-resource-panel project-scheduler-resource-panel-task">
@@ -315,6 +323,17 @@ export function createProjectSchedulerModel(items: ProjectCalendarItem[], month:
   const versionGroups = createVersionGroups(visibleItems);
   const resources: DayPilot.ResourceData[] = versionGroups.flatMap((group) => [
     {
+      id: `${levelTitleResourcePrefix}version:${group.id}`,
+      name: "版本",
+      cssClass: "project-scheduler-row-level-title project-scheduler-row-level-title-version",
+      height: levelTitleRowHeight,
+      html: getLevelTitleResourceHtml("版本", "version"),
+      tags: {
+        type: "level-title",
+        level: "version"
+      }
+    },
+    {
       id: `${versionResourcePrefix}${group.id}`,
       name: group.name,
       cssClass: "project-scheduler-row-version",
@@ -329,6 +348,18 @@ export function createProjectSchedulerModel(items: ProjectCalendarItem[], month:
     },
     ...group.ownerGroups.flatMap((ownerGroup) => [
       {
+        id: `${levelTitleResourcePrefix}owner:${group.id}:${ownerGroup.owner}`,
+        name: "人",
+        cssClass: "project-scheduler-row-level-title project-scheduler-row-level-title-owner",
+        height: levelTitleRowHeight,
+        html: getLevelTitleResourceHtml("人", "owner"),
+        tags: {
+          owner: ownerGroup.owner,
+          type: "level-title",
+          level: "owner"
+        }
+      },
+      {
         id: `${ownerResourcePrefix}${group.id}:${ownerGroup.owner}`,
         name: ownerGroup.owner,
         cssClass: "project-scheduler-row-owner",
@@ -340,6 +371,18 @@ export function createProjectSchedulerModel(items: ProjectCalendarItem[], month:
           progress: getGroupProgress(ownerGroup.items),
           riskCount: ownerGroup.items.filter((item) => item.riskTone === "danger").length,
           type: "owner"
+        }
+      },
+      {
+        id: `${levelTitleResourcePrefix}task:${group.id}:${ownerGroup.owner}`,
+        name: "任务",
+        cssClass: "project-scheduler-row-level-title project-scheduler-row-level-title-task",
+        height: levelTitleRowHeight,
+        html: getLevelTitleResourceHtml("任务", "task"),
+        tags: {
+          owner: ownerGroup.owner,
+          type: "level-title",
+          level: "task"
         }
       },
       ...ownerGroup.items.map((item) => ({

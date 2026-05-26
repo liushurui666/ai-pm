@@ -1273,7 +1273,7 @@
   min-width: 0;
 }
 
-/* 左侧资源列用“标题独立一行 + 缩进内容”呈现，标题不再和内容同行，层级靠缩进与树线共同表达。 */
+/* 左侧资源列把层级标题拆成独立资源行，内容行只负责展示对应层级的具体信息。 */
 .project-scheduler-resource-stack {
   display: grid;
   gap: 4px;
@@ -1284,12 +1284,30 @@
   background: var(--surface);
 }
 
-.project-scheduler-level-title {
+.project-scheduler-level-row {
+  display: flex;
+  position: relative;
+  align-items: center;
+  height: 100%;
+  padding: 0 12px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--surface-subtle) 80%, transparent), transparent 74%),
+    var(--surface);
+}
+
+.project-scheduler-level-row::after {
+  height: 1px;
+  flex: 1 1 auto;
+  margin-left: 10px;
+  background: color-mix(in srgb, var(--border) 78%, transparent);
+  content: "";
+}
+
+.project-scheduler-level-row span {
   display: inline-grid;
-  height: 18px;
+  height: 20px;
   min-width: 38px;
   place-items: center;
-  justify-self: start;
   padding: 0 8px;
   border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
   border-radius: 999px;
@@ -1300,21 +1318,21 @@
   line-height: 1;
 }
 
-.project-scheduler-level-title-version {
+.project-scheduler-level-row-version span {
   margin-left: 8px;
   border-color: color-mix(in srgb, var(--brand) 34%, var(--border));
   background: color-mix(in srgb, var(--brand) 10%, var(--surface-elevated));
   color: var(--brand);
 }
 
-.project-scheduler-level-title-owner {
+.project-scheduler-level-row-owner span {
   margin-left: 40px;
   border-color: color-mix(in srgb, var(--teal) 34%, var(--border));
   background: color-mix(in srgb, var(--teal) 10%, var(--surface-elevated));
   color: color-mix(in srgb, var(--teal) 82%, var(--foreground));
 }
 
-.project-scheduler-level-title-task {
+.project-scheduler-level-row-task span {
   margin-left: 72px;
   border-color: color-mix(in srgb, var(--brand) 24%, var(--border));
   background: color-mix(in srgb, var(--surface-subtle) 88%, transparent);
