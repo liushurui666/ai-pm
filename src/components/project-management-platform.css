@@ -1233,58 +1233,9 @@
   font-size: 12px;
 }
 
-.project-scheduler-level-label {
-  display: grid;
-  height: 28px;
-  min-width: 0;
-  place-items: center;
-  align-self: center;
-  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--surface-elevated) 78%, transparent);
-  color: color-mix(in srgb, var(--foreground) 76%, var(--muted));
-  font-size: 12px;
-  font-weight: 820;
-  line-height: 1;
-}
-
-.project-scheduler-level-label-version {
-  border-color: color-mix(in srgb, var(--brand) 34%, var(--border));
-  background: color-mix(in srgb, var(--brand) 10%, var(--surface-elevated));
-  color: var(--brand);
-}
-
-.project-scheduler-level-label-owner {
-  border-color: color-mix(in srgb, var(--teal) 34%, var(--border));
-  background: color-mix(in srgb, var(--teal) 10%, var(--surface-elevated));
-  color: color-mix(in srgb, var(--teal) 82%, var(--foreground));
-}
-
-.project-scheduler-level-label-task {
-  border-color: color-mix(in srgb, var(--brand) 24%, var(--border));
-  background: color-mix(in srgb, var(--surface-subtle) 88%, transparent);
-  color: color-mix(in srgb, var(--foreground) 70%, var(--muted));
-}
-
 .project-scheduler-resource-label span {
   color: var(--muted);
   font-size: 11px;
-}
-
-.project-scheduler-resource-label .project-scheduler-level-label {
-  font-size: 12px;
-}
-
-.project-scheduler-resource-label .project-scheduler-level-label-version {
-  color: var(--brand);
-}
-
-.project-scheduler-resource-label .project-scheduler-level-label-owner {
-  color: color-mix(in srgb, var(--teal) 82%, var(--foreground));
-}
-
-.project-scheduler-resource-label .project-scheduler-level-label-task {
-  color: color-mix(in srgb, var(--foreground) 70%, var(--muted));
 }
 
 .project-scheduler-resource-label em {
@@ -1322,16 +1273,72 @@
   min-width: 0;
 }
 
-/* 左侧资源列用“层级标签列 + 树线 + 内容”呈现，标签列明确标出版本/人/任务，内容仍保持纵向父子关系。 */
+/* 左侧资源列用“标题独立一行 + 缩进内容”呈现，标题不再和内容同行，层级靠缩进与树线共同表达。 */
 .project-scheduler-resource-stack {
   display: grid;
-  grid-template-columns: 58px 34px minmax(0, 1fr);
+  gap: 4px;
+  align-content: center;
+  min-width: 0;
+  height: 100%;
+  padding: 5px 12px;
+  background: var(--surface);
+}
+
+.project-scheduler-level-title {
+  display: inline-grid;
+  height: 18px;
+  min-width: 38px;
+  place-items: center;
+  justify-self: start;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-elevated) 82%, transparent);
+  color: color-mix(in srgb, var(--foreground) 76%, var(--muted));
+  font-size: 12px;
+  font-weight: 820;
+  line-height: 1;
+}
+
+.project-scheduler-level-title-version {
+  margin-left: 8px;
+  border-color: color-mix(in srgb, var(--brand) 34%, var(--border));
+  background: color-mix(in srgb, var(--brand) 10%, var(--surface-elevated));
+  color: var(--brand);
+}
+
+.project-scheduler-level-title-owner {
+  margin-left: 40px;
+  border-color: color-mix(in srgb, var(--teal) 34%, var(--border));
+  background: color-mix(in srgb, var(--teal) 10%, var(--surface-elevated));
+  color: color-mix(in srgb, var(--teal) 82%, var(--foreground));
+}
+
+.project-scheduler-level-title-task {
+  margin-left: 72px;
+  border-color: color-mix(in srgb, var(--brand) 24%, var(--border));
+  background: color-mix(in srgb, var(--surface-subtle) 88%, transparent);
+  color: color-mix(in srgb, var(--foreground) 70%, var(--muted));
+}
+
+.project-scheduler-resource-body {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
   gap: 8px;
   align-items: center;
   min-width: 0;
-  height: 100%;
-  padding: 6px 12px;
-  background: var(--surface);
+}
+
+.project-scheduler-resource-body-version {
+  margin-left: 8px;
+}
+
+.project-scheduler-resource-body-owner {
+  margin-left: 40px;
+}
+
+.project-scheduler-resource-body-task {
+  margin-left: 72px;
 }
 
 .project-scheduler-hierarchy-rail {

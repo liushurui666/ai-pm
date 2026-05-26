@@ -39,9 +39,9 @@ const resizeHandleWidth = 14;
 const taskResourcePrefix = "task:";
 const versionResourcePrefix = "version:";
 const ownerResourcePrefix = "owner:";
-const taskRowHeight = 76;
-const ownerRowHeight = 56;
-const versionRowHeight = 54;
+const taskRowHeight = 82;
+const ownerRowHeight = 68;
+const versionRowHeight = 74;
 
 type ProjectSchedulerOwnerGroup = {
   owner: string;
@@ -193,14 +193,16 @@ function getVersionResourceHtml(group: ProjectSchedulerVersionGroup) {
   // 版本分组行是第一层目录，下面继续按负责人分组，方便看清版本内责任边界。
   return `
     <div class="project-scheduler-resource-label project-scheduler-resource-stack project-scheduler-resource-version">
-      <span class="project-scheduler-level-label project-scheduler-level-label-version">版本</span>
-      <span class="project-scheduler-hierarchy-rail project-scheduler-hierarchy-rail-version" aria-hidden="true"></span>
-      <div class="project-scheduler-resource-panel project-scheduler-resource-panel-version">
-        <div class="project-scheduler-resource-heading">
-          <strong>${escapeHtml(group.name)}</strong>
+      <span class="project-scheduler-level-title project-scheduler-level-title-version">版本</span>
+      <div class="project-scheduler-resource-body project-scheduler-resource-body-version">
+        <span class="project-scheduler-hierarchy-rail project-scheduler-hierarchy-rail-version" aria-hidden="true"></span>
+        <div class="project-scheduler-resource-panel project-scheduler-resource-panel-version">
+          <div class="project-scheduler-resource-heading">
+            <strong>${escapeHtml(group.name)}</strong>
+          </div>
+          <span class="project-scheduler-resource-subtitle">${escapeHtml(group.project)}</span>
+          <em>${progress}% · ${items.length} 项任务 · ${group.ownerGroups.length} 人${riskCount ? ` · 风险 ${riskCount}` : ""}</em>
         </div>
-        <span class="project-scheduler-resource-subtitle">${escapeHtml(group.project)}</span>
-        <em>${progress}% · ${items.length} 项任务 · ${group.ownerGroups.length} 人${riskCount ? ` · 风险 ${riskCount}` : ""}</em>
       </div>
     </div>
   `;
@@ -214,17 +216,19 @@ function getOwnerResourceHtml(group: ProjectSchedulerOwnerGroup) {
   // 负责人行是第二层目录，任务行只承载具体交付事项。
   return `
     <div class="project-scheduler-resource-label project-scheduler-resource-stack project-scheduler-resource-owner">
-      <span class="project-scheduler-level-label project-scheduler-level-label-owner">人</span>
-      <span class="project-scheduler-hierarchy-rail project-scheduler-hierarchy-rail-owner" aria-hidden="true"></span>
-      <div class="project-scheduler-resource-panel project-scheduler-resource-panel-owner">
-        ${getOwnerAvatarHtml(group)}
-        <div class="project-scheduler-resource-owner-copy">
-          <div class="project-scheduler-resource-heading">
-            <strong>${escapeHtml(group.owner)}</strong>
+      <span class="project-scheduler-level-title project-scheduler-level-title-owner">人</span>
+      <div class="project-scheduler-resource-body project-scheduler-resource-body-owner">
+        <span class="project-scheduler-hierarchy-rail project-scheduler-hierarchy-rail-owner" aria-hidden="true"></span>
+        <div class="project-scheduler-resource-panel project-scheduler-resource-panel-owner">
+          ${getOwnerAvatarHtml(group)}
+          <div class="project-scheduler-resource-owner-copy">
+            <div class="project-scheduler-resource-heading">
+              <strong>${escapeHtml(group.owner)}</strong>
+            </div>
+            <span class="project-scheduler-resource-subtitle">${group.items.length} 项任务 · 完成 ${doneCount}</span>
           </div>
-          <span class="project-scheduler-resource-subtitle">${group.items.length} 项任务 · 完成 ${doneCount}</span>
+          <em>${progress}%${riskCount ? ` · 风险 ${riskCount}` : ""}</em>
         </div>
-        <em>${progress}%${riskCount ? ` · 风险 ${riskCount}` : ""}</em>
       </div>
     </div>
   `;
@@ -236,15 +240,17 @@ function getTaskResourceHtml(item: ProjectCalendarItem) {
   // 任务标题放到左侧固定行，右侧时间条只保留拖拽排期职责。
   return `
     <div class="project-scheduler-resource-label project-scheduler-resource-stack project-scheduler-resource-task">
-      <span class="project-scheduler-level-label project-scheduler-level-label-task">任务</span>
-      <span class="project-scheduler-hierarchy-rail project-scheduler-hierarchy-rail-task" aria-hidden="true"></span>
-      <div class="project-scheduler-resource-panel project-scheduler-resource-panel-task">
-        <span class="project-scheduler-task-node" aria-hidden="true"></span>
-        <div class="project-scheduler-resource-task-copy">
-          <div class="project-scheduler-resource-heading">
-            <strong>${escapeHtml(item.title)}</strong>
+      <span class="project-scheduler-level-title project-scheduler-level-title-task">任务</span>
+      <div class="project-scheduler-resource-body project-scheduler-resource-body-task">
+        <span class="project-scheduler-hierarchy-rail project-scheduler-hierarchy-rail-task" aria-hidden="true"></span>
+        <div class="project-scheduler-resource-panel project-scheduler-resource-panel-task">
+          <span class="project-scheduler-task-node" aria-hidden="true"></span>
+          <div class="project-scheduler-resource-task-copy">
+            <div class="project-scheduler-resource-heading">
+              <strong>${escapeHtml(item.title)}</strong>
+            </div>
+            <span class="project-scheduler-resource-subtitle">${escapeHtml(item.status)} · ${item.progress}% · ${escapeHtml(rangeText)}</span>
           </div>
-          <span class="project-scheduler-resource-subtitle">${escapeHtml(item.status)} · ${item.progress}% · ${escapeHtml(rangeText)}</span>
         </div>
       </div>
     </div>
