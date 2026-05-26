@@ -1768,18 +1768,30 @@
 
 .task-stage-list {
   display: grid;
+  align-content: start;
   gap: 10px;
   min-height: 360px;
 }
 
 .task-stage-empty {
   display: grid;
-  min-height: 96px;
+  height: 58px;
   place-items: center;
   border: 1px dashed color-mix(in srgb, var(--task-stage-tone) 38%, var(--border));
   border-radius: 8px;
   color: var(--muted);
   background: color-mix(in srgb, var(--surface) 76%, var(--task-stage-tone) 8%);
+}
+
+.task-stage-empty-active {
+  height: 120px;
+  border-color: color-mix(in srgb, var(--task-stage-tone) 58%, var(--border));
+  background: color-mix(in srgb, var(--surface) 70%, var(--task-stage-tone) 14%);
+}
+
+.task-stage-column-over .task-stage-empty-active {
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface) 58%, var(--task-stage-tone) 22%);
 }
 
 .task-stage-sortable {

@@ -61,16 +61,19 @@ function getStageFromDropId(id: string) {
 // 阶段列同时是空列投放区，避免某个阶段没有任务时无法拖入。
 function TaskStageColumn({
   children,
+  draggingTask,
   stage,
   tasks
 }: {
   children: ReactNode;
+  draggingTask: boolean;
   stage: TaskStage;
   tasks: Task[];
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: `stage:${stage}` });
   const overdueCount = tasks.filter(getTaskOverdue).length;
   const donePercent = getColumnPercent(tasks);
+  const emptyText = draggingTask ? (isOver ? `松手移入${stage}` : "可拖入此阶段") : "暂无任务";
 
   return (
     <div ref={setNodeRef} className="task-stage-column-shell">
@@ -93,7 +96,11 @@ function TaskStageColumn({
         <SortableContext items={tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
           <div className="task-stage-list">
             {children}
-            {!tasks.length ? <div className="task-stage-empty">拖入任务</div> : null}
+            {!tasks.length ? (
+              <div className={`task-stage-empty${draggingTask ? " task-stage-empty-active" : ""}`}>
+                <Text type="secondary">{emptyText}</Text>
+              </div>
+            ) : null}
           </div>
         </SortableContext>
       </Card>
@@ -261,7 +268,7 @@ export function TaskStageBoard({
     >
       <div className="task-stage-board">
         {taskStages.map((stage) => (
-          <TaskStageColumn key={stage} stage={stage} tasks={tasksByStage[stage]}>
+          <TaskStageColumn key={stage} draggingTask={Boolean(activeTask)} stage={stage} tasks={tasksByStage[stage]}>
             {tasksByStage[stage].map((task) => (
               <SortableTaskCard key={task.id} task={task} onEdit={onEdit} />
             ))}
