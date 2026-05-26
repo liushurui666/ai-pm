@@ -245,7 +245,7 @@ export function ProjectProgressCalendar({
         resources={schedulerModel.resources}
         events={schedulerModel.events}
         cellWidth={118}
-        rowHeaderWidth={430}
+        rowHeaderWidth={470}
         eventHeight={52}
         durationBarHeight={4}
         height={760}
