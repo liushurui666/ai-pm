@@ -23,17 +23,6 @@ export const overviewBugStatusColor: Record<BugReport["status"], string> = {
   已关闭: "green"
 };
 
-export type OverviewFocusItem = {
-  action: "bug" | "task";
-  id: string;
-  meta: string;
-  score: number;
-  status: string;
-  tagColor: string;
-  title: string;
-  typeLabel: "Bug" | "任务";
-};
-
 // Bug 的“个人相关”同时看修复负责人和提交人，避免工作台漏掉我提交但还未闭环的问题。
 export function isMyOverviewBug(bug: BugReport, currentUser?: FeishuUser) {
   if (!currentUser) {
@@ -77,44 +66,4 @@ export function sortBugsForPersonalFocus(left: BugReport, right: BugReport) {
     statusWeight[right.status] - statusWeight[left.status] ||
     dayjs(left.createdAt).valueOf() - dayjs(right.createdAt).valueOf()
   );
-}
-
-// 顶部优先队列把 Bug 和任务压成同一种展示项，排序时让阻塞 Bug、逾期任务先露出。
-export function getOverviewPriorityItems(tasks: Task[], bugs: BugReport[]): OverviewFocusItem[] {
-  const bugItems = bugs.map((bug) => ({
-    action: "bug" as const,
-    id: bug.id,
-    meta: `${bug.versionName || bug.project} · ${bug.owner || "未分配"}`,
-    score: getBugScore(bug),
-    status: bug.severity,
-    tagColor: overviewBugSeverityColor[bug.severity],
-    title: bug.title,
-    typeLabel: "Bug" as const
-  }));
-  const taskItems = tasks.map((task) => ({
-    action: "task" as const,
-    id: task.id,
-    meta: `${task.versionName || task.project} · 截止 ${task.dueDate}`,
-    score: getTaskScore(task),
-    status: isOverdueOverviewTask(task) ? "逾期" : task.priority,
-    tagColor: isOverdueOverviewTask(task) ? "red" : overviewTaskPriorityColor[task.priority],
-    title: task.title,
-    typeLabel: "任务" as const
-  }));
-
-  return [...bugItems, ...taskItems].sort((left, right) => right.score - left.score || left.title.localeCompare(right.title, "zh-CN"));
-}
-
-function getBugScore(bug: BugReport) {
-  const severityWeight: Record<BugReport["severity"], number> = { 阻塞: 500, 严重: 400, 一般: 260, 轻微: 180 };
-  const statusWeight: Record<BugReport["status"], number> = { 新建: 80, 定位中: 70, 修复中: 60, 待验证: 30, 已关闭: 0 };
-
-  return severityWeight[bug.severity] + statusWeight[bug.status];
-}
-
-function getTaskScore(task: Task) {
-  const priorityWeight: Record<Task["priority"], number> = { 高: 320, 中: 220, 低: 120 };
-  const overdueDays = Math.max(0, dayjs().startOf("day").diff(dayjs(task.dueDate), "day"));
-
-  return priorityWeight[task.priority] + overdueDays * 20;
 }

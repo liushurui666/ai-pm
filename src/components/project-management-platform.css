@@ -253,19 +253,12 @@
 
 .overview-command {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
-  gap: 16px;
-  align-items: stretch;
-}
-
-/* 个人工作台独占一行，优先队列下沉到卡片下方，避免右侧栏抢占第一视觉。 */
-.overview-personal-command {
   grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
   align-items: start;
 }
 
-.overview-command-main,
-.overview-risk-panel {
+.overview-command-main {
   padding: 20px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -372,28 +365,11 @@
   line-height: 1;
 }
 
-.overview-risk-panel .ant-divider {
-  margin: 8px 0;
-}
-
-.overview-priority-panel {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.overview-priority-list,
 .overview-work-list {
   display: grid;
   gap: 10px;
 }
 
-.overview-priority-list {
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-}
-
-.overview-priority-item,
 .overview-work-item {
   display: grid;
   min-width: 0;
@@ -407,17 +383,10 @@
     var(--surface);
 }
 
-.overview-priority-item {
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-}
-
-.overview-priority-item-bug,
 .overview-work-item-bug {
   --overview-item-tone: var(--danger);
 }
 
-.overview-priority-item-task,
 .overview-work-item-task {
   --overview-item-tone: var(--brand);
 }
@@ -431,9 +400,7 @@
 }
 
 .overview-work-item .ant-space,
-.overview-work-item .ant-typography,
-.overview-priority-item .ant-space,
-.overview-priority-item .ant-typography {
+.overview-work-item .ant-typography {
   min-width: 0;
 }
 
@@ -2405,14 +2372,6 @@
     grid-template-columns: 1fr;
   }
 
-  .overview-risk-panel {
-    max-width: 560px;
-  }
-
-  .overview-priority-panel {
-    max-width: none;
-  }
-
   .pm-hero {
     grid-template-columns: 1fr;
   }
@@ -2495,10 +2454,6 @@
   }
 
   .overview-focus-summary {
-    grid-template-columns: 1fr;
-  }
-
-  .overview-priority-item {
     grid-template-columns: 1fr;
   }
 
