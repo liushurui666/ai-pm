@@ -51,8 +51,20 @@ export function OverviewView({
     <Space orientation="vertical" size={18} className="pm-page-stack">
       <section className="overview-command">
         <div className="overview-command-main overview-personal-main">
-          <Tag color="blue">{currentUser ? "个人待处理" : "团队待处理"}</Tag>
-          <Title level={2}>{perspectiveName}工作台：{focusTotal} 个未解决项</Title>
+          {/* 顶部信息区收拢身份、标题和总数，避免形成只有标签的空横栏。 */}
+          <div className="overview-personal-header">
+            <div className="overview-personal-heading">
+              <div className="overview-personal-kicker">
+                <span>{currentUser ? "个人待处理" : "团队待处理"}</span>
+                <em>未关闭 Bug / 未完成任务 / 逾期项</em>
+              </div>
+              <Title level={2}>{perspectiveName}工作台</Title>
+            </div>
+            <div className="overview-focus-total">
+              <strong>{focusTotal}</strong>
+              <span>未解决项</span>
+            </div>
+          </div>
           <Paragraph>
             优先聚焦未关闭 Bug、未完成任务和已经逾期的执行项，把今天真正需要推进的事情放在第一屏。
           </Paragraph>

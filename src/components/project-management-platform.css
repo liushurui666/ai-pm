@@ -308,12 +308,91 @@
   color: var(--foreground);
 }
 
+.overview-personal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  margin-bottom: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--brand) 16%, var(--border));
+}
+
+.overview-personal-heading {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+
+.overview-personal-kicker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.overview-personal-kicker span {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, var(--brand) 28%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand) 10%, transparent);
+}
+
+.overview-personal-kicker em {
+  overflow: hidden;
+  color: var(--muted);
+  font-style: normal;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-focus-total {
+  display: grid;
+  min-width: 112px;
+  justify-items: end;
+  gap: 2px;
+  padding: 8px 11px;
+  border: 1px solid color-mix(in srgb, var(--brand) 22%, var(--border));
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand) 10%, transparent), transparent 70%),
+    var(--surface);
+}
+
+.overview-focus-total strong {
+  color: var(--foreground);
+  font-size: 30px;
+  line-height: 1;
+}
+
+.overview-focus-total span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
 .overview-personal-main .ant-typography {
   color: var(--muted);
 }
 
 .overview-personal-main h2.ant-typography {
   color: var(--foreground);
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.overview-personal-main .ant-typography + .overview-focus-summary {
+  margin-top: 14px;
 }
 
 .overview-focus-summary {
@@ -2451,6 +2530,32 @@
 
   .pm-hero-copy h1 {
     font-size: 30px;
+  }
+
+  .overview-personal-header {
+    align-items: center;
+    gap: 10px;
+  }
+
+  .overview-personal-kicker {
+    gap: 6px;
+  }
+
+  .overview-personal-kicker em {
+    display: none;
+  }
+
+  .overview-focus-total {
+    min-width: 86px;
+    padding: 7px 9px;
+  }
+
+  .overview-personal-main h2.ant-typography {
+    font-size: 24px;
+  }
+
+  .overview-focus-total strong {
+    font-size: 26px;
   }
 
   .overview-focus-summary {
