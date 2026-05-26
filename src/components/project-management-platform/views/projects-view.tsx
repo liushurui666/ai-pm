@@ -20,8 +20,18 @@ import {
 } from "@/components/project-management-platform/views/project-calendar-utils";
 import { ProjectDelaySummary } from "@/components/project-management-platform/views/project-delay-summary";
 import { ProjectProgressCalendar } from "@/components/project-management-platform/views/project-progress-calendar";
+import type { ProjectSchedulerTaskSort } from "@/components/project-management-platform/views/project-scheduler-utils";
 
 const { Text } = Typography;
+
+// 排序只作用于负责人下面的任务行，不改变版本筛选、人员分组和右侧日期拖拽语义。
+const projectTaskSortOptions: Array<{ value: ProjectSchedulerTaskSort; label: string }> = [
+  { value: "startAsc", label: "开始时间" },
+  { value: "endAsc", label: "截止时间" },
+  { value: "priorityDesc", label: "优先级" },
+  { value: "progressAsc", label: "进度最低" },
+  { value: "default", label: "默认稳定" }
+];
 
 // 项目视图把版本收进筛选器，主排期表只保留负责人和任务两层，尽量释放时间轴宽度。
 export function ProjectsView({
@@ -55,6 +65,7 @@ export function ProjectsView({
   const projectCount = selectedVersion ? scopeProjectNames.length : projects.length;
   const [calendarMonth, setCalendarMonth] = useState(() => dayjs());
   const [manualCalendarMonthKey, setManualCalendarMonthKey] = useState("");
+  const [taskSort, setTaskSort] = useState<ProjectSchedulerTaskSort>("startAsc");
   const calendarItems = useMemo(
     () =>
       createProjectCalendarItems({
@@ -128,6 +139,16 @@ export function ProjectsView({
               ]}
             />
           </div>
+          <div className="project-calendar-filter-field project-calendar-sort-field">
+            <Text type="secondary">任务排序</Text>
+            <Select
+              className="project-calendar-sort-select"
+              value={taskSort}
+              onChange={setTaskSort}
+              aria-label="任务排序"
+              options={projectTaskSortOptions}
+            />
+          </div>
           <DatePicker
             picker="month"
             value={displayedCalendarMonth}
@@ -174,6 +195,7 @@ export function ProjectsView({
           month={displayedCalendarMonth}
           onOpenItem={onOpenCalendarItem}
           onRescheduleItem={onRescheduleCalendarItem}
+          taskSort={taskSort}
         />
       </div>
     </TableView>

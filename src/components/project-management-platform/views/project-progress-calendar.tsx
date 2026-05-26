@@ -18,7 +18,8 @@ import {
 } from "@/components/project-management-platform/views/project-scheduler-preview-utils";
 import {
   createProjectSchedulerModel,
-  isProjectSchedulerTaskResource
+  isProjectSchedulerTaskResource,
+  type ProjectSchedulerTaskSort
 } from "@/components/project-management-platform/views/project-scheduler-utils";
 
 const weekdayLabels = ["日", "一", "二", "三", "四", "五", "六"];
@@ -47,18 +48,20 @@ export function ProjectProgressCalendar({
   items,
   month,
   onOpenItem,
-  onRescheduleItem
+  onRescheduleItem,
+  taskSort
 }: {
   items: ProjectCalendarItem[];
   month: dayjs.Dayjs;
   onOpenItem: (item: ProjectCalendarItem) => void;
   onRescheduleItem: (item: ProjectCalendarItem, change: ProjectCalendarScheduleChange) => Promise<boolean>;
+  taskSort: ProjectSchedulerTaskSort;
 }) {
   const shellRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef({ active: false, lastEndedAt: 0 });
   const pointerDragRef = useRef({ active: false, moved: false, startX: 0, startY: 0 });
   const resizePreviewRef = useRef<ResizePreviewSource | null>(null);
-  const schedulerModel = createProjectSchedulerModel(items, month);
+  const schedulerModel = createProjectSchedulerModel(items, month, taskSort);
 
   function markDragEnded() {
     dragStateRef.current.active = false;

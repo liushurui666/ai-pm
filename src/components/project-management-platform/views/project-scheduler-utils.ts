@@ -41,6 +41,11 @@ const ownerResourcePrefix = "owner:";
 const taskRowHeight = 58;
 const ownerRowHeight = 54;
 
+export type ProjectSchedulerTaskSort = "startAsc" | "endAsc" | "priorityDesc" | "progressAsc" | "default";
+
+const defaultTaskSort: ProjectSchedulerTaskSort = "startAsc";
+const priorityWeight: Record<string, number> = { 高: 3, 中: 2, 低: 1 };
+
 type ProjectSchedulerOwnerGroup = {
   owner: string;
   avatarUrl?: string;
@@ -88,18 +93,49 @@ function getRangeText(item: ProjectCalendarItem) {
   return start.isSame(end, "day") ? start.format("MM/DD") : `${start.format("MM/DD")} - ${end.format("MM/DD")}`;
 }
 
-function compareProjectSchedulerItems(left: ProjectCalendarItem, right: ProjectCalendarItem) {
-  const leftRange = getProjectCalendarItemRange(left);
-  const rightRange = getProjectCalendarItemRange(right);
-
-  // 任务行按版本和标题稳定排序，拖拽改期后不因为日期变化导致行位跳动。
+function compareStableTaskFields(left: ProjectCalendarItem, right: ProjectCalendarItem) {
   return (
     (left.versionName || left.project).localeCompare(right.versionName || right.project, "zh-Hans-CN") ||
     left.title.localeCompare(right.title, "zh-Hans-CN") ||
-    left.id.localeCompare(right.id, "zh-Hans-CN") ||
-    leftRange.start.valueOf() - rightRange.start.valueOf() ||
-    leftRange.end.valueOf() - rightRange.end.valueOf()
+    left.id.localeCompare(right.id, "zh-Hans-CN")
   );
+}
+
+function compareProjectSchedulerItems(
+  left: ProjectCalendarItem,
+  right: ProjectCalendarItem,
+  taskSort: ProjectSchedulerTaskSort = defaultTaskSort
+) {
+  const leftRange = getProjectCalendarItemRange(left);
+  const rightRange = getProjectCalendarItemRange(right);
+  const leftStart = leftRange.start.valueOf();
+  const rightStart = rightRange.start.valueOf();
+  const leftEnd = leftRange.end.valueOf();
+  const rightEnd = rightRange.end.valueOf();
+  const stableCompare = compareStableTaskFields(left, right);
+
+  // 项目视图的任务行排序只影响同一负责人的上下顺序，右侧任务条仍只负责日期拖拽。
+  if (taskSort === "startAsc") {
+    return leftStart - rightStart || leftEnd - rightEnd || stableCompare;
+  }
+
+  if (taskSort === "endAsc") {
+    return leftEnd - rightEnd || leftStart - rightStart || stableCompare;
+  }
+
+  if (taskSort === "priorityDesc") {
+    return (
+      (priorityWeight[right.priority ?? ""] ?? 0) - (priorityWeight[left.priority ?? ""] ?? 0) ||
+      leftEnd - rightEnd ||
+      stableCompare
+    );
+  }
+
+  if (taskSort === "progressAsc") {
+    return left.progress - right.progress || leftEnd - rightEnd || stableCompare;
+  }
+
+  return stableCompare || leftStart - rightStart || leftEnd - rightEnd;
 }
 
 function getTaskResourceId(item: ProjectCalendarItem) {
@@ -110,7 +146,7 @@ export function isProjectSchedulerTaskResource(resource: DayPilot.ResourceId, it
   return String(resource) === getTaskResourceId(item);
 }
 
-function createOwnerGroups(items: ProjectCalendarItem[]) {
+function createOwnerGroups(items: ProjectCalendarItem[], taskSort: ProjectSchedulerTaskSort) {
   const groups = items.reduce<Record<string, ProjectSchedulerOwnerGroup>>((nextGroups, item) => {
     const owner = item.owner || "未分配";
     const ownerGroup = nextGroups[owner] ?? {
@@ -133,7 +169,7 @@ function createOwnerGroups(items: ProjectCalendarItem[]) {
   return Object.values(groups)
     .map((ownerGroup) => ({
       ...ownerGroup,
-      items: ownerGroup.items.sort(compareProjectSchedulerItems)
+      items: [...ownerGroup.items].sort((left, right) => compareProjectSchedulerItems(left, right, taskSort))
     }))
     .sort((left, right) => {
       const leftFirstItem = left.items[0];
@@ -248,9 +284,15 @@ function getEventResizeAreas(item: ProjectCalendarItem): DayPilot.AreaData[] {
 }
 
 // Scheduler 需要资源行和事件条；这里统一把项目日历条目适配成 DayPilot 可消费的数据。
-export function createProjectSchedulerModel(items: ProjectCalendarItem[], month: dayjs.Dayjs) {
-  const visibleItems = items.filter((item) => isCalendarItemVisibleInMonth(item, month)).sort(compareProjectSchedulerItems);
-  const ownerGroups = createOwnerGroups(visibleItems);
+export function createProjectSchedulerModel(
+  items: ProjectCalendarItem[],
+  month: dayjs.Dayjs,
+  taskSort: ProjectSchedulerTaskSort = defaultTaskSort
+) {
+  const visibleItems = items
+    .filter((item) => isCalendarItemVisibleInMonth(item, month))
+    .sort((left, right) => compareProjectSchedulerItems(left, right, taskSort));
+  const ownerGroups = createOwnerGroups(visibleItems, taskSort);
   const resources: DayPilot.ResourceData[] = ownerGroups.flatMap((ownerGroup) => [
     {
       id: `${ownerResourcePrefix}${ownerGroup.owner}`,

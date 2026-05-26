@@ -911,6 +911,15 @@
   max-width: 100%;
 }
 
+.project-calendar-sort-field {
+  grid-template-columns: auto minmax(150px, 190px);
+}
+
+.project-calendar-sort-select {
+  width: 190px !important;
+  max-width: 100%;
+}
+
 .project-calendar-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(420px, 0.78fr);
@@ -2306,7 +2315,8 @@
   .project-calendar-toolbar,
   .project-calendar-filter-field,
   .project-calendar-toolbar .ant-picker,
-  .project-calendar-project-select {
+  .project-calendar-project-select,
+  .project-calendar-sort-select {
     width: 100% !important;
   }
 
