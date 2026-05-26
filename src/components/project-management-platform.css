@@ -1273,74 +1273,76 @@
   min-width: 0;
 }
 
-/* 左侧资源列伪装成三列表格：版本、负责人、任务各有固定列，层级不再依赖单列缩进。 */
-.project-scheduler-resource-corner,
-.project-scheduler-resource-table {
+/* 左侧资源列用纵向分组呈现：版本整行、负责人子组整行、任务明细整行，避免把三层做成并列同级。 */
+.project-scheduler-resource-stack {
   display: grid;
-  grid-template-columns: 170px 150px 240px;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
   min-width: 0;
   height: 100%;
-}
-
-.project-scheduler-resource-corner {
-  align-items: center;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface-subtle);
-  color: color-mix(in srgb, var(--foreground) 70%, var(--muted));
-  font-size: 12px;
-  font-weight: 760;
-}
-
-.project-scheduler-resource-corner span {
-  display: grid;
-  height: 100%;
-  place-items: center start;
-  padding: 0 12px;
-  border-left: 1px solid var(--border);
-}
-
-.project-scheduler-resource-corner span:first-child {
-  border-left: 0;
-}
-
-.project-scheduler-resource-table {
+  padding: 6px 12px;
   background: var(--surface);
 }
 
-.project-scheduler-resource-cell {
+.project-scheduler-hierarchy-rail {
   position: relative;
-  display: grid;
-  align-content: center;
-  min-width: 0;
-  padding: 7px 10px;
-  border-left: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  align-self: stretch;
 }
 
-.project-scheduler-resource-cell:first-child {
-  border-left: 0;
-}
-
-.project-scheduler-resource-empty-cell {
-  background:
-    linear-gradient(90deg, transparent, color-mix(in srgb, var(--border) 22%, transparent) 50%, transparent),
-    color-mix(in srgb, var(--surface-subtle) 48%, transparent);
-}
-
-.project-scheduler-resource-empty-cell::after {
+.project-scheduler-hierarchy-rail::before,
+.project-scheduler-hierarchy-rail::after {
   position: absolute;
-  top: 50%;
-  left: 10px;
-  right: 10px;
-  height: 1px;
-  background: color-mix(in srgb, var(--border) 78%, transparent);
   content: "";
 }
 
-.project-scheduler-resource-version .project-scheduler-resource-cell-version {
-  padding-left: 12px;
-  border-left: 4px solid var(--brand);
+.project-scheduler-hierarchy-rail::before {
+  top: -12px;
+  bottom: -12px;
+  left: 16px;
+  width: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 82%, transparent);
+}
+
+.project-scheduler-hierarchy-rail::after {
+  top: 50%;
+  left: 16px;
+  width: 18px;
+  height: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 82%, transparent);
+}
+
+.project-scheduler-hierarchy-rail-version::before,
+.project-scheduler-hierarchy-rail-version::after {
+  background: color-mix(in srgb, var(--brand) 60%, var(--border));
+}
+
+.project-scheduler-hierarchy-rail-owner::before,
+.project-scheduler-hierarchy-rail-owner::after {
+  background: color-mix(in srgb, var(--teal) 62%, var(--border));
+}
+
+.project-scheduler-hierarchy-rail-task::before,
+.project-scheduler-hierarchy-rail-task::after {
+  background: color-mix(in srgb, var(--brand) 40%, var(--border));
+}
+
+.project-scheduler-resource-panel {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  border-radius: 7px;
+}
+
+.project-scheduler-resource-panel-version {
+  gap: 3px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--brand) 28%, var(--border));
+  border-left: 5px solid var(--brand);
   background:
-    linear-gradient(90deg, color-mix(in srgb, var(--brand) 18%, transparent), transparent 76%),
+    linear-gradient(90deg, color-mix(in srgb, var(--brand) 16%, transparent), transparent 72%),
     var(--surface-subtle);
 }
 
@@ -1355,18 +1357,16 @@
   font-weight: 800;
 }
 
-.project-scheduler-resource-owner .project-scheduler-resource-cell-version::after {
-  background: color-mix(in srgb, var(--brand) 34%, var(--border));
-}
-
-.project-scheduler-resource-owner .project-scheduler-resource-cell-owner {
+.project-scheduler-resource-panel-owner {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
+  grid-template-columns: 28px minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
-  border-left: 4px solid color-mix(in srgb, var(--teal) 72%, var(--brand));
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--teal) 24%, var(--border));
+  border-left: 5px solid color-mix(in srgb, var(--teal) 74%, var(--brand));
   background:
-    linear-gradient(90deg, color-mix(in srgb, var(--teal) 12%, transparent), transparent 74%),
+    linear-gradient(90deg, color-mix(in srgb, var(--teal) 10%, transparent), transparent 72%),
     color-mix(in srgb, var(--teal) 5%, var(--surface));
 }
 
@@ -1380,8 +1380,11 @@
   color: color-mix(in srgb, var(--teal) 82%, var(--foreground));
 }
 
-.project-scheduler-resource-owner .project-scheduler-resource-cell-task::after {
-  background: color-mix(in srgb, var(--teal) 30%, var(--border));
+.project-scheduler-resource-owner em {
+  justify-self: end;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--teal) 9%, transparent);
 }
 
 .project-scheduler-owner-avatar {
@@ -1401,19 +1404,13 @@
   object-fit: cover;
 }
 
-.project-scheduler-resource-task .project-scheduler-resource-cell-version::after {
-  background: color-mix(in srgb, var(--brand) 28%, var(--border));
-}
-
-.project-scheduler-resource-task .project-scheduler-resource-cell-owner::after {
-  background: color-mix(in srgb, var(--teal) 46%, var(--border));
-}
-
-.project-scheduler-resource-task .project-scheduler-resource-cell-task {
+.project-scheduler-resource-panel-task {
   display: grid;
   grid-template-columns: 14px minmax(0, 1fr);
   gap: 8px;
   align-items: center;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--brand) 14%, var(--border));
   border-left: 4px solid color-mix(in srgb, var(--brand) 70%, var(--teal));
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--brand) 7%, transparent), transparent 72%),
