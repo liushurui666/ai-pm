@@ -112,34 +112,35 @@ export function OverviewView({
             </Button>
           </Space>
         </div>
-
-        <div className="overview-risk-panel overview-priority-panel">
-          <Flex justify="space-between" align="center" gap={12}>
-            <Text strong>最该处理</Text>
-            <Tag color={priorityItems.length ? "red" : "green"}>{priorityItems.length ? "按风险排序" : "已清空"}</Tag>
-          </Flex>
-          {priorityItems.length ? (
-            <div className="overview-priority-list">
-              {priorityItems.map((item) => (
-                <div className={`overview-priority-item overview-priority-item-${item.action}`} key={`${item.action}-${item.id}`}>
-                  <Space orientation="vertical" size={6} className="pm-wide">
-                    <Flex justify="space-between" align="start" gap={10}>
-                      <Text strong className="overview-work-title">{item.title}</Text>
-                      <Tag color={item.tagColor}>{item.status}</Tag>
-                    </Flex>
-                    <Text type="secondary">{item.typeLabel} · {item.meta}</Text>
-                  </Space>
-                  <Button size="small" type="text" onClick={item.action === "bug" ? onViewBugs : onViewTasks}>
-                    处理
-                  </Button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无未解决任务或 Bug" />
-          )}
-        </div>
       </section>
+
+      {/* 优先队列放在工作台主卡下方，先看个人概况，再处理具体事项。 */}
+      <div className="overview-risk-panel overview-priority-panel">
+        <Flex justify="space-between" align="center" gap={12}>
+          <Text strong>最该处理</Text>
+          <Tag color={priorityItems.length ? "red" : "green"}>{priorityItems.length ? "按风险排序" : "已清空"}</Tag>
+        </Flex>
+        {priorityItems.length ? (
+          <div className="overview-priority-list">
+            {priorityItems.map((item) => (
+              <div className={`overview-priority-item overview-priority-item-${item.action}`} key={`${item.action}-${item.id}`}>
+                <Space orientation="vertical" size={6} className="pm-wide">
+                  <Flex justify="space-between" align="start" gap={10}>
+                    <Text strong className="overview-work-title">{item.title}</Text>
+                    <Tag color={item.tagColor}>{item.status}</Tag>
+                  </Flex>
+                  <Text type="secondary">{item.typeLabel} · {item.meta}</Text>
+                </Space>
+                <Button size="small" type="text" onClick={item.action === "bug" ? onViewBugs : onViewTasks}>
+                  处理
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无未解决任务或 Bug" />
+        )}
+      </div>
 
       <Row gutter={[16, 16]}>
         <MetricCard icon={<CheckCircleOutlined />} title={currentUser ? "我的待办任务" : "待办任务"} value={unresolvedTasks.length} suffix="个" tone="blue" />

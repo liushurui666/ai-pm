@@ -258,8 +258,9 @@
   align-items: stretch;
 }
 
-/* 个人工作台不和右侧优先队列强制等高，避免操作按钮下方出现大片空白。 */
+/* 个人工作台独占一行，优先队列下沉到卡片下方，避免右侧栏抢占第一视觉。 */
 .overview-personal-command {
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
 }
 
@@ -386,6 +387,10 @@
 .overview-work-list {
   display: grid;
   gap: 10px;
+}
+
+.overview-priority-list {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 
 .overview-priority-item,
