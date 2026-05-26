@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Button, Card, Col, Empty, Flex, Row, Space, Tag, Typography } from "antd";
+import { Button, Card, Col, Empty, Flex, Row, Space, Tag, Typography } from "antd";
 import { AlertOutlined, BugOutlined, CheckCircleOutlined, ClockCircleOutlined, RobotOutlined } from "@ant-design/icons";
 import type { DashboardData } from "@/types/dashboard";
 import { isMyOwnerRecord } from "@/components/project-management-platform/identity";
@@ -25,7 +25,6 @@ export function OverviewView({
   onViewBugs,
   onViewTasks,
   onOpenAssistant,
-  onViewProjects,
   onViewRisks
 }: {
   data: DashboardData;
@@ -33,7 +32,6 @@ export function OverviewView({
   onViewBugs: () => void;
   onViewTasks: () => void;
   onOpenAssistant: () => void;
-  onViewProjects: () => void;
   onViewRisks: () => void;
 }) {
   const currentUser = data.meta?.user;
@@ -48,26 +46,9 @@ export function OverviewView({
   const bugList = [...unresolvedBugs].sort(sortBugsForPersonalFocus).slice(0, 6);
   const perspectiveName = currentUser ? currentUser.name : "团队";
   const focusTotal = unresolvedTasks.length + unresolvedBugs.length;
-  const topRiskProject = data.projects.length
-    ? [...data.projects].sort((left, right) => left.health - right.health || right.riskCount - left.riskCount)[0]
-    : null;
 
   return (
     <Space orientation="vertical" size={18} className="pm-page-stack">
-      {data.meta?.message ? (
-        <Alert
-          className="pm-source-alert"
-          type={data.meta.source === "local" ? "success" : "warning"}
-          showIcon
-          title={data.meta.message}
-          description={
-            <Space orientation="vertical" size={4}>
-              {data.meta.storage ? <Text>数据存储：{data.meta.storage}</Text> : null}
-              <Text>飞书用于登录、负责人选择和机器人通知，不作为项目主数据源。</Text>
-            </Space>
-          }
-        />
-      ) : null}
       <section className="overview-command">
         <div className="overview-command-main overview-personal-main">
           <Tag color="blue">{currentUser ? "个人待处理" : "团队待处理"}</Tag>
@@ -179,16 +160,6 @@ export function OverviewView({
           </Card>
         </Col>
       </Row>
-
-      {topRiskProject ? (
-        <Alert
-          type="warning"
-          showIcon
-          action={<Button size="small" onClick={onViewProjects}>查看项目</Button>}
-          message={`当前最高风险项目：${topRiskProject.name}`}
-          description={`${topRiskProject.summary} 风险数 ${topRiskProject.riskCount}，健康度 ${topRiskProject.health}/100。`}
-        />
-      ) : null}
     </Space>
   );
 }
