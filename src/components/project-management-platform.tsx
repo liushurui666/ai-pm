@@ -1593,8 +1593,10 @@ export function ProjectManagementPlatform({
                       data={data}
                       onGenerateReport={handleGenerateWeeklyReport}
                       onOpenAssistant={() => setAssistantOpen(true)}
+                      onViewBugs={() => switchView("bugs")}
                       onViewProjects={() => switchView("projects")}
                       onViewRisks={() => switchView("risks")}
+                      onViewTasks={() => switchView("tasks")}
                     />
                   ) : null}
                   {activeView === "projects" ? (

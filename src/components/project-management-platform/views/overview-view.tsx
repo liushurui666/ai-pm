@@ -1,47 +1,58 @@
 "use client";
 
-import { Alert, Button, Card, Col, Divider, Empty, Flex, Progress, Row, Space, Statistic, Tag, Typography } from "antd";
-import { AlertOutlined, CheckCircleOutlined, ClockCircleOutlined, ProjectOutlined, RobotOutlined } from "@ant-design/icons";
-import dayjs from "dayjs";
-import type { DashboardData, Requirement, Task } from "@/types/dashboard";
+import { Alert, Button, Card, Col, Empty, Flex, Row, Space, Tag, Typography } from "antd";
+import { AlertOutlined, BugOutlined, CheckCircleOutlined, ClockCircleOutlined, RobotOutlined } from "@ant-design/icons";
+import type { DashboardData } from "@/types/dashboard";
+import { isMyOwnerRecord } from "@/components/project-management-platform/identity";
 import { MetricCard } from "@/components/project-management-platform/shared/metric-card";
-import { OwnerAvatar, OwnerInline } from "@/components/project-management-platform/shared/owner-inline";
+import { OwnerInline } from "@/components/project-management-platform/shared/owner-inline";
+import {
+  formatOverviewBugCreatedAt,
+  getOverviewPriorityItems,
+  isMyOverviewBug,
+  isOverdueOverviewTask,
+  overviewBugSeverityColor,
+  overviewBugStatusColor,
+  overviewTaskPriorityColor,
+  sortBugsForPersonalFocus,
+  sortTasksForPersonalFocus
+} from "@/components/project-management-platform/views/overview-utils";
 
 const { Title, Text, Paragraph } = Typography;
-
-const priorityColor: Record<Task["priority"] | Requirement["priority"], string> = {
-  高: "red",
-  中: "gold",
-  低: "green",
-  P0: "red",
-  P1: "blue",
-  P2: "default"
-};
 
 export function OverviewView({
   data,
   onGenerateReport,
+  onViewBugs,
+  onViewTasks,
   onOpenAssistant,
   onViewProjects,
   onViewRisks
 }: {
   data: DashboardData;
   onGenerateReport: () => void;
+  onViewBugs: () => void;
+  onViewTasks: () => void;
   onOpenAssistant: () => void;
   onViewProjects: () => void;
   onViewRisks: () => void;
 }) {
+  const currentUser = data.meta?.user;
+  const personalTasks = currentUser ? data.tasks.filter((task) => isMyOwnerRecord(task, currentUser)) : data.tasks;
+  const personalBugs = currentUser ? data.bugs.filter((bug) => isMyOverviewBug(bug, currentUser)) : data.bugs;
+  const unresolvedTasks = personalTasks.filter((task) => task.stage !== "已完成");
+  const unresolvedBugs = personalBugs.filter((bug) => bug.status !== "已关闭");
+  const overdueTasks = unresolvedTasks.filter(isOverdueOverviewTask);
+  const reviewBugs = unresolvedBugs.filter((bug) => bug.status === "待验证");
+  const severeBugs = unresolvedBugs.filter((bug) => ["阻塞", "严重"].includes(bug.severity));
+  const priorityItems = getOverviewPriorityItems(unresolvedTasks, unresolvedBugs).slice(0, 5);
+  const taskList = [...unresolvedTasks].sort(sortTasksForPersonalFocus).slice(0, 6);
+  const bugList = [...unresolvedBugs].sort(sortBugsForPersonalFocus).slice(0, 6);
+  const perspectiveName = currentUser ? currentUser.name : "团队";
+  const focusTotal = unresolvedTasks.length + unresolvedBugs.length;
   const topRiskProject = data.projects.length
     ? [...data.projects].sort((left, right) => left.health - right.health || right.riskCount - left.riskCount)[0]
     : null;
-  const focusProjects = [...data.projects]
-    .sort((left, right) => left.health - right.health || right.riskCount - left.riskCount)
-    .slice(0, 3);
-  const urgentTasks = data.tasks
-    .filter((task) => task.stage !== "已完成")
-    .sort((left, right) => dayjs(left.dueDate).valueOf() - dayjs(right.dueDate).valueOf())
-    .slice(0, 4);
-  const aiSavedFormula = `估算口径：需求 ${data.requirements.length} 条 × 3h + 文档 ${data.documents.length} 份 × 2h + 任务 ${data.tasks.length} 条 × 1h + Bug ${data.bugs.length} 条 × 1h。`;
 
   return (
     <Space orientation="vertical" size={18} className="pm-page-stack">
@@ -59,103 +70,135 @@ export function OverviewView({
           }
         />
       ) : null}
-      <section className="overview-command">
-        <div className="overview-command-main">
-          <Tag color="blue">AI 项目运营中枢</Tag>
-          <Title level={2}>今天优先关注 {focusProjects.filter((project) => project.status === "有风险").length} 个风险项目</Title>
+      <section className="overview-command overview-personal-command">
+        <div className="overview-command-main overview-personal-main">
+          <Tag color="blue">{currentUser ? "个人待处理" : "团队待处理"}</Tag>
+          <Title level={2}>{perspectiveName}工作台：{focusTotal} 个未解决项</Title>
           <Paragraph>
-            系统已按项目健康度、逾期任务、Bug 严重程度和里程碑状态重新排序，优先处理健康度最低的项目。
+            优先聚焦未关闭 Bug、未完成任务和已经逾期的执行项，把今天真正需要推进的事情放在第一屏。
           </Paragraph>
+          <div className="overview-focus-summary">
+            <div className="overview-focus-chip overview-focus-chip-task">
+              <span>待办任务</span>
+              <strong>{unresolvedTasks.length}</strong>
+              <em>{overdueTasks.length} 个逾期</em>
+            </div>
+            <div className="overview-focus-chip overview-focus-chip-bug">
+              <span>未关闭 Bug</span>
+              <strong>{unresolvedBugs.length}</strong>
+              <em>{severeBugs.length} 个阻塞/严重</em>
+            </div>
+            <div className="overview-focus-chip overview-focus-chip-review">
+              <span>待验证 Bug</span>
+              <strong>{reviewBugs.length}</strong>
+              <em>需要确认是否闭环</em>
+            </div>
+          </div>
           <Space wrap>
-            <Button type="primary" icon={<RobotOutlined />} onClick={onGenerateReport}>
-              生成本周汇报
+            <Button type="primary" icon={<CheckCircleOutlined />} onClick={onViewTasks}>
+              去任务看板
             </Button>
-            <Button icon={<AlertOutlined />} onClick={onViewRisks}>
-              查看风险清单
+            <Button icon={<BugOutlined />} onClick={onViewBugs}>
+              去 Bug 管理
             </Button>
             <Button icon={<RobotOutlined />} onClick={onOpenAssistant}>
               询问 AI 助手
             </Button>
+            <Button icon={<AlertOutlined />} onClick={onViewRisks}>
+              风险清单
+            </Button>
+            <Button icon={<RobotOutlined />} onClick={onGenerateReport}>
+              生成周报
+            </Button>
           </Space>
         </div>
 
-        <div className="overview-risk-panel">
-          {topRiskProject ? (
-            <Space orientation="vertical" size={12} className="pm-wide">
-              <Flex justify="space-between" align="center">
-                <Text strong>最高风险项目</Text>
-                <Tag color={topRiskProject.health < 70 ? "red" : "gold"}>{topRiskProject.status}</Tag>
-              </Flex>
-              <Title level={4}>{topRiskProject.name}</Title>
-              <OwnerInline name={topRiskProject.owner} avatarUrl={topRiskProject.ownerAvatarUrl} />
-              <Text type="secondary">{topRiskProject.summary}</Text>
-              <Divider />
-              <Row gutter={12}>
-                <Col span={12}>
-                  <Statistic title="健康度" value={topRiskProject.health} suffix="/ 100" />
-                </Col>
-                <Col span={12}>
-                  <Statistic title="风险数" value={topRiskProject.riskCount} />
-                </Col>
-              </Row>
-            </Space>
+        <div className="overview-risk-panel overview-priority-panel">
+          <Flex justify="space-between" align="center" gap={12}>
+            <Text strong>最该处理</Text>
+            <Tag color={priorityItems.length ? "red" : "green"}>{priorityItems.length ? "按风险排序" : "已清空"}</Tag>
+          </Flex>
+          {priorityItems.length ? (
+            <div className="overview-priority-list">
+              {priorityItems.map((item) => (
+                <div className={`overview-priority-item overview-priority-item-${item.action}`} key={`${item.action}-${item.id}`}>
+                  <Space orientation="vertical" size={6} className="pm-wide">
+                    <Flex justify="space-between" align="start" gap={10}>
+                      <Text strong className="overview-work-title">{item.title}</Text>
+                      <Tag color={item.tagColor}>{item.status}</Tag>
+                    </Flex>
+                    <Text type="secondary">{item.typeLabel} · {item.meta}</Text>
+                  </Space>
+                  <Button size="small" type="text" onClick={item.action === "bug" ? onViewBugs : onViewTasks}>
+                    处理
+                  </Button>
+                </div>
+              ))}
+            </div>
           ) : (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无项目" />
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无未解决任务或 Bug" />
           )}
         </div>
       </section>
 
       <Row gutter={[16, 16]}>
-        <MetricCard icon={<ProjectOutlined />} title="活跃项目" value={data.metrics.activeProjects} suffix="个" tone="blue" />
-        <MetricCard icon={<CheckCircleOutlined />} title="交付达成率" value={data.metrics.deliveryRate} suffix="%" tone="green" />
-        <MetricCard icon={<ClockCircleOutlined />} title="逾期任务" value={data.metrics.overdueTasks} suffix="个" tone="orange" />
-        <MetricCard
-          icon={<RobotOutlined />}
-          title="AI 节省工时"
-          value={data.metrics.aiSavedHours}
-          suffix="小时"
-          tone="violet"
-          description={aiSavedFormula}
-          help={aiSavedFormula}
-        />
+        <MetricCard icon={<CheckCircleOutlined />} title={currentUser ? "我的待办任务" : "待办任务"} value={unresolvedTasks.length} suffix="个" tone="blue" />
+        <MetricCard icon={<BugOutlined />} title={currentUser ? "我的未关闭 Bug" : "未关闭 Bug"} value={unresolvedBugs.length} suffix="个" tone="orange" />
+        <MetricCard icon={<ClockCircleOutlined />} title="已逾期任务" value={overdueTasks.length} suffix="个" tone="violet" />
+        <MetricCard icon={<AlertOutlined />} title="阻塞/严重 Bug" value={severeBugs.length} suffix="个" tone="green" />
       </Row>
 
       <Row gutter={[16, 16]}>
-        <Col xs={24} xl={15}>
-          <Card title={<Space><ProjectOutlined />项目健康度</Space>} extra={<Button type="link" onClick={onViewProjects}>查看全部</Button>}>
-            <Space orientation="vertical" size={16} className="pm-wide">
-              {focusProjects.map((project) => (
-                <div className="project-health-row" key={project.id}>
-                  <div>
-                    <Text strong>{project.name}</Text>
-                    <div>
-                      <Space size={6}>
-                        <OwnerAvatar name={project.owner} avatarUrl={project.ownerAvatarUrl} size="small" />
-                        <Text type="secondary">{project.owner} · 截止 {project.dueDate}</Text>
+        <Col xs={24} xl={12}>
+          <Card
+            className="overview-work-card"
+            title={<Space><BugOutlined />未解决 Bug</Space>}
+            extra={<Button type="link" onClick={onViewBugs}>查看全部</Button>}
+          >
+            {bugList.length ? (
+              <div className="overview-work-list">
+                {bugList.map((bug) => (
+                  <div className="overview-work-item overview-work-item-bug" key={bug.id}>
+                    <Flex justify="space-between" align="start" gap={12}>
+                      <Text strong className="overview-work-title">{bug.title}</Text>
+                      <Space size={4}>
+                        <Tag color={overviewBugSeverityColor[bug.severity]}>{bug.severity}</Tag>
+                        <Tag color={overviewBugStatusColor[bug.status]}>{bug.status}</Tag>
                       </Space>
-                    </div>
+                    </Flex>
+                    <Flex justify="space-between" align="center" gap={12} wrap="wrap">
+                      <OwnerInline name={bug.owner || "未分配"} avatarUrl={bug.ownerAvatarUrl} secondary={bug.versionName || bug.project} />
+                      <Text type="secondary">{formatOverviewBugCreatedAt(bug.createdAt)}</Text>
+                    </Flex>
                   </div>
-                  <div className="project-health-progress">
-                    <Progress percent={project.progress} strokeColor={project.health >= 85 ? "var(--teal)" : "var(--amber)"} />
-                  </div>
-                </div>
-              ))}
-            </Space>
+                ))}
+              </div>
+            ) : (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无未关闭 Bug" />
+            )}
           </Card>
         </Col>
-        <Col xs={24} xl={9}>
-          <Card title={<Space><ClockCircleOutlined />近期任务</Space>}>
-            {urgentTasks.length ? (
-              <div className="pm-list-stack">
-                {urgentTasks.map((task) => (
-                  <div className="pm-list-item" key={task.id}>
-                    <Space orientation="vertical" size={4} className="pm-wide">
-                      <Flex justify="space-between" align="start" gap={12}>
-                        <Text strong>{task.title}</Text>
-                        <Tag color={priorityColor[task.priority]}>{task.priority}</Tag>
-                      </Flex>
-                      <Text type="secondary">{task.project} · {task.owner || "未分配"} · {task.dueDate}</Text>
-                    </Space>
+        <Col xs={24} xl={12}>
+          <Card
+            className="overview-work-card"
+            title={<Space><ClockCircleOutlined />待办任务</Space>}
+            extra={<Button type="link" onClick={onViewTasks}>查看全部</Button>}
+          >
+            {taskList.length ? (
+              <div className="overview-work-list">
+                {taskList.map((task) => (
+                  <div className="overview-work-item overview-work-item-task" key={task.id}>
+                    <Flex justify="space-between" align="start" gap={12}>
+                      <Text strong className="overview-work-title">{task.title}</Text>
+                      <Space size={4}>
+                        <Tag color={overviewTaskPriorityColor[task.priority]}>{task.priority}</Tag>
+                        <Tag>{task.stage}</Tag>
+                      </Space>
+                    </Flex>
+                    <Flex justify="space-between" align="center" gap={12} wrap="wrap">
+                      <OwnerInline name={task.owner || "未分配"} avatarUrl={task.ownerAvatarUrl} secondary={task.versionName || task.project} />
+                      <Text type={isOverdueOverviewTask(task) ? "danger" : "secondary"}>截止 {task.dueDate}</Text>
+                    </Flex>
                   </div>
                 ))}
               </div>
@@ -165,6 +208,16 @@ export function OverviewView({
           </Card>
         </Col>
       </Row>
+
+      {topRiskProject ? (
+        <Alert
+          type="warning"
+          showIcon
+          action={<Button size="small" onClick={onViewProjects}>查看项目</Button>}
+          message={`当前最高风险项目：${topRiskProject.name}`}
+          description={`${topRiskProject.summary} 风险数 ${topRiskProject.riskCount}，健康度 ${topRiskProject.health}/100。`}
+        />
+      ) : null}
     </Space>
   );
 }
