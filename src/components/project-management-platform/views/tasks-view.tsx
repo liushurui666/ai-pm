@@ -10,11 +10,11 @@ import { OwnerAvatar, OwnerInline } from "@/components/project-management-platfo
 import { PageTitle } from "@/components/project-management-platform/shared/page-shell";
 import { priorityColor, taskStages } from "@/components/project-management-platform/constants";
 import { TaskStageBoard } from "@/components/project-management-platform/views/task-stage-board";
-import { sortTasksForDelivery, VersionTaskBoard } from "@/components/project-management-platform/views/version-task-board";
+import { sortTasksForDelivery } from "@/components/project-management-platform/views/version-task-board";
 
 const { Text } = Typography;
-const allOwnerVersionValue = "全部";
-const unplannedOwnerVersionValue = "__unplanned__";
+const allTaskVersionValue = "全部";
+const unplannedTaskVersionValue = "__unplanned__";
 
 type RequirementVersionOption = {
   value: string;
@@ -48,6 +48,14 @@ function isMyTask(task: Task, currentUser?: FeishuUser) {
   return [currentUser.name, currentUser.enName, currentUser.email].some((value) => owner && owner === normalizeIdentity(value));
 }
 
+function getTaskEmptyText(onlyMine: boolean, versionFilter: string) {
+  if (versionFilter !== allTaskVersionValue) {
+    return onlyMine ? "当前版本暂无分配给你的任务" : "当前版本暂无任务，上传文档后会自动生成";
+  }
+
+  return onlyMine ? "暂无分配给你的任务" : "暂无任务";
+}
+
 export function TasksView({
   tasks,
   currentUser,
@@ -63,38 +71,38 @@ export function TasksView({
   onEdit: (task: Task) => void;
   onStageChange: (task: Task, stage: TaskStage) => Promise<boolean>;
 }) {
-  const [viewMode, setViewMode] = useState<"stage" | "version" | "table" | "owner">("stage");
+  const [viewMode, setViewMode] = useState<"stage" | "table" | "owner">("stage");
   const [onlyMine, setOnlyMine] = useState(false);
-  const [ownerVersionFilter, setOwnerVersionFilter] = useState(allOwnerVersionValue);
-  const visibleTasks = useMemo(
+  const [taskVersionFilter, setTaskVersionFilter] = useState(allTaskVersionValue);
+  const scopedTasks = useMemo(
     () => (onlyMine ? tasks.filter((task) => isMyTask(task, currentUser)) : tasks),
     [currentUser, onlyMine, tasks]
   );
-  const ownerVersionOptions = useMemo(() => {
-    const hasUnplannedTask = visibleTasks.some((task) => !task.versionId);
+  const taskVersionOptions = useMemo(() => {
+    const hasUnplannedTask = scopedTasks.some((task) => !task.versionId);
 
-    // 负责人视图单独加版本筛选，避免人维度看板混入太多版本上下文。
+    // 版本筛选是任务看板的全局入口，所有展示模式共享同一批过滤后的任务。
     return [
-      { value: allOwnerVersionValue, label: "全部版本" },
+      { value: allTaskVersionValue, label: "全部版本" },
       ...versionOptions.map((version) => ({ value: version.value, label: version.label })),
-      ...(hasUnplannedTask ? [{ value: unplannedOwnerVersionValue, label: "未规划" }] : [])
+      ...(hasUnplannedTask ? [{ value: unplannedTaskVersionValue, label: "未规划" }] : [])
     ];
-  }, [versionOptions, visibleTasks]);
-  const ownerVisibleTasks = useMemo(() => {
-    if (ownerVersionFilter === allOwnerVersionValue) {
-      return visibleTasks;
+  }, [scopedTasks, versionOptions]);
+  const visibleTasks = useMemo(() => {
+    if (taskVersionFilter === allTaskVersionValue) {
+      return scopedTasks;
     }
 
-    if (ownerVersionFilter === unplannedOwnerVersionValue) {
-      return visibleTasks.filter((task) => !task.versionId);
+    if (taskVersionFilter === unplannedTaskVersionValue) {
+      return scopedTasks.filter((task) => !task.versionId);
     }
 
-    return visibleTasks.filter((task) => task.versionId === ownerVersionFilter);
-  }, [ownerVersionFilter, visibleTasks]);
+    return scopedTasks.filter((task) => task.versionId === taskVersionFilter);
+  }, [scopedTasks, taskVersionFilter]);
   const ownerGroups = useMemo(() => {
     const groups = new Map<string, { avatarUrl?: string; tasks: Task[] }>();
 
-    for (const task of ownerVisibleTasks) {
+    for (const task of visibleTasks) {
       const owner = task.owner?.trim() || "未分配";
       const current = groups.get(owner) ?? { avatarUrl: task.ownerAvatarUrl, tasks: [] };
       groups.set(owner, {
@@ -110,7 +118,7 @@ export function TasksView({
         tasks: group.tasks.sort(sortTasksForDelivery)
       }))
       .sort((left, right) => right.tasks.length - left.tasks.length || left.owner.localeCompare(right.owner, "zh-CN"));
-  }, [ownerVisibleTasks]);
+  }, [visibleTasks]);
   const taskColumns: ColumnsType<Task> = [
     {
       title: "任务",
@@ -131,8 +139,6 @@ export function TasksView({
       dataIndex: "versionName",
       key: "versionName",
       width: 180,
-      filters: versionOptions.map((version) => ({ text: version.versionName, value: version.versionName })),
-      onFilter: (value, task) => task.versionName === value,
       render: (_, task) => task.versionName ? <Tag color="blue">{task.versionName}</Tag> : <Tag>未规划</Tag>
     },
     {
@@ -210,32 +216,29 @@ export function TasksView({
           <Space wrap>
             <Segmented
               value={viewMode}
-              onChange={(value) => setViewMode(value as "stage" | "version" | "table" | "owner")}
+              onChange={(value) => setViewMode(value as "stage" | "table" | "owner")}
               options={[
                 { label: "按阶段", value: "stage", icon: <CheckCircleOutlined /> },
-                { label: "按版本", value: "version", icon: <CalendarOutlined /> },
                 { label: "全部任务", value: "table", icon: <UnorderedListOutlined /> },
                 { label: "按负责人", value: "owner", icon: <UserOutlined /> }
               ]}
             />
+            <Space className="task-version-filter">
+              <Text type="secondary">版本</Text>
+              <Select
+                className="task-version-select"
+                value={taskVersionFilter}
+                onChange={setTaskVersionFilter}
+                options={taskVersionOptions}
+                aria-label="任务看板版本筛选"
+              />
+            </Space>
             <Tooltip title={currentUser ? `当前登录：${currentUser.name}` : "未获取到登录用户"}>
               <Space className="task-mine-filter">
                 <Text type="secondary">只看我的</Text>
                 <Switch checked={onlyMine} disabled={!currentUser} onChange={setOnlyMine} />
               </Space>
             </Tooltip>
-            {viewMode === "owner" ? (
-              <Space className="task-owner-version-filter">
-                <Text type="secondary">版本</Text>
-                <Select
-                  className="task-owner-version-select"
-                  value={ownerVersionFilter}
-                  onChange={setOwnerVersionFilter}
-                  options={ownerVersionOptions}
-                  aria-label="负责人看板版本筛选"
-                />
-              </Space>
-            ) : null}
             <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>
               新建任务
             </Button>
@@ -245,15 +248,13 @@ export function TasksView({
 
       {viewMode === "stage" ? (
         <TaskStageBoard onlyMine={onlyMine} tasks={visibleTasks} onEdit={onEdit} onStageChange={onStageChange} />
-      ) : viewMode === "version" ? (
-        <VersionTaskBoard onlyMine={onlyMine} tasks={visibleTasks} versionOptions={versionOptions} onEdit={onEdit} />
       ) : viewMode === "table" ? (
         <Card>
           <Table
             rowKey="id"
             columns={taskColumns}
             dataSource={visibleTasks}
-            locale={{ emptyText: onlyMine ? "暂无分配给你的任务" : "暂无任务" }}
+            locale={{ emptyText: getTaskEmptyText(onlyMine, taskVersionFilter) }}
             pagination={{ pageSize: 12, showSizeChanger: true }}
             scroll={{ x: 1500 }}
             size="middle"
@@ -311,7 +312,7 @@ export function TasksView({
               <Alert
                 type="info"
                 showIcon
-                message={onlyMine ? "当前版本暂无分配给你的任务" : "当前版本暂无任务，上传文档后会自动生成"}
+                message={getTaskEmptyText(onlyMine, taskVersionFilter)}
               />
             </Card>
           )}

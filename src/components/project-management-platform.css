@@ -1882,7 +1882,7 @@
   background: var(--surface);
 }
 
-.task-owner-version-filter {
+.task-version-filter {
   display: flex;
   align-items: center;
   min-height: 32px;
@@ -1892,12 +1892,12 @@
   background: var(--surface);
 }
 
-.task-owner-version-filter > .ant-space-item:last-child {
+.task-version-filter > .ant-space-item:last-child {
   flex: 1 1 auto;
   min-width: 0;
 }
 
-.task-owner-version-select {
+.task-version-select {
   width: clamp(170px, 18vw, 240px);
 }
 
@@ -2311,8 +2311,8 @@
     width: 100%;
   }
 
-  .task-owner-version-filter,
-  .task-owner-version-select {
+  .task-version-filter,
+  .task-version-select {
     width: 100% !important;
   }
 }
