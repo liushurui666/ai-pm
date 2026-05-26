@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Badge, Button, Card, Flex, Segmented, Space, Switch, Table, Tag, Tooltip, Typography } from "antd";
+import { Alert, Badge, Button, Card, Flex, Segmented, Select, Space, Switch, Table, Tag, Tooltip, Typography } from "antd";
 import { CalendarOutlined, CheckCircleOutlined, EditOutlined, PlusOutlined, UnorderedListOutlined, UserOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo, useState } from "react";
@@ -13,6 +13,8 @@ import { TaskStageBoard } from "@/components/project-management-platform/views/t
 import { sortTasksForDelivery, VersionTaskBoard } from "@/components/project-management-platform/views/version-task-board";
 
 const { Text } = Typography;
+const allOwnerVersionValue = "全部";
+const unplannedOwnerVersionValue = "__unplanned__";
 
 type RequirementVersionOption = {
   value: string;
@@ -63,14 +65,36 @@ export function TasksView({
 }) {
   const [viewMode, setViewMode] = useState<"stage" | "version" | "table" | "owner">("stage");
   const [onlyMine, setOnlyMine] = useState(false);
+  const [ownerVersionFilter, setOwnerVersionFilter] = useState(allOwnerVersionValue);
   const visibleTasks = useMemo(
     () => (onlyMine ? tasks.filter((task) => isMyTask(task, currentUser)) : tasks),
     [currentUser, onlyMine, tasks]
   );
+  const ownerVersionOptions = useMemo(() => {
+    const hasUnplannedTask = visibleTasks.some((task) => !task.versionId);
+
+    // 负责人视图单独加版本筛选，避免人维度看板混入太多版本上下文。
+    return [
+      { value: allOwnerVersionValue, label: "全部版本" },
+      ...versionOptions.map((version) => ({ value: version.value, label: version.label })),
+      ...(hasUnplannedTask ? [{ value: unplannedOwnerVersionValue, label: "未规划" }] : [])
+    ];
+  }, [versionOptions, visibleTasks]);
+  const ownerVisibleTasks = useMemo(() => {
+    if (ownerVersionFilter === allOwnerVersionValue) {
+      return visibleTasks;
+    }
+
+    if (ownerVersionFilter === unplannedOwnerVersionValue) {
+      return visibleTasks.filter((task) => !task.versionId);
+    }
+
+    return visibleTasks.filter((task) => task.versionId === ownerVersionFilter);
+  }, [ownerVersionFilter, visibleTasks]);
   const ownerGroups = useMemo(() => {
     const groups = new Map<string, { avatarUrl?: string; tasks: Task[] }>();
 
-    for (const task of visibleTasks) {
+    for (const task of ownerVisibleTasks) {
       const owner = task.owner?.trim() || "未分配";
       const current = groups.get(owner) ?? { avatarUrl: task.ownerAvatarUrl, tasks: [] };
       groups.set(owner, {
@@ -86,7 +110,7 @@ export function TasksView({
         tasks: group.tasks.sort(sortTasksForDelivery)
       }))
       .sort((left, right) => right.tasks.length - left.tasks.length || left.owner.localeCompare(right.owner, "zh-CN"));
-  }, [visibleTasks]);
+  }, [ownerVisibleTasks]);
   const taskColumns: ColumnsType<Task> = [
     {
       title: "任务",
@@ -200,6 +224,18 @@ export function TasksView({
                 <Switch checked={onlyMine} disabled={!currentUser} onChange={setOnlyMine} />
               </Space>
             </Tooltip>
+            {viewMode === "owner" ? (
+              <Space className="task-owner-version-filter">
+                <Text type="secondary">版本</Text>
+                <Select
+                  className="task-owner-version-select"
+                  value={ownerVersionFilter}
+                  onChange={setOwnerVersionFilter}
+                  options={ownerVersionOptions}
+                  aria-label="负责人看板版本筛选"
+                />
+              </Space>
+            ) : null}
             <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>
               新建任务
             </Button>
@@ -275,7 +311,7 @@ export function TasksView({
               <Alert
                 type="info"
                 showIcon
-                message={onlyMine ? "暂无分配给你的任务" : "暂无任务，上传文档后会自动生成"}
+                message={onlyMine ? "当前版本暂无分配给你的任务" : "当前版本暂无任务，上传文档后会自动生成"}
               />
             </Card>
           )}

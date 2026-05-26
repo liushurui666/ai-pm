@@ -1882,6 +1882,25 @@
   background: var(--surface);
 }
 
+.task-owner-version-filter {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  padding-left: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.task-owner-version-filter > .ant-space-item:last-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.task-owner-version-select {
+  width: clamp(170px, 18vw, 240px);
+}
+
 .bug-version-filter {
   width: clamp(150px, 18vw, 220px);
 }
@@ -2285,5 +2304,15 @@
 
   .project-calendar-filter-field {
     grid-template-columns: 1fr;
+  }
+
+  .page-title-extra > .ant-space,
+  .page-title-extra > .ant-space > .ant-space-item {
+    width: 100%;
+  }
+
+  .task-owner-version-filter,
+  .task-owner-version-select {
+    width: 100% !important;
   }
 }
