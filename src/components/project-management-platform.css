@@ -1245,6 +1245,7 @@
 }
 
 .project-scheduler-resource-heading,
+.project-scheduler-resource-content,
 .project-scheduler-resource-owner-copy,
 .project-scheduler-resource-task-copy {
   min-width: 0;
@@ -1273,14 +1274,99 @@
   min-width: 0;
 }
 
+/* 左侧资源列用“层级轨道 + 节点容器”呈现版本/负责人/任务，比单纯缩进更容易辨认父子关系。 */
+.project-scheduler-level-marker {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 7px;
+  color: var(--surface);
+  font-size: 11px;
+  font-weight: 840;
+  line-height: 1;
+}
+
+.project-scheduler-level-marker-version {
+  background: linear-gradient(135deg, var(--brand), color-mix(in srgb, var(--brand) 62%, var(--teal)));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 12%, transparent);
+}
+
+.project-scheduler-level-marker-owner {
+  background: linear-gradient(135deg, var(--teal), color-mix(in srgb, var(--teal) 70%, var(--brand)));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--teal) 12%, transparent);
+}
+
+.project-scheduler-level-marker-task {
+  width: 20px;
+  height: 20px;
+  border: 1px solid color-mix(in srgb, var(--brand) 34%, var(--border));
+  background: var(--surface-elevated);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 8%, transparent);
+  color: var(--brand);
+  font-size: 10px;
+}
+
+.project-scheduler-tree-connector {
+  position: relative;
+  align-self: stretch;
+  min-height: 100%;
+}
+
+.project-scheduler-tree-connector::before,
+.project-scheduler-tree-connector::after {
+  position: absolute;
+  content: "";
+}
+
+.project-scheduler-tree-connector::before {
+  top: -12px;
+  bottom: -12px;
+  width: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--teal) 62%, var(--border));
+}
+
+.project-scheduler-tree-connector::after {
+  top: 50%;
+  height: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--teal) 62%, var(--border));
+}
+
+.project-scheduler-tree-connector-owner::before {
+  left: 9px;
+}
+
+.project-scheduler-tree-connector-owner::after {
+  left: 9px;
+  width: 22px;
+}
+
+.project-scheduler-tree-connector-task::before {
+  left: 9px;
+  background: color-mix(in srgb, var(--brand) 48%, var(--border));
+}
+
+.project-scheduler-tree-connector-task::after {
+  left: 9px;
+  width: 44px;
+  background: color-mix(in srgb, var(--brand) 48%, var(--border));
+}
+
 .project-scheduler-resource-version {
+  grid-template-columns: 24px minmax(0, 1fr);
   gap: 3px;
   align-content: center;
-  padding: 9px 14px 9px 12px;
+  column-gap: 10px;
+  padding: 8px 14px 8px 12px;
   border-left: 4px solid var(--brand);
   border-bottom: 1px solid color-mix(in srgb, var(--brand) 12%, var(--border));
   background:
-    linear-gradient(90deg, color-mix(in srgb, var(--brand) 18%, transparent), transparent 66%),
+    linear-gradient(90deg, color-mix(in srgb, var(--brand) 23%, transparent), transparent 72%),
     var(--surface-subtle);
 }
 
@@ -1296,43 +1382,15 @@
 }
 
 .project-scheduler-resource-owner {
-  grid-template-columns: 28px minmax(0, 1fr) auto;
-  gap: 4px 9px;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 8px;
   align-content: center;
   align-items: center;
-  padding: 8px 14px 8px 34px;
-  border-left: 4px solid transparent;
+  padding: 6px 14px 6px 30px;
+  border-left: 4px solid color-mix(in srgb, var(--brand) 16%, transparent);
   background:
-    linear-gradient(90deg, color-mix(in srgb, var(--teal) 12%, transparent), transparent 60%),
+    linear-gradient(90deg, color-mix(in srgb, var(--teal) 10%, transparent), transparent 58%),
     var(--surface);
-}
-
-.project-scheduler-resource-owner::before,
-.project-scheduler-resource-task::before {
-  position: absolute;
-  top: -10px;
-  bottom: -10px;
-  background: color-mix(in srgb, var(--teal) 46%, var(--border));
-  content: "";
-}
-
-.project-scheduler-resource-owner::after,
-.project-scheduler-resource-task::after {
-  position: absolute;
-  height: 1px;
-  background: color-mix(in srgb, var(--teal) 50%, var(--border));
-  content: "";
-}
-
-.project-scheduler-resource-owner::before {
-  left: 18px;
-  width: 2px;
-}
-
-.project-scheduler-resource-owner::after {
-  top: 50%;
-  left: 18px;
-  width: 14px;
 }
 
 .project-scheduler-resource-owner strong {
@@ -1341,12 +1399,29 @@
 
 .project-scheduler-resource-owner em {
   justify-self: end;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--teal) 9%, transparent);
 }
 
 .project-scheduler-resource-owner .project-scheduler-resource-kind {
   border-color: color-mix(in srgb, var(--teal) 32%, var(--border));
   background: color-mix(in srgb, var(--teal) 10%, var(--surface-elevated));
   color: color-mix(in srgb, var(--teal) 82%, var(--foreground));
+}
+
+.project-scheduler-owner-card {
+  display: grid;
+  grid-template-columns: 24px 28px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  min-height: 36px;
+  padding: 5px 9px;
+  border: 1px solid color-mix(in srgb, var(--teal) 24%, var(--border));
+  border-left: 4px solid color-mix(in srgb, var(--teal) 74%, var(--brand));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--teal) 7%, var(--surface-elevated));
 }
 
 .project-scheduler-owner-avatar {
@@ -1367,23 +1442,13 @@
 }
 
 .project-scheduler-resource-task {
-  grid-template-columns: 14px minmax(0, 1fr);
-  gap: 6px;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 8px;
   align-content: center;
   align-items: center;
-  padding: 8px 14px 8px 56px;
+  padding: 6px 14px 6px 30px;
+  border-left: 4px solid color-mix(in srgb, var(--brand) 9%, transparent);
   background: var(--surface);
-}
-
-.project-scheduler-resource-task::before {
-  left: 30px;
-  width: 1px;
-}
-
-.project-scheduler-resource-task::after {
-  top: 50%;
-  left: 30px;
-  width: 20px;
 }
 
 .project-scheduler-task-node {
@@ -1401,6 +1466,20 @@
   border-color: color-mix(in srgb, var(--border) 90%, transparent);
   background: color-mix(in srgb, var(--surface-subtle) 82%, transparent);
   color: var(--muted);
+}
+
+.project-scheduler-task-card {
+  display: grid;
+  grid-template-columns: 20px 14px minmax(0, 1fr);
+  gap: 7px;
+  align-items: center;
+  min-width: 0;
+  min-height: 40px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--brand) 12%, var(--border));
+  border-left: 3px solid color-mix(in srgb, var(--brand) 52%, var(--teal));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--surface-elevated) 78%, var(--brand) 3%);
 }
 
 .project-scheduler-resource-task strong {
