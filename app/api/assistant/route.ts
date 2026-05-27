@@ -4,6 +4,7 @@ import { getDashboardData } from "@/data/local-dashboard";
 import { createAiAssistantReply, isAiAssistantConfigured } from "@/lib/ai-client";
 import { isFeishuAuthConfigured } from "@/lib/feishu-auth";
 import { getSession } from "@/lib/session";
+import { createWeeklyReportMarkdown, isWeeklyReportRequest } from "@/lib/weekly-report";
 
 export async function POST(request: NextRequest) {
   const session = await getSession();
@@ -35,6 +36,15 @@ export async function POST(request: NextRequest) {
 
   try {
     const data = await getDashboardData(session?.user, body?.workspaceId);
+
+    if (isWeeklyReportRequest(message)) {
+      return NextResponse.json({
+        reply: createWeeklyReportMarkdown(data),
+        source: "weekly-report",
+        generatedAt: new Date().toISOString()
+      });
+    }
+
     const fallbackReply = createAssistantReply(message, data);
 
     if (!isAiAssistantConfigured()) {

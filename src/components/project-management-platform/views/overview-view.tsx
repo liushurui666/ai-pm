@@ -99,7 +99,7 @@ export function OverviewView({
               风险清单
             </Button>
             <Button icon={<RobotOutlined />} onClick={onGenerateReport}>
-              生成周报
+              导出周报
             </Button>
           </Space>
         </div>

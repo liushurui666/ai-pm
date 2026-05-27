@@ -1,4 +1,5 @@
 import type { DashboardData, Project, TaskStage } from "@/types/dashboard";
+import { createWeeklyReportMarkdown, isWeeklyReportRequest } from "@/lib/weekly-report";
 
 export const dashboardData: DashboardData = {
   metrics: {
@@ -474,12 +475,8 @@ export function createAssistantReply(message: string, data: DashboardData = dash
     ].join("\n");
   }
 
-  if (normalized.includes("周报") || normalized.includes("汇报")) {
-    return [
-      `本周项目总体交付达成率为 ${data.metrics.deliveryRate}%，当前活跃项目 ${data.metrics.activeProjects} 个。`,
-      `重点进展：${data.projects.slice(0, 2).map((project) => project.name).join("、") || "暂无项目"} 正在推进。`,
-      `主要风险：${topRiskProject ? `${topRiskProject.name} 健康度为 ${topRiskProject.health}` : "暂无风险项目"}，建议在周报中单独标记责任人和下个检查点。`
-    ].join("\n");
+  if (isWeeklyReportRequest(normalized)) {
+    return createWeeklyReportMarkdown(data);
   }
 
   if (normalized.includes("任务") || normalized.includes("拆解")) {

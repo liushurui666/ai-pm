@@ -112,12 +112,32 @@ import { ReportsView } from "@/components/project-management-platform/views/repo
 import { RequirementsView } from "@/components/project-management-platform/views/requirements-view";
 import { RisksView } from "@/components/project-management-platform/views/risks-view";
 import { TasksView } from "@/components/project-management-platform/views/tasks-view";
+import { createWeeklyReportFileName } from "@/lib/weekly-report";
 
 export type { AppView } from "@/components/project-management-platform/types";
 
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
 const { useBreakpoint } = Grid;
+
+type AssistantQuestionOptions = {
+  exportFileName?: string;
+  exportMarkdown?: boolean;
+};
+
+// 周报导出在浏览器侧完成，避免为了一个 Markdown 文件额外落库或新增下载接口。
+function downloadMarkdownFile(fileName: string, content: string) {
+  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
 
 // 项目管理平台主容器只保留跨模块状态、接口编排和页面路由切换。
 export function ProjectManagementPlatform({
@@ -326,7 +346,7 @@ export function ProjectManagementPlatform({
     form.resetFields();
   }
 
-  async function submitAssistantQuestion(message: string) {
+  async function submitAssistantQuestion(message: string, options: AssistantQuestionOptions = {}) {
     if (chatLoading) {
       messageApi.warning("AI 助手正在分析上一条问题");
 
@@ -346,6 +366,7 @@ export function ProjectManagementPlatform({
         body: JSON.stringify({ message, workspaceId: currentWorkspaceId })
       });
       const payload = (await response.json()) as { reply?: string; error?: string };
+      const assistantContent = payload.reply ?? payload.error ?? "AI 助手暂时没有返回内容。";
 
       if (response.status === 401) {
         window.location.assign("/login");
@@ -357,16 +378,31 @@ export function ProjectManagementPlatform({
         ...messages,
         {
           role: "assistant",
-          content: payload.reply ?? payload.error ?? "AI 助手暂时没有返回内容。"
+          content: assistantContent
         }
       ]);
+
+      if (options.exportMarkdown && payload.reply) {
+        downloadMarkdownFile(options.exportFileName ?? "AI-PM-项目周报.md", payload.reply);
+        messageApi.success("Markdown 周报已导出");
+      }
     } finally {
       setChatLoading(false);
     }
   }
 
   function handleGenerateWeeklyReport() {
-    void submitAssistantQuestion("请基于当前项目、任务、Bug、风险和文档数据，生成一份本周项目汇报，包含总体结论、关键风险、负责人和下周动作。");
+    if (!data) {
+      messageApi.warning("项目数据还在加载，稍后再生成周报。");
+
+      return;
+    }
+
+    // 这里使用固定模板请求词，后端会按 Markdown 周报口径返回，前端同步自动下载。
+    void submitAssistantQuestion("请生成固定格式的详细 Markdown 项目周报。", {
+      exportFileName: createWeeklyReportFileName(data),
+      exportMarkdown: true
+    });
   }
 
   function showRecordResultMessage(resultMessage: string) {

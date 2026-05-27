@@ -16,7 +16,7 @@ export function ReportsView({ data, onGenerateReport }: { data: DashboardData; o
         subtitle="为管理层提供进度、质量、风险和 AI 解释。"
         extra={
           <Button type="primary" icon={<FileTextOutlined />} onClick={onGenerateReport}>
-            生成汇报
+            导出周报 MD
           </Button>
         }
       />
