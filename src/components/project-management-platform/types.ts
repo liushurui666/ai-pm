@@ -5,6 +5,7 @@ import type { DashboardEntityType } from "@/types/records";
 export type AppView =
   | "overview"
   | "projects"
+  | "versionDashboard"
   | "tasks"
   | "bugs"
   | "bugEdit"

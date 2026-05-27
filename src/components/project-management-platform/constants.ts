@@ -32,6 +32,7 @@ export const fallbackRequirementVersionId = "rv-backlog";
 export const validViews = new Set<AppView>([
   "overview",
   "projects",
+  "versionDashboard",
   "tasks",
   "bugs",
   "bugEdit",

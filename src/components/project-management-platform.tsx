@@ -26,6 +26,7 @@ import {
   CalendarOutlined,
   CheckCircleOutlined,
   DashboardOutlined,
+  FundProjectionScreenOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -106,6 +107,7 @@ import {
 import { ProjectsView } from "@/components/project-management-platform/views/projects-view";
 import { RequirementsView } from "@/components/project-management-platform/views/requirements-view";
 import { TasksView } from "@/components/project-management-platform/views/tasks-view";
+import { VersionDashboardView } from "@/components/project-management-platform/views/version-dashboard-view";
 import { createWeeklyReportFileName } from "@/lib/weekly-report";
 
 export type { AppView } from "@/components/project-management-platform/types";
@@ -1229,6 +1231,7 @@ export function ProjectManagementPlatform({
   const menuItems = [
     { key: "overview", icon: <DashboardOutlined />, label: "工作台" },
     { key: "projects", icon: <ProjectOutlined />, label: "项目视图" },
+    { key: "versionDashboard", icon: <FundProjectionScreenOutlined />, label: "版本大屏" },
     { key: "tasks", icon: <CheckCircleOutlined />, label: "任务看板" },
     { key: "bugs", icon: <BugOutlined />, label: "Bug 管理" },
     { key: "requirements", icon: <NodeIndexOutlined />, label: "需求管理" },
@@ -1449,6 +1452,12 @@ export function ProjectManagementPlatform({
     messageApi.success(`已打开${result.type}模块`);
   }
 
+  // 大屏下钻到需求版本详情时，先保存选中的版本，再交给需求管理页展示详情。
+  function openRequirementVersionFromDashboard(versionId: string) {
+    setSelectedRequirementVersionId(versionId);
+    switchView("requirements");
+  }
+
   return (
     <ConfigProvider
       theme={getAntdThemeConfig(effectiveTheme)}
@@ -1633,6 +1642,7 @@ export function ProjectManagementPlatform({
                 options={[
                   { label: "工作台", value: "overview" },
                   { label: "项目", value: "projects" },
+                  { label: "大屏", value: "versionDashboard" },
                   { label: "任务", value: "tasks" },
                   { label: "Bug", value: "bugs" },
                   { label: "需求", value: "requirements" }
@@ -1671,6 +1681,15 @@ export function ProjectManagementPlatform({
                       onOpenCalendarItem={openProjectCalendarItem}
                       onRescheduleCalendarItem={handleRescheduleProjectCalendarItem}
                       onVersionFilterChange={setProjectCalendarVersionId}
+                    />
+                  ) : null}
+                  {activeView === "versionDashboard" ? (
+                    <VersionDashboardView
+                      bugs={data.bugs}
+                      requirements={data.requirements}
+                      tasks={data.tasks}
+                      versions={requirementVersions}
+                      onOpenVersion={openRequirementVersionFromDashboard}
                     />
                   ) : null}
                   {activeView === "tasks" ? (

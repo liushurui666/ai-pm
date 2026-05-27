@@ -6,7 +6,15 @@ import { getSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
-const validAppViews = new Set<AppView>(["overview", "projects", "tasks", "bugs", "requirements", "members"]);
+const validAppViews = new Set<AppView>([
+  "overview",
+  "projects",
+  "versionDashboard",
+  "tasks",
+  "bugs",
+  "requirements",
+  "members"
+]);
 
 function resolveInitialView(value?: string | string[]) {
   const view = Array.isArray(value) ? value[0] : value;
