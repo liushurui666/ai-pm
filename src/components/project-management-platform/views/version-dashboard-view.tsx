@@ -1,20 +1,15 @@
 "use client";
 
-import { Button, Empty, Select, Space, Tag, Typography } from "antd";
+import { Button, Empty, Select, Space } from "antd";
 import {
-  BugOutlined,
-  CheckCircleOutlined,
   CompressOutlined,
   FullscreenOutlined,
-  NodeIndexOutlined,
-  RocketOutlined,
-  WarningOutlined
+  NodeIndexOutlined
 } from "@ant-design/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { BugReport, Requirement, RequirementVersion, Task } from "@/types/dashboard";
 import { PageTitle } from "@/components/project-management-platform/shared/page-shell";
 import {
-  MetricTile,
   OwnerLoadBoard,
   TaskStageFunnel,
   VersionDistribution,
@@ -22,16 +17,15 @@ import {
   VersionScoreboard,
   versionStatuses
 } from "@/components/project-management-platform/views/version-dashboard-panels";
+import { VersionDashboardHero } from "@/components/project-management-platform/views/version-dashboard-hero";
 import { MilestoneSignals } from "@/components/project-management-platform/views/version-dashboard-milestones";
-import { VersionDashboardMark } from "@/components/project-management-platform/views/version-dashboard-visuals";
+import { VersionDashboardWidget } from "@/components/project-management-platform/views/version-dashboard-widget";
 import {
   allVersionDashboardFilterValue,
   createVersionDashboardSnapshots,
   createVersionMilestoneSignals,
   createVersionOwnerLoads
 } from "@/components/project-management-platform/views/version-dashboard-utils";
-
-const { Text, Title } = Typography;
 
 function getAverage(values: number[]) {
   if (!values.length) {
@@ -59,6 +53,7 @@ export function VersionDashboardView({
   const [projectFilter, setProjectFilter] = useState(allVersionDashboardFilterValue);
   const [statusFilter, setStatusFilter] = useState(allVersionDashboardFilterValue);
   const [versionFilter, setVersionFilter] = useState(allVersionDashboardFilterValue);
+  const [selectedWidgetId, setSelectedWidgetId] = useState("metric-total");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const snapshots = useMemo(
     () => createVersionDashboardSnapshots({ bugs, requirements, tasks, versions }),
@@ -134,6 +129,11 @@ export function VersionDashboardView({
     await dashboardRef.current?.requestFullscreen();
   }
 
+  // 组件级工具条先把智能分析聚焦到当前组件，后续可接入真实 AI 分析接口。
+  function handleWidgetAnalyze(widgetId: string) {
+    setSelectedWidgetId(widgetId);
+  }
+
   return (
     <div className="version-dashboard-page" ref={dashboardRef}>
       <PageTitle
@@ -184,39 +184,72 @@ export function VersionDashboardView({
         }
       />
 
-      <div className="version-dashboard-hero">
-        <div className="version-dashboard-hero-copy">
-          <VersionDashboardMark />
-          <div className="version-dashboard-hero-text">
-            <Space wrap size={[8, 8]}>
-              <Tag icon={<RocketOutlined />}>{metrics.totalVersions} 个版本</Tag>
-              <Tag icon={<CheckCircleOutlined />}>{metrics.totalTasks} 个任务</Tag>
-              <Tag icon={<BugOutlined />}>{metrics.openBugs} 个未关闭 Bug</Tag>
-            </Space>
-            <Title level={3}>版本交付态势</Title>
-            <Text type="secondary">
-              汇总父子版本范围，把需求就绪、任务完成、里程碑完成和缺陷健康合成一个可对比的交付分。
-            </Text>
-          </div>
-        </div>
-        <div className="version-dashboard-metrics">
-          <MetricTile icon={<NodeIndexOutlined />} label="版本总数" tone="brand" value={metrics.totalVersions} />
-          <MetricTile icon={<RocketOutlined />} label="进行中" tone="teal" value={metrics.activeVersions} />
-          <MetricTile icon={<CheckCircleOutlined />} label="平均就绪" suffix="%" tone="violet" value={metrics.averageReadiness} />
-          <MetricTile icon={<WarningOutlined />} label="风险版本" tone="amber" value={metrics.riskVersions} />
-        </div>
-      </div>
+      <VersionDashboardHero
+        metrics={metrics}
+        selectedWidgetId={selectedWidgetId}
+        onAnalyze={handleWidgetAnalyze}
+        onSelect={setSelectedWidgetId}
+      />
 
       {visibleSnapshots.length ? (
         <>
           <div className="version-dashboard-grid">
-            <VersionScoreboard snapshots={visibleSnapshots.slice(0, 8)} onOpenVersion={onOpenVersion} />
-            <VersionDistribution snapshots={visibleSnapshots} />
-            <TaskStageFunnel tasks={visibleTasks} />
-            <OwnerLoadBoard loads={ownerLoads} />
+            <VersionDashboardWidget
+              active={selectedWidgetId === "scoreboard"}
+              className="version-dashboard-widget-wide"
+              id="scoreboard"
+              title="版本交付排行"
+              onAnalyze={handleWidgetAnalyze}
+              onSelect={setSelectedWidgetId}
+            >
+              <VersionScoreboard snapshots={visibleSnapshots.slice(0, 8)} onOpenVersion={onOpenVersion} />
+            </VersionDashboardWidget>
+            <VersionDashboardWidget
+              active={selectedWidgetId === "status"}
+              id="status"
+              title="状态分布"
+              onAnalyze={handleWidgetAnalyze}
+              onSelect={setSelectedWidgetId}
+            >
+              <VersionDistribution snapshots={visibleSnapshots} />
+            </VersionDashboardWidget>
+            <VersionDashboardWidget
+              active={selectedWidgetId === "stages"}
+              id="stages"
+              title="任务阶段"
+              onAnalyze={handleWidgetAnalyze}
+              onSelect={setSelectedWidgetId}
+            >
+              <TaskStageFunnel tasks={visibleTasks} />
+            </VersionDashboardWidget>
+            <VersionDashboardWidget
+              active={selectedWidgetId === "owners"}
+              id="owners"
+              title="负责人负载"
+              onAnalyze={handleWidgetAnalyze}
+              onSelect={setSelectedWidgetId}
+            >
+              <OwnerLoadBoard loads={ownerLoads} />
+            </VersionDashboardWidget>
           </div>
-          <VersionMatrix snapshots={visibleSnapshots.slice(0, 6)} onOpenVersion={onOpenVersion} />
-          <MilestoneSignals signals={milestoneSignals} />
+          <VersionDashboardWidget
+            active={selectedWidgetId === "matrix"}
+            id="matrix"
+            title="版本明细矩阵"
+            onAnalyze={handleWidgetAnalyze}
+            onSelect={setSelectedWidgetId}
+          >
+            <VersionMatrix snapshots={visibleSnapshots.slice(0, 6)} onOpenVersion={onOpenVersion} />
+          </VersionDashboardWidget>
+          <VersionDashboardWidget
+            active={selectedWidgetId === "milestones"}
+            id="milestones"
+            title="近期里程碑"
+            onAnalyze={handleWidgetAnalyze}
+            onSelect={setSelectedWidgetId}
+          >
+            <MilestoneSignals signals={milestoneSignals} />
+          </VersionDashboardWidget>
         </>
       ) : (
         <div className="version-dashboard-empty">
