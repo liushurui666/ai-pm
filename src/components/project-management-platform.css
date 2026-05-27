@@ -384,6 +384,14 @@
     var(--surface);
 }
 
+.overview-personal-tools {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  gap: 10px;
+}
+
 .overview-focus-total strong {
   color: var(--foreground);
   font-size: 30px;
@@ -405,59 +413,6 @@
   margin: 0;
   font-size: 28px;
   line-height: 1.2;
-}
-
-.overview-personal-main .ant-typography + .overview-focus-summary {
-  margin-top: 14px;
-}
-
-.overview-focus-summary {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  width: 100%;
-  margin: 12px 0 16px;
-}
-
-.overview-focus-chip {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-  padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--overview-focus-tone) 20%, var(--border));
-  border-radius: 8px;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--overview-focus-tone) 8%, transparent), transparent 90%),
-    var(--surface);
-}
-
-.overview-focus-chip-task {
-  --overview-focus-tone: var(--brand);
-}
-
-.overview-focus-chip-bug {
-  --overview-focus-tone: var(--danger);
-}
-
-.overview-focus-chip-review {
-  --overview-focus-tone: var(--violet);
-}
-
-.overview-focus-chip span,
-.overview-focus-chip em {
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 12px;
-  font-style: normal;
-  line-height: 1.15;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.overview-focus-chip strong {
-  color: var(--foreground);
-  font-size: 28px;
-  line-height: 1;
 }
 
 .overview-work-list {
@@ -2550,7 +2505,13 @@
 
   .overview-personal-header {
     align-items: center;
+    flex-wrap: wrap;
     gap: 10px;
+  }
+
+  .overview-personal-tools {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .overview-personal-kicker {
@@ -2572,10 +2533,6 @@
 
   .overview-focus-total strong {
     font-size: 26px;
-  }
-
-  .overview-focus-summary {
-    grid-template-columns: 1fr;
   }
 
   .project-health-row {

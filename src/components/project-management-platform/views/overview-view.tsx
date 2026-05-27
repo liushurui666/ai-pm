@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, Card, Col, Empty, Flex, Row, Space, Tag, Typography } from "antd";
-import { AlertOutlined, BugOutlined, CheckCircleOutlined, ClockCircleOutlined, RobotOutlined } from "@ant-design/icons";
+import { AlertOutlined, BugOutlined, CheckCircleOutlined, ClockCircleOutlined, FileTextOutlined } from "@ant-design/icons";
 import type { DashboardData } from "@/types/dashboard";
 import { isMyOwnerRecord } from "@/components/project-management-platform/identity";
 import { MetricCard } from "@/components/project-management-platform/shared/metric-card";
@@ -23,14 +23,12 @@ export function OverviewView({
   data,
   onGenerateReport,
   onViewBugs,
-  onViewTasks,
-  onOpenAssistant
+  onViewTasks
 }: {
   data: DashboardData;
   onGenerateReport: () => void;
   onViewBugs: () => void;
   onViewTasks: () => void;
-  onOpenAssistant: () => void;
 }) {
   const currentUser = data.meta?.user;
   const personalTasks = currentUser ? data.tasks.filter((task) => isMyOwnerRecord(task, currentUser)) : data.tasks;
@@ -38,7 +36,6 @@ export function OverviewView({
   const unresolvedTasks = personalTasks.filter((task) => task.stage !== "已完成");
   const unresolvedBugs = personalBugs.filter((bug) => bug.status !== "已关闭");
   const overdueTasks = unresolvedTasks.filter(isOverdueOverviewTask);
-  const reviewBugs = unresolvedBugs.filter((bug) => bug.status === "待验证");
   const severeBugs = unresolvedBugs.filter((bug) => ["阻塞", "严重"].includes(bug.severity));
   const taskList = [...unresolvedTasks].sort(sortTasksForPersonalFocus).slice(0, 6);
   const bugList = [...unresolvedBugs].sort(sortBugsForPersonalFocus).slice(0, 6);
@@ -58,45 +55,19 @@ export function OverviewView({
               </div>
               <Title level={2}>{perspectiveName}工作台</Title>
             </div>
-            <div className="overview-focus-total">
-              <strong>{focusTotal}</strong>
-              <span>未解决项</span>
+            <div className="overview-personal-tools">
+              <Button type="primary" icon={<FileTextOutlined />} onClick={onGenerateReport}>
+                导出周报
+              </Button>
+              <div className="overview-focus-total">
+                <strong>{focusTotal}</strong>
+                <span>未解决项</span>
+              </div>
             </div>
           </div>
           <Paragraph>
             优先聚焦未关闭 Bug、未完成任务和已经逾期的执行项，把今天真正需要推进的事情放在第一屏。
           </Paragraph>
-          <div className="overview-focus-summary">
-            <div className="overview-focus-chip overview-focus-chip-task">
-              <span>待办任务</span>
-              <strong>{unresolvedTasks.length}</strong>
-              <em>{overdueTasks.length} 个逾期</em>
-            </div>
-            <div className="overview-focus-chip overview-focus-chip-bug">
-              <span>未关闭 Bug</span>
-              <strong>{unresolvedBugs.length}</strong>
-              <em>{severeBugs.length} 个阻塞/严重</em>
-            </div>
-            <div className="overview-focus-chip overview-focus-chip-review">
-              <span>待验证 Bug</span>
-              <strong>{reviewBugs.length}</strong>
-              <em>需要确认是否闭环</em>
-            </div>
-          </div>
-          <Space wrap>
-            <Button type="primary" icon={<CheckCircleOutlined />} onClick={onViewTasks}>
-              去任务看板
-            </Button>
-            <Button icon={<BugOutlined />} onClick={onViewBugs}>
-              去 Bug 管理
-            </Button>
-            <Button icon={<RobotOutlined />} onClick={onOpenAssistant}>
-              询问 AI 助手
-            </Button>
-            <Button icon={<RobotOutlined />} onClick={onGenerateReport}>
-              导出周报
-            </Button>
-          </Space>
         </div>
       </section>
 

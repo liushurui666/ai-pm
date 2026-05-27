@@ -1655,7 +1655,6 @@ export function ProjectManagementPlatform({
                     <OverviewView
                       data={data}
                       onGenerateReport={handleGenerateWeeklyReport}
-                      onOpenAssistant={() => setAssistantOpen(true)}
                       onViewBugs={() => switchView("bugs")}
                       onViewTasks={() => switchView("tasks")}
                     />
