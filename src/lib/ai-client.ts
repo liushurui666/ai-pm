@@ -2,6 +2,7 @@ import type { DashboardData } from "@/types/dashboard";
 import { requirementStatusOptions } from "@/lib/requirements/requirement-quality";
 import type { Requirement } from "@/types/dashboard";
 import type { DocumentTaskBreakdown, RequirementAnalyzeResult } from "@/types/records";
+import { createWeeklyReportAiPrompt } from "@/lib/weekly-report-ai";
 
 const DEFAULT_AI_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1";
 const DEFAULT_AI_MODEL = "qwen-plus";
@@ -11,6 +12,7 @@ const DOCUMENT_BREAKDOWN_TASK_LIMIT = 24;
 const DOCUMENT_BREAKDOWN_TEXT_LIMIT = 24_000;
 const REQUIREMENT_ANALYSIS_TIMEOUT_MS = 90_000;
 const REQUIREMENT_ANALYSIS_TEXT_LIMIT = 24_000;
+const WEEKLY_REPORT_TIMEOUT_MS = 120_000;
 
 type ChatCompletionResponse = {
   choices?: Array<{
@@ -179,6 +181,26 @@ export async function createAiAssistantReply(message: string, data: DashboardDat
       ].join("\n")
     }
   ]);
+}
+
+export async function createAiWeeklyReportReply(data: DashboardData) {
+  const { systemPrompt, userPrompt } = createWeeklyReportAiPrompt(data);
+  const reply = await createChatCompletion([
+    {
+      role: "system",
+      content: systemPrompt
+    },
+    {
+      role: "user",
+      content: userPrompt
+    }
+  ], {
+    maxTokens: 5_000,
+    timeoutMs: WEEKLY_REPORT_TIMEOUT_MS
+  });
+
+  // 有些模型会习惯性包一层 fenced block，导出 Markdown 前先去掉外壳。
+  return reply.replace(/^```(?:markdown)?\s*/i, "").replace(/\s*```$/i, "").trim();
 }
 
 function extractJsonObject<T>(content: string) {

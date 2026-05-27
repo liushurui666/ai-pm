@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAssistantReply } from "@/data/dashboard";
 import { getDashboardData } from "@/data/local-dashboard";
-import { createAiAssistantReply, isAiAssistantConfigured } from "@/lib/ai-client";
+import { createAiAssistantReply, createAiWeeklyReportReply, isAiAssistantConfigured } from "@/lib/ai-client";
 import { isFeishuAuthConfigured } from "@/lib/feishu-auth";
 import { getSession } from "@/lib/session";
 import { createWeeklyReportMarkdown, isWeeklyReportRequest } from "@/lib/weekly-report";
@@ -38,11 +38,37 @@ export async function POST(request: NextRequest) {
     const data = await getDashboardData(session?.user, body?.workspaceId);
 
     if (isWeeklyReportRequest(message)) {
-      return NextResponse.json({
-        reply: createWeeklyReportMarkdown(data),
-        source: "weekly-report",
-        generatedAt: new Date().toISOString()
-      });
+      const fallbackReply = createWeeklyReportMarkdown(data);
+
+      if (!isAiAssistantConfigured()) {
+        return NextResponse.json({
+          reply: [
+            fallbackReply,
+            "（未配置 AI_API_KEY，已使用本地固定模板兜底生成。）"
+          ].join("\n\n"),
+          source: "fallback-weekly-report",
+          warning: "未配置 AI_API_KEY，已使用本地固定模板兜底。",
+          generatedAt: new Date().toISOString()
+        });
+      }
+
+      try {
+        return NextResponse.json({
+          reply: await createAiWeeklyReportReply(data),
+          source: "ai-weekly-report",
+          generatedAt: new Date().toISOString()
+        });
+      } catch {
+        return NextResponse.json({
+          reply: [
+            fallbackReply,
+            "（AI 周报生成暂时不可用，已使用本地固定模板兜底生成。）"
+          ].join("\n\n"),
+          source: "fallback-weekly-report",
+          warning: "AI 周报生成暂时不可用，已使用本地固定模板兜底。",
+          generatedAt: new Date().toISOString()
+        });
+      }
     }
 
     const fallbackReply = createAssistantReply(message, data);
