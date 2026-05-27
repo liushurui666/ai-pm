@@ -1,4 +1,5 @@
 import type { BugReport, DashboardData, Project, RequirementVersion, Risk, Task } from "@/types/dashboard";
+import { createWeeklyReportScope } from "@/lib/weekly-report-scope";
 
 type WeekRange = {
   end: Date;
@@ -23,52 +24,60 @@ export function isWeeklyReportRequest(message: string) {
 
 export function createWeeklyReportFileName(data: DashboardData, referenceDate = new Date()) {
   const workspaceName = sanitizeFileName(data.meta?.currentWorkspace?.name || "AI-PM");
+  const scope = createWeeklyReportScope(data);
+  const reportName = scope.isPersonal ? `${sanitizeFileName(scope.ownerName)}-个人周报` : "团队项目周报";
 
-  return `${workspaceName}-项目周报-${formatDate(referenceDate)}.md`;
+  return `${workspaceName}-${reportName}-${formatDate(referenceDate)}.md`;
 }
 
 // 周报生成保持纯函数，前端导出和后端兜底可以复用同一套口径。
 export function createWeeklyReportMarkdown(data: DashboardData, referenceDate = new Date()) {
   const range = createWeekRange(referenceDate);
-  const openTasks = data.tasks.filter((task) => task.stage !== "已完成");
-  const doneTasks = data.tasks.filter((task) => task.stage === "已完成");
+  const scope = createWeeklyReportScope(data);
+  const workspaceName = data.meta?.currentWorkspace?.name || "AI PM";
+  const reportTitle = scope.isPersonal ? `${scope.ownerName} 个人项目周报` : `${workspaceName} 团队项目周报`;
+  const scopeLabel = scope.isPersonal ? `${scope.ownerName} 个人相关` : "团队";
+  const reportInsightTitle = scope.isPersonal ? "## 11. 附：工作区洞察（参考）" : "## 11. 附：平台洞察";
+  const deliveryRate = scope.isPersonal ? calculateTaskCompletionRate(scope.tasks) : data.metrics.deliveryRate;
+  const openTasks = scope.tasks.filter((task) => task.stage !== "已完成");
+  const doneTasks = scope.tasks.filter((task) => task.stage === "已完成");
   const overdueTasks = openTasks.filter((task) => isBeforeDate(task.dueDate, referenceDate));
-  const weekDueTasks = data.tasks.filter((task) => isDateInRange(task.dueDate, range));
-  const openBugs = data.bugs.filter((bug) => bug.status !== "已关闭");
-  const closedBugs = data.bugs.filter((bug) => bug.status === "已关闭");
-  const newBugsThisWeek = data.bugs.filter((bug) => isDateInRange(bug.createdAt, range));
+  const weekDueTasks = scope.tasks.filter((task) => isDateInRange(task.dueDate, range));
+  const openBugs = scope.bugs.filter((bug) => bug.status !== "已关闭");
+  const closedBugs = scope.bugs.filter((bug) => bug.status === "已关闭");
+  const newBugsThisWeek = scope.bugs.filter((bug) => isDateInRange(bug.createdAt, range));
   const severeBugs = openBugs.filter((bug) => bug.severity === "阻塞" || bug.severity === "严重");
-  const highRisks = data.risks.filter((risk) => risk.level === "高");
-  const topRiskProject = getTopRiskProject(data.projects);
-  const activeVersions = data.requirementVersions.filter((version) => version.status === "规划中" || version.status === "进行中");
-  const activeRequirements = data.requirements.filter((requirement) => !["已上线", "已关闭", "已驳回"].includes(requirement.status));
+  const highRisks = scope.risks.filter((risk) => risk.level === "高");
+  const topRiskProject = getTopRiskProject(scope.projects);
+  const activeVersions = scope.requirementVersions.filter((version) => version.status === "规划中" || version.status === "进行中");
+  const activeRequirements = scope.requirements.filter((requirement) => !["已上线", "已关闭", "已驳回"].includes(requirement.status));
 
   return [
-    `# ${data.meta?.currentWorkspace?.name || "AI PM"} 项目周报`,
+    `# ${reportTitle}`,
     "",
     `> 周期：${range.label}  `,
     `> 生成时间：${formatDate(referenceDate)}  `,
-    `> 数据口径：基于 AI PM 站内项目、任务、Bug、风险、需求、版本和文档数据自动生成，适合直接贴到周报或飞书文档。`,
+    `> 数据口径：基于 AI PM 站内数据自动生成；本报告口径为「${scopeLabel}」任务、Bug、风险、需求和项目，文档摘要为工作区参考信息。`,
     "",
     "## 1. 本周结论",
     createBulletList([
-      `本周活跃项目 ${data.metrics.activeProjects} 个，整体交付达成率 ${data.metrics.deliveryRate}%，当前未完成任务 ${openTasks.length} 个，其中逾期 ${overdueTasks.length} 个。`,
-      `质量侧未关闭 Bug ${openBugs.length} 个，其中阻塞/严重 ${severeBugs.length} 个；本周新增 Bug ${newBugsThisWeek.length} 个，已关闭 Bug ${closedBugs.length} 个。`,
+      `本周${scopeLabel}项目 ${scope.projects.length} 个，任务完成率 ${deliveryRate}%，当前未完成任务 ${openTasks.length} 个，其中逾期 ${overdueTasks.length} 个。`,
+      `${scopeLabel}质量侧未关闭 Bug ${openBugs.length} 个，其中阻塞/严重 ${severeBugs.length} 个；本周新增相关 Bug ${newBugsThisWeek.length} 个，已关闭相关 Bug ${closedBugs.length} 个。`,
       topRiskProject
-        ? `最高关注项目为「${topRiskProject.name}」，健康度 ${topRiskProject.health}/100，登记风险 ${topRiskProject.riskCount} 个，需要持续跟进负责人 ${topRiskProject.owner} 的风险动作。`
-        : "当前暂无可识别的高风险项目，建议继续维持任务、Bug 和风险的日常巡检节奏。"
+        ? `${scope.isPersonal ? "个人相关" : "最高关注"}项目「${topRiskProject.name}」健康度 ${topRiskProject.health}/100，登记风险 ${topRiskProject.riskCount} 个，需要持续跟进负责人 ${topRiskProject.owner} 的风险动作。`
+        : `当前暂无${scopeLabel}高风险项目，建议继续维持任务、Bug 和风险的日常巡检节奏。`
     ]),
     "",
     "## 2. 核心指标",
     createTable(
       ["指标", "数值", "说明"],
       [
-        ["活跃项目", `${data.metrics.activeProjects} 个`, "本周纳入周报统计的项目数量"],
-        ["交付达成率", `${data.metrics.deliveryRate}%`, "平台当前项目交付综合指标"],
-        ["未完成任务", `${openTasks.length} 个`, `待处理/进行中/评审中任务合计，逾期 ${overdueTasks.length} 个`],
-        ["未关闭 Bug", `${openBugs.length} 个`, `阻塞/严重 ${severeBugs.length} 个，待验证 ${openBugs.filter((bug) => bug.status === "待验证").length} 个`],
-        ["高风险项", `${highRisks.length} 个`, "风险等级为高的项目风险"],
-        ["进行中版本", `${activeVersions.length} 个`, "规划中或进行中的需求版本"]
+        ["相关项目", `${scope.projects.length} 个`, `本周纳入${scopeLabel}周报统计的项目数量`],
+        ["任务完成率", `${deliveryRate}%`, scope.isPersonal ? "按个人相关任务计算" : "平台当前项目交付综合指标"],
+        ["未完成任务", `${openTasks.length} 个`, `${scopeLabel}待处理/进行中/评审中任务合计，逾期 ${overdueTasks.length} 个`],
+        ["未关闭 Bug", `${openBugs.length} 个`, `${scopeLabel}阻塞/严重 ${severeBugs.length} 个，待验证 ${openBugs.filter((bug) => bug.status === "待验证").length} 个`],
+        ["高风险项", `${highRisks.length} 个`, `${scopeLabel}风险等级为高的项目风险`],
+        ["相关版本", `${activeVersions.length} 个`, `${scopeLabel}规划中或进行中的需求版本`]
       ],
       "暂无核心指标。"
     ),
@@ -76,7 +85,7 @@ export function createWeeklyReportMarkdown(data: DashboardData, referenceDate = 
     "## 3. 项目概览",
     createTable(
       ["项目", "负责人", "状态", "进度", "健康度", "风险数", "截止日期", "本周判断"],
-      sortProjectsByRisk(data.projects).map((project) => [
+      sortProjectsByRisk(scope.projects).map((project) => [
         project.name,
         project.owner || "未分配",
         project.status,
@@ -176,7 +185,7 @@ export function createWeeklyReportMarkdown(data: DashboardData, referenceDate = 
     "## 7. 风险与阻塞",
     createLimitedTable(
       ["风险", "等级", "项目", "负责人", "应对措施", "本周状态"],
-      [...data.risks]
+      [...scope.risks]
         .sort((left, right) => riskLevelWeight[right.level] - riskLevelWeight[left.level])
         .map((risk) => [
           risk.title,
@@ -207,7 +216,7 @@ export function createWeeklyReportMarkdown(data: DashboardData, referenceDate = 
     "### 8.2 文档与 AI 摘要",
     createLimitedTable(
       ["文档", "类型", "更新时间", "AI 摘要"],
-      data.documents.map((document) => [document.title, document.type, document.updatedAt, document.aiSummary]),
+      scope.documents.map((document) => [document.title, document.type, document.updatedAt, document.aiSummary]),
       "暂无文档记录。"
     ),
     "",
@@ -221,7 +230,7 @@ export function createWeeklyReportMarkdown(data: DashboardData, referenceDate = 
     "## 10. 需要决策或支持",
     createBulletList(buildDecisionItems({ highRisks, overdueTasks, severeBugs, topRiskProject })),
     "",
-    "## 11. 附：平台洞察",
+    reportInsightTitle,
     createBulletList(data.weeklyInsight.length ? data.weeklyInsight : ["暂无平台洞察。"])
   ].join("\n");
 }
@@ -278,6 +287,14 @@ function formatDateText(value: string) {
   const date = parseDate(value);
 
   return date ? formatDate(date) : value;
+}
+
+function calculateTaskCompletionRate(tasks: Task[]) {
+  if (!tasks.length) {
+    return 0;
+  }
+
+  return Math.round((tasks.filter((task) => task.stage === "已完成").length / tasks.length) * 100);
 }
 
 function createTable(headers: string[], rows: Array<Array<string | number>>, emptyText: string) {
