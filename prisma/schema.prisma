@@ -1,0 +1,426 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Workspace {
+  id          String  @id
+  name        String
+  description String?
+  status      String
+  createdAt   String
+  updatedAt   String
+
+  members             DashboardMember[]
+  projects            Project[]
+  tasks               ProjectTask[]
+  risks               Risk[]
+  bugs                BugReport[]
+  requirements        Requirement[]
+  requirementVersions RequirementVersion[]
+  documents           DocumentItem[]
+  weeklyInsights      WeeklyInsight[]
+  repositories        ProjectRepository[]
+  bugFixJobs          BugFixJob[]
+
+  @@map("workspaces")
+}
+
+model DashboardMember {
+  id           String  @id
+  workspaceId  String
+  name         String
+  email        String?
+  avatarUrl    String?
+  role         String
+  status       String
+  identities   Json
+  notification Json
+  createdAt    String
+  updatedAt    String
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("workspace_members")
+}
+
+model Project {
+  id             String  @id
+  workspaceId    String
+  name           String
+  owner          String
+  ownerMemberId  String?
+  ownerOpenId    String?
+  ownerUnionId   String?
+  ownerUserId    String?
+  ownerEmail     String?
+  ownerAvatarUrl String?
+  status         String
+  progress       Int
+  health         Int
+  dueDate        String
+  team           Int
+  riskCount      Int
+  summary        String
+  milestones     Json
+
+  workspace    Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  repositories ProjectRepository[]
+
+  @@index([workspaceId])
+  @@index([name])
+  @@map("projects")
+}
+
+model ProjectTask {
+  id             String  @id
+  workspaceId    String
+  title          String
+  stage          String
+  owner          String
+  ownerMemberId  String?
+  ownerOpenId    String?
+  ownerUnionId   String?
+  ownerUserId    String?
+  ownerEmail     String?
+  ownerAvatarUrl String?
+  project        String
+  versionId      String?
+  versionName    String?
+  priority       String
+  startDate      String
+  dueDate        String
+  aiHint         String
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([versionId])
+  @@index([ownerMemberId])
+  @@map("project_tasks")
+}
+
+model Risk {
+  id             String  @id
+  workspaceId    String
+  title          String
+  level          String
+  owner          String
+  ownerMemberId  String?
+  ownerOpenId    String?
+  ownerUnionId   String?
+  ownerUserId    String?
+  ownerEmail     String?
+  ownerAvatarUrl String?
+  project        String
+  mitigation     String
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("risks")
+}
+
+model BugReport {
+  id               String           @id
+  workspaceId      String
+  title            String
+  status           String
+  severity         String
+  project          String
+  versionId        String?
+  versionName      String?
+  reporter         String
+  owner            String
+  ownerMemberId    String?
+  ownerOpenId      String?
+  ownerUnionId     String?
+  ownerUserId      String?
+  ownerEmail       String?
+  ownerAvatarUrl   String?
+  environment      String
+  reproduction     String
+  expected         String
+  actual           String
+  createdAt        String
+  aiFixLatestJobId String?
+  aiFixStatus      BugFixJobStatus?
+  aiFixBranch      String?
+  aiFixMrUrl       String?
+  aiFixSummary     String?
+  aiFixError       String?
+  aiFixUpdatedAt   DateTime?
+
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  attachments BugAttachment[]
+  flowRecords BugFlowRecord[]
+  bugFixJobs  BugFixJob[]
+
+  @@index([workspaceId])
+  @@index([versionId])
+  @@index([ownerMemberId])
+  @@map("bug_reports")
+}
+
+model BugAttachment {
+  id         String @id
+  bugId      String
+  key        String
+  name       String
+  url        String
+  type       String
+  mimeType   String
+  size       Int
+  uploadedAt String
+
+  bug BugReport @relation(fields: [bugId], references: [id], onDelete: Cascade)
+
+  @@index([bugId])
+  @@map("bug_attachments")
+}
+
+model BugFlowRecord {
+  id       String  @id
+  bugId    String
+  action   String
+  at       String
+  operator String
+  from     String?
+  to       String?
+  note     String?
+
+  bug BugReport @relation(fields: [bugId], references: [id], onDelete: Cascade)
+
+  @@index([bugId, at])
+  @@map("bug_flow_records")
+}
+
+model RequirementVersion {
+  id                    String  @id
+  workspaceId           String
+  parentVersionId       String?
+  parentVersionName     String?
+  name                  String
+  project               String
+  status                String
+  startDate             String
+  releaseDate           String
+  goal                  String
+  productOwner          String?
+  productOwnerMemberId  String?
+  productOwnerOpenId    String?
+  productOwnerUnionId   String?
+  productOwnerUserId    String?
+  productOwnerEmail     String?
+  productOwnerAvatarUrl String?
+  uiOwner               String?
+  uiOwnerMemberId       String?
+  uiOwnerOpenId         String?
+  uiOwnerUnionId        String?
+  uiOwnerUserId         String?
+  uiOwnerEmail          String?
+  uiOwnerAvatarUrl      String?
+  devOwner              String?
+  devOwnerMemberId      String?
+  devOwnerOpenId        String?
+  devOwnerUnionId       String?
+  devOwnerUserId        String?
+  devOwnerEmail         String?
+  devOwnerAvatarUrl     String?
+  milestones            Json
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([parentVersionId])
+  @@map("project_versions")
+}
+
+model Requirement {
+  id                  String   @id
+  workspaceId         String
+  title               String
+  priority            String
+  status              String
+  project             String
+  versionId           String?
+  versionName         String?
+  owner               String
+  ownerMemberId       String?
+  ownerOpenId         String?
+  ownerUnionId        String?
+  ownerUserId         String?
+  ownerEmail          String?
+  ownerAvatarUrl      String?
+  uiLink              String?
+  documentLink        String?
+  acceptance          String
+  aiSummary           String?
+  aiRisks             String[] @default([])
+  aiMissingItems      String[] @default([])
+  aiFrontendNotes     String[] @default([])
+  aiBackendNotes      String[] @default([])
+  aiTestingNotes      String[] @default([])
+  aiCompletenessScore Int?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([versionId])
+  @@map("requirements")
+}
+
+model DocumentItem {
+  id          String @id
+  workspaceId String
+  title       String
+  type        String
+  updatedAt   String
+  aiSummary   String
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("documents")
+}
+
+model WeeklyInsight {
+  id          String @id
+  workspaceId String
+  content     String
+  sortOrder   Int
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("weekly_insights")
+}
+
+model ProjectRepository {
+  id               String           @id @default(cuid())
+  workspaceId      String
+  projectId        String?
+  provider         GitProvider
+  repoFullName     String
+  cloneUrl         String
+  defaultBranch    String           @default("main")
+  packageManager   String           @default("pnpm")
+  installCommand   String
+  lintCommand      String?
+  testCommand      String?
+  buildCommand     String?
+  allowedPaths     String[]         @default([])
+  blockedPaths     String[]         @default([])
+  defaultReviewers String[]         @default([])
+  status           RepositoryStatus @default(active)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  workspace  Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project    Project?    @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  bugFixJobs BugFixJob[]
+
+  @@index([workspaceId])
+  @@index([projectId])
+  @@map("project_repositories")
+}
+
+model BugFixJob {
+  id           String          @id @default(cuid())
+  workspaceId  String
+  bugId        String
+  repositoryId String
+  status       BugFixJobStatus @default(queued)
+  baseBranch   String
+  fixBranch    String?
+  commitSha    String?
+  mrUrl        String?
+  mrNumber     String?
+  mrState      String?
+  summary      String?
+  changedFiles String[]        @default([])
+  error        String?
+  requestedBy  String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  startedAt    DateTime?
+  finishedAt   DateTime?
+
+  workspace  Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  bug        BugReport         @relation(fields: [bugId], references: [id], onDelete: Cascade)
+  repository ProjectRepository @relation(fields: [repositoryId], references: [id], onDelete: Restrict)
+  logs       BugFixJobLog[]
+  checks     BugFixJobCheck[]
+
+  @@index([workspaceId, status])
+  @@index([bugId, createdAt])
+  @@index([repositoryId])
+  @@map("bug_fix_jobs")
+}
+
+model BugFixJobLog {
+  id        String      @id @default(cuid())
+  jobId     String
+  level     JobLogLevel @default(info)
+  message   String
+  createdAt DateTime    @default(now())
+
+  job BugFixJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, createdAt])
+  @@map("bug_fix_job_logs")
+}
+
+model BugFixJobCheck {
+  id         String      @id @default(cuid())
+  jobId      String
+  name       String
+  command    String
+  status     CheckStatus
+  durationMs Int?
+  outputTail String?
+  createdAt  DateTime    @default(now())
+
+  job BugFixJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@map("bug_fix_job_checks")
+}
+
+enum GitProvider {
+  github
+  gitlab
+}
+
+enum RepositoryStatus {
+  active
+  disabled
+}
+
+enum BugFixJobStatus {
+  queued
+  preparing
+  analyzing
+  coding
+  testing
+  pushing
+  mr_created
+  failed
+  canceled
+}
+
+enum JobLogLevel {
+  info
+  warn
+  error
+}
+
+enum CheckStatus {
+  passed
+  failed
+  skipped
+}

@@ -875,6 +875,37 @@ export function ProjectManagementPlatform({
     }
   }
 
+  async function handleCreateBugFixJob(bug: BugReport) {
+    try {
+      const response = await fetch("/api/bug-fix-jobs", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          workspaceId: currentWorkspaceId,
+          bugId: bug.id
+        })
+      });
+      const payload = (await response.json()) as { error?: string; message?: string };
+
+      if (response.status === 401) {
+        window.location.assign("/login");
+
+        return;
+      }
+
+      if (!response.ok || payload.error) {
+        throw new Error(payload.error || "创建 AI 修复任务失败");
+      }
+
+      messageApi.success(payload.message || "已创建 AI 修复 MR 任务");
+      await refreshDashboardState();
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "创建 AI 修复任务失败");
+    }
+  }
+
   async function handleUpdateRequirement(values: Record<string, unknown>) {
     if (!editingRequirement) {
       return;
@@ -1527,8 +1558,8 @@ export function ProjectManagementPlatform({
 
               <Space size={10} className="pm-header-actions">
                 {data?.meta ? (
-                  <Tag color={data.meta.source === "local" ? "green" : "default"}>
-                    {data.meta.source === "local" ? "站内数据" : "演示数据"}
+                  <Tag color={data.meta.source === "database" ? "green" : data.meta.source === "local" ? "blue" : "default"}>
+                    {data.meta.source === "database" ? "正式数据库" : data.meta.source === "local" ? "站内数据" : "演示数据"}
                   </Tag>
                 ) : null}
                 <Tooltip title="查看日程">
@@ -1737,6 +1768,7 @@ export function ProjectManagementPlatform({
                           navigateToView("bugs");
                         }
                       }}
+                      onCreateAiFix={handleCreateBugFixJob}
                       onSubmit={(bug, values) => handleUpdateBug(values, bug, { keepFormOpen: true })}
                     />
                   ) : null}

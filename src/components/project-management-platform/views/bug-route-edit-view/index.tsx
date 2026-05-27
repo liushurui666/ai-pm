@@ -9,8 +9,10 @@ import type { OwnerSelectableMember, RequirementVersionOption } from "@/componen
 import { BugFields } from "@/components/project-management-platform/forms/form-fields";
 import { getBugFormValues } from "@/components/project-management-platform/forms/form-utils";
 import { hydrateOwnerFormValues } from "@/components/project-management-platform/forms/owner-select";
+import { BugAiFixCard } from "@/components/project-management-platform/shared/bug-ai-fix-card";
 import { PageTitle } from "@/components/project-management-platform/shared/page-shell";
 import { bugFlowActionColor, bugFlowActionLabel, formatBugCreatedAt, getAttachmentLabel, getBugFlowDescription, getBugFlowRecords } from "@/components/project-management-platform/views/bugs-view";
+import "./index.less";
 
 const { Text } = Typography;
 
@@ -23,6 +25,7 @@ export function BugRouteEditView({
   form,
   onBack,
   onDelete,
+  onCreateAiFix,
   onSubmit,
   people,
   peopleError,
@@ -38,6 +41,7 @@ export function BugRouteEditView({
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   onBack: () => void;
   onDelete: (bug: BugReport) => void;
+  onCreateAiFix: (bug: BugReport) => Promise<void>;
   onSubmit: (bug: BugReport, values: Record<string, unknown>) => void;
   people: OwnerSelectableMember[];
   peopleError: string;
@@ -143,6 +147,13 @@ export function BugRouteEditView({
         </Card>
 
         <Space orientation="vertical" size={16} className="bug-edit-side">
+          <BugAiFixCard
+            bug={bug}
+            canCreate={canEditBugs}
+            disabledReason={permissionDeniedReason}
+            onCreate={onCreateAiFix}
+          />
+
           <Card title="复现材料" className="bug-edit-side-card">
             {bug.attachments?.length ? (
               <div className="bug-attachment-list">

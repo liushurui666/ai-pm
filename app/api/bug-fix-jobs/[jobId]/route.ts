@@ -1,0 +1,46 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getDashboardData } from "@/data/local-dashboard";
+import { isFeishuAuthConfigured } from "@/lib/feishu-auth";
+import { getSession } from "@/lib/session";
+import { getBugFixJob } from "@/server/repositories/bug-fix-jobs";
+
+export async function GET(
+  request: NextRequest,
+  context: {
+    params: Promise<{
+      jobId: string;
+    }>;
+  }
+) {
+  const session = await getSession();
+
+  if (isFeishuAuthConfigured() && !session) {
+    return NextResponse.json({ error: "未登录" }, { status: 401 });
+  }
+
+  const { jobId } = await context.params;
+  const workspaceId = request.nextUrl.searchParams.get("workspaceId") || undefined;
+
+  try {
+    const data = await getDashboardData(session?.user, workspaceId);
+    const currentWorkspaceId = data.meta?.currentWorkspace?.id;
+    const job = await getBugFixJob(jobId);
+
+    if (!job || job.workspaceId !== currentWorkspaceId) {
+      return NextResponse.json({ error: "AI 修复任务不存在" }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      job
+    });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "读取 AI 修复任务失败"
+      },
+      {
+        status: 502
+      }
+    );
+  }
+}

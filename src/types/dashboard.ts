@@ -63,6 +63,98 @@ export type BugFlowRecord = {
   note?: string;
 };
 
+export type GitProvider = "github" | "gitlab";
+
+export type ProjectRepositoryStatus = "active" | "disabled";
+
+export type ProjectRepository = {
+  id: string;
+  workspaceId: string;
+  projectId?: string;
+  provider: GitProvider;
+  repoFullName: string;
+  cloneUrl: string;
+  defaultBranch: string;
+  packageManager: "pnpm" | "npm" | "yarn";
+  installCommand: string;
+  lintCommand?: string;
+  testCommand?: string;
+  buildCommand?: string;
+  allowedPaths: string[];
+  blockedPaths: string[];
+  defaultReviewers: string[];
+  status: ProjectRepositoryStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BugFixJobStatus =
+  | "queued"
+  | "preparing"
+  | "analyzing"
+  | "coding"
+  | "testing"
+  | "pushing"
+  | "mr_created"
+  | "failed"
+  | "canceled";
+
+export type BugFixCheckStatus = "passed" | "failed" | "skipped";
+export type BugFixLogLevel = "info" | "warn" | "error";
+
+export type BugFixCheckResult = {
+  id: string;
+  jobId: string;
+  name: string;
+  command: string;
+  status: BugFixCheckStatus;
+  durationMs?: number;
+  outputTail?: string;
+  createdAt: string;
+};
+
+export type BugFixJobLog = {
+  id: string;
+  jobId: string;
+  level: BugFixLogLevel;
+  message: string;
+  createdAt: string;
+};
+
+export type BugFixJob = {
+  id: string;
+  workspaceId: string;
+  bugId: string;
+  repositoryId: string;
+  status: BugFixJobStatus;
+  baseBranch: string;
+  fixBranch?: string;
+  commitSha?: string;
+  mrUrl?: string;
+  mrNumber?: string;
+  mrState?: string;
+  summary?: string;
+  changedFiles: string[];
+  error?: string;
+  requestedBy?: string;
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  logs?: BugFixJobLog[];
+  checks?: BugFixCheckResult[];
+};
+
+export type BugAiFixBrief = {
+  latestJobId?: string;
+  status?: BugFixJobStatus;
+  branch?: string;
+  mrUrl?: string;
+  summary?: string;
+  error?: string;
+  updatedAt?: string;
+};
+
 export type Task = {
   id: string;
   workspaceId?: string;
@@ -123,6 +215,7 @@ export type BugReport = {
   actual: string;
   attachments?: BugAttachment[];
   flowRecords?: BugFlowRecord[];
+  aiFix?: BugAiFixBrief;
   createdAt: string;
 };
 
@@ -313,9 +406,10 @@ export type DashboardData = {
   documents: DocumentItem[];
   workspaces: DashboardWorkspace[];
   members: DashboardMember[];
+  repositories?: ProjectRepository[];
   weeklyInsight: string[];
   meta?: {
-    source: "local" | "mock";
+    source: "database" | "local" | "mock";
     user?: FeishuUser;
     currentWorkspace?: DashboardWorkspace;
     currentMember?: DashboardMember;

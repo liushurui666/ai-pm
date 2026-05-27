@@ -1,6 +1,9 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import path from "node:path";
 import dayjs from "dayjs";
+import {
+  DASHBOARD_DATABASE_STORAGE,
+  readDashboardDatabase,
+  writeDashboardDatabase
+} from "@/data/database-dashboard";
 import { dashboardData } from "@/data/dashboard";
 import { sendFeishuBotTaskCard } from "@/lib/feishu-message";
 import { findWorkspaceMemberForUser, getDashboardPermissions } from "@/lib/permissions";
@@ -30,8 +33,6 @@ import type {
 } from "@/types/dashboard";
 import type { CreateRecordResult, DashboardEntityMap, DashboardEntityType } from "@/types/records";
 
-const DATABASE_DIR = path.join(process.cwd(), ".ai-pm");
-const DATABASE_FILE = path.join(DATABASE_DIR, "app-database.json");
 const DEFAULT_WORKSPACE: DashboardWorkspace = {
   id: "ws-default",
   name: "默认工作区",
@@ -79,84 +80,18 @@ function createLocalId(type: DashboardEntityType | "bugFlow" | "member" | "miles
   return `${type}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-async function ensureDatabaseDir() {
-  await mkdir(DATABASE_DIR, { recursive: true });
-}
-
 async function readDatabase() {
-  let raw = "";
-
-  try {
-    raw = await readFile(DATABASE_FILE, "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw error;
-    }
-
-    const seed = applyProjectMetrics(cloneSeedData());
-
-    await writeDatabase(seed);
-
-    return seed;
-  }
-
-  try {
-    const data = JSON.parse(raw) as Partial<LocalDatabase>;
-    const seed = cloneSeedData();
-    const migratedData = migrateLocalDatabase({
-      ...seed,
-      ...data,
-      metrics: seed.metrics,
-      projects: Array.isArray(data.projects) ? data.projects : seed.projects,
-      tasks: Array.isArray(data.tasks) ? data.tasks : seed.tasks,
-      bugs: Array.isArray(data.bugs) ? data.bugs : [],
-      risks: Array.isArray(data.risks) ? data.risks : seed.risks,
-      requirementVersions: Array.isArray(data.requirementVersions) ? data.requirementVersions : seed.requirementVersions,
-      requirements: Array.isArray(data.requirements) ? data.requirements : seed.requirements,
-      documents: Array.isArray(data.documents) ? data.documents : seed.documents,
-      workspaces: Array.isArray(data.workspaces) ? data.workspaces : seed.workspaces,
-      members: Array.isArray(data.members) ? data.members : seed.members,
-      weeklyInsight: Array.isArray(data.weeklyInsight) ? data.weeklyInsight : seed.weeklyInsight,
-      updatedAt: asText(data.updatedAt, seed.updatedAt)
-    });
-
-    const derivedData = applyProjectMetrics(migratedData);
-
-    return {
-      ...derivedData,
-      metrics: createMetrics(derivedData)
-    };
-  } catch {
-    await writeFile(`${DATABASE_FILE}.corrupt-${Date.now()}`, raw, {
-      mode: 0o600
-    });
-
-    const seed = applyProjectMetrics(cloneSeedData());
-
-    await writeDatabase(seed);
-
-    return seed;
-  }
+  return readDashboardDatabase(() => applyProjectMetrics(cloneSeedData()));
 }
 
 async function writeDatabase(data: LocalDatabase) {
-  await ensureDatabaseDir();
-  const tempFile = `${DATABASE_FILE}.${process.pid}.${Date.now()}.tmp`;
   const derivedData = applyProjectMetrics(data);
-  const payload = `${JSON.stringify(
-    {
-      ...derivedData,
-      metrics: createMetrics(derivedData),
-      updatedAt: new Date().toISOString()
-    },
-    null,
-    2
-  )}\n`;
 
-  await writeFile(tempFile, payload, {
-    mode: 0o600
+  await writeDashboardDatabase({
+    ...derivedData,
+    metrics: createMetrics(derivedData),
+    updatedAt: new Date().toISOString()
   });
-  await rename(tempFile, DATABASE_FILE);
 }
 
 function asText(value: unknown, fallback = "") {
@@ -239,6 +174,41 @@ function normalizeBugFlowAction(value: unknown): NonNullable<BugReport["flowReco
   }
 
   return "updated";
+}
+
+function normalizeBugAiFix(value: unknown): BugReport["aiFix"] {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const aiFix = value as NonNullable<BugReport["aiFix"]>;
+  const latestJobId = asText(aiFix.latestJobId);
+
+  if (!latestJobId) {
+    return undefined;
+  }
+
+  return {
+    latestJobId,
+    status: [
+      "queued",
+      "preparing",
+      "analyzing",
+      "coding",
+      "testing",
+      "pushing",
+      "mr_created",
+      "failed",
+      "canceled"
+    ].includes(asText(aiFix.status))
+      ? aiFix.status
+      : undefined,
+    branch: asText(aiFix.branch) || undefined,
+    mrUrl: asText(aiFix.mrUrl) || undefined,
+    summary: asText(aiFix.summary) || undefined,
+    error: asText(aiFix.error) || undefined,
+    updatedAt: asText(aiFix.updatedAt) || undefined
+  };
 }
 
 function getBugFlowOperator(user?: FeishuUser | null, fallback = "系统") {
@@ -740,16 +710,6 @@ function normalizeCreateProject(values: Record<string, unknown>, id = createLoca
   };
 }
 
-function normalizeExistingProject(project: Project): Project {
-  return normalizeCreateProject(
-    {
-      ...project,
-      milestones: (project as Project & { milestones?: unknown }).milestones
-    },
-    project.id
-  );
-}
-
 function normalizeCreateTask(values: Record<string, unknown>, id = createLocalId("task")): Task {
   const dueDate = asDateString(values.dueDate, dayjs().add(7, "day").format("YYYY-MM-DD"));
 
@@ -767,24 +727,6 @@ function normalizeCreateTask(values: Record<string, unknown>, id = createLocalId
     startDate: asDateString(values.startDate, dayjs(dueDate).subtract(3, "day").format("YYYY-MM-DD")),
     dueDate,
     aiHint: asText(values.aiHint, "AI 暂未发现额外风险。")
-  };
-}
-
-function normalizeExistingTask(task: Task, versions: RequirementVersion[]): Task {
-  const dueDate = asDateString(task.dueDate, dayjs().add(7, "day").format("YYYY-MM-DD"));
-  const fallbackVersion = findFallbackVersionForProject(task.project, versions);
-  const matchedVersion = versions.find((version) => version.id === task.versionId) ?? fallbackVersion;
-
-  return {
-    ...task,
-    workspaceId: asText(task.workspaceId, DEFAULT_WORKSPACE.id),
-    versionId: matchedVersion.id,
-    versionName: matchedVersion.name,
-    dueDate,
-    startDate: asDateString(
-      (task as Task & { startDate?: unknown }).startDate,
-      dayjs(dueDate).subtract(3, "day").format("YYYY-MM-DD")
-    )
   };
 }
 
@@ -811,6 +753,7 @@ function normalizeCreateBug(values: Record<string, unknown>, id = createLocalId(
     expected: asText(values.expected, "暂无预期结果。"),
     actual: asText(values.actual, "暂无实际结果。"),
     attachments: asBugAttachments(values.attachments),
+    aiFix: normalizeBugAiFix(values.aiFix),
     createdAt: getBugCreatedAt(values),
     flowRecords: normalizeBugFlowRecords(values.flowRecords, {
       bugId: id,
@@ -819,24 +762,6 @@ function normalizeCreateBug(values: Record<string, unknown>, id = createLocalId(
       values
     })
   };
-}
-
-function normalizeExistingBug(bug: BugReport, versions: RequirementVersion[]): BugReport {
-  const fallbackVersion = findFallbackVersionForProject(bug.project, versions);
-  const matchedVersion = versions.find((version) => version.id === bug.versionId) ?? fallbackVersion;
-
-  return normalizeCreateBug(
-    {
-      ...bug,
-      versionId: matchedVersion.id,
-      versionName: matchedVersion.name,
-      status: bug.status,
-      severity: bug.severity,
-      flowRecords: bug.flowRecords,
-      flowRecordOperator: bug.reporter
-    },
-    bug.id
-  );
 }
 
 function buildBugUpdateFlowRecords(previous: BugReport, next: BugReport, operator: string) {
@@ -994,10 +919,6 @@ function normalizeCreateRequirementVersion(
   };
 }
 
-function normalizeExistingRequirementVersion(version: RequirementVersion): RequirementVersion {
-  return normalizeCreateRequirementVersion(version as unknown as Record<string, unknown>, version.id);
-}
-
 function normalizeCreateRequirement(
   values: Record<string, unknown>,
   id = createLocalId("requirement")
@@ -1024,22 +945,6 @@ function normalizeCreateRequirement(
     aiTestingNotes: asTextArray(values.aiTestingNotes),
     aiCompletenessScore: Math.max(0, Math.min(100, asNumber(values.aiCompletenessScore, 0))) || undefined
   };
-}
-
-function normalizeExistingRequirement(requirement: Requirement, versions: RequirementVersion[]): Requirement {
-  const fallbackVersion =
-    versions.find((version) => version.id === DEFAULT_REQUIREMENT_VERSION.id) ?? versions[0] ?? DEFAULT_REQUIREMENT_VERSION;
-  const matchedVersion = versions.find((version) => version.id === requirement.versionId) ?? fallbackVersion;
-
-  return normalizeCreateRequirement(
-    {
-      ...requirement,
-      versionId: matchedVersion.id,
-      versionName: matchedVersion.name,
-      project: matchedVersion.project
-    },
-    requirement.id
-  );
 }
 
 function normalizeMemberRole(value: unknown): MemberRole {
@@ -1487,35 +1392,6 @@ function ensureCurrentMember(data: LocalDatabase, workspaceId: string, user?: Fe
   };
 }
 
-function migrateLocalDatabase(data: LocalDatabase): LocalDatabase {
-  const normalizedVersions = (data.requirementVersions.length ? data.requirementVersions : [DEFAULT_REQUIREMENT_VERSION])
-    .map(normalizeExistingRequirementVersion);
-  const versionsWithParentNames = normalizedVersions.map((version) => {
-    const parentVersion = version.parentVersionId
-      ? normalizedVersions.find((item) => item.id === version.parentVersionId)
-      : undefined;
-
-    return parentVersion && !version.parentVersionName
-      ? {
-          ...version,
-          parentVersionName: parentVersion.name
-        }
-      : version;
-  });
-  const normalizedWorkspaces = normalizeWorkspaces(data.workspaces);
-
-  return {
-    ...data,
-    workspaces: normalizedWorkspaces,
-    projects: data.projects.map(normalizeExistingProject),
-    tasks: data.tasks.map((task) => normalizeExistingTask(task, versionsWithParentNames)),
-    bugs: data.bugs.map((bug) => normalizeExistingBug(bug, versionsWithParentNames)),
-    requirementVersions: versionsWithParentNames,
-    requirements: data.requirements.map((requirement) => normalizeExistingRequirement(requirement, versionsWithParentNames)),
-    members: data.members.map((member) => normalizeMember(member, normalizedWorkspaces[0]?.id ?? DEFAULT_WORKSPACE.id))
-  };
-}
-
 function getWorkspaceId(record: { workspaceId?: string }) {
   return record.workspaceId || DEFAULT_WORKSPACE.id;
 }
@@ -1599,15 +1475,6 @@ function normalizeProjectName(value: string) {
 
 function isLinkedToProject(project: Project, value?: string) {
   return Boolean(value && normalizeProjectName(project.name) === normalizeProjectName(value));
-}
-
-function findFallbackVersionForProject(project: string, versions: RequirementVersion[]) {
-  return (
-    versions.find((version) => version.project !== "跨项目" && normalizeProjectName(version.project) === normalizeProjectName(project)) ??
-    versions.find((version) => version.id === DEFAULT_REQUIREMENT_VERSION.id) ??
-    versions[0] ??
-    DEFAULT_REQUIREMENT_VERSION
-  );
 }
 
 function clampScore(value: number) {
@@ -2125,13 +1992,13 @@ export async function getDashboardData(user?: FeishuUser, workspaceId?: string):
     workspaces: data.workspaces,
     metrics: createMetrics(scopedData),
     meta: {
-      source: "local",
+      source: "database",
       user,
       currentWorkspace: workspaceResult.currentWorkspace,
       currentMember,
       permissions: getDashboardPermissions(currentMember),
-      storage: DATABASE_FILE,
-      message: "已接入站内项目管理数据源，平台成员负责权限与负责人选择，飞书仅用于登录和机器人通知。"
+      storage: DASHBOARD_DATABASE_STORAGE,
+      message: "已接入正式数据库，平台成员负责权限与负责人选择，飞书仅用于登录和机器人通知。"
     }
   };
 }

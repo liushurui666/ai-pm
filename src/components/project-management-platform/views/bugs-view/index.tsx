@@ -17,7 +17,9 @@ import dayjs from "dayjs";
 import type { BugAttachment, BugReport, FeishuUser } from "@/types/dashboard";
 import { MetricCard } from "@/components/project-management-platform/shared/metric-card";
 import { OwnerInline } from "@/components/project-management-platform/shared/owner-inline";
+import { BugAiFixStatus } from "@/components/project-management-platform/shared/bug-ai-fix-status";
 import { PageTitle } from "@/components/project-management-platform/shared/page-shell";
+import "./index.less";
 
 const { Text } = Typography;
 
@@ -214,6 +216,13 @@ export function BugsView({
       render: (status: BugReport["status"]) => <Tag color={bugStatusColor[status]}>{status}</Tag>
     },
     {
+      title: "AI 修复",
+      dataIndex: "aiFix",
+      key: "aiFix",
+      width: 150,
+      render: (_, bug) => <BugAiFixStatus bug={bug} compact />
+    },
+    {
       title: "材料",
       dataIndex: "attachments",
       key: "attachments",
@@ -361,7 +370,7 @@ export function BugsView({
           dataSource={visibleBugs}
           locale={{ emptyText: getBugEmptyText(onlyMine, versionFilter) }}
           pagination={{ pageSize: 12, showSizeChanger: true }}
-          scroll={{ x: 1120 }}
+          scroll={{ x: 1270 }}
         />
       </Card>
     </Space>
