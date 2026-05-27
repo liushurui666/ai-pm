@@ -1,10 +1,7 @@
 import type { DayPilot } from "@daypilot/daypilot-lite-react";
 import dayjs from "dayjs";
 import type { ProjectCalendarItem, ProjectCalendarItemType } from "@/components/project-management-platform/views/project-calendar-utils";
-import {
-  getProjectCalendarItemRange,
-  isCalendarItemVisibleInMonth
-} from "@/components/project-management-platform/views/project-calendar-utils";
+import { getProjectCalendarItemRange } from "@/components/project-management-platform/views/project-calendar-utils";
 
 const typeClassMap: Record<ProjectCalendarItemType, string> = {
   任务: "task",
@@ -77,17 +74,13 @@ function getOwnerAvatarHtml(group: ProjectSchedulerOwnerGroup) {
   return `<span class="project-scheduler-owner-avatar project-scheduler-owner-avatar-fallback">${escapeHtml(ownerInitial)}</span>`;
 }
 
-function getEventDateRange(item: ProjectCalendarItem, month: dayjs.Dayjs) {
+function getEventDateRange(item: ProjectCalendarItem) {
   const { start, end } = getProjectCalendarItemRange(item);
-  const monthStart = month.startOf("month");
-  const monthEnd = month.endOf("month");
-  const visibleStart = start.isBefore(monthStart, "day") ? monthStart : start;
-  const visibleEnd = end.isAfter(monthEnd, "day") ? monthEnd : end;
 
-  // Scheduler 拖拽时会保留事件完整跨度；跨月任务需裁成当前月可见段，避免拖动时把隐藏月份也展开到画布上。
+  // 时间轴现在展示版本全量任务，事件条保留完整起止跨度，不再按月份裁剪。
   return {
-    start: visibleStart.format("YYYY-MM-DD"),
-    end: visibleEnd.add(1, "day").format("YYYY-MM-DD")
+    start: start.format("YYYY-MM-DD"),
+    end: end.add(1, "day").format("YYYY-MM-DD")
   };
 }
 
@@ -254,6 +247,33 @@ function getGroupProgress(items: ProjectCalendarItem[]) {
   return Number.isFinite(progress) ? progress : 0;
 }
 
+function getSchedulerDateRange(items: ProjectCalendarItem[]) {
+  const ranges = items.map((item) => getProjectCalendarItemRange(item));
+  const fallbackStart = dayjs().startOf("month");
+
+  if (!ranges.length) {
+    return {
+      days: fallbackStart.daysInMonth(),
+      startDate: fallbackStart.format("YYYY-MM-DD")
+    };
+  }
+
+  const start = ranges.reduce(
+    (currentStart, range) => (range.start.isBefore(currentStart, "day") ? range.start : currentStart),
+    ranges[0]?.start ?? fallbackStart
+  );
+  const end = ranges.reduce(
+    (currentEnd, range) => (range.end.isAfter(currentEnd, "day") ? range.end : currentEnd),
+    ranges[0]?.end ?? start
+  );
+
+  // DayPilot 的 days 是从 startDate 起算的天数，截止日业务上是包含当天的。
+  return {
+    days: Math.max(1, end.diff(start, "day") + 1),
+    startDate: start.format("YYYY-MM-DD")
+  };
+}
+
 function getEventResizeAreas(item: ProjectCalendarItem): DayPilot.AreaData[] {
   if (item.type !== "任务") {
     return [];
@@ -289,12 +309,10 @@ function getEventResizeAreas(item: ProjectCalendarItem): DayPilot.AreaData[] {
 // Scheduler 需要资源行和事件条；这里统一把项目日历条目适配成 DayPilot 可消费的数据。
 export function createProjectSchedulerModel(
   items: ProjectCalendarItem[],
-  month: dayjs.Dayjs,
   taskOrderByOwner: ProjectSchedulerTaskOrder = {}
 ) {
-  const visibleItems = items
-    .filter((item) => isCalendarItemVisibleInMonth(item, month))
-    .sort(compareProjectSchedulerItems);
+  const visibleItems = [...items].sort(compareProjectSchedulerItems);
+  const scheduleRange = getSchedulerDateRange(visibleItems);
   const ownerGroups = createOwnerGroups(visibleItems, taskOrderByOwner);
   const resources: DayPilot.ResourceData[] = ownerGroups.flatMap((ownerGroup) => [
     {
@@ -329,7 +347,7 @@ export function createProjectSchedulerModel(
 
   const events: DayPilot.EventData[] = visibleItems.map((item) => {
     const colors = toneColors[item.riskTone];
-    const range = getEventDateRange(item, month);
+    const range = getEventDateRange(item);
 
     return {
       ...range,
@@ -348,10 +366,10 @@ export function createProjectSchedulerModel(
   });
 
   return {
-    days: month.daysInMonth(),
+    days: scheduleRange.days,
     events,
     resources,
-    startDate: month.startOf("month").format("YYYY-MM-DD"),
+    startDate: scheduleRange.startDate,
     visibleItems
   };
 }
@@ -359,15 +377,13 @@ export function createProjectSchedulerModel(
 export function applyProjectSchedulerTaskOrderChange({
   change,
   items,
-  month,
   taskOrderByOwner
 }: {
   change: ProjectSchedulerTaskOrderChange;
   items: ProjectCalendarItem[];
-  month: dayjs.Dayjs;
   taskOrderByOwner: ProjectSchedulerTaskOrder;
 }) {
-  const ownerItems = items.filter((item) => (item.owner || "未分配") === change.owner && isCalendarItemVisibleInMonth(item, month));
+  const ownerItems = items.filter((item) => (item.owner || "未分配") === change.owner);
   const orderedIds = getOrderedProjectSchedulerItems(ownerItems, change.owner, taskOrderByOwner).map((item) => item.id);
   const activeIndex = orderedIds.indexOf(change.activeId);
   const overIndex = orderedIds.indexOf(change.overId);
@@ -390,7 +406,7 @@ export function applyProjectSchedulerTaskOrderChange({
   const visibleIdSet = new Set(orderedIds);
   const hiddenOrderedIds = (taskOrderByOwner[change.owner] ?? []).filter((id) => !visibleIdSet.has(id));
 
-  // 只重排当前可见月份里同一负责人的任务，其他月份已有手动顺序继续保留。
+  // 只重排当前版本范围里同一负责人的任务，其他负责人已有手动顺序继续保留。
   return {
     ...taskOrderByOwner,
     [change.owner]: [...nextVisibleIds, ...hiddenOrderedIds]

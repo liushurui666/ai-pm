@@ -47,14 +47,12 @@ function getScheduleChange(start: DayPilot.Date, end: DayPilot.Date, owner: stri
 // 项目进度日历使用 Scheduler 表达排期，让跨天任务天然横穿日期轴。
 export function ProjectProgressCalendar({
   items,
-  month,
   onOpenItem,
   onRescheduleItem,
   onTaskOrderChange,
   taskOrderByOwner
 }: {
   items: ProjectCalendarItem[];
-  month: dayjs.Dayjs;
   onOpenItem: (item: ProjectCalendarItem) => void;
   onRescheduleItem: (item: ProjectCalendarItem, change: ProjectCalendarScheduleChange) => Promise<boolean>;
   onTaskOrderChange: Parameters<typeof attachProjectSchedulerRowSort>[0]["onTaskOrderChange"];
@@ -65,7 +63,7 @@ export function ProjectProgressCalendar({
   const pointerDragRef = useRef({ active: false, moved: false, startX: 0, startY: 0 });
   const onTaskOrderChangeRef = useRef(onTaskOrderChange);
   const resizePreviewRef = useRef<ResizePreviewSource | null>(null);
-  const schedulerModel = createProjectSchedulerModel(items, month, taskOrderByOwner);
+  const schedulerModel = createProjectSchedulerModel(items, taskOrderByOwner);
 
   useEffect(() => {
     onTaskOrderChangeRef.current = onTaskOrderChange;
@@ -254,7 +252,7 @@ export function ProjectProgressCalendar({
   if (!schedulerModel.visibleItems.length) {
     return (
       <div className="project-scheduler-empty">
-        <Empty description="当前月份暂无任务排期" />
+        <Empty description="当前版本暂无任务排期" />
       </div>
     );
   }

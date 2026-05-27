@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Badge, Button, Card, DatePicker, Flex, Segmented, Select, Space, Switch, Table, Tag, Tooltip, Typography } from "antd";
+import { Alert, Badge, Button, Card, Flex, Segmented, Select, Space, Switch, Table, Tag, Tooltip, Typography } from "antd";
 import { CalendarOutlined, CheckCircleOutlined, EditOutlined, PlusOutlined, UnorderedListOutlined, UserOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo, useState } from "react";
@@ -44,10 +44,10 @@ function isMyTask(task: Task, currentUser?: FeishuUser) {
 
 function getTaskEmptyText(onlyMine: boolean, versionFilter: string) {
   if (versionFilter !== allTaskVersionValue) {
-    return onlyMine ? "当前版本在所选月份暂无分配给你的任务" : "当前版本在所选月份暂无任务";
+    return onlyMine ? "当前版本暂无分配给你的任务" : "当前版本暂无任务，上传文档后会自动生成";
   }
 
-  return onlyMine ? "所选月份暂无分配给你的任务" : "所选月份暂无任务";
+  return onlyMine ? "暂无分配给你的任务" : "暂无任务";
 }
 
 function getTaskVersionScopeIds(versionOptions: RequirementVersionOption[], selectedVersionId: string) {
@@ -65,37 +65,6 @@ function getTaskVersionScopeIds(versionOptions: RequirementVersionOption[], sele
   }
 
   return scopeIds;
-}
-
-function getTaskDateRange(task: Task) {
-  const start = dayjs(task.startDate || task.dueDate).startOf("day");
-  const end = dayjs(task.dueDate || task.startDate).startOf("day");
-
-  // 历史任务可能存在起止日期反向，统一归一化后再做月份筛选。
-  return end.isBefore(start) ? { start: end, end: start } : { start, end };
-}
-
-function isTaskVisibleInMonth(task: Task, month: dayjs.Dayjs) {
-  const { start, end } = getTaskDateRange(task);
-  const monthStart = month.startOf("month");
-  const monthEnd = month.endOf("month");
-
-  // 与项目视图保持同一口径：只要任务跨度和所选月份有交集，就进入当前月看板。
-  return start.isSame(month, "month") || end.isSame(month, "month") || (start.isBefore(monthStart) && end.isAfter(monthEnd));
-}
-
-function getTaskFallbackMonth(tasks: Task[], preferredMonth: dayjs.Dayjs) {
-  const preferred = preferredMonth.startOf("month");
-  const ranges = tasks
-    .map((task) => getTaskDateRange(task))
-    .sort((left, right) => {
-      const leftDistance = Math.abs(left.start.startOf("month").diff(preferred, "month"));
-      const rightDistance = Math.abs(right.start.startOf("month").diff(preferred, "month"));
-
-      return leftDistance - rightDistance || left.start.valueOf() - right.start.valueOf();
-    });
-
-  return ranges[0]?.start.startOf("month") ?? preferredMonth;
 }
 
 export function TasksView({
@@ -116,8 +85,6 @@ export function TasksView({
   const [viewMode, setViewMode] = useState<"stage" | "table" | "owner">("stage");
   const [onlyMine, setOnlyMine] = useState(false);
   const [taskVersionFilter, setTaskVersionFilter] = useState(allTaskVersionValue);
-  const [taskMonth, setTaskMonth] = useState(() => dayjs());
-  const [manualTaskMonthKey, setManualTaskMonthKey] = useState("");
   const scopedTasks = useMemo(
     () => (onlyMine ? tasks.filter((task) => isMyTask(task, currentUser)) : tasks),
     [currentUser, onlyMine, tasks]
@@ -145,30 +112,7 @@ export function TasksView({
 
     return scopedTasks.filter((task) => task.versionId && versionScopeIds.has(task.versionId));
   }, [scopedTasks, taskVersionFilter, versionOptions]);
-  const taskMonthAutoKey = useMemo(
-    () =>
-      [
-        taskVersionFilter,
-        onlyMine ? "mine" : "all",
-        ...versionFilteredTasks.map((task) => `${task.id}:${task.startDate}:${task.dueDate}`)
-      ].join("|"),
-    [onlyMine, taskVersionFilter, versionFilteredTasks]
-  );
-  const displayedTaskMonth = useMemo(() => {
-    if (!versionFilteredTasks.length || manualTaskMonthKey === taskMonthAutoKey) {
-      return taskMonth;
-    }
-
-    if (versionFilteredTasks.some((task) => isTaskVisibleInMonth(task, taskMonth))) {
-      return taskMonth;
-    }
-
-    return getTaskFallbackMonth(versionFilteredTasks, taskMonth);
-  }, [manualTaskMonthKey, taskMonth, taskMonthAutoKey, versionFilteredTasks]);
-  const visibleTasks = useMemo(
-    () => versionFilteredTasks.filter((task) => isTaskVisibleInMonth(task, displayedTaskMonth)),
-    [displayedTaskMonth, versionFilteredTasks]
-  );
+  const visibleTasks = versionFilteredTasks;
   const ownerGroups = useMemo(() => {
     const groups = new Map<string, { avatarUrl?: string; tasks: Task[] }>();
 
@@ -301,20 +245,6 @@ export function TasksView({
                 onChange={setTaskVersionFilter}
                 options={taskVersionOptions}
                 aria-label="任务看板版本筛选"
-              />
-            </Space>
-            <Space className="task-month-filter">
-              <Text type="secondary">月份</Text>
-              <DatePicker
-                picker="month"
-                value={displayedTaskMonth}
-                allowClear={false}
-                className="task-month-picker"
-                suffixIcon={<CalendarOutlined />}
-                onChange={(value) => {
-                  setTaskMonth(value ?? dayjs());
-                  setManualTaskMonthKey(taskMonthAutoKey);
-                }}
               />
             </Space>
             <Tooltip title={currentUser ? `当前登录：${currentUser.name}` : "未获取到登录用户"}>
