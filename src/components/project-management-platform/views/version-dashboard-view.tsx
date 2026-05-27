@@ -161,50 +161,35 @@ export function VersionDashboardView({
       </div>
 
       <section className="version-board-version-switch" aria-label="版本切换">
-        <div className="version-board-version-switch-main">
-          <Space align="center" size={10}>
+        <div className="version-board-version-tabs-shell">
+          <Space align="center" size={10} className="version-board-version-switch-heading">
             <NodeIndexOutlined />
             <Text strong>版本切换</Text>
           </Space>
-          <Select
-            aria-label="切换展示版本"
-            className="version-board-version-select"
-            showSearch
-            optionFilterProp="label"
-            value={versionFilter}
-            onChange={setVersionFilter}
-            options={[
-              { value: allVersionDashboardFilterValue, label: "全部版本" },
-              ...snapshots.map((snapshot) => ({
-                value: snapshot.id,
-                label: `${snapshot.name} · ${snapshot.project}`
-              }))
-            ]}
-          />
-        </div>
-        <div className="version-board-version-tabs" role="group" aria-label="常用版本切换">
-          <button
-            className={
-              versionFilter === allVersionDashboardFilterValue
-                ? "version-board-version-tab version-board-version-tab-active"
-                : "version-board-version-tab"
-            }
-            type="button"
-            onClick={() => setVersionFilter(allVersionDashboardFilterValue)}
-          >
-            全部版本
-          </button>
-          {snapshots.slice(0, 8).map((snapshot) => (
+          <div className="version-board-version-tabs" role="group" aria-label="版本切换">
             <button
-              className={versionFilter === snapshot.id ? "version-board-version-tab version-board-version-tab-active" : "version-board-version-tab"}
-              key={snapshot.id}
+              className={
+                versionFilter === allVersionDashboardFilterValue
+                  ? "version-board-version-tab version-board-version-tab-active"
+                  : "version-board-version-tab"
+              }
               type="button"
-              onClick={() => setVersionFilter(snapshot.id)}
+              onClick={() => setVersionFilter(allVersionDashboardFilterValue)}
             >
-              <span>{snapshot.name}</span>
-              <em>{snapshot.status}</em>
+              全部版本
             </button>
-          ))}
+            {snapshots.map((snapshot) => (
+              <button
+                className={versionFilter === snapshot.id ? "version-board-version-tab version-board-version-tab-active" : "version-board-version-tab"}
+                key={snapshot.id}
+                type="button"
+                onClick={() => setVersionFilter(snapshot.id)}
+              >
+                <span>{snapshot.name}</span>
+                <em>{snapshot.status}</em>
+              </button>
+            ))}
+          </div>
         </div>
         <div className="version-board-version-summary">
           <Text strong>{selectedVersion?.name ?? "全部版本"}</Text>
