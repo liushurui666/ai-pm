@@ -120,11 +120,6 @@ const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
 const { useBreakpoint } = Grid;
 
-type AssistantQuestionOptions = {
-  exportFileName?: string;
-  exportMarkdown?: boolean;
-};
-
 // 周报导出在浏览器侧完成，避免为了一个 Markdown 文件额外落库或新增下载接口。
 function downloadMarkdownFile(fileName: string, content: string) {
   const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
@@ -181,6 +176,7 @@ export function ProjectManagementPlatform({
   const [workspaceSubmitting, setWorkspaceSubmitting] = useState(false);
   const [workspaceDrawerOpen, setWorkspaceDrawerOpen] = useState(false);
   const [workspaceSelectOpen, setWorkspaceSelectOpen] = useState(false);
+  const [weeklyReportExporting, setWeeklyReportExporting] = useState(false);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(initialWorkspaceId ?? "");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
@@ -346,7 +342,7 @@ export function ProjectManagementPlatform({
     form.resetFields();
   }
 
-  async function submitAssistantQuestion(message: string, options: AssistantQuestionOptions = {}) {
+  async function submitAssistantQuestion(message: string) {
     if (chatLoading) {
       messageApi.warning("AI 助手正在分析上一条问题");
 
@@ -381,28 +377,61 @@ export function ProjectManagementPlatform({
           content: assistantContent
         }
       ]);
-
-      if (options.exportMarkdown && payload.reply) {
-        downloadMarkdownFile(options.exportFileName ?? "AI-PM-项目周报.md", payload.reply);
-        messageApi.success("Markdown 周报已导出");
-      }
     } finally {
       setChatLoading(false);
     }
   }
 
-  function handleGenerateWeeklyReport() {
+  async function handleGenerateWeeklyReport() {
     if (!data) {
       messageApi.warning("项目数据还在加载，稍后再生成周报。");
 
       return;
     }
 
-    // 这里使用固定模板请求词，后端会按 Markdown 周报口径返回，前端同步自动下载。
-    void submitAssistantQuestion("请生成固定格式的详细 Markdown 项目周报。", {
-      exportFileName: createWeeklyReportFileName(data),
-      exportMarkdown: true
-    });
+    if (weeklyReportExporting) {
+      messageApi.warning("周报正在生成中，请稍候。");
+
+      return;
+    }
+
+    setWeeklyReportExporting(true);
+
+    try {
+      const response = await fetch("/api/assistant", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          message: "请生成固定格式的详细 Markdown 项目周报。",
+          workspaceId: currentWorkspaceId
+        })
+      });
+      const payload = (await response.json()) as { error?: string; reply?: string; warning?: string };
+
+      if (response.status === 401) {
+        window.location.assign("/login");
+
+        return;
+      }
+
+      if (!response.ok || !payload.reply) {
+        throw new Error(payload.error || "周报生成失败");
+      }
+
+      downloadMarkdownFile(createWeeklyReportFileName(data), payload.reply);
+
+      if (payload.warning) {
+        messageApi.warning(payload.warning, 6);
+      } else {
+        messageApi.success("Markdown 周报已导出");
+      }
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "周报生成失败");
+    } finally {
+      setWeeklyReportExporting(false);
+    }
   }
 
   function showRecordResultMessage(resultMessage: string) {
@@ -1435,6 +1464,13 @@ export function ProjectManagementPlatform({
     >
       <App>
         {messageContextHolder}
+        {weeklyReportExporting ? (
+          <div className="pm-global-loading" role="status" aria-live="polite">
+            <Spin size="large" />
+            <Text strong>AI 正在生成周报...</Text>
+            <Text type="secondary">完成后会自动下载 Markdown 文件</Text>
+          </div>
+        ) : null}
         <Layout className="pm-shell">
           {/* 桌面侧边栏始终输出，由 CSS 媒体查询控制显示，避免 F5 首屏断点未知时布局乱跳。 */}
           <Sider

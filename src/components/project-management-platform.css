@@ -241,6 +241,22 @@
   place-items: center;
 }
 
+.pm-global-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  background: color-mix(in srgb, var(--background) 76%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.pm-global-loading .ant-typography {
+  margin: 0;
+}
+
 .pm-page-stack,
 .pm-wide {
   width: 100%;
