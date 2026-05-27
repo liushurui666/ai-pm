@@ -7,10 +7,7 @@ import {
   CompressOutlined,
   FilterOutlined,
   FullscreenOutlined,
-  NodeIndexOutlined,
-  PlusOutlined,
-  SettingOutlined,
-  ShareAltOutlined
+  NodeIndexOutlined
 } from "@ant-design/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { BugReport, Requirement, RequirementVersion, Task } from "@/types/dashboard";
@@ -33,7 +30,7 @@ const versionStatusFilterOptions: Array<RequirementVersion["status"] | typeof al
 type ReleaseFilterValue = typeof allVersionDashboardFilterValue | "delayed" | "next30" | "thisMonth";
 
 const releaseFilterOptions: Array<{ value: ReleaseFilterValue; label: string }> = [
-  { value: allVersionDashboardFilterValue, label: "请选择" },
+  { value: allVersionDashboardFilterValue, label: "全部时间" },
   { value: "delayed", label: "已延期" },
   { value: "next30", label: "30天内" },
   { value: "thisMonth", label: "本月发布" }
@@ -60,7 +57,7 @@ function matchesReleaseFilter(snapshot: VersionDashboardSnapshot, filter: Releas
   return dayjs(snapshot.releaseDate).isSame(dayjs(), "month");
 }
 
-// 版本统计看板主容器只负责筛选、全屏和搭建态选中，其余图表交给子组件。
+// 版本统计看板主容器只负责真实可用的版本切换、筛选和全屏，其余图表交给子组件。
 export function VersionDashboardView({
   bugs,
   requirements,
@@ -81,7 +78,6 @@ export function VersionDashboardView({
   const [versionFilter, setVersionFilter] = useState(allVersionDashboardFilterValue);
   const [ownerFilter, setOwnerFilter] = useState(allVersionDashboardFilterValue);
   const [releaseFilter, setReleaseFilter] = useState<ReleaseFilterValue>(allVersionDashboardFilterValue);
-  const [selectedWidgetId, setSelectedWidgetId] = useState("metric-total");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const snapshots = useMemo(
     () => createVersionDashboardSnapshots({ bugs, requirements, tasks, versions }),
@@ -113,6 +109,11 @@ export function VersionDashboardView({
     () => createVersionOwnerLoads(visibleSnapshots, tasks, bugs).slice(0, 10),
     [bugs, tasks, visibleSnapshots]
   );
+  const hasActiveFilters =
+    statusFilter !== allVersionDashboardFilterValue ||
+    versionFilter !== allVersionDashboardFilterValue ||
+    ownerFilter !== allVersionDashboardFilterValue ||
+    releaseFilter !== allVersionDashboardFilterValue;
 
   useEffect(() => {
     function handleFullscreenChange() {
@@ -134,9 +135,12 @@ export function VersionDashboardView({
     await dashboardRef.current?.requestFullscreen();
   }
 
-  // 组件工具条的智能分析先落到选中态，后续接入分析接口时无需改动看板布局。
-  function handleWidgetAnalyze(widgetId: string) {
-    setSelectedWidgetId(widgetId);
+  // 重置只处理真实筛选条件，避免顶部出现“看似能操作但无反馈”的按钮。
+  function resetFilters() {
+    setStatusFilter(allVersionDashboardFilterValue);
+    setVersionFilter(allVersionDashboardFilterValue);
+    setOwnerFilter(allVersionDashboardFilterValue);
+    setReleaseFilter(allVersionDashboardFilterValue);
   }
 
   return (
@@ -147,15 +151,11 @@ export function VersionDashboardView({
           <Text strong>版本统计看板</Text>
         </Space>
         <Space wrap size={8} className="version-board-toolbar-actions">
-          <Button icon={<PlusOutlined />}>添加组件</Button>
-          <Button icon={<FilterOutlined />}>筛选</Button>
-          <Button icon={<SettingOutlined />}>设置自动化发送</Button>
-          <Button>主题</Button>
+          <Button disabled={!hasActiveFilters} icon={<FilterOutlined />} onClick={resetFilters}>
+            重置筛选
+          </Button>
           <Button icon={isFullscreen ? <CompressOutlined /> : <FullscreenOutlined />} onClick={toggleFullscreen}>
             {isFullscreen ? "退出演示" : "全屏演示"}
-          </Button>
-          <Button type="primary" ghost icon={<ShareAltOutlined />}>
-            分享仪表盘
           </Button>
         </Space>
       </div>
@@ -282,11 +282,8 @@ export function VersionDashboardView({
       {visibleSnapshots.length ? (
         <VersionDashboardBoard
           ownerLoads={ownerLoads}
-          selectedWidgetId={selectedWidgetId}
           snapshots={visibleSnapshots}
-          onAnalyze={handleWidgetAnalyze}
           onOpenVersion={onOpenVersion}
-          onSelect={setSelectedWidgetId}
         />
       ) : (
         <div className="version-dashboard-empty version-board-empty-state">

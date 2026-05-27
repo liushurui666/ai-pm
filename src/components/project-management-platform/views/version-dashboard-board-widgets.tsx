@@ -1,13 +1,12 @@
 "use client";
 
 import { Avatar, Badge, Empty, Flex, Space, Typography } from "antd";
-import { BarChartOutlined, DashboardOutlined, DotChartOutlined, TrophyOutlined, UserOutlined } from "@ant-design/icons";
+import { BarChartOutlined, DashboardOutlined, TrophyOutlined, UserOutlined } from "@ant-design/icons";
 import type { ReactNode } from "react";
 import type { VersionDashboardSnapshot, VersionOwnerLoad } from "@/components/project-management-platform/views/version-dashboard-utils";
 import { VersionDashboardWidget } from "@/components/project-management-platform/views/version-dashboard-widget";
 
 const { Text } = Typography;
-type WidgetAction = (widgetId: string) => void;
 
 // 百分比统一四舍五入，保证柱图和漏斗的文本口径一致。
 function getPercent(part: number, total: number) {
@@ -62,66 +61,35 @@ function getStatusCounts(snapshots: VersionDashboardSnapshot[]) {
 
 // 大数字卡片保持极简，只展示标题和核心指标，贴近截图里的左上 KPI。
 export function KpiWidget({
-  active,
   danger = false,
   id,
   label,
-  value,
-  onAnalyze,
-  onSelect
+  value
 }: {
-  active: boolean;
   danger?: boolean;
   id: string;
   label: string;
   value: number;
-  onAnalyze: WidgetAction;
-  onSelect: WidgetAction;
 }) {
   return (
-    <VersionDashboardWidget active={active} className="version-board-card version-board-kpi-card" id={id} title={label} onAnalyze={onAnalyze} onSelect={onSelect}>
+    <VersionDashboardWidget className="version-board-card version-board-kpi-card" id={id} title={label}>
       <Text className={danger ? "version-board-card-title version-board-card-title-danger" : "version-board-card-title"}>{label}</Text>
       <strong className={danger ? "version-board-kpi-value version-board-kpi-value-danger" : "version-board-kpi-value"}>{value}</strong>
     </VersionDashboardWidget>
   );
 }
 
-// 顶部右侧占位组件用于还原截图里的“数据无效”图表槽位。
-export function PlaceholderWidget({
-  active,
-  id,
-  onAnalyze,
-  onSelect
-}: {
-  active: boolean;
-  id: string;
-  onAnalyze: WidgetAction;
-  onSelect: WidgetAction;
-}) {
-  return (
-    <VersionDashboardWidget active={active} className="version-board-card version-board-placeholder-card" id={id} title="版本趋势看板" onAnalyze={onAnalyze} onSelect={onSelect}>
-      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="数据无效" />
-    </VersionDashboardWidget>
-  );
-}
-
 // 紧急程度分布用手绘式柱图表达，当前只依赖快照统计不引入图表库。
 export function RiskDistributionWidget({
-  active,
-  snapshots,
-  onAnalyze,
-  onSelect
+  snapshots
 }: {
-  active: boolean;
   snapshots: VersionDashboardSnapshot[];
-  onAnalyze: WidgetAction;
-  onSelect: WidgetAction;
 }) {
   const stats = getVersionRiskStats(snapshots);
   const maxValue = getMaxValue(stats.map((item) => item.value));
 
   return (
-    <VersionDashboardWidget active={active} className="version-board-card version-board-risk-card" id="risk-distribution" title="任务紧急程度分布" onAnalyze={onAnalyze} onSelect={onSelect}>
+    <VersionDashboardWidget className="version-board-card version-board-risk-card" id="risk-distribution" title="任务紧急程度分布">
       <PanelTitle icon={<BarChartOutlined />} title="任务紧急程度分布" />
       <LegendItems items={stats} />
       <div className="version-board-column-chart">
@@ -139,20 +107,14 @@ export function RiskDistributionWidget({
 
 // 版本数排行把前三名做成头像榜，剩余项用紧凑列表承接。
 export function VersionRankWidget({
-  active,
   snapshots,
-  onAnalyze,
-  onOpenVersion,
-  onSelect
+  onOpenVersion
 }: {
-  active: boolean;
   snapshots: VersionDashboardSnapshot[];
-  onAnalyze: WidgetAction;
   onOpenVersion: (versionId: string) => void;
-  onSelect: WidgetAction;
 }) {
   return (
-    <VersionDashboardWidget active={active} className="version-board-card version-board-rank-card" id="version-rank" title="版本任务数排行" onAnalyze={onAnalyze} onSelect={onSelect}>
+    <VersionDashboardWidget className="version-board-card version-board-rank-card" id="version-rank" title="版本任务数排行">
       <PanelTitle icon={<TrophyOutlined />} title="版本任务数排行" />
       {snapshots.length ? (
         <>
@@ -185,21 +147,15 @@ export function VersionRankWidget({
 
 // 负责人看板复刻横向条形图，橙色表示延期或缺陷负载，绿色表示正常工作量。
 export function OwnerBoardWidget({
-  active,
-  ownerLoads,
-  onAnalyze,
-  onSelect
+  ownerLoads
 }: {
-  active: boolean;
   ownerLoads: VersionOwnerLoad[];
-  onAnalyze: WidgetAction;
-  onSelect: WidgetAction;
 }) {
   const visibleOwners = ownerLoads.slice(0, 9);
   const maxValue = getMaxValue(visibleOwners.map((owner) => owner.openTaskCount + owner.bugCount));
 
   return (
-    <VersionDashboardWidget active={active} className="version-board-card version-board-owner-card" id="owner-board" title="版本负责人看板" onAnalyze={onAnalyze} onSelect={onSelect}>
+    <VersionDashboardWidget className="version-board-card version-board-owner-card" id="owner-board" title="版本负责人看板">
       <PanelTitle icon={<UserOutlined />} title="版本负责人看板" />
       <LegendItems items={[{ color: "var(--version-board-orange)", label: "已延期", value: 0 }, { color: "var(--version-board-green)", label: "正常", value: 0 }]} showValues={false} />
       {visibleOwners.length ? (
@@ -230,21 +186,15 @@ export function OwnerBoardWidget({
 
 // 进展看板用漏斗表达任务阶段转换率，和截图的横向漏斗保持一致。
 export function ProgressFunnelWidget({
-  active,
-  snapshots,
-  onAnalyze,
-  onSelect
+  snapshots
 }: {
-  active: boolean;
   snapshots: VersionDashboardSnapshot[];
-  onAnalyze: WidgetAction;
-  onSelect: WidgetAction;
 }) {
   const statusCounts = getStatusCounts(snapshots);
   const total = Math.max(1, statusCounts.reduce((sum, item) => sum + item.value, 0));
 
   return (
-    <VersionDashboardWidget active={active} className="version-board-card version-board-progress-card" id="progress-funnel" title="任务进展看板" onAnalyze={onAnalyze} onSelect={onSelect}>
+    <VersionDashboardWidget className="version-board-card version-board-progress-card" id="progress-funnel" title="任务进展看板">
       <PanelTitle icon={<DashboardOutlined />} title="任务进展看板" />
       <div className="version-board-funnel">
         {statusCounts.map((item, index) => {
@@ -267,13 +217,12 @@ export function ProgressFunnelWidget({
   );
 }
 
-// 面板标题保留小图标和复制样式的操作点，形成截图里的组件标题区。
+// 面板标题只保留图表语义图标，避免出现没有动作的小按钮。
 function PanelTitle({ icon, title }: { icon: ReactNode; title: string }) {
   return (
     <Flex align="center" gap={8} className="version-board-panel-title">
       {icon}
       <Text strong>{title}</Text>
-      <DotChartOutlined className="version-board-title-action" />
     </Flex>
   );
 }
