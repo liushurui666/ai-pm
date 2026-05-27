@@ -67,11 +67,13 @@ function PanelTitle({ icon, title }: { icon: ReactNode; title: string }) {
 function ProgressLine({ label, value }: { label: string; value: number }) {
   return (
     <div className="version-board-health-progress-row">
-      <Text type="secondary">{label}</Text>
-      <span>
+      <span className="version-board-health-progress-heading">
+        <Text type="secondary">{label}</Text>
+        <strong>{value}%</strong>
+      </span>
+      <span className="version-board-health-progress-bar">
         <i style={{ width: `${Math.max(4, value)}%` }} />
       </span>
-      <strong>{value}%</strong>
     </div>
   );
 }

@@ -2837,42 +2837,56 @@
 
 .version-board-health-progress {
   display: grid;
-  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .version-board-health-progress-row {
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr) 44px;
-  align-items: center;
-  gap: 10px;
+  align-content: start;
+  gap: 9px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-subtle);
 }
 
-.version-board-health-progress-row > .ant-typography {
+.version-board-health-progress-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 8px;
+}
+
+.version-board-health-progress-heading .ant-typography {
   overflow: hidden;
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.version-board-health-progress-row span {
+.version-board-health-progress-heading strong {
+  flex: 0 0 auto;
+  color: var(--foreground);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.version-board-health-progress-bar {
   display: block;
-  height: 8px;
+  height: 7px;
   overflow: hidden;
   border-radius: 999px;
   background: var(--surface-muted);
 }
 
-.version-board-health-progress-row i {
+.version-board-health-progress-bar i {
   display: block;
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, var(--brand), var(--teal));
-}
-
-.version-board-health-progress-row strong {
-  color: var(--foreground);
-  font-size: 12px;
-  text-align: right;
 }
 
 .version-board-risk-card,
@@ -3989,12 +4003,8 @@
     grid-template-columns: 1fr;
   }
 
-  .version-board-health-progress-row {
+  .version-board-health-progress {
     grid-template-columns: 1fr;
-  }
-
-  .version-board-health-progress-row strong {
-    text-align: left;
   }
 
   .version-board-kpi-value {
