@@ -28,7 +28,6 @@ import {
   CalendarOutlined,
   CheckCircleOutlined,
   DashboardOutlined,
-  FileTextOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -99,7 +98,6 @@ import type {
 import { formatRequirementVersionOptionLabel } from "@/components/project-management-platform/requirements/version-utils";
 import { BugRouteEditView } from "@/components/project-management-platform/views/bug-route-edit-view";
 import { BugsView } from "@/components/project-management-platform/views/bugs-view";
-import { DocumentsView } from "@/components/project-management-platform/views/documents-view";
 import { MembersView } from "@/components/project-management-platform/views/members-view";
 import { OverviewView } from "@/components/project-management-platform/views/overview-view";
 import {
@@ -1239,7 +1237,6 @@ export function ProjectManagementPlatform({
     { key: "bugs", icon: <BugOutlined />, label: "Bug 管理" },
     { key: "requirements", icon: <NodeIndexOutlined />, label: "需求管理" },
     { key: "risks", icon: <AlertOutlined />, label: "风险中心" },
-    { key: "docs", icon: <FileTextOutlined />, label: "文档知识库" },
     { key: "members", icon: <TeamOutlined />, label: "成员管理" },
     { key: "reports", icon: <BarChartOutlined />, label: "报表驾驶舱" }
   ];
@@ -1505,8 +1502,8 @@ export function ProjectManagementPlatform({
                 <Input
                   className="pm-search"
                   prefix={<SearchOutlined />}
-                  placeholder="搜索项目、任务、文档"
-                  aria-label="搜索项目、任务、文档"
+                  placeholder="搜索项目、任务、Bug、风险、需求"
+                  aria-label="搜索项目、任务、Bug、风险、需求"
                   allowClear
                   value={searchQuery}
                   onChange={(event) => {
@@ -1762,13 +1759,6 @@ export function ProjectManagementPlatform({
                   ) : null}
                   {activeView === "risks" ? (
                     <RisksView risks={data.risks} onCreate={() => openCreateDrawer("risk")} />
-                  ) : null}
-                  {activeView === "docs" ? (
-                    <DocumentsView
-                      documents={data.documents}
-                      onCreate={() => openCreateDrawer("document")}
-                      onUpload={() => openDocumentBreakdownDrawer()}
-                    />
                   ) : null}
                   {activeView === "members" ? (
                     <MembersView

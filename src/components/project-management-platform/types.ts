@@ -10,7 +10,6 @@ export type AppView =
   | "bugEdit"
   | "requirements"
   | "risks"
-  | "docs"
   | "members"
   | "reports";
 

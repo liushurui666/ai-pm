@@ -8,7 +8,7 @@ import { OwnerAvatar } from "@/components/project-management-platform/shared/own
 
 const { Text } = Typography;
 
-// 全局搜索跨项目、任务、Bug、文档、风险和需求，统一限制结果数量保护抽屉性能。
+// 全局搜索跨项目、任务、Bug、风险和需求，统一限制结果数量保护抽屉性能。
 export function createSearchResults(data: DashboardData, query: string): SearchResult[] {
   const keyword = query.trim().toLowerCase();
 
@@ -67,17 +67,6 @@ export function createSearchResults(data: DashboardData, query: string): SearchR
       type: "Bug",
       view: "bugs" as const
     }));
-  const documentResults = data.documents
-    .filter((document) => matches([document.title, document.type, document.aiSummary]))
-    .map((document) => ({
-      entity: "document" as const,
-      id: document.id,
-      title: document.title,
-      description: document.aiSummary,
-      meta: `文档 · ${document.type} · ${document.updatedAt}`,
-      type: "文档",
-      view: "docs" as const
-    }));
   const riskResults = data.risks
     .filter((risk) => matches([risk.title, risk.owner, risk.project, risk.mitigation, risk.level]))
     .map((risk) => ({
@@ -131,7 +120,6 @@ export function createSearchResults(data: DashboardData, query: string): SearchR
     ...projectResults,
     ...taskResults,
     ...bugResults,
-    ...documentResults,
     ...riskResults,
     ...versionResults,
     ...requirementResults
@@ -171,7 +159,7 @@ export function SearchDrawer({
           allowClear
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="搜索项目、任务、Bug、文档、风险"
+          placeholder="搜索项目、任务、Bug、风险、需求"
         />
         {results.length ? (
           <div className="search-results-list">
