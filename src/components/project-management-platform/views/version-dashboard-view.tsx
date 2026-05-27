@@ -15,7 +15,6 @@ import type { BugReport, Requirement, RequirementVersion, Task } from "@/types/d
 import { PageTitle } from "@/components/project-management-platform/shared/page-shell";
 import {
   MetricTile,
-  MilestoneSignals,
   OwnerLoadBoard,
   TaskStageFunnel,
   VersionDistribution,
@@ -23,6 +22,8 @@ import {
   VersionScoreboard,
   versionStatuses
 } from "@/components/project-management-platform/views/version-dashboard-panels";
+import { MilestoneSignals } from "@/components/project-management-platform/views/version-dashboard-milestones";
+import { VersionDashboardMark } from "@/components/project-management-platform/views/version-dashboard-visuals";
 import {
   allVersionDashboardFilterValue,
   createVersionDashboardSnapshots,
@@ -185,15 +186,18 @@ export function VersionDashboardView({
 
       <div className="version-dashboard-hero">
         <div className="version-dashboard-hero-copy">
-          <Space wrap size={[8, 8]}>
-            <Tag icon={<RocketOutlined />}>{metrics.totalVersions} 个版本</Tag>
-            <Tag icon={<CheckCircleOutlined />}>{metrics.totalTasks} 个任务</Tag>
-            <Tag icon={<BugOutlined />}>{metrics.openBugs} 个未关闭 Bug</Tag>
-          </Space>
-          <Title level={3}>版本交付态势</Title>
-          <Text type="secondary">
-            汇总父子版本范围，把需求就绪、任务完成、里程碑完成和缺陷健康合成一个可对比的交付分。
-          </Text>
+          <VersionDashboardMark />
+          <div className="version-dashboard-hero-text">
+            <Space wrap size={[8, 8]}>
+              <Tag icon={<RocketOutlined />}>{metrics.totalVersions} 个版本</Tag>
+              <Tag icon={<CheckCircleOutlined />}>{metrics.totalTasks} 个任务</Tag>
+              <Tag icon={<BugOutlined />}>{metrics.openBugs} 个未关闭 Bug</Tag>
+            </Space>
+            <Title level={3}>版本交付态势</Title>
+            <Text type="secondary">
+              汇总父子版本范围，把需求就绪、任务完成、里程碑完成和缺陷健康合成一个可对比的交付分。
+            </Text>
+          </div>
         </div>
         <div className="version-dashboard-metrics">
           <MetricTile icon={<NodeIndexOutlined />} label="版本总数" tone="brand" value={metrics.totalVersions} />

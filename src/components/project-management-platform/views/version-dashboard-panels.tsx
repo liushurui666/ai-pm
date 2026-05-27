@@ -13,10 +13,14 @@ import type { CSSProperties, ReactNode } from "react";
 import type { RequirementVersion, Task } from "@/types/dashboard";
 import { taskStages } from "@/components/project-management-platform/constants";
 import {
-  createVersionMilestoneSignals,
   createVersionOwnerLoads,
   type VersionDashboardSnapshot
 } from "@/components/project-management-platform/views/version-dashboard-utils";
+import {
+  TaskStageNode,
+  VersionScoreGauge,
+  VersionStatusDonut
+} from "@/components/project-management-platform/views/version-dashboard-visuals";
 
 const { Text } = Typography;
 
@@ -121,12 +125,24 @@ export function VersionScoreboard({
 
 // 状态分布面板直接使用版本状态枚举，避免额外图表库带来的重量。
 export function VersionDistribution({ snapshots }: { snapshots: VersionDashboardSnapshot[] }) {
+  const counts = versionStatuses.reduce<Record<RequirementVersion["status"], number>>((currentCounts, status) => {
+    currentCounts[status] = snapshots.filter((snapshot) => snapshot.status === status).length;
+
+    return currentCounts;
+  }, {
+    规划中: 0,
+    进行中: 0,
+    已发布: 0,
+    已归档: 0
+  });
+
   return (
     <section className="version-dashboard-panel">
       <PanelHeader icon={<NodeIndexOutlined />} title="状态分布" subtitle="版本生命周期占比" />
+      <VersionStatusDonut counts={counts} total={snapshots.length} />
       <div className="version-dashboard-status-list">
         {versionStatuses.map((status) => {
-          const count = snapshots.filter((snapshot) => snapshot.status === status).length;
+          const count = counts[status];
           const percent = snapshots.length ? Math.round((count / snapshots.length) * 100) : 0;
 
           return (
@@ -160,6 +176,7 @@ export function TaskStageFunnel({ tasks }: { tasks: Task[] }) {
       <div className="version-dashboard-funnel">
         {stageCounts.map((item) => (
           <div className="version-dashboard-funnel-row" key={item.stage}>
+            <TaskStageNode active={item.count > 0} stage={item.stage} />
             <Text type="secondary">{item.stage}</Text>
             <span className="version-dashboard-bar" style={getBarStyle((item.count / maxCount) * 100)}>
               <i />
@@ -216,7 +233,10 @@ export function VersionMatrix({
               </Space>
               <Tag color={versionStatusColor[snapshot.status]}>{snapshot.status}</Tag>
             </Flex>
-            <Progress percent={snapshot.deliveryScore} size="small" />
+            <div className="version-dashboard-card-score">
+              <VersionScoreGauge percent={snapshot.deliveryScore} label="交付分" />
+              <Progress percent={snapshot.deliveryScore} size="small" />
+            </div>
             <div className="version-dashboard-card-metrics">
               <span><Text type="secondary">需求</Text><strong>{snapshot.requirementCount}</strong></span>
               <span><Text type="secondary">任务</Text><strong>{snapshot.doneTaskCount}/{snapshot.taskCount}</strong></span>
@@ -240,34 +260,7 @@ export function VersionMatrix({
   );
 }
 
-// 里程碑信号把版本检查点抽出来，方便投屏时看最近交付节点。
-export function MilestoneSignals({ signals }: { signals: ReturnType<typeof createVersionMilestoneSignals> }) {
-  return (
-    <section className="version-dashboard-section">
-      <PanelHeader icon={<CalendarOutlined />} title="近期里程碑" subtitle="按日期排序的版本交付检查点" />
-      {signals.length ? (
-        <div className="version-dashboard-milestone-list">
-          {signals.map((signal) => (
-            <div className="version-dashboard-milestone-row" key={`${signal.versionId}-${signal.title}-${signal.date}`}>
-              <Tag icon={<CalendarOutlined />}>{signal.date}</Tag>
-              <span>
-                <Text strong>{signal.title}</Text>
-                <Text type="secondary">{signal.versionName} · {signal.owner || "未配置负责人"}</Text>
-              </span>
-              <Tag>{signal.status}</Tag>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="version-dashboard-empty-inline">
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前版本范围暂无里程碑" />
-        </div>
-      )}
-    </section>
-  );
-}
-
-function PanelHeader({
+export function PanelHeader({
   icon,
   subtitle,
   title
