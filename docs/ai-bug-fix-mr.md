@@ -1,211 +1,297 @@
 # Bug 管理接入 AI 自动修复 MR 技术方案
 
 状态：待评审  
-范围：AI PM 的 Bug 管理模块  
-目标：从 Bug 记录自动生成代码修复分支和 MR/PR，不自动合并
+范围：AI PM 的 Bug 管理、项目仓库配置、任务执行系统、正式数据库持久化  
+目标：从 Bug 记录自动生成代码修复分支、提交代码并创建 MR/PR，不自动合并
 
-## 1. 背景与目标
+## 1. 目标
 
-当前 Bug 管理已经具备 Bug 录入、版本关联、负责人、复现材料、状态流转和通知能力。下一步希望在 Bug 详情页增加 `AI 生成修复 MR` 能力，让系统基于 Bug 信息自动拉取项目代码、定位问题、修改代码、执行校验并创建 MR。
+Bug 管理模块上线后需要具备生产可用的数据持久化和 AI 自动修复能力。系统从 Bug 详情页发起修复任务后，后台自动读取 Bug、版本、项目、附件和仓库配置，拉取代码，调用 AI Coding Runner 修改代码，运行校验，推送分支，并直接创建 MR/PR。
 
-本方案只做“自动开 MR”，不做“自动合并”。合并仍由人工 Review 和代码平台保护分支规则决定。
+本方案不再使用 `.ai-pm/app-database.json` 或其他本地 JSON 文件承载业务数据。开发、测试、生产环境统一接入正式数据库。业务状态、任务日志、校验结果、MR 链接全部写入数据库。
+
+本方案只做自动开 MR/PR，不做自动合并。合并仍由人工 Review、CI 和代码平台分支保护规则控制。
 
 ## 2. 非目标
 
 - 不自动 merge 到主干。
 - 不绕过 CI、Code Review、分支保护或人工审批。
 - 不允许 AI 修改密钥、环境变量、CI 权限、部署凭据等高风险文件。
-- 第一版不做跨多个仓库的联合修复。
-- 第一版不承诺 100% 自动修复成功，失败时要产出排查建议。
+- 不允许 AI 只输出修改建议作为成功结果。
+- 不把业务数据写入本地文件。
+- 第一阶段不做跨多个仓库的联合修复。
 
-## 3. 用户流程
+## 3. 技术选型
+
+### 数据库
+
+- 正式数据库：PostgreSQL。
+- ORM：Prisma。
+- 连接方式：`DATABASE_URL`。
+- 迁移方式：`prisma migrate`。
+- 本地开发：连接开发库或 Docker PostgreSQL，不再写 `.ai-pm/app-database.json`。
+
+### 后台任务
+
+- API 只负责创建任务和查询任务。
+- Worker 负责 clone、编码、校验、commit、push、创建 MR。
+- Worker 执行目录只作为临时 checkout 工作区，不承载业务数据；执行结束清理或由保留策略清理。
+
+### Git 平台
+
+- 首期接 GitHub，UI 仍统一叫 MR。
+- GitHub 实际创建 Pull Request。
+- Git Provider 保持抽象，后续接 GitLab 时复用同一任务模型。
+
+### AI Coding Runner
+
+- 采用真实代码修改 Runner。
+- Runner 必须产出代码 diff。
+- 任务成功标准是创建 MR/PR 并回写链接。
+- Runner 不能只生成排查建议；无法产生有效代码变更时任务失败。
+
+## 4. 用户流程
 
 1. 用户进入 Bug 详情页。
 2. 点击 `AI 生成修复 MR`。
 3. 系统展示确认抽屉：目标仓库、基准分支、允许修改目录、校验命令、Reviewer。
 4. 用户确认后创建 AI 修复任务。
-5. 后台 worker 拉取代码、创建分支、调用 AI 修复、运行校验。
-6. 校验通过后提交 commit、推送分支、创建 MR/PR。
-7. 系统把 MR 链接、修复摘要、校验结果回写到 Bug。
-8. Bug 状态流转为 `修复中` 或 `待验证`，具体由配置决定。
-9. 人工 Review，合并后再由 CI webhook 或人工操作流转 Bug。
+5. 后台 Worker 领取任务，拉取代码并创建 `ai-fix/*` 分支。
+6. AI Coding Runner 基于 Bug 上下文直接修改代码。
+7. Worker 检查 diff 权限，运行 install/lint/test/build。
+8. Worker commit、push，并创建 MR/PR。
+9. 系统把 MR 链接、修复摘要、改动文件、校验结果写回数据库。
+10. Bug 自动流转为 `修复中`。
+11. 人工 Review 和 CI 通过后合并，再由人工或 webhook 流转 Bug 到 `待验证` 或 `已关闭`。
 
-## 4. 总体架构
+## 5. 总体架构
 
 ```mermaid
 sequenceDiagram
   participant User as 用户
   participant UI as Bug 详情页
   participant API as Next.js API
-  participant DB as 本地数据/后续数据库
+  participant DB as PostgreSQL
+  participant Queue as 任务队列
   participant Worker as AI 修复 Worker
   participant Git as Git Provider
   participant AI as AI Coding Runner
 
   User->>UI: 点击 AI 生成修复 MR
   UI->>API: POST /api/bug-fix-jobs
-  API->>DB: 创建 queued 任务并回写 Bug
-  Worker->>DB: 领取 queued 任务
+  API->>DB: 创建 bug_fix_jobs
+  API->>Queue: 投递 jobId
+  Worker->>Queue: 领取任务
+  Worker->>DB: 锁定 queued 任务
   Worker->>Git: clone/fetch 仓库
-  Worker->>AI: 提供 Bug 上下文并执行修复
-  AI-->>Worker: 修改代码
-  Worker->>Worker: lint/test/build
+  Worker->>AI: 提供 Bug 上下文并执行代码修复
+  AI-->>Worker: 返回代码改动和摘要
+  Worker->>Worker: diff 安全检查 + install/lint/test/build
   Worker->>Git: commit + push branch
   Worker->>Git: 创建 MR/PR
-  Worker->>DB: 写入 MR 链接、摘要、校验结果
-  UI->>API: 轮询任务状态
-  API-->>UI: 展示 MR、日志、失败原因
+  Worker->>DB: 写入 MR 链接、摘要、日志、校验结果
+  UI->>API: 查询任务状态
+  API-->>UI: 展示 MR、状态、校验结果
 ```
 
-## 5. 模块拆分
+## 6. 正式数据库设计
 
-### 5.1 Bug 页面入口
+### 6.1 数据库基线
 
-改动位置：
+所有当前本地数据模型需要进入数据库。AI 修复 MR 功能依赖以下基础表：
 
-- `src/components/project-management-platform/views/bug-route-edit-view.tsx`
-- `src/components/project-management-platform/views/bugs-view.tsx`
-- `src/components/project-management-platform.tsx`
-
-新增能力：
-
-- Bug 详情页增加 `AI 生成修复 MR` 按钮。
-- 列表页可增加轻量状态标签：`AI 修复中`、`MR 已创建`、`修复失败`。
-- 点击按钮后打开确认抽屉，避免误触后直接开始执行。
-
-确认抽屉字段：
-
-| 字段 | 说明 |
+| 表 | 用途 |
 | --- | --- |
-| 目标仓库 | 根据 Bug 的项目自动匹配，可手动调整 |
-| 基准分支 | 默认来自仓库配置，如 `main` |
-| 修复范围 | 展示允许修改目录和禁止修改目录 |
-| 校验命令 | 展示 install/lint/test/build |
-| Reviewer | 默认来自项目配置 |
-| 附加提示 | 用户可补充复现信息或约束 |
+| `workspaces` | 工作区 |
+| `workspace_members` | 工作区成员和权限 |
+| `projects` | 项目 |
+| `project_versions` | 需求版本 |
+| `project_tasks` | 任务 |
+| `bug_reports` | Bug 主表 |
+| `bug_attachments` | Bug 附件 |
+| `bug_flow_records` | Bug 流转记录 |
+| `project_repositories` | 项目仓库配置 |
+| `bug_fix_jobs` | AI 修复任务 |
+| `bug_fix_job_logs` | AI 修复任务日志 |
+| `bug_fix_job_checks` | AI 修复校验结果 |
 
-### 5.2 项目仓库配置
+### 6.2 项目仓库表
 
-第一版不要把仓库配置塞进 `Project` 本体，建议独立成 `ProjectRepository`，便于一个项目后续绑定多个仓库。
+```prisma
+model ProjectRepository {
+  id                String   @id @default(cuid())
+  workspaceId       String
+  projectId         String?
+  provider          GitProvider
+  repoFullName      String
+  cloneUrl          String
+  defaultBranch     String   @default("main")
+  packageManager    String   @default("pnpm")
+  installCommand    String
+  lintCommand       String?
+  testCommand       String?
+  buildCommand      String?
+  allowedPaths      String[]
+  blockedPaths      String[]
+  defaultReviewers  String[]
+  status            RepositoryStatus @default(active)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-新增类型建议放在 `src/types/dashboard.ts`：
+  workspace         Workspace @relation(fields: [workspaceId], references: [id])
+  project           Project?  @relation(fields: [projectId], references: [id])
+  bugFixJobs        BugFixJob[]
 
-```ts
-export type GitProvider = "github" | "gitlab";
+  @@index([workspaceId])
+  @@index([projectId])
+}
 
-export type ProjectRepository = {
-  id: string;
-  workspaceId: string;
-  projectName: string;
-  provider: GitProvider;
-  repoFullName: string; // owner/repo 或 group/project
-  cloneUrl: string;
-  defaultBranch: string;
-  packageManager: "pnpm" | "npm" | "yarn";
-  installCommand: string;
-  lintCommand?: string;
-  testCommand?: string;
-  buildCommand?: string;
-  allowedPaths: string[];
-  blockedPaths: string[];
-  defaultReviewers: string[];
-  status: "active" | "disabled";
-  createdAt: string;
-  updatedAt: string;
-};
+enum GitProvider {
+  github
+  gitlab
+}
+
+enum RepositoryStatus {
+  active
+  disabled
+}
 ```
 
-本地数据扩展：
+### 6.3 AI 修复任务表
 
-- `.ai-pm/app-database.json` 增加 `repositories: ProjectRepository[]`。
-- `src/data/local-dashboard.ts` 增加 normalize 和读写兼容。
-- 后续如果接数据库，迁移为单独表。
+```prisma
+model BugFixJob {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  bugId           String
+  repositoryId    String
+  status          BugFixJobStatus @default(queued)
+  baseBranch      String
+  fixBranch       String?
+  commitSha       String?
+  mrUrl           String?
+  mrNumber        String?
+  mrState         String?
+  summary         String?
+  changedFiles    String[]
+  error           String?
+  requestedBy     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  startedAt       DateTime?
+  finishedAt      DateTime?
 
-### 5.3 AI 修复任务模型
+  workspace       Workspace @relation(fields: [workspaceId], references: [id])
+  bug             BugReport @relation(fields: [bugId], references: [id])
+  repository      ProjectRepository @relation(fields: [repositoryId], references: [id])
+  logs            BugFixJobLog[]
+  checks          BugFixJobCheck[]
 
-新增 `BugFixJob`，用于记录后台执行过程，不直接塞进 Bug 的流转记录里。
+  @@index([workspaceId, status])
+  @@index([bugId, createdAt])
+  @@index([repositoryId])
+}
 
-```ts
-export type BugFixJobStatus =
-  | "queued"
-  | "preparing"
-  | "analyzing"
-  | "coding"
-  | "testing"
-  | "pushing"
-  | "mr_created"
-  | "failed"
-  | "canceled";
+model BugFixJobLog {
+  id        String   @id @default(cuid())
+  jobId     String
+  level     JobLogLevel @default(info)
+  message   String
+  createdAt DateTime @default(now())
 
-export type BugFixCheckResult = {
-  name: "install" | "lint" | "test" | "build" | "custom";
-  command: string;
-  status: "passed" | "failed" | "skipped";
-  durationMs?: number;
-  outputTail?: string;
-};
+  job       BugFixJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
-export type BugFixJob = {
-  id: string;
-  workspaceId: string;
-  bugId: string;
-  repositoryId: string;
-  status: BugFixJobStatus;
-  baseBranch: string;
-  fixBranch?: string;
-  commitSha?: string;
-  mrUrl?: string;
-  mrNumber?: string;
-  summary?: string;
-  changedFiles?: string[];
-  checks: BugFixCheckResult[];
-  error?: string;
-  logs: string[];
-  requestedBy?: string;
-  createdAt: string;
-  updatedAt: string;
-  startedAt?: string;
-  finishedAt?: string;
-};
+  @@index([jobId, createdAt])
+}
+
+model BugFixJobCheck {
+  id          String   @id @default(cuid())
+  jobId       String
+  name        String
+  command     String
+  status      CheckStatus
+  durationMs  Int?
+  outputTail  String?
+  createdAt   DateTime @default(now())
+
+  job         BugFixJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+}
+
+enum BugFixJobStatus {
+  queued
+  preparing
+  analyzing
+  coding
+  testing
+  pushing
+  mr_created
+  failed
+  canceled
+}
+
+enum JobLogLevel {
+  info
+  warn
+  error
+}
+
+enum CheckStatus {
+  passed
+  failed
+  skipped
+}
 ```
 
-Bug 本体只保留最近一次 AI 修复摘要字段，方便列表展示：
+### 6.4 Bug 表扩展
 
-```ts
-export type BugAiFixBrief = {
-  latestJobId?: string;
-  status?: BugFixJobStatus;
-  branch?: string;
-  mrUrl?: string;
-  summary?: string;
-  testResult?: string;
-  error?: string;
-  updatedAt?: string;
-};
+`bug_reports` 增加最近一次 AI 修复摘要字段，用于列表和详情页快速展示：
+
+```prisma
+model BugReport {
+  id                String   @id @default(cuid())
+  // 既有字段省略
+  aiFixLatestJobId  String?
+  aiFixStatus       BugFixJobStatus?
+  aiFixBranch       String?
+  aiFixMrUrl        String?
+  aiFixSummary      String?
+  aiFixError        String?
+  aiFixUpdatedAt    DateTime?
+
+  bugFixJobs        BugFixJob[]
+}
 ```
 
-`BugReport` 增加：
+## 7. 后端模块
 
-```ts
-aiFix?: BugAiFixBrief;
+### 7.1 数据访问层
+
+新增正式数据库访问模块：
+
+```text
+prisma/schema.prisma
+prisma/migrations/
+src/lib/db.ts
+src/server/repositories/bugs.ts
+src/server/repositories/projects.ts
+src/server/repositories/project-repositories.ts
+src/server/repositories/bug-fix-jobs.ts
 ```
 
-### 5.4 API 设计
+所有 API 和 Worker 只通过 repository 层读写数据库，不直接操作 Prisma Client。
 
-新增目录：
+### 7.2 API
 
-- `app/api/bug-fix-jobs/route.ts`
-- `app/api/bug-fix-jobs/[jobId]/route.ts`
-- `app/api/bug-fix-jobs/[jobId]/cancel/route.ts`
-
-接口：
+新增接口：
 
 | Method | Path | 用途 |
 | --- | --- | --- |
 | POST | `/api/bug-fix-jobs` | 创建 AI 修复任务 |
 | GET | `/api/bug-fix-jobs?bugId=xxx` | 查询某个 Bug 的修复任务 |
 | GET | `/api/bug-fix-jobs/:jobId` | 查询任务详情 |
-| POST | `/api/bug-fix-jobs/:jobId/cancel` | 取消未执行或执行中的任务 |
+| POST | `/api/bug-fix-jobs/:jobId/cancel` | 取消未开始或可中断的任务 |
 
 创建任务请求：
 
@@ -219,55 +305,44 @@ aiFix?: BugAiFixBrief;
 }
 ```
 
-创建任务响应：
+创建任务时的数据库事务：
 
-```json
-{
-  "job": {
-    "id": "bugFixJob-xxx",
-    "status": "queued"
-  },
-  "message": "已创建 AI 修复任务"
-}
+1. 校验用户权限。
+2. 校验 Bug、项目、仓库同属一个 workspace。
+3. 检查同一 Bug 是否已有 active job。
+4. 插入 `bug_fix_jobs`。
+5. 更新 `bug_reports.aiFix*` 快照字段。
+6. 插入 `bug_flow_records`。
+7. 投递队列消息。
+
+### 7.3 Worker
+
+新增模块：
+
+```text
+scripts/bug-fix-worker.ts
+src/lib/bug-fix-jobs/context.ts
+src/lib/bug-fix-jobs/runner.ts
+src/lib/bug-fix-jobs/security.ts
+src/lib/bug-fix-jobs/mr-template.ts
+src/lib/git-providers/types.ts
+src/lib/git-providers/github.ts
 ```
-
-权限：
-
-- `canEditBugs` 才能创建任务。
-- `viewer` 禁止创建任务。
-- 第一版建议只有 `owner/admin/productAdmin` 可配置仓库。
-
-### 5.5 Worker 设计
-
-不要在 Next.js API route 内直接执行 clone、AI 编码、测试和 push。这些是长任务，应该由 worker 执行。
-
-第一版可做本地 worker：
-
-- `scripts/bug-fix-worker.ts`
-- `pnpm bug-fix:worker`
-- 轮询本地 `bugFixJobs` 中的 `queued` 任务。
-
-后续可替换为：
-
-- BullMQ + Redis
-- GitHub Actions runner
-- 自建容器任务
-- Kubernetes Job
 
 Worker 步骤：
 
-1. 领取任务并置为 `preparing`。
-2. 创建隔离目录：`.ai-pm/bug-fix-workspaces/{jobId}`。
+1. 领取任务并使用数据库行锁或原子状态更新将任务置为 `preparing`。
+2. 创建临时 checkout 目录。
 3. clone 仓库并 checkout 基准分支。
 4. 创建分支：`ai-fix/{bugId}-{slug}`。
-5. 拼装 Bug 上下文。
+5. 拼装 Bug 上下文，包含标题、描述、复现步骤、附件索引、版本、项目、负责人、历史流转记录。
 6. 调用 AI Coding Runner 修改代码。
 7. 检查 diff 是否越权。
 8. 执行 install/lint/test/build。
 9. commit。
 10. push。
-11. 调 Git Provider 创建 MR。
-12. 回写 job 和 bug。
+11. 调 Git Provider 创建 MR/PR。
+12. 回写 `bug_fix_jobs`、`bug_fix_job_logs`、`bug_fix_job_checks` 和 `bug_reports.aiFix*`。
 
 状态流转：
 
@@ -276,9 +351,9 @@ queued -> preparing -> analyzing -> coding -> testing -> pushing -> mr_created
                                                   -> failed
 ```
 
-### 5.6 AI Coding Runner
+## 8. AI Coding Runner
 
-为避免把 AI 工具绑定死，定义统一接口：
+统一接口：
 
 ```ts
 export type AiCodeRunnerInput = {
@@ -295,29 +370,25 @@ export type AiCodeRunnerResult = {
 };
 ```
 
-第一版 runner 建议做成可插拔：
+Runner 规则：
 
-- `localCommandRunner`：通过环境变量配置本地命令，例如 Codex CLI 或其他内部编码 agent。
-- `dryRunRunner`：只生成排查建议，不改代码，用于验证链路。
-- `openAiPatchRunner`：后续再做，负责生成 patch 并由 worker 应用。
+- 必须直接修改 checkout 工作区代码。
+- 必须产出至少一个允许范围内的代码 diff。
+- 不允许只输出排查建议、修改意见或伪日志。
+- 无有效 diff 时任务置为 `failed`。
+- diff 越权时任务置为 `failed`，不 push。
+- 校验通过后创建 Ready MR/PR。
+- 校验失败但已有有效代码 diff 时创建 Draft MR/PR，并在 MR body 写入失败命令、失败日志和风险说明。
 
 环境变量：
 
 ```bash
 AI_BUG_FIX_RUNNER=local-command
 AI_BUG_FIX_RUNNER_COMMAND="codex exec --json"
-AI_BUG_FIX_WORKDIR=.ai-pm/bug-fix-workspaces
+AI_BUG_FIX_WORKDIR=/tmp/ai-pm-bug-fix-workspaces
 ```
 
-第一版可以先落 `dryRunRunner + GitHub PR skeleton`，再接真实 coding runner，这样链路可逐步验证。
-
-### 5.7 Git Provider 设计
-
-新增目录：
-
-- `src/lib/git-providers/types.ts`
-- `src/lib/git-providers/github.ts`
-- `src/lib/git-providers/gitlab.ts` 后置
+## 9. Git Provider
 
 接口：
 
@@ -329,6 +400,7 @@ export type CreateMergeRequestInput = {
   title: string;
   body: string;
   reviewers?: string[];
+  draft?: boolean;
 };
 
 export type GitProviderClient = {
@@ -338,13 +410,6 @@ export type GitProviderClient = {
   }>;
 };
 ```
-
-第一版优先 GitHub：
-
-- UI 仍叫 MR。
-- GitHub 实际创建 Pull Request。
-- 环境变量：`GITHUB_TOKEN`。
-- token 权限：repo read/write、pull request write。
 
 MR 标题：
 
@@ -371,27 +436,27 @@ MR body 模板：
 
 ## 改动文件
 
-## 本地校验
+## 校验结果
 
-## 风险与待确认
+## 风险与人工 Review 重点
 
 由 AI PM 自动生成，请人工 Review 后合并。
 ```
 
-### 5.8 安全与边界控制
+## 10. 安全边界
 
-必须做：
+必须执行：
 
-- 仓库必须来自项目配置白名单。
+- 仓库必须来自 `project_repositories` 白名单。
 - 分支只能创建到 `ai-fix/*`。
 - 禁止 push 到默认分支。
 - 禁止自动合并。
 - 禁止修改 `.env`、密钥、证书、CI 权限、部署脚本等文件。
 - 限制最大改动文件数，例如 20 个。
 - 限制最大 diff 行数，例如 1500 行。
-- 校验命令失败则不创建 MR，或创建 Draft MR，具体由配置决定。
-- 所有执行日志写入 `BugFixJob.logs`。
-- Worker 工作区每次独立，避免污染主应用仓库。
+- 所有执行日志写入 `bug_fix_job_logs`。
+- 所有校验结果写入 `bug_fix_job_checks`。
+- Worker 临时 checkout 目录不保存业务状态，任务结束后清理。
 
 默认 blockedPaths：
 
@@ -409,9 +474,7 @@ MR body 模板：
 ]
 ```
 
-如果确实需要改 CI 或部署文件，必须人工处理，不走 AI 自动修复。
-
-## 6. UI 展示细节
+## 11. UI 展示
 
 ### Bug 详情页
 
@@ -423,6 +486,7 @@ MR body 模板：
 - 分支名
 - MR 链接
 - 修复摘要
+- 改动文件
 - 校验结果
 - 失败原因
 - 最近日志
@@ -436,43 +500,46 @@ MR body 模板：
 
 ### Bug 列表
 
-新增一列或在操作区展示：
+在操作区或状态区展示：
 
 - `AI 修复中`
 - `MR 已创建`
-- `失败`
+- `修复失败`
 
-第一版建议只在详情页做完整状态，列表只做轻量标签，避免表格过宽。
-
-## 7. 数据回写策略
+## 12. 数据回写
 
 创建任务时：
 
-- `Bug.aiFix.status = queued`
-- `Bug.aiFix.latestJobId = job.id`
-- 增加一条 flow record：`updated`，note 为 `创建 AI 修复任务`
+- `bug_reports.aiFixStatus = queued`
+- `bug_reports.aiFixLatestJobId = job.id`
+- 新增 `bug_flow_records`，note 为 `创建 AI 修复 MR 任务`
 
 MR 创建成功时：
 
-- `Bug.aiFix.status = mr_created`
-- `Bug.aiFix.mrUrl = job.mrUrl`
-- `Bug.aiFix.summary = job.summary`
-- 如果 Bug 当前状态是 `新建` 或 `定位中`，自动改为 `修复中`
-- 不自动改为 `待验证`，除非项目配置允许“MR 创建即待验证”
+- `bug_fix_jobs.status = mr_created`
+- `bug_fix_jobs.mrUrl = mr.url`
+- `bug_fix_jobs.summary = runner.summary`
+- `bug_reports.aiFixStatus = mr_created`
+- `bug_reports.aiFixMrUrl = mr.url`
+- `bug_reports.aiFixSummary = runner.summary`
+- Bug 当前状态为 `新建` 或 `定位中` 时自动改为 `修复中`
 
 任务失败时：
 
-- `Bug.aiFix.status = failed`
-- `Bug.aiFix.error = job.error`
+- `bug_fix_jobs.status = failed`
+- `bug_fix_jobs.error = error.message`
+- `bug_reports.aiFixStatus = failed`
+- `bug_reports.aiFixError = error.message`
 - Bug 状态不自动回退
 
-## 8. 文件改动规划
-
-第一阶段建议改动：
+## 13. 文件改动规划
 
 ```text
-src/types/dashboard.ts
-src/data/local-dashboard.ts
+package.json
+prisma/schema.prisma
+prisma/migrations/
+src/lib/db.ts
+src/server/repositories/
 app/api/bug-fix-jobs/route.ts
 app/api/bug-fix-jobs/[jobId]/route.ts
 app/api/bug-fix-jobs/[jobId]/cancel/route.ts
@@ -482,117 +549,97 @@ src/components/project-management-platform/views/bug-route-edit-view.tsx
 src/components/project-management-platform/views/bugs-view.tsx
 src/components/project-management-platform/forms/
 scripts/bug-fix-worker.ts
-package.json
 ```
 
-建议新增模块：
+## 14. 上线分期
 
-```text
-src/lib/bug-fix-jobs/context.ts      # 拼装 Bug + 附件 + 仓库配置上下文
-src/lib/bug-fix-jobs/queue.ts        # 本地任务领取和状态更新
-src/lib/bug-fix-jobs/runner.ts       # AI runner 抽象
-src/lib/bug-fix-jobs/security.ts     # diff 和路径安全检查
-src/lib/bug-fix-jobs/mr-template.ts  # MR body 模板
-```
+### M1：数据库基线
 
-## 9. MVP 分期
-
-### M1：仓库配置与任务模型
-
-- 增加 `ProjectRepository`、`BugFixJob` 类型。
-- 本地数据读写兼容。
-- 仓库配置先用静态表或本地数据维护。
-- Bug 详情展示 AI 修复卡片空状态。
+- 引入 Prisma 和 PostgreSQL。
+- 建立基础业务表、仓库配置表、AI 修复任务表。
+- API 从数据库读取 Bug、项目、版本、任务和成员。
+- 本地 JSON 只允许作为一次性迁移来源，运行态不再读写。
 
 验收：
 
-- 可以给项目配置仓库。
-- 可以在 Bug 详情看到目标仓库。
+- `DATABASE_URL` 指向开发库时，应用可完整读写 Bug、任务、版本和项目。
+- 创建、编辑、查询 Bug 不再依赖 `.ai-pm/app-database.json`。
 
-### M2：创建任务与状态展示
+### M2：仓库配置与 Bug 入口
 
-- 增加 `POST /api/bug-fix-jobs`。
-- Bug 详情页按钮和确认抽屉。
-- 创建 job 后回写 Bug。
-- 前端轮询 job 状态。
-
-验收：
-
-- 点击按钮后生成 queued job。
-- Bug 上能看到 `AI 修复中`。
-
-### M3：Worker Dry Run
-
-- Worker 能领取任务。
-- 拼装上下文。
-- 不改代码，只生成排查建议和模拟日志。
-- 状态能从 queued 跑到 failed 或 completed dry-run。
+- 增加项目仓库配置管理。
+- Bug 详情展示 AI 修复 MR 卡片。
+- 点击按钮创建 `bug_fix_jobs`。
 
 验收：
 
-- 链路可跑通。
-- 失败原因能展示。
+- Bug 能匹配目标仓库。
+- 同一 Bug 同时只能存在一个 active AI 修复任务。
 
-### M4：GitHub PR 创建
+### M3：Worker 与真实代码修复
 
-- Worker clone 仓库。
-- 创建分支。
-- 生成空 commit 或文档 commit。
-- 创建 GitHub PR。
-- 回写 PR 链接。
+- Worker 从数据库领取任务。
+- Worker 调用 AI Coding Runner 修改代码。
+- Worker 执行 diff 安全检查和校验命令。
 
 验收：
 
-- Bug 自动出现 MR 链接。
-- 分支和 PR 标题符合规范。
+- Runner 无有效 diff 时任务失败。
+- Runner 有有效 diff 时进入 push/MR 创建流程。
 
-### M5：接入真实 AI Coding Runner
+### M4：自动创建 MR/PR
 
-- 调用 AI runner 修改代码。
-- 做路径和 diff 安全检查。
-- 执行 install/lint/test/build。
-- 校验通过后创建 MR。
+- Worker commit、push `ai-fix/*` 分支。
+- GitHub Provider 创建 PR。
+- PR 链接回写 Bug。
 
 验收：
 
-- 简单 Bug 可以自动开带代码变更的 MR。
-- 校验失败时不静默成功，能显示失败命令和日志。
+- Bug 详情出现可点击 MR 链接。
+- MR body 包含 Bug 信息、修复摘要、改动文件、校验结果。
+- 校验失败但已有有效 diff 时创建 Draft MR。
 
-## 10. 环境变量
+### M5：通知与闭环
+
+- MR 创建后通知负责人。
+- 接入代码平台 webhook，同步 MR merged/closed 状态。
+- 合并后辅助流转 Bug 到 `待验证`。
+
+验收：
+
+- MR 状态变化能回写 Bug。
+- Bug 流转记录能看到 AI 修复任务、MR 链接和合并结果。
+
+## 15. 环境变量
 
 ```bash
+DATABASE_URL=
 GITHUB_TOKEN=
 AI_BUG_FIX_ENABLED=false
-AI_BUG_FIX_WORKDIR=.ai-pm/bug-fix-workspaces
-AI_BUG_FIX_RUNNER=dry-run
+AI_BUG_FIX_WORKDIR=/tmp/ai-pm-bug-fix-workspaces
+AI_BUG_FIX_RUNNER=local-command
 AI_BUG_FIX_RUNNER_COMMAND=
 AI_BUG_FIX_MAX_CHANGED_FILES=20
 AI_BUG_FIX_MAX_DIFF_LINES=1500
 ```
 
-默认 `AI_BUG_FIX_ENABLED=false`，避免未配置仓库和 token 时误触发。
+默认 `AI_BUG_FIX_ENABLED=false`，未配置数据库、仓库和 token 时不允许触发。
 
-## 11. 风险与应对
+## 16. 风险与应对
 
 | 风险 | 应对 |
 | --- | --- |
 | AI 修错代码 | 只开 MR，不自动合并；必须人工 Review |
 | 修改越权文件 | allowedPaths/blockedPaths + diff 检查 |
 | 长任务阻塞 API | Worker 异步执行，不在 API route 直接跑 |
-| 凭据泄漏 | token 只在 worker 环境读取，不写入日志 |
+| 凭据泄漏 | token 只在 Worker 环境读取，不写入日志 |
 | 测试耗时太长 | 命令超时限制，失败回写 |
 | 多人重复触发 | 同一 Bug 同一时间只允许一个 active job |
-| 代码平台差异 | GitProvider 抽象，先 GitHub 后 GitLab |
+| 数据不一致 | API 创建任务使用数据库事务；Worker 状态更新使用原子条件更新 |
+| 代码平台差异 | GitProvider 抽象，首期 GitHub，后续 GitLab |
 
-## 12. 待确认问题
+## 17. 结论
 
-1. 第一版代码平台先接 GitHub 还是 GitLab？
-2. 项目和仓库是一对一还是一对多？
-3. MR 创建后 Bug 状态应该变成 `修复中` 还是 `待验证`？
-4. 校验失败时是否允许创建 Draft MR？
-5. AI runner 使用本地命令、远程服务，还是后续单独部署 runner？
-6. 是否需要把 AI 修复日志通知到飞书？
+上线实现路径确定为：`正式 PostgreSQL 数据库 -> Bug 详情页创建 AI 修复任务 -> Worker 调用 AI 修改代码 -> commit/push -> 创建 MR/PR -> 回写 Bug`。
 
-## 13. 推荐结论
-
-建议第一版目标定为：`Bug 详情页 -> AI 生成修复 MR -> GitHub PR 链接回写`。先把仓库配置、任务模型、异步 worker、Git provider 和 UI 状态闭环搭起来，再接真实 AI coding runner。这样风险最低，也方便后续替换 GitLab、CI webhook 或更强的代码修复模型。
+该功能的成功结果必须是 MR/PR 链接，不接受只生成修改建议作为完成状态。
