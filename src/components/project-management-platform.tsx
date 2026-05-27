@@ -512,7 +512,7 @@ export function ProjectManagementPlatform({
     openCreateDrawer("requirementVersion", {
       parentVersionId: version.id,
       parentVersionName: version.name,
-      project: version.project === "跨项目" ? undefined : version.project
+      project: version.project
     });
   }
 
@@ -1882,7 +1882,6 @@ export function ProjectManagementPlatform({
             people={ownerOptions}
             peopleLoading={ownerSelectLoading}
             peopleError={ownerSelectError}
-            projectOptions={projectOptions}
             versionOptions={requirementVersionOptions}
             onClose={() => setEditingRequirementVersion(null)}
             onSubmit={handleUpdateRequirementVersion}

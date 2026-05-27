@@ -40,7 +40,7 @@ function useSyncParentVersion(
     const selectedParentVersion = parentVersionOptions.find((version) => version.value === selectedParentVersionId);
 
     if (!selectedParentVersionId) {
-      form.setFieldsValue({ parentVersionName: "" });
+      form.setFieldsValue({ parentVersionName: "", project: "跨项目" });
 
       return;
     }
@@ -51,7 +51,7 @@ function useSyncParentVersion(
 
     form.setFieldsValue({
       parentVersionName: selectedParentVersion.versionName,
-      ...(selectedParentVersion.project !== "跨项目" ? { project: selectedParentVersion.project } : {})
+      project: selectedParentVersion.project
     });
   }, [form, parentVersionOptions, selectedParentVersionId]);
 }

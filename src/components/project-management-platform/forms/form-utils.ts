@@ -49,6 +49,7 @@ export function getCreateInitialValues(type: DashboardEntityType, currentUser?: 
 
   if (type === "requirementVersion") {
     return {
+      project: "跨项目",
       status: "规划中",
       startDate: dayjs(),
       releaseDate: dayjs().add(30, "day"),

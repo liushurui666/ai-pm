@@ -90,7 +90,6 @@ export function CreateRecordDrawer({
               people={people}
               peopleLoading={peopleLoading}
               peopleError={peopleError}
-              projectOptions={projectOptions}
               versionOptions={requirementVersionOptions}
             />
           ) : null}

@@ -183,7 +183,6 @@ export function RequirementVersionFields({
   people,
   peopleError,
   peopleLoading,
-  projectOptions,
   versionOptions,
   editingVersionId
 }: {
@@ -191,7 +190,6 @@ export function RequirementVersionFields({
   people: OwnerSelectableMember[];
   peopleError: string;
   peopleLoading: boolean;
-  projectOptions: string[];
   versionOptions: RequirementVersionOption[];
   editingVersionId?: string;
 }) {
@@ -200,18 +198,12 @@ export function RequirementVersionFields({
       <Form.Item label="版本名称" name="name" rules={[{ required: true, message: "请输入版本名称" }]}>
         <Input placeholder="例如：1.5 协同提效版本" />
       </Form.Item>
-      <Row gutter={12}>
-        <Col span={12}>
-          <Form.Item label="版本状态" name="status">
-            <Select options={["规划中", "进行中", "已发布", "已归档"].map((value) => ({ value, label: value }))} />
-          </Form.Item>
-        </Col>
-        <Col span={12}>
-          <Form.Item label="版本归属项目" name="project" rules={[{ required: true, message: "请选择版本归属项目" }]}>
-            <ProjectOptionSelect projectOptions={projectOptions} />
-          </Form.Item>
-        </Col>
-      </Row>
+      <Form.Item name="project" hidden>
+        <Input />
+      </Form.Item>
+      <Form.Item label="版本状态" name="status">
+        <Select options={["规划中", "进行中", "已发布", "已归档"].map((value) => ({ value, label: value }))} />
+      </Form.Item>
       <VersionParentField form={form} versionOptions={versionOptions} editingVersionId={editingVersionId} />
       <VersionOwnerFields
         form={form}

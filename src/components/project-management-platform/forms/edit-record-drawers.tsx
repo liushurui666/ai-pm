@@ -248,7 +248,6 @@ export function RequirementVersionEditDrawer({
   people,
   peopleLoading,
   peopleError,
-  projectOptions,
   versionOptions,
   onClose,
   onSubmit
@@ -259,7 +258,6 @@ export function RequirementVersionEditDrawer({
   people: OwnerSelectableMember[];
   peopleLoading: boolean;
   peopleError: string;
-  projectOptions: string[];
   versionOptions: RequirementVersionOption[];
   onClose: () => void;
   onSubmit: (values: Record<string, unknown>) => void;
@@ -292,7 +290,6 @@ export function RequirementVersionEditDrawer({
             people={people}
             peopleLoading={peopleLoading}
             peopleError={peopleError}
-            projectOptions={projectOptions}
             versionOptions={versionOptions}
             editingVersionId={version.id}
           />
