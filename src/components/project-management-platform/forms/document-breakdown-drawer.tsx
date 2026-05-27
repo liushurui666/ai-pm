@@ -57,7 +57,7 @@ export function DocumentBreakdownDrawer({
           type="info"
           showIcon
           title="上传后会按目标版本生成任务"
-          description="系统会读取文档内容，围绕你选择的版本拆解前端、后端、测试任务，并保存到任务看板。AI 识别到的负责人会优先匹配平台成员，未匹配时使用默认负责人。"
+          description="系统会读取文档内容，围绕你选择的版本拆解前端、后端、测试任务，并保存到任务看板。选择默认负责人后，本次生成的任务会统一挂到该成员；不选择时再按 AI 识别结果匹配平台成员。"
         />
         <VersionOnlyField
           form={form}

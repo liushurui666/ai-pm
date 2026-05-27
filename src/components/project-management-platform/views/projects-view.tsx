@@ -118,6 +118,7 @@ export function ProjectsView({
     [calendarItems, selectedVersion?.id, versions]
   );
   const versionRange = getVersionDateRange(versions, selectedVersion?.id);
+  const versionTaskTotal = calendarItems.length;
   const doneCount = monthItems.filter((item) => item.progress >= 100).length;
   const avgProgress = monthItems.length
     ? Math.round(monthItems.reduce((sum, item) => sum + item.progress, 0) / monthItems.length)
@@ -194,11 +195,15 @@ export function ProjectsView({
           </Space>
           <h3>{selectedVersion ? selectedVersion.name : "全版本交付日历"}</h3>
           <Text type="secondary">
-            版本已收进筛选器，左侧只按负责人固定分组，右侧尽量留给可横向拖拽改期的任务时间条。
+            项目视图按月份展示排期，任务看板保留版本全量任务；切换月份可查看其他时间段。
           </Text>
         </div>
         <div className="project-calendar-hero-stats">
-          <Statistic title="本月任务" value={monthItems.length} prefix={<CalendarOutlined />} />
+          <Statistic
+            title={selectedVersion ? "本月 / 版本任务" : "本月 / 全部任务"}
+            value={`${monthItems.length}/${versionTaskTotal}`}
+            prefix={<CalendarOutlined />}
+          />
           <Statistic title="平均进度" value={avgProgress} suffix="%" prefix={<UserOutlined />} />
           <Statistic title="已完成" value={doneCount} />
           <Statistic title="需延期" value={delaySummary.total} prefix={<WarningOutlined />} />

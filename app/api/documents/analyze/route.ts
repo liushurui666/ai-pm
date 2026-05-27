@@ -93,7 +93,15 @@ function getFallbackOwner(formData: FormData) {
   };
 }
 
+function hasFallbackOwner(fallbackOwner: ReturnType<typeof getFallbackOwner>) {
+  return Boolean(fallbackOwner.ownerMemberId || fallbackOwner.ownerOpenId || fallbackOwner.owner);
+}
+
 function resolveTaskOwner(task: DocumentTaskDraft, members: DashboardMember[], fallbackOwner: ReturnType<typeof getFallbackOwner>) {
+  if (hasFallbackOwner(fallbackOwner)) {
+    return fallbackOwner;
+  }
+
   const matchedOwner = findMatchedOwner(task.owner ?? "", members);
 
   if (matchedOwner) {
@@ -108,17 +116,15 @@ function resolveTaskOwner(task: DocumentTaskDraft, members: DashboardMember[], f
     };
   }
 
-  return fallbackOwner.ownerMemberId || fallbackOwner.ownerOpenId || fallbackOwner.owner
-    ? fallbackOwner
-    : {
-        owner: task.owner ?? "未分配",
-        ownerMemberId: "",
-        ownerOpenId: "",
-        ownerUnionId: "",
-        ownerUserId: "",
-        ownerEmail: "",
-        ownerAvatarUrl: ""
-      };
+  return {
+    owner: task.owner ?? "未分配",
+    ownerMemberId: "",
+    ownerOpenId: "",
+    ownerUnionId: "",
+    ownerUserId: "",
+    ownerEmail: "",
+    ownerAvatarUrl: ""
+  };
 }
 
 function resolveBreakdownVersion({
@@ -138,13 +144,9 @@ function resolveBreakdownVersion({
     throw new DocumentAnalyzeInputError("目标版本不存在或不属于当前工作区，请刷新后重新选择版本。");
   }
 
-  if (targetVersion.project === "跨项目" && !formProjectName) {
-    throw new DocumentAnalyzeInputError("跨项目版本需要选择本次拆解任务的归属项目。");
-  }
-
   // 入库时以服务端解析出来的版本为准，避免子版本入口的隐藏字段同步慢一步导致任务落到父版本或未规划版本。
   return {
-    projectName: targetVersion.project === "跨项目" ? formProjectName : targetVersion.project,
+    projectName: targetVersion.project || formProjectName || "跨项目",
     versionId: targetVersion.id,
     versionName: targetVersion.name
   };

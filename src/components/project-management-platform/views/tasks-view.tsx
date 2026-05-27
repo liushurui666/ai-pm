@@ -6,6 +6,7 @@ import type { ColumnsType } from "antd/es/table";
 import { useMemo, useState } from "react";
 import dayjs from "dayjs";
 import type { FeishuUser, Task, TaskStage } from "@/types/dashboard";
+import type { RequirementVersionOption } from "@/components/project-management-platform/types";
 import { OwnerAvatar, OwnerInline } from "@/components/project-management-platform/shared/owner-inline";
 import { PageTitle } from "@/components/project-management-platform/shared/page-shell";
 import { priorityColor, taskStages } from "@/components/project-management-platform/constants";
@@ -15,13 +16,6 @@ import { sortTasksForDelivery } from "@/components/project-management-platform/v
 const { Text } = Typography;
 const allTaskVersionValue = "全部";
 const unplannedTaskVersionValue = "__unplanned__";
-
-type RequirementVersionOption = {
-  value: string;
-  label: string;
-  versionName: string;
-  project: string;
-};
 
 function normalizeIdentity(value?: string) {
   return value?.trim().toLowerCase() ?? "";
@@ -54,6 +48,23 @@ function getTaskEmptyText(onlyMine: boolean, versionFilter: string) {
   }
 
   return onlyMine ? "暂无分配给你的任务" : "暂无任务";
+}
+
+function getTaskVersionScopeIds(versionOptions: RequirementVersionOption[], selectedVersionId: string) {
+  const scopeIds = new Set<string>([selectedVersionId]);
+  let hasNewChild = true;
+
+  while (hasNewChild) {
+    hasNewChild = false;
+    versionOptions.forEach((version) => {
+      if (version.parentVersionId && scopeIds.has(version.parentVersionId) && !scopeIds.has(version.value)) {
+        scopeIds.add(version.value);
+        hasNewChild = true;
+      }
+    });
+  }
+
+  return scopeIds;
 }
 
 export function TasksView({
@@ -97,8 +108,10 @@ export function TasksView({
       return scopedTasks.filter((task) => !task.versionId);
     }
 
-    return scopedTasks.filter((task) => task.versionId === taskVersionFilter);
-  }, [scopedTasks, taskVersionFilter]);
+    const versionScopeIds = getTaskVersionScopeIds(versionOptions, taskVersionFilter);
+
+    return scopedTasks.filter((task) => task.versionId && versionScopeIds.has(task.versionId));
+  }, [scopedTasks, taskVersionFilter, versionOptions]);
   const ownerGroups = useMemo(() => {
     const groups = new Map<string, { avatarUrl?: string; tasks: Task[] }>();
 
