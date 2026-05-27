@@ -12,6 +12,10 @@
 - 文件建议阈值：
   - 超过 300 行且逻辑明显多职责时应拆分。
   - 超过 500 行应优先重构拆分。
+- 所有 React 组件必须使用组件目录格式：`组件目录/index.tsx` + `组件目录/index.less`。
+- 新增组件禁止直接创建 `SomeComponent.tsx`、`some-component.tsx`、`SomeComponent.css` 等平铺组件文件。
+- 修改既有组件时，如果涉及组件拆分、新增子组件或样式重构，必须同步迁移到 `index.tsx` + `index.less` 目录结构。
+- `index.tsx` 负责组件入口和必要组合逻辑，样式必须放在同目录 `index.less`，避免继续扩大全局样式文件。
 - `project-management-platform` 及其子模块执行上述规则，其他模块同样执行。
 
 ## 2. 中文注释

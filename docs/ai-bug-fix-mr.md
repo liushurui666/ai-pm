@@ -476,6 +476,22 @@ MR body 模板：
 
 ## 11. UI 展示
 
+### 组件文件规范
+
+本次功能涉及的新增或重构组件必须遵守全项目组件目录规范：
+
+```text
+component-name/
+  index.tsx
+  index.less
+```
+
+执行要求：
+
+- Bug AI 修复卡片、确认抽屉、任务状态标签等新增组件全部使用目录组件。
+- 如果改造既有 Bug 详情页或 Bug 列表页时发生组件拆分，同步迁移到 `index.tsx` + `index.less`。
+- 组件样式放在同目录 `index.less`，不继续堆到全局样式文件。
+
 ### Bug 详情页
 
 新增侧边卡片：`AI 修复 MR`
@@ -545,9 +561,16 @@ app/api/bug-fix-jobs/[jobId]/route.ts
 app/api/bug-fix-jobs/[jobId]/cancel/route.ts
 src/lib/bug-fix-jobs/
 src/lib/git-providers/
-src/components/project-management-platform/views/bug-route-edit-view.tsx
-src/components/project-management-platform/views/bugs-view.tsx
-src/components/project-management-platform/forms/
+src/components/project-management-platform/views/bug-route-edit-view/index.tsx
+src/components/project-management-platform/views/bug-route-edit-view/index.less
+src/components/project-management-platform/views/bugs-view/index.tsx
+src/components/project-management-platform/views/bugs-view/index.less
+src/components/project-management-platform/forms/bug-ai-fix-drawer/index.tsx
+src/components/project-management-platform/forms/bug-ai-fix-drawer/index.less
+src/components/project-management-platform/shared/bug-ai-fix-card/index.tsx
+src/components/project-management-platform/shared/bug-ai-fix-card/index.less
+src/components/project-management-platform/shared/bug-ai-fix-status/index.tsx
+src/components/project-management-platform/shared/bug-ai-fix-status/index.less
 scripts/bug-fix-worker.ts
 ```
 
