@@ -1,6 +1,6 @@
 "use client";
 
-import { Avatar, Badge, Empty, Flex, Space, Typography } from "antd";
+import { Empty, Flex, Space, Typography } from "antd";
 import { BarChartOutlined, DashboardOutlined, TrophyOutlined, UserOutlined } from "@ant-design/icons";
 import type { ReactNode } from "react";
 import type { VersionDashboardSnapshot, VersionOwnerLoad } from "@/components/project-management-platform/views/version-dashboard-utils";
@@ -79,25 +79,48 @@ export function KpiWidget({
   );
 }
 
-// 紧急程度分布用手绘式柱图表达，当前只依赖快照统计不引入图表库。
+// 紧急程度分布改为摘要和占比条，避免低数据量时出现空洞大图表。
 export function RiskDistributionWidget({
   snapshots
 }: {
   snapshots: VersionDashboardSnapshot[];
 }) {
   const stats = getVersionRiskStats(snapshots);
-  const maxValue = getMaxValue(stats.map((item) => item.value));
+  const total = Math.max(1, stats.reduce((sum, item) => sum + item.value, 0));
 
   return (
     <VersionDashboardWidget className="version-board-card version-board-risk-card" id="risk-distribution" title="任务紧急程度分布">
       <PanelTitle icon={<BarChartOutlined />} title="任务紧急程度分布" />
-      <LegendItems items={stats} />
-      <div className="version-board-column-chart">
+      <div className="version-board-risk-summary">
         {stats.map((item) => (
-          <div className="version-board-column" key={item.label}>
-            <span className="version-board-column-count" style={{ color: item.color }}>{item.value}</span>
-            <i style={{ height: `${Math.max(6, (item.value / maxValue) * 100)}%`, background: item.color }} />
+          <span key={item.label}>
             <Text type="secondary">{item.label}</Text>
+            <strong style={{ color: item.color }}>{item.value}</strong>
+            <em>{getPercent(item.value, total)}%</em>
+          </span>
+        ))}
+      </div>
+      <div className="version-board-risk-stack" aria-label="任务紧急程度占比">
+        {stats.map((item) =>
+          item.value ? (
+            <i
+              key={item.label}
+              style={{
+                background: item.color,
+                flexBasis: `${Math.max(6, getPercent(item.value, total))}%`
+              }}
+            />
+          ) : null
+        )}
+      </div>
+      <div className="version-board-risk-list">
+        {stats.map((item) => (
+          <div className="version-board-risk-row" key={item.label}>
+            <Text type="secondary">{item.label}</Text>
+            <span>
+              <i style={{ width: `${Math.max(item.value ? 4 : 0, getPercent(item.value, total))}%`, background: item.color }} />
+            </span>
+            <strong>{item.value}</strong>
           </div>
         ))}
       </div>
@@ -105,7 +128,7 @@ export function RiskDistributionWidget({
   );
 }
 
-// 版本数排行把前三名做成头像榜，剩余项用紧凑列表承接。
+// 版本任务排行改用可扫读的行卡，单个版本场景也不会出现大片空白。
 export function VersionRankWidget({
   snapshots,
   onOpenVersion
@@ -113,30 +136,48 @@ export function VersionRankWidget({
   snapshots: VersionDashboardSnapshot[];
   onOpenVersion: (versionId: string) => void;
 }) {
+  const maxTaskCount = getMaxValue(snapshots.map((snapshot) => snapshot.taskCount));
+  const focusSnapshot = snapshots[0];
+
   return (
     <VersionDashboardWidget className="version-board-card version-board-rank-card" id="version-rank" title="版本任务数排行">
       <PanelTitle icon={<TrophyOutlined />} title="版本任务数排行" />
       {snapshots.length ? (
         <>
-          <div className="version-board-rank-podium">
-            {snapshots.slice(0, 3).map((snapshot, index) => (
-              <button className="version-board-rank-leader" key={snapshot.id} onClick={() => onOpenVersion(snapshot.id)}>
-                <Avatar className="version-board-rank-avatar">{snapshot.name.slice(0, 1)}</Avatar>
-                <Badge count={index + 1} color="var(--version-board-yellow)" />
-                <Text>{snapshot.name}</Text>
-                <strong>{snapshot.taskCount}</strong>
-              </button>
-            ))}
-          </div>
           <div className="version-board-rank-list">
-            {snapshots.slice(3).map((snapshot, index) => (
+            {snapshots.map((snapshot, index) => (
               <button className="version-board-rank-row" key={snapshot.id} onClick={() => onOpenVersion(snapshot.id)}>
-                <span>{index + 4}</span>
-                <Text>{snapshot.name}</Text>
-                <strong>{snapshot.taskCount}</strong>
+                <span className="version-board-rank-index">{index + 1}</span>
+                <span className="version-board-rank-main">
+                  <Text strong>{snapshot.name}</Text>
+                  <em>{snapshot.project} · {snapshot.status}</em>
+                  <i>
+                    <b style={{ width: `${Math.max(4, (snapshot.taskCount / maxTaskCount) * 100)}%` }} />
+                  </i>
+                </span>
+                <span className="version-board-rank-metric">
+                  <strong>{snapshot.taskCount}</strong>
+                  <Text type="secondary">任务</Text>
+                </span>
               </button>
             ))}
           </div>
+          {focusSnapshot ? (
+            <div className="version-board-rank-focus">
+              <span>
+                <Text type="secondary">已完成</Text>
+                <strong>{focusSnapshot.doneTaskCount}</strong>
+              </span>
+              <span>
+                <Text type="secondary">延期</Text>
+                <strong className={focusSnapshot.overdueTaskCount ? "version-board-rank-danger" : ""}>{focusSnapshot.overdueTaskCount}</strong>
+              </span>
+              <span>
+                <Text type="secondary">未关缺陷</Text>
+                <strong className={focusSnapshot.openBugCount ? "version-board-rank-warning" : ""}>{focusSnapshot.openBugCount}</strong>
+              </span>
+            </div>
+          ) : null}
         </>
       ) : (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无排行数据" />
