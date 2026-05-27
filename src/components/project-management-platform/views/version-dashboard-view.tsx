@@ -1,41 +1,66 @@
 "use client";
 
-import { Button, Empty, Select, Space } from "antd";
+import dayjs from "dayjs";
+import { Button, Empty, Select, Space, Typography } from "antd";
 import {
+  CalendarOutlined,
   CompressOutlined,
+  FilterOutlined,
   FullscreenOutlined,
-  NodeIndexOutlined
+  NodeIndexOutlined,
+  PlusOutlined,
+  SettingOutlined,
+  ShareAltOutlined
 } from "@ant-design/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { BugReport, Requirement, RequirementVersion, Task } from "@/types/dashboard";
-import { PageTitle } from "@/components/project-management-platform/shared/page-shell";
-import {
-  OwnerLoadBoard,
-  TaskStageFunnel,
-  VersionDistribution,
-  VersionMatrix,
-  VersionScoreboard,
-  versionStatuses
-} from "@/components/project-management-platform/views/version-dashboard-panels";
-import { VersionDashboardHero } from "@/components/project-management-platform/views/version-dashboard-hero";
-import { MilestoneSignals } from "@/components/project-management-platform/views/version-dashboard-milestones";
-import { VersionDashboardWidget } from "@/components/project-management-platform/views/version-dashboard-widget";
+import { VersionDashboardBoard } from "@/components/project-management-platform/views/version-dashboard-board";
 import {
   allVersionDashboardFilterValue,
   createVersionDashboardSnapshots,
-  createVersionMilestoneSignals,
-  createVersionOwnerLoads
+  createVersionOwnerLoads,
+  type VersionDashboardSnapshot
 } from "@/components/project-management-platform/views/version-dashboard-utils";
 
-function getAverage(values: number[]) {
-  if (!values.length) {
-    return 0;
-  }
+const { Text } = Typography;
 
-  return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
+const versionStatuses: RequirementVersion["status"][] = ["规划中", "进行中", "已发布", "已归档"];
+const versionStatusFilterOptions: Array<RequirementVersion["status"] | typeof allVersionDashboardFilterValue> = [
+  allVersionDashboardFilterValue,
+  ...versionStatuses
+];
+
+type ReleaseFilterValue = typeof allVersionDashboardFilterValue | "delayed" | "next30" | "thisMonth";
+
+const releaseFilterOptions: Array<{ value: ReleaseFilterValue; label: string }> = [
+  { value: allVersionDashboardFilterValue, label: "请选择" },
+  { value: "delayed", label: "已延期" },
+  { value: "next30", label: "30天内" },
+  { value: "thisMonth", label: "本月发布" }
+];
+
+function getVersionOwners(snapshot: VersionDashboardSnapshot) {
+  return [snapshot.productOwner, snapshot.uiOwner, snapshot.devOwner].filter(Boolean) as string[];
 }
 
-// 版本大屏主视图负责筛选和编排，所有业务统计都来自 utils，避免 JSX 里夹杂复杂口径。
+// 时间筛选单独收口，避免页面 JSX 里混入相对日期判断。
+function matchesReleaseFilter(snapshot: VersionDashboardSnapshot, filter: ReleaseFilterValue) {
+  if (filter === allVersionDashboardFilterValue) {
+    return true;
+  }
+
+  if (filter === "delayed") {
+    return snapshot.daysToRelease < 0 || snapshot.overdueTaskCount > 0;
+  }
+
+  if (filter === "next30") {
+    return snapshot.daysToRelease >= 0 && snapshot.daysToRelease <= 30;
+  }
+
+  return dayjs(snapshot.releaseDate).isSame(dayjs(), "month");
+}
+
+// 版本统计看板主容器只负责筛选、全屏和搭建态选中，其余图表交给子组件。
 export function VersionDashboardView({
   bugs,
   requirements,
@@ -50,63 +75,43 @@ export function VersionDashboardView({
   onOpenVersion: (versionId: string) => void;
 }) {
   const dashboardRef = useRef<HTMLDivElement>(null);
-  const [projectFilter, setProjectFilter] = useState(allVersionDashboardFilterValue);
-  const [statusFilter, setStatusFilter] = useState(allVersionDashboardFilterValue);
+  const [statusFilter, setStatusFilter] = useState<RequirementVersion["status"] | typeof allVersionDashboardFilterValue>(
+    allVersionDashboardFilterValue
+  );
   const [versionFilter, setVersionFilter] = useState(allVersionDashboardFilterValue);
+  const [ownerFilter, setOwnerFilter] = useState(allVersionDashboardFilterValue);
+  const [releaseFilter, setReleaseFilter] = useState<ReleaseFilterValue>(allVersionDashboardFilterValue);
   const [selectedWidgetId, setSelectedWidgetId] = useState("metric-total");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const snapshots = useMemo(
     () => createVersionDashboardSnapshots({ bugs, requirements, tasks, versions }),
     [bugs, requirements, tasks, versions]
   );
+  const ownerOptions = useMemo(
+    () =>
+      Array.from(new Set(snapshots.flatMap((snapshot) => getVersionOwners(snapshot))))
+        .filter(Boolean)
+        .sort((left, right) => left.localeCompare(right, "zh-CN")),
+    [snapshots]
+  );
+  const selectedVersion = useMemo(
+    () => snapshots.find((snapshot) => snapshot.id === versionFilter),
+    [snapshots, versionFilter]
+  );
   const visibleSnapshots = useMemo(
     () =>
       snapshots.filter(
         (snapshot) =>
-          (projectFilter === allVersionDashboardFilterValue || snapshot.project === projectFilter) &&
+          (versionFilter === allVersionDashboardFilterValue || snapshot.id === versionFilter) &&
           (statusFilter === allVersionDashboardFilterValue || snapshot.status === statusFilter) &&
-          (versionFilter === allVersionDashboardFilterValue || snapshot.id === versionFilter)
+          (ownerFilter === allVersionDashboardFilterValue || getVersionOwners(snapshot).includes(ownerFilter)) &&
+          matchesReleaseFilter(snapshot, releaseFilter)
       ),
-    [projectFilter, snapshots, statusFilter, versionFilter]
+    [ownerFilter, releaseFilter, snapshots, statusFilter, versionFilter]
   );
-  const projects = useMemo(
-    () => Array.from(new Set(versions.map((version) => version.project))).sort((left, right) => left.localeCompare(right, "zh-CN")),
-    [versions]
-  );
-  const visibleVersionIds = useMemo(
-    () => new Set(visibleSnapshots.flatMap((snapshot) => snapshot.scopeVersionIds)),
-    [visibleSnapshots]
-  );
-  const visibleTasks = useMemo(
-    () => tasks.filter((task) => task.versionId && visibleVersionIds.has(task.versionId)),
-    [tasks, visibleVersionIds]
-  );
-  const visibleBugs = useMemo(
-    () => bugs.filter((bug) => bug.versionId && visibleVersionIds.has(bug.versionId)),
-    [bugs, visibleVersionIds]
-  );
-  const metrics = useMemo(() => {
-    const activeVersions = visibleSnapshots.filter((snapshot) => snapshot.status === "进行中").length;
-    const riskVersions = visibleSnapshots.filter(
-      (snapshot) => snapshot.daysToRelease < 0 || snapshot.openBugCount || snapshot.overdueTaskCount
-    ).length;
-
-    return {
-      activeVersions,
-      averageReadiness: getAverage(visibleSnapshots.map((snapshot) => snapshot.readiness)),
-      openBugs: visibleBugs.filter((bug) => bug.status !== "已关闭").length,
-      riskVersions,
-      totalTasks: visibleTasks.length,
-      totalVersions: visibleSnapshots.length
-    };
-  }, [visibleBugs, visibleSnapshots, visibleTasks]);
   const ownerLoads = useMemo(
-    () => createVersionOwnerLoads(visibleSnapshots, tasks, bugs).slice(0, 6),
+    () => createVersionOwnerLoads(visibleSnapshots, tasks, bugs).slice(0, 10),
     [bugs, tasks, visibleSnapshots]
-  );
-  const milestoneSignals = useMemo(
-    () => createVersionMilestoneSignals(visibleSnapshots).slice(0, 8),
-    [visibleSnapshots]
   );
 
   useEffect(() => {
@@ -129,130 +134,162 @@ export function VersionDashboardView({
     await dashboardRef.current?.requestFullscreen();
   }
 
-  // 组件级工具条先把智能分析聚焦到当前组件，后续可接入真实 AI 分析接口。
+  // 组件工具条的智能分析先落到选中态，后续接入分析接口时无需改动看板布局。
   function handleWidgetAnalyze(widgetId: string) {
     setSelectedWidgetId(widgetId);
   }
 
   return (
     <div className="version-dashboard-page" ref={dashboardRef}>
-      <PageTitle
-        icon={<NodeIndexOutlined />}
-        title="版本大屏"
-        subtitle="以需求版本为主轴，横向查看范围、进度、缺陷、里程碑和负责人负载。"
-        extra={
-          <Space wrap className="version-dashboard-toolbar">
-            <Select
-              className="version-dashboard-filter"
-              value={projectFilter}
-              onChange={setProjectFilter}
-              aria-label="版本大屏项目筛选"
-              options={[
-                { value: allVersionDashboardFilterValue, label: "全部项目" },
-                ...projects.map((project) => ({ value: project, label: project }))
-              ]}
-            />
-            <Select
-              className="version-dashboard-filter"
-              value={statusFilter}
-              onChange={setStatusFilter}
-              aria-label="版本大屏状态筛选"
-              options={[
-                { value: allVersionDashboardFilterValue, label: "全部状态" },
-                ...versionStatuses.map((status) => ({ value: status, label: status }))
-              ]}
-            />
-            <Select
-              className="version-dashboard-version-filter"
-              showSearch
-              optionFilterProp="label"
-              value={versionFilter}
-              onChange={setVersionFilter}
-              aria-label="版本大屏版本筛选"
-              options={[
-                { value: allVersionDashboardFilterValue, label: "全部版本" },
-                ...snapshots.map((snapshot) => ({
-                  value: snapshot.id,
-                  label: `${snapshot.name} · ${snapshot.project}`
-                }))
-              ]}
-            />
-            <Button icon={isFullscreen ? <CompressOutlined /> : <FullscreenOutlined />} onClick={toggleFullscreen}>
-              {isFullscreen ? "退出演示" : "演示模式"}
-            </Button>
-          </Space>
-        }
-      />
+      <div className="version-board-toolbar" aria-label="版本统计看板工具栏">
+        <Space align="center" size={10} className="version-board-toolbar-title">
+          <NodeIndexOutlined />
+          <Text strong>版本统计看板</Text>
+        </Space>
+        <Space wrap size={8} className="version-board-toolbar-actions">
+          <Button icon={<PlusOutlined />}>添加组件</Button>
+          <Button icon={<FilterOutlined />}>筛选</Button>
+          <Button icon={<SettingOutlined />}>设置自动化发送</Button>
+          <Button>主题</Button>
+          <Button icon={isFullscreen ? <CompressOutlined /> : <FullscreenOutlined />} onClick={toggleFullscreen}>
+            {isFullscreen ? "退出演示" : "全屏演示"}
+          </Button>
+          <Button type="primary" ghost icon={<ShareAltOutlined />}>
+            分享仪表盘
+          </Button>
+        </Space>
+      </div>
 
-      <VersionDashboardHero
-        metrics={metrics}
-        selectedWidgetId={selectedWidgetId}
-        onAnalyze={handleWidgetAnalyze}
-        onSelect={setSelectedWidgetId}
-      />
+      <section className="version-board-version-switch" aria-label="版本切换">
+        <div className="version-board-version-switch-main">
+          <Space align="center" size={10}>
+            <NodeIndexOutlined />
+            <Text strong>版本切换</Text>
+          </Space>
+          <Select
+            aria-label="切换展示版本"
+            className="version-board-version-select"
+            showSearch
+            optionFilterProp="label"
+            value={versionFilter}
+            onChange={setVersionFilter}
+            options={[
+              { value: allVersionDashboardFilterValue, label: "全部版本" },
+              ...snapshots.map((snapshot) => ({
+                value: snapshot.id,
+                label: `${snapshot.name} · ${snapshot.project}`
+              }))
+            ]}
+          />
+        </div>
+        <div className="version-board-version-tabs" role="group" aria-label="常用版本切换">
+          <button
+            className={
+              versionFilter === allVersionDashboardFilterValue
+                ? "version-board-version-tab version-board-version-tab-active"
+                : "version-board-version-tab"
+            }
+            type="button"
+            onClick={() => setVersionFilter(allVersionDashboardFilterValue)}
+          >
+            全部版本
+          </button>
+          {snapshots.slice(0, 8).map((snapshot) => (
+            <button
+              className={versionFilter === snapshot.id ? "version-board-version-tab version-board-version-tab-active" : "version-board-version-tab"}
+              key={snapshot.id}
+              type="button"
+              onClick={() => setVersionFilter(snapshot.id)}
+            >
+              <span>{snapshot.name}</span>
+              <em>{snapshot.status}</em>
+            </button>
+          ))}
+        </div>
+        <div className="version-board-version-summary">
+          <Text strong>{selectedVersion?.name ?? "全部版本"}</Text>
+          <Text type="secondary">
+            {selectedVersion
+              ? `${selectedVersion.project} · ${selectedVersion.releaseDate} 发布 · ${selectedVersion.taskCount} 个任务`
+              : `汇总 ${snapshots.length} 个版本`}
+          </Text>
+        </div>
+      </section>
+
+      <div className="version-board-filter-row">
+        <div className="version-board-filter-card">
+          <Text strong>版本状态</Text>
+          <div className="version-board-filter-pills" role="group" aria-label="版本状态筛选">
+            {versionStatusFilterOptions.map((status) => (
+              <button
+                className={statusFilter === status ? "version-board-filter-pill version-board-filter-pill-active" : "version-board-filter-pill"}
+                key={status}
+                type="button"
+                onClick={() => setStatusFilter(status)}
+              >
+                {status}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="version-board-filter-card version-board-owner-filter-card">
+          <Text strong>版本负责人</Text>
+          <div className="version-board-owner-pills" role="group" aria-label="版本负责人筛选">
+            <button
+              className={
+                ownerFilter === allVersionDashboardFilterValue
+                  ? "version-board-owner-pill version-board-owner-pill-active"
+                  : "version-board-owner-pill"
+              }
+              type="button"
+              onClick={() => setOwnerFilter(allVersionDashboardFilterValue)}
+            >
+              <span className="version-board-owner-pill-avatar">All</span>
+              全部
+            </button>
+            {ownerOptions.map((owner, index) => (
+              <button
+                className={ownerFilter === owner ? "version-board-owner-pill version-board-owner-pill-active" : "version-board-owner-pill"}
+                key={owner}
+                type="button"
+                onClick={() => setOwnerFilter(owner)}
+              >
+                <span className={`version-board-owner-pill-avatar version-board-owner-pill-avatar-${(index % 5) + 1}`}>
+                  {owner.slice(0, 1)}
+                </span>
+                {owner}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="version-board-filter-card version-board-time-filter-card">
+          <Space align="center" size={8}>
+            <CalendarOutlined />
+            <Text strong>发布时间</Text>
+          </Space>
+          <Select
+            aria-label="版本发布时间筛选"
+            className="version-board-time-select"
+            value={releaseFilter}
+            onChange={setReleaseFilter}
+            options={releaseFilterOptions}
+          />
+        </div>
+      </div>
 
       {visibleSnapshots.length ? (
-        <>
-          <div className="version-dashboard-grid">
-            <VersionDashboardWidget
-              active={selectedWidgetId === "scoreboard"}
-              className="version-dashboard-widget-wide"
-              id="scoreboard"
-              title="版本交付排行"
-              onAnalyze={handleWidgetAnalyze}
-              onSelect={setSelectedWidgetId}
-            >
-              <VersionScoreboard snapshots={visibleSnapshots.slice(0, 8)} onOpenVersion={onOpenVersion} />
-            </VersionDashboardWidget>
-            <VersionDashboardWidget
-              active={selectedWidgetId === "status"}
-              id="status"
-              title="状态分布"
-              onAnalyze={handleWidgetAnalyze}
-              onSelect={setSelectedWidgetId}
-            >
-              <VersionDistribution snapshots={visibleSnapshots} />
-            </VersionDashboardWidget>
-            <VersionDashboardWidget
-              active={selectedWidgetId === "stages"}
-              id="stages"
-              title="任务阶段"
-              onAnalyze={handleWidgetAnalyze}
-              onSelect={setSelectedWidgetId}
-            >
-              <TaskStageFunnel tasks={visibleTasks} />
-            </VersionDashboardWidget>
-            <VersionDashboardWidget
-              active={selectedWidgetId === "owners"}
-              id="owners"
-              title="负责人负载"
-              onAnalyze={handleWidgetAnalyze}
-              onSelect={setSelectedWidgetId}
-            >
-              <OwnerLoadBoard loads={ownerLoads} />
-            </VersionDashboardWidget>
-          </div>
-          <VersionDashboardWidget
-            active={selectedWidgetId === "matrix"}
-            id="matrix"
-            title="版本明细矩阵"
-            onAnalyze={handleWidgetAnalyze}
-            onSelect={setSelectedWidgetId}
-          >
-            <VersionMatrix snapshots={visibleSnapshots.slice(0, 6)} onOpenVersion={onOpenVersion} />
-          </VersionDashboardWidget>
-          <VersionDashboardWidget
-            active={selectedWidgetId === "milestones"}
-            id="milestones"
-            title="近期里程碑"
-            onAnalyze={handleWidgetAnalyze}
-            onSelect={setSelectedWidgetId}
-          >
-            <MilestoneSignals signals={milestoneSignals} />
-          </VersionDashboardWidget>
-        </>
+        <VersionDashboardBoard
+          ownerLoads={ownerLoads}
+          selectedWidgetId={selectedWidgetId}
+          snapshots={visibleSnapshots}
+          onAnalyze={handleWidgetAnalyze}
+          onOpenVersion={onOpenVersion}
+          onSelect={setSelectedWidgetId}
+        />
       ) : (
-        <div className="version-dashboard-empty">
+        <div className="version-dashboard-empty version-board-empty-state">
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前筛选下暂无版本数据" />
         </div>
       )}
