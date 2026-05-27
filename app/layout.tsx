@@ -5,7 +5,7 @@ import { themeInitScript } from "@/components/theme-init-script";
 import { ThemePreferenceProvider } from "@/components/theme-mode";
 import { getInitialThemeSnapshot, parseThemeSnapshot, themeBackground, themeSnapshotCookieName } from "@/lib/theme-preference";
 import "./globals.css";
-import "@/components/project-management-platform.css";
+import "@/components/project-management-platform/index.less";
 
 export const metadata: Metadata = {
   title: "AI PM 项目管理平台",
