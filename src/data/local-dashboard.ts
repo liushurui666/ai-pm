@@ -1998,7 +1998,7 @@ export async function getDashboardData(user?: FeishuUser, workspaceId?: string):
       currentMember,
       permissions: getDashboardPermissions(currentMember),
       storage: DASHBOARD_DATABASE_STORAGE,
-      message: "已接入正式数据库，平台成员负责权限与负责人选择，飞书仅用于登录和机器人通知。"
+      message: "已接入 PostgreSQL 数据库，平台成员负责权限与负责人选择，飞书仅用于登录和机器人通知。"
     }
   };
 }

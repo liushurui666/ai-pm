@@ -70,7 +70,7 @@ export function BugAiFixCard({
         {!canCreate ? <Text type="secondary">{disabledReason}</Text> : null}
         {active ? <Text type="secondary">当前 Bug 已有 AI 修复任务在执行，请等待任务完成。</Text> : null}
         <Text type="secondary">
-          <BranchesOutlined /> Worker 会从正式数据库领取任务，执行校验后回写 MR 链接。
+          <BranchesOutlined /> Worker 会从 PostgreSQL 领取任务，执行校验后回写 MR 链接。
         </Text>
       </Space>
       <BugAiFixDrawer

@@ -6,10 +6,28 @@
 
 ```bash
 pnpm install
+pnpm db:migrate
 pnpm dev
 ```
 
 默认访问 `http://localhost:3000`。如果端口被占用，Next 会自动切换到可用端口。
+
+本地开发使用本机 PostgreSQL。当前默认连接串为：
+
+```txt
+DATABASE_URL=postgresql://ai_pm:ai_pm_local@localhost:5432/ai_pm?schema=public
+```
+
+如果本机还没有库，可以用 PostgreSQL 管理员账号执行一次：
+
+```bash
+psql -h localhost -p 5432 -d postgres -c "CREATE ROLE ai_pm LOGIN PASSWORD 'ai_pm_local';"
+createdb -h localhost -p 5432 -O ai_pm ai_pm
+psql -h localhost -p 5432 -d ai_pm -c "GRANT ALL ON SCHEMA public TO ai_pm; ALTER SCHEMA public OWNER TO ai_pm;"
+pnpm db:migrate
+```
+
+`prisma.config.ts` 会优先读取 `.env.local`，本地没有配置 `DATABASE_URL` 时会回退到上面的本机 PostgreSQL 地址；生产环境必须显式配置 `DATABASE_URL`。
 
 ## 飞书登录与协同集成
 
@@ -34,13 +52,7 @@ cp .env.example .env.local
 http://localhost:3000/api/auth/feishu/callback
 ```
 
-项目管理主数据不写入飞书云文档。AI PM 平台会把项目、任务、风险、需求、文档和洞察保存到站内数据文件：
-
-```txt
-.ai-pm/app-database.json
-```
-
-这个目录已被 Git 忽略，不会提交到仓库。首次启动时如果数据文件不存在，系统会从内置种子数据初始化；后续通过“新建项目 / 新建任务 / 登记风险 / 新建需求 / 新建文档”创建的记录会由 `/api/records` 持久化到站内数据源，刷新页面后仍然保留。
+项目管理主数据不写入飞书云文档。AI PM 平台会把项目、任务、风险、需求、文档、洞察、Bug 和 AI 修复任务保存到 PostgreSQL；首次启动时如果数据库为空，系统会从内置种子数据初始化。后续通过“新建项目 / 新建任务 / 登记风险 / 新建需求 / 新建文档 / 登记 Bug”创建的记录会由站内 API 持久化到数据库，刷新页面后仍然保留。
 
 飞书只承担三件事：
 
