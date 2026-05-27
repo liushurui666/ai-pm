@@ -111,11 +111,11 @@ export function ProjectsView({
   const delaySummary = useMemo(
     () =>
       createProjectDelaySummary({
-        items: calendarItems,
+        items: monthItems,
         selectedVersionId: selectedVersion?.id,
         versions
       }),
-    [calendarItems, selectedVersion?.id, versions]
+    [monthItems, selectedVersion?.id, versions]
   );
   const versionRange = getVersionDateRange(versions, selectedVersion?.id);
   const versionTaskTotal = calendarItems.length;
@@ -195,7 +195,7 @@ export function ProjectsView({
           </Space>
           <h3>{selectedVersion ? selectedVersion.name : "全版本交付日历"}</h3>
           <Text type="secondary">
-            项目视图按月份展示排期，任务看板保留版本全量任务；切换月份可查看其他时间段。
+            项目视图和任务看板都按所选月份展示任务；切换月份可查看其他时间段。
           </Text>
         </div>
         <div className="project-calendar-hero-stats">

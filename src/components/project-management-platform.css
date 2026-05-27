@@ -3547,13 +3547,32 @@
   background: var(--surface);
 }
 
+.task-month-filter {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  padding-left: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
 .task-version-filter > .ant-space-item:last-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.task-month-filter > .ant-space-item:last-child {
   flex: 1 1 auto;
   min-width: 0;
 }
 
 .task-version-select {
   width: clamp(170px, 18vw, 240px);
+}
+
+.task-month-picker {
+  width: 150px;
 }
 
 .bug-version-filter {
@@ -4085,7 +4104,9 @@
   }
 
   .task-version-filter,
+  .task-month-filter,
   .task-version-select,
+  .task-month-picker,
   .version-dashboard-toolbar,
   .version-dashboard-filter,
   .version-dashboard-version-filter,
