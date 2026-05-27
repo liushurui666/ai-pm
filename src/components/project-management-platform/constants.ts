@@ -36,9 +36,7 @@ export const validViews = new Set<AppView>([
   "bugs",
   "bugEdit",
   "requirements",
-  "risks",
-  "members",
-  "reports"
+  "members"
 ]);
 
 export const statusColor: Record<Project["status"], NonNullable<BadgeProps["status"]>> = {

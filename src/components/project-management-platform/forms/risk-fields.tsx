@@ -5,7 +5,7 @@ import type { OwnerSelectableMember } from "@/components/project-management-plat
 import { OwnerSelect } from "@/components/project-management-platform/forms/owner-select";
 import { ProjectOptionSelect } from "@/components/project-management-platform/forms/version-fields";
 
-// 风险字段绑定项目和负责人，方便后续风险清单按责任人追踪。
+// 风险字段绑定项目和负责人，保留给底层风险数据维护和报表上下文使用。
 export function RiskFields({
   form,
   projectOptions,

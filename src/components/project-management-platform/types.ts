@@ -9,9 +9,7 @@ export type AppView =
   | "bugs"
   | "bugEdit"
   | "requirements"
-  | "risks"
-  | "members"
-  | "reports";
+  | "members";
 
 export type ChatMessage = {
   role: "assistant" | "user";

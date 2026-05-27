@@ -24,15 +24,13 @@ export function OverviewView({
   onGenerateReport,
   onViewBugs,
   onViewTasks,
-  onOpenAssistant,
-  onViewRisks
+  onOpenAssistant
 }: {
   data: DashboardData;
   onGenerateReport: () => void;
   onViewBugs: () => void;
   onViewTasks: () => void;
   onOpenAssistant: () => void;
-  onViewRisks: () => void;
 }) {
   const currentUser = data.meta?.user;
   const personalTasks = currentUser ? data.tasks.filter((task) => isMyOwnerRecord(task, currentUser)) : data.tasks;
@@ -94,9 +92,6 @@ export function OverviewView({
             </Button>
             <Button icon={<RobotOutlined />} onClick={onOpenAssistant}>
               询问 AI 助手
-            </Button>
-            <Button icon={<AlertOutlined />} onClick={onViewRisks}>
-              风险清单
             </Button>
             <Button icon={<RobotOutlined />} onClick={onGenerateReport}>
               导出周报

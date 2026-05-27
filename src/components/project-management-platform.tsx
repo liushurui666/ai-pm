@@ -22,8 +22,6 @@ import {
   message
 } from "antd";
 import {
-  AlertOutlined,
-  BarChartOutlined,
   BugOutlined,
   CalendarOutlined,
   CheckCircleOutlined,
@@ -106,9 +104,7 @@ import {
   type ProjectCalendarScheduleChange
 } from "@/components/project-management-platform/views/project-calendar-utils";
 import { ProjectsView } from "@/components/project-management-platform/views/projects-view";
-import { ReportsView } from "@/components/project-management-platform/views/reports-view";
 import { RequirementsView } from "@/components/project-management-platform/views/requirements-view";
-import { RisksView } from "@/components/project-management-platform/views/risks-view";
 import { TasksView } from "@/components/project-management-platform/views/tasks-view";
 import { createWeeklyReportFileName } from "@/lib/weekly-report";
 
@@ -1236,9 +1232,7 @@ export function ProjectManagementPlatform({
     { key: "tasks", icon: <CheckCircleOutlined />, label: "任务看板" },
     { key: "bugs", icon: <BugOutlined />, label: "Bug 管理" },
     { key: "requirements", icon: <NodeIndexOutlined />, label: "需求管理" },
-    { key: "risks", icon: <AlertOutlined />, label: "风险中心" },
-    { key: "members", icon: <TeamOutlined />, label: "成员管理" },
-    { key: "reports", icon: <BarChartOutlined />, label: "报表驾驶舱" }
+    { key: "members", icon: <TeamOutlined />, label: "成员管理" }
   ];
   const userName = data?.meta?.user?.name ?? "苏";
   const userInitial = userName.slice(0, 1);
@@ -1502,8 +1496,8 @@ export function ProjectManagementPlatform({
                 <Input
                   className="pm-search"
                   prefix={<SearchOutlined />}
-                  placeholder="搜索项目、任务、Bug、风险、需求"
-                  aria-label="搜索项目、任务、Bug、风险、需求"
+                  placeholder="搜索项目、任务、Bug、需求"
+                  aria-label="搜索项目、任务、Bug、需求"
                   allowClear
                   value={searchQuery}
                   onChange={(event) => {
@@ -1641,7 +1635,7 @@ export function ProjectManagementPlatform({
                   { label: "项目", value: "projects" },
                   { label: "任务", value: "tasks" },
                   { label: "Bug", value: "bugs" },
-                  { label: "风险", value: "risks" }
+                  { label: "需求", value: "requirements" }
                 ]}
               />
             </div>
@@ -1663,7 +1657,6 @@ export function ProjectManagementPlatform({
                       onGenerateReport={handleGenerateWeeklyReport}
                       onOpenAssistant={() => setAssistantOpen(true)}
                       onViewBugs={() => switchView("bugs")}
-                      onViewRisks={() => switchView("risks")}
                       onViewTasks={() => switchView("tasks")}
                     />
                   ) : null}
@@ -1757,9 +1750,6 @@ export function ProjectManagementPlatform({
                       onSelectVersion={setSelectedRequirementVersionId}
                     />
                   ) : null}
-                  {activeView === "risks" ? (
-                    <RisksView risks={data.risks} onCreate={() => openCreateDrawer("risk")} />
-                  ) : null}
                   {activeView === "members" ? (
                     <MembersView
                       members={data.members}
@@ -1781,9 +1771,6 @@ export function ProjectManagementPlatform({
                       onCreateMember={handleCreateMember}
                       onUpdateMember={handleUpdateMember}
                     />
-                  ) : null}
-                  {activeView === "reports" ? (
-                    <ReportsView data={data} onGenerateReport={handleGenerateWeeklyReport} />
                   ) : null}
                 </>
               )}
