@@ -116,11 +116,13 @@ export function RiskDistributionWidget({
       <div className="version-board-risk-list">
         {stats.map((item) => (
           <div className="version-board-risk-row" key={item.label}>
-            <Text type="secondary">{item.label}</Text>
-            <span>
+            <span className="version-board-risk-row-head">
+              <Text type="secondary">{item.label}</Text>
+              <strong style={{ color: item.color }}>{item.value}</strong>
+            </span>
+            <span className="version-board-risk-track">
               <i style={{ width: `${Math.max(item.value ? 4 : 0, getPercent(item.value, total))}%`, background: item.color }} />
             </span>
-            <strong>{item.value}</strong>
           </div>
         ))}
       </div>

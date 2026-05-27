@@ -2985,25 +2985,44 @@
 
 .version-board-risk-list {
   display: grid;
-  gap: 12px;
-  margin-top: 18px;
+  gap: 14px;
+  margin-top: 16px;
 }
 
 .version-board-risk-row {
   display: grid;
-  grid-template-columns: 76px minmax(0, 1fr) 44px;
-  align-items: center;
-  gap: 12px;
+  gap: 7px;
 }
 
-.version-board-risk-row .ant-typography,
 .version-board-rank-main .ant-typography {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.version-board-risk-row span {
+.version-board-risk-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  line-height: 1;
+}
+
+.version-board-risk-row-head .ant-typography {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.version-board-risk-row-head strong {
+  flex: 0 0 auto;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.version-board-risk-track {
   display: block;
   height: 8px;
   overflow: hidden;
@@ -3011,17 +3030,10 @@
   background: var(--surface-muted);
 }
 
-.version-board-risk-row i {
+.version-board-risk-track i {
   display: block;
   height: 100%;
   border-radius: inherit;
-}
-
-.version-board-risk-row strong {
-  color: var(--foreground);
-  font-size: 14px;
-  line-height: 1;
-  text-align: right;
 }
 
 .version-board-rank-list {
@@ -3181,21 +3193,29 @@
 
 .version-board-funnel {
   display: grid;
-  gap: 14px;
-  margin-top: 34px;
-  padding: 0 18px;
+  gap: 12px;
+  margin-top: 30px;
+  padding: 0 6px;
 }
 
 .version-board-funnel-row {
   display: grid;
-  grid-template-columns: 78px minmax(180px, 1fr) 54px;
+  grid-template-columns: 64px minmax(180px, 1fr) 48px;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
 }
 
 .version-board-funnel-row > .ant-typography:first-child {
-  color: var(--foreground);
-  font-size: 13px;
+  justify-self: end;
+  overflow: hidden;
+  max-width: 64px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.1;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .version-board-funnel-row > span {
