@@ -37,6 +37,7 @@ const taskResourcePrefix = "task:";
 const ownerResourcePrefix = "owner:";
 const taskRowHeight = 58;
 const ownerRowHeight = 54;
+const schedulerTailPaddingMonths = 5;
 
 export type ProjectSchedulerTaskOrder = Record<string, string[]>;
 
@@ -267,9 +268,11 @@ function getSchedulerDateRange(items: ProjectCalendarItem[]) {
     ranges[0]?.end ?? start
   );
 
-  // DayPilot 的 days 是从 startDate 起算的天数，截止日业务上是包含当天的。
+  const paddedEnd = end.add(schedulerTailPaddingMonths, "month");
+
+  // 右侧保留较长缓冲区，方便把最终截止日期直接拖到后续月份。
   return {
-    days: Math.max(1, end.diff(start, "day") + 1),
+    days: Math.max(1, paddedEnd.diff(start, "day") + 1),
     startDate: start.format("YYYY-MM-DD")
   };
 }
