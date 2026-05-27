@@ -246,12 +246,12 @@ export function ProgressFunnelWidget({
 
           return (
             <div className="version-board-funnel-row" key={item.label}>
-              <Text type="secondary">{item.label}</Text>
+              <Text className="version-board-funnel-label" type="secondary">{item.label}</Text>
               <span style={{ width }}>
-                <em style={{ width: `${Math.max(4, percent)}%`, background: item.color }} />
+                <em style={{ width: `${Math.max(item.value ? 4 : 0, percent)}%`, background: item.color }} />
                 <strong>{item.value}</strong>
               </span>
-              <Text>{percent}%</Text>
+              <Text className="version-board-funnel-percent" type="secondary">{percent}%</Text>
             </div>
           );
         })}
