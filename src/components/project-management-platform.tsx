@@ -1911,7 +1911,6 @@ export function ProjectManagementPlatform({
             form={breakdownForm}
             open={breakdownOpen}
             submitting={breakdownSubmitting}
-            projectOptions={projectOptions}
             versionOptions={requirementVersionOptions}
             people={ownerOptions}
             peopleLoading={ownerSelectLoading}

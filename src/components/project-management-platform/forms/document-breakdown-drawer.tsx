@@ -5,7 +5,7 @@ import { InboxOutlined, UploadOutlined } from "@ant-design/icons";
 import type { OwnerSelectableMember, RequirementVersionOption } from "@/components/project-management-platform/types";
 import { getUploadFileList } from "@/components/project-management-platform/forms/form-utils";
 import { OwnerSelect } from "@/components/project-management-platform/forms/owner-select";
-import { VersionProjectFields } from "@/components/project-management-platform/forms/form-fields";
+import { VersionOnlyField } from "@/components/project-management-platform/forms/form-fields";
 import { DrawerFooterActions } from "@/components/project-management-platform/forms/drawer-footer-actions";
 
 // 文档拆解抽屉以版本为主上下文，确保 AI 任务拆解直接落到选定版本。
@@ -13,7 +13,6 @@ export function DocumentBreakdownDrawer({
   form,
   open,
   submitting,
-  projectOptions,
   versionOptions,
   people,
   peopleLoading,
@@ -24,7 +23,6 @@ export function DocumentBreakdownDrawer({
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   open: boolean;
   submitting: boolean;
-  projectOptions: string[];
   versionOptions: RequirementVersionOption[];
   people: OwnerSelectableMember[];
   peopleLoading: boolean;
@@ -61,9 +59,8 @@ export function DocumentBreakdownDrawer({
           title="上传后会按目标版本生成任务"
           description="系统会读取文档内容，围绕你选择的版本拆解前端、后端、测试任务，并保存到任务看板。AI 识别到的负责人会优先匹配平台成员，未匹配时使用默认负责人。"
         />
-        <VersionProjectFields
+        <VersionOnlyField
           form={form}
-          projectOptions={projectOptions}
           versionOptions={versionOptions}
           versionLabel="目标版本"
           versionMessage="请选择文档拆解的目标版本"
