@@ -11,6 +11,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
+    "deploy:remote": "bash scripts/deploy.sh",
     "bug-fix:worker": "tsx scripts/bug-fix-worker.ts"
   },
   "dependencies": {

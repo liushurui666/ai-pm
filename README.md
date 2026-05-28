@@ -89,6 +89,46 @@ AI_MODEL=deepseek-chat
 
 `.env.local` 已在 `.gitignore` 中忽略。不要把真实密钥写入仓库；如果密钥已经出现在聊天、截图或提交记录中，建议立即在服务商后台轮换。
 
+## 远程部署
+
+项目提供可由运维直接执行的远程部署脚本，核心思路是“脚本固定、环境变量可替换”：换测试服、预发服或正式服时，只需要切换 `DEPLOY_ENV_FILE` 指向的配置文件。
+
+```bash
+cp scripts/deploy.env.example scripts/deploy.env
+cp .env.example .env.production
+```
+
+在 `scripts/deploy.env` 中填写服务器 SSH、目标目录、端口、重启方式等部署变量；在 `.env.production` 中填写运行时密钥，例如 `DATABASE_URL`、`SESSION_SECRET`、`FEISHU_*`、`AI_*`、`TENCENT_COS_*`。真实的 `scripts/deploy.env` 和 `.env.production` 已被 `.gitignore` 忽略，不要提交。
+
+执行部署：
+
+```bash
+pnpm deploy:remote
+```
+
+部署脚本会：
+
+- 用 `git archive` 打包当前提交，避免把 `.env.local`、`.next`、`node_modules` 等本地文件带到服务器。
+- 上传到 `${DEPLOY_TARGET_DIR}/releases/{时间戳-commit}`，并把运行时 env 放到 `${DEPLOY_TARGET_DIR}/shared`。
+- 在服务器执行 `pnpm install --frozen-lockfile`、`pnpm db:migrate`、`pnpm build`。
+- 切换 `${DEPLOY_TARGET_DIR}/current` 软链，再按 `DEPLOY_RESTART_STRATEGY` 选择 `systemd`、`pm2`、`custom` 或 `none` 重启。
+- 可通过 `DEPLOY_BEFORE_REMOTE_SCRIPT` 和 `DEPLOY_AFTER_REMOTE_SCRIPT` 插入内部运维脚本，适合接入 Nginx reload、健康检查、通知等流程。
+
+如果要部署到另一台服务器，复制一份配置文件即可：
+
+```bash
+DEPLOY_ENV_FILE=/opt/deploy-configs/ai-pm-prod.env pnpm deploy:remote
+```
+
+使用 `DEPLOY_RESTART_STRATEGY=systemd` 时，服务器上的服务建议把工作目录指向 `current` 软链，例如：
+
+```ini
+[Service]
+WorkingDirectory=/srv/ai-pm/current
+ExecStart=/usr/bin/pnpm start -- -p 3003
+Restart=always
+```
+
 ## Bug 复现材料上传
 
 Bug 管理支持上传复现步骤的图片或视频材料。文件会通过服务端接口上传到腾讯云 COS，并在 Bug 记录中保存文件 URL、对象 Key、类型和大小。

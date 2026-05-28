@@ -6,7 +6,9 @@ node_modules/
 
 .env
 .env.local
+.env.production
 .env.*.local
+scripts/deploy.env
 
 ai-pm-*.png
 console-desktop.json
