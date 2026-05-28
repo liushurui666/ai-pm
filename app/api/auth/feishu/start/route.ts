@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   createOauthState,
   FEISHU_STATE_COOKIE_NAME,
+  getFeishuAuthConfigError,
   getFeishuAuthorizeUrl,
   isFeishuAuthConfigured
 } from "@/lib/feishu/auth";
@@ -11,6 +12,12 @@ import { shouldUseSecureCookie } from "@/lib/auth/session";
 export async function GET(request: NextRequest) {
   if (!isFeishuAuthConfigured()) {
     return NextResponse.redirect(createPublicAppUrl("/login?error=missing_feishu_config", request));
+  }
+
+  const configError = getFeishuAuthConfigError();
+
+  if (configError) {
+    return NextResponse.redirect(createPublicAppUrl(`/login?error=${configError}`, request));
   }
 
   const state = createOauthState();

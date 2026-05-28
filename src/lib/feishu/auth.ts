@@ -45,6 +45,38 @@ export function isFeishuAuthConfigured() {
   return Boolean(process.env.FEISHU_APP_ID && process.env.FEISHU_APP_SECRET);
 }
 
+/**
+ * 判断飞书回调地址是否仍指向本机。
+ *
+ * 线上如果把 localhost 传给飞书，用户授权完成后浏览器会跳到自己的电脑而不是服务器；
+ * 这个错误应在登录入口提示，而不应该让整个容器退出造成 502。
+ */
+function isLocalRedirectUri(value: string) {
+  try {
+    const url = new URL(value);
+
+    return ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 给登录入口使用的配置校验。
+ *
+ * 容器启动阶段只做警告，避免整站不可用；真正发起飞书授权前再阻断错误配置，
+ * 让用户停留在站内登录页并看到明确错误。
+ */
+export function getFeishuAuthConfigError() {
+  const configuredRedirectUri = process.env.FEISHU_REDIRECT_URI?.trim();
+
+  if (process.env.NODE_ENV === "production" && configuredRedirectUri && isLocalRedirectUri(configuredRedirectUri)) {
+    return "invalid_feishu_redirect_uri";
+  }
+
+  return null;
+}
+
 export function createOauthState() {
   return randomBytes(24).toString("base64url");
 }

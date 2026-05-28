@@ -11,7 +11,9 @@ const { Title, Text, Paragraph } = Typography;
 const errorMessageMap: Record<string, string> = {
   missing_feishu_config: "飞书登录尚未配置，请先补充 FEISHU_APP_ID 和 FEISHU_APP_SECRET。",
   invalid_state: "登录状态校验失败，请重新发起飞书登录。",
-  session_expired: "登录会话已失效，请重新使用飞书登录。"
+  session_expired: "登录会话已失效，请重新使用飞书登录。",
+  invalid_feishu_redirect_uri:
+    "生产环境的 FEISHU_REDIRECT_URI 仍指向 localhost，请改为 https://ai-pm.chainthink.cn/api/auth/feishu/callback 并同步到飞书开放平台。"
 };
 
 export function FeishuLoginPage({ configured, error }: { configured: boolean; error?: string }) {

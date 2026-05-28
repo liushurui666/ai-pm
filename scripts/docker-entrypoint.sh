@@ -28,18 +28,15 @@ fi
 
 if [ "${NODE_ENV:-production}" = "production" ]; then
   if [ -z "${APP_URL:-}" ]; then
-    echo "[docker-entrypoint][error] 缺少 APP_URL。生产登录跳转必须配置公网域名，例如 https://ai-pm.chainthink.cn。" >&2
-    exit 1
+    echo "[docker-entrypoint][warn] 缺少 APP_URL。建议配置公网域名，例如 https://ai-pm.chainthink.cn，避免反向代理下登录跳转异常。" >&2
   fi
 
-  if is_local_url "${APP_URL}"; then
-    echo "[docker-entrypoint][error] APP_URL 不能是 localhost，否则飞书登录后会跳回用户本机。" >&2
-    exit 1
+  if [ -n "${APP_URL:-}" ] && is_local_url "${APP_URL}"; then
+    echo "[docker-entrypoint][warn] APP_URL 当前是 localhost，生产登录跳转可能回到用户本机。" >&2
   fi
 
   if [ -n "${FEISHU_REDIRECT_URI:-}" ] && is_local_url "${FEISHU_REDIRECT_URI}"; then
-    echo "[docker-entrypoint][error] FEISHU_REDIRECT_URI 仍指向 localhost。请改为 ${APP_URL}/api/auth/feishu/callback，并同步到飞书开放平台。" >&2
-    exit 1
+    echo "[docker-entrypoint][warn] FEISHU_REDIRECT_URI 仍指向 localhost。请改为 ${APP_URL:-https://ai-pm.chainthink.cn}/api/auth/feishu/callback，并同步到飞书开放平台。" >&2
   fi
 fi
 
