@@ -91,7 +91,50 @@ AI_MODEL=deepseek-chat
 
 ## 远程部署
 
-项目提供可由运维直接执行的远程部署脚本，核心思路是“脚本固定、环境变量可替换”：换测试服、预发服或正式服时，只需要切换 `DEPLOY_ENV_FILE` 指向的配置文件。
+项目提供两种部署脚本：
+
+- `scripts/deploy.ops.sh`：给运维在目标服务器上直接执行，脚本内置仓库、分支、目录、端口、服务名等非敏感默认值。
+- `scripts/deploy.sh`：给开发机或发布机通过 SSH 推送到远端，适合接入外部 CI/CD。
+
+### 运维服务器一键执行
+
+运维只需要在服务器上先准备一次运行时密钥文件：
+
+```bash
+sudo mkdir -p /etc/ai-pm
+sudo cp scripts/runtime.env.example /etc/ai-pm/ai-pm.env
+sudo chmod 600 /etc/ai-pm/ai-pm.env
+sudo vim /etc/ai-pm/ai-pm.env
+```
+
+之后直接执行：
+
+```bash
+bash scripts/deploy.ops.sh
+```
+
+这条脚本会从 `main` 拉取 `https://github.com/liushurui666/ai-pm.git`，发布到 `/srv/ai-pm`，执行依赖安装、数据库迁移、构建，并重启 `ai-pm` systemd 服务。换环境时不用改脚本，直接覆盖变量即可：
+
+```bash
+APP_ROOT=/data/apps/ai-pm APP_PORT=3004 SYSTEMD_SERVICE=ai-pm-test bash scripts/deploy.ops.sh
+```
+
+如果要接内部运维脚本，可以用这些钩子：
+
+```bash
+BEFORE_DEPLOY_HOOK=/opt/company/hooks/before-ai-pm.sh AFTER_DEPLOY_HOOK=/opt/company/hooks/after-ai-pm.sh bash scripts/deploy.ops.sh
+```
+
+使用 `RESTART_STRATEGY=systemd` 时，服务器上的服务建议把工作目录指向 `current` 软链，例如：
+
+```ini
+[Service]
+WorkingDirectory=/srv/ai-pm/current
+ExecStart=/usr/bin/pnpm start -- -p 3003
+Restart=always
+```
+
+### 发布机 SSH 推送
 
 ```bash
 cp scripts/deploy.env.example scripts/deploy.env
@@ -118,15 +161,6 @@ pnpm deploy:remote
 
 ```bash
 DEPLOY_ENV_FILE=/opt/deploy-configs/ai-pm-prod.env pnpm deploy:remote
-```
-
-使用 `DEPLOY_RESTART_STRATEGY=systemd` 时，服务器上的服务建议把工作目录指向 `current` 软链，例如：
-
-```ini
-[Service]
-WorkingDirectory=/srv/ai-pm/current
-ExecStart=/usr/bin/pnpm start -- -p 3003
-Restart=always
 ```
 
 ## Bug 复现材料上传
