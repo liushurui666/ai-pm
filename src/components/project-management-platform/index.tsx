@@ -1560,7 +1560,7 @@ export function ProjectManagementPlatform({
               <Space size={10} className="pm-header-actions">
                 {data?.meta ? (
                   <Tag color={data.meta.source === "database" ? "green" : data.meta.source === "local" ? "blue" : "default"}>
-                    {data.meta.source === "database" ? "PostgreSQL" : data.meta.source === "local" ? "站内数据" : "演示数据"}
+                    {data.meta.source === "database" ? "MySQL" : data.meta.source === "local" ? "站内数据" : "演示数据"}
                   </Tag>
                 ) : null}
                 <Tooltip title="查看日程">

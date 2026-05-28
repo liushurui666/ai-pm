@@ -1,3 +1,5 @@
+import type { Prisma } from "@prisma/client";
+import { fromJsonStringArray, toJsonValue } from "@/lib/database/json";
 import { getPrismaClient } from "@/lib/database/prisma";
 import type { ProjectRepository } from "@/types/dashboard";
 
@@ -14,9 +16,9 @@ function toProjectRepository(repository: {
   lintCommand: string | null;
   testCommand: string | null;
   buildCommand: string | null;
-  allowedPaths: string[];
-  blockedPaths: string[];
-  defaultReviewers: string[];
+  allowedPaths: Prisma.JsonValue;
+  blockedPaths: Prisma.JsonValue;
+  defaultReviewers: Prisma.JsonValue;
   status: "active" | "disabled";
   createdAt: Date;
   updatedAt: Date;
@@ -34,9 +36,9 @@ function toProjectRepository(repository: {
     lintCommand: repository.lintCommand ?? undefined,
     testCommand: repository.testCommand ?? undefined,
     buildCommand: repository.buildCommand ?? undefined,
-    allowedPaths: repository.allowedPaths,
-    blockedPaths: repository.blockedPaths,
-    defaultReviewers: repository.defaultReviewers,
+    allowedPaths: fromJsonStringArray(repository.allowedPaths),
+    blockedPaths: fromJsonStringArray(repository.blockedPaths),
+    defaultReviewers: fromJsonStringArray(repository.defaultReviewers),
     status: repository.status,
     createdAt: repository.createdAt.toISOString(),
     updatedAt: repository.updatedAt.toISOString()
@@ -99,9 +101,10 @@ export async function createProjectRepository(values: {
       lintCommand: values.lintCommand,
       testCommand: values.testCommand,
       buildCommand: values.buildCommand,
-      allowedPaths: values.allowedPaths ?? [],
-      blockedPaths: values.blockedPaths ?? [],
-      defaultReviewers: values.defaultReviewers ?? [],
+      // MySQL 版本用 JSON 保存数组型仓库规则，业务层仍保持 string[]，避免前端和 Worker 感知存储差异。
+      allowedPaths: toJsonValue(values.allowedPaths ?? []),
+      blockedPaths: toJsonValue(values.blockedPaths ?? []),
+      defaultReviewers: toJsonValue(values.defaultReviewers ?? []),
       status: "active"
     }
   });

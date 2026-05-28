@@ -5,7 +5,7 @@ import { defineConfig } from "prisma/config";
 loadEnv({ path: ".env.local" });
 loadEnv();
 
-const LOCAL_DATABASE_URL = "postgresql://ai_pm:ai_pm_local@localhost:5432/ai_pm?schema=public";
+const LOCAL_DATABASE_URL = "mysql://ai_pm:ai_pm_local@localhost:3306/ai_pm";
 const command = process.argv.join(" ");
 const canUsePlaceholderUrl = /\b(generate|format|migrate diff)\b/.test(command);
 const databaseUrl =
@@ -14,7 +14,7 @@ const databaseUrl =
   (canUsePlaceholderUrl
     ? LOCAL_DATABASE_URL
     : (() => {
-        throw new Error("缺少 DATABASE_URL，请先配置本地或生产 PostgreSQL 数据库连接。");
+        throw new Error("缺少 DATABASE_URL，请先配置本地或生产 MySQL 数据库连接。");
       })());
 
 export default defineConfig({

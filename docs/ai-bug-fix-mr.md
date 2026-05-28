@@ -1,14 +1,14 @@
 # Bug 管理接入 AI 自动修复 MR 技术方案
 
 状态：待评审  
-范围：AI PM 的 Bug 管理、项目仓库配置、任务执行系统、PostgreSQL 数据库持久化
+范围：AI PM 的 Bug 管理、项目仓库配置、任务执行系统、MySQL 数据库持久化
 目标：从 Bug 记录自动生成代码修复分支、提交代码并创建 MR/PR，不自动合并
 
 ## 1. 目标
 
 Bug 管理模块上线后需要具备生产可用的数据持久化和 AI 自动修复能力。系统从 Bug 详情页发起修复任务后，后台自动读取 Bug、版本、项目、附件和仓库配置，拉取代码，调用 AI Coding Runner 修改代码，运行校验，推送分支，并直接创建 MR/PR。
 
-本方案不再使用 `.ai-pm/app-database.json` 或其他本地 JSON 文件承载业务数据。当前先接入本机 PostgreSQL，后续生产环境只需要把 `DATABASE_URL` 切到托管 PostgreSQL。业务状态、任务日志、校验结果、MR 链接全部写入数据库。
+本方案不再使用 `.ai-pm/app-database.json` 或其他本地 JSON 文件承载业务数据。当前先接入本机 MySQL，后续生产环境只需要把 `DATABASE_URL` 切到腾讯云 MySQL。业务状态、任务日志、校验结果、MR 链接全部写入数据库。
 
 本方案只做自动开 MR/PR，不做自动合并。合并仍由人工 Review、CI 和代码平台分支保护规则控制。
 
@@ -25,11 +25,11 @@ Bug 管理模块上线后需要具备生产可用的数据持久化和 AI 自动
 
 ### 数据库
 
-- 数据库：PostgreSQL，本地开发先使用本机实例，生产环境切换为托管实例。
+- 数据库：MySQL，本地开发先使用本机实例，生产环境切换为托管实例。
 - ORM：Prisma。
 - 连接方式：`DATABASE_URL`。
 - 迁移方式：`prisma migrate`。
-- 本地开发：连接本机 PostgreSQL，不再写 `.ai-pm/app-database.json`。
+- 本地开发：连接本机 MySQL 或腾讯云 MySQL，不再写 `.ai-pm/app-database.json`。
 
 ### 后台任务
 
@@ -71,7 +71,7 @@ sequenceDiagram
   participant User as 用户
   participant UI as Bug 详情页
   participant API as Next.js API
-  participant DB as PostgreSQL
+  participant DB as MySQL
   participant Queue as 任务队列
   participant Worker as AI 修复 Worker
   participant Git as Git Provider
@@ -94,7 +94,7 @@ sequenceDiagram
   API-->>UI: 展示 MR、状态、校验结果
 ```
 
-## 6. PostgreSQL 数据库设计
+## 6. MySQL 数据库设计
 
 ### 6.1 数据库基线
 
@@ -268,7 +268,7 @@ model BugReport {
 
 ### 7.1 数据访问层
 
-新增 PostgreSQL 数据库访问模块：
+新增 MySQL 数据库访问模块：
 
 ```text
 prisma/schema.prisma
@@ -617,7 +617,7 @@ scripts/bug-fix-worker.ts
 
 ### M1：数据库基线
 
-- 引入 Prisma 和 PostgreSQL。
+- 引入 Prisma 和 MySQL。
 - 建立基础业务表、仓库配置表、AI 修复任务表。
 - API 从数据库读取 Bug、项目、版本、任务和成员。
 - 本地 JSON 只允许作为一次性迁移来源，运行态不再读写。
@@ -675,7 +675,7 @@ scripts/bug-fix-worker.ts
 ## 15. 环境变量
 
 ```bash
-DATABASE_URL=postgresql://ai_pm:ai_pm_local@localhost:5432/ai_pm?schema=public
+DATABASE_URL=mysql://ai_pm:ai_pm_local@localhost:3306/ai_pm
 GITHUB_TOKEN=
 AI_BUG_FIX_ENABLED=false
 AI_BUG_FIX_WORKDIR=/tmp/ai-pm-bug-fix-workspaces
@@ -685,7 +685,7 @@ AI_BUG_FIX_MAX_CHANGED_FILES=20
 AI_BUG_FIX_MAX_DIFF_LINES=1500
 ```
 
-默认 `AI_BUG_FIX_ENABLED=false`，未配置数据库、仓库和 token 时不允许触发；本地开发数据库使用本机 PostgreSQL。
+默认 `AI_BUG_FIX_ENABLED=false`，未配置数据库、仓库和 token 时不允许触发；本地开发数据库使用本机 MySQL。
 
 ## 16. 风险与应对
 
@@ -702,6 +702,6 @@ AI_BUG_FIX_MAX_DIFF_LINES=1500
 
 ## 17. 结论
 
-实现路径确定为：`PostgreSQL 数据库 -> Bug 详情页创建 AI 修复任务 -> Worker 调用 AI 修改代码 -> commit/push -> 创建 MR/PR -> 回写 Bug`。本地阶段连接本机 PostgreSQL，生产上线时切换托管 PostgreSQL。
+实现路径确定为：`MySQL 数据库 -> Bug 详情页创建 AI 修复任务 -> Worker 调用 AI 修改代码 -> commit/push -> 创建 MR/PR -> 回写 Bug`。本地阶段连接本机 MySQL，生产上线时切换托管 MySQL。
 
 该功能的成功结果必须是 MR/PR 链接，不接受只生成修改建议作为完成状态。

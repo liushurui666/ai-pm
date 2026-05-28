@@ -12,22 +12,25 @@ pnpm dev
 
 默认访问 `http://localhost:3000`。如果端口被占用，Next 会自动切换到可用端口。
 
-本地开发使用本机 PostgreSQL。当前默认连接串为：
+本地开发使用本机 MySQL。当前默认连接串为：
 
 ```txt
-DATABASE_URL=postgresql://ai_pm:ai_pm_local@localhost:5432/ai_pm?schema=public
+DATABASE_URL=mysql://ai_pm:ai_pm_local@localhost:3306/ai_pm
 ```
 
-如果本机还没有库，可以用 PostgreSQL 管理员账号执行一次：
+如果本机还没有库，可以用 MySQL 管理员账号执行一次：
 
 ```bash
-psql -h localhost -p 5432 -d postgres -c "CREATE ROLE ai_pm LOGIN PASSWORD 'ai_pm_local';"
-createdb -h localhost -p 5432 -O ai_pm ai_pm
-psql -h localhost -p 5432 -d ai_pm -c "GRANT ALL ON SCHEMA public TO ai_pm; ALTER SCHEMA public OWNER TO ai_pm;"
+mysql -h 127.0.0.1 -P 3306 -uroot -p -e "CREATE DATABASE IF NOT EXISTS ai_pm CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+mysql -h 127.0.0.1 -P 3306 -uroot -p -e "CREATE USER IF NOT EXISTS 'ai_pm'@'%' IDENTIFIED BY 'ai_pm_local'; GRANT ALL PRIVILEGES ON ai_pm.* TO 'ai_pm'@'%'; FLUSH PRIVILEGES;"
 pnpm db:migrate
 ```
 
-`prisma.config.ts` 会优先读取 `.env.local`，本地没有配置 `DATABASE_URL` 时会回退到上面的本机 PostgreSQL 地址；生产环境必须显式配置 `DATABASE_URL`。
+`prisma.config.ts` 会优先读取 `.env.local`，本地没有配置 `DATABASE_URL` 时会回退到上面的本机 MySQL 地址；生产环境必须显式配置 `DATABASE_URL`。腾讯云 MySQL 的连接串格式如下：
+
+```txt
+DATABASE_URL=mysql://用户名:密码@腾讯云MySQL地址:3306/数据库名
+```
 
 ## 飞书登录与协同集成
 
@@ -52,7 +55,7 @@ cp .env.example .env.local
 http://localhost:3000/api/auth/feishu/callback
 ```
 
-项目管理主数据不写入飞书云文档。AI PM 平台会把项目、任务、风险、需求、文档、洞察、Bug 和 AI 修复任务保存到 PostgreSQL；首次启动时如果数据库为空，系统会从内置种子数据初始化。后续通过“新建项目 / 新建任务 / 登记风险 / 新建需求 / 新建文档 / 登记 Bug”创建的记录会由站内 API 持久化到数据库，刷新页面后仍然保留。
+项目管理主数据不写入飞书云文档。AI PM 平台会把项目、任务、风险、需求、文档、洞察、Bug 和 AI 修复任务保存到 MySQL；首次启动时如果数据库为空，系统会从内置种子数据初始化。后续通过“新建项目 / 新建任务 / 登记风险 / 新建需求 / 新建文档 / 登记 Bug”创建的记录会由站内 API 持久化到数据库，刷新页面后仍然保留。
 
 飞书只承担三件事：
 

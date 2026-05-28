@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
+import { fromJsonStringArray, toJsonValue } from "@/lib/database/json";
 import { getPrismaClient } from "@/lib/database/prisma";
 import type {
   BugAttachment,
@@ -16,7 +17,7 @@ import type {
   Task
 } from "@/types/dashboard";
 
-export const DASHBOARD_DATABASE_STORAGE = "PostgreSQL";
+export const DASHBOARD_DATABASE_STORAGE = "MySQL";
 
 type DashboardDatabase = Omit<DashboardData, "meta"> & {
   updatedAt: string;
@@ -25,7 +26,7 @@ type DashboardDatabase = Omit<DashboardData, "meta"> & {
 type DashboardPrisma = PrismaClient | Prisma.TransactionClient;
 
 function asJson(value: unknown): Prisma.InputJsonValue {
-  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+  return toJsonValue(value);
 }
 
 function fromJsonArray<T>(value: Prisma.JsonValue): T[] {
@@ -285,11 +286,11 @@ export async function readDashboardDatabase(createSeed: () => DashboardDatabase)
       documentLink: toOptionalText(requirement.documentLink),
       acceptance: requirement.acceptance,
       aiSummary: toOptionalText(requirement.aiSummary),
-      aiRisks: requirement.aiRisks,
-      aiMissingItems: requirement.aiMissingItems,
-      aiFrontendNotes: requirement.aiFrontendNotes,
-      aiBackendNotes: requirement.aiBackendNotes,
-      aiTestingNotes: requirement.aiTestingNotes,
+      aiRisks: fromJsonStringArray(requirement.aiRisks),
+      aiMissingItems: fromJsonStringArray(requirement.aiMissingItems),
+      aiFrontendNotes: fromJsonStringArray(requirement.aiFrontendNotes),
+      aiBackendNotes: fromJsonStringArray(requirement.aiBackendNotes),
+      aiTestingNotes: fromJsonStringArray(requirement.aiTestingNotes),
       aiCompletenessScore: requirement.aiCompletenessScore ?? undefined
     })),
     documents: documents.map((document): DocumentItem => ({
@@ -629,11 +630,11 @@ async function syncRequirements(prisma: DashboardPrisma, requirements: Requireme
       documentLink: requirement.documentLink,
       acceptance: requirement.acceptance,
       aiSummary: requirement.aiSummary,
-      aiRisks: requirement.aiRisks ?? [],
-      aiMissingItems: requirement.aiMissingItems ?? [],
-      aiFrontendNotes: requirement.aiFrontendNotes ?? [],
-      aiBackendNotes: requirement.aiBackendNotes ?? [],
-      aiTestingNotes: requirement.aiTestingNotes ?? [],
+      aiRisks: asJson(requirement.aiRisks ?? []),
+      aiMissingItems: asJson(requirement.aiMissingItems ?? []),
+      aiFrontendNotes: asJson(requirement.aiFrontendNotes ?? []),
+      aiBackendNotes: asJson(requirement.aiBackendNotes ?? []),
+      aiTestingNotes: asJson(requirement.aiTestingNotes ?? []),
       aiCompletenessScore: requirement.aiCompletenessScore
     };
 

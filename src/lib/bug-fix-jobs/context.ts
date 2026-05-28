@@ -1,3 +1,4 @@
+import { fromJsonStringArray } from "@/lib/database/json";
 import { getPrismaClient } from "@/lib/database/prisma";
 import type { BugReport, ProjectRepository } from "@/types/dashboard";
 
@@ -98,9 +99,10 @@ export async function getBugFixExecutionContext(jobId: string): Promise<BugFixEx
       lintCommand: job.repository.lintCommand ?? undefined,
       testCommand: job.repository.testCommand ?? undefined,
       buildCommand: job.repository.buildCommand ?? undefined,
-      allowedPaths: job.repository.allowedPaths,
-      blockedPaths: job.repository.blockedPaths,
-      defaultReviewers: job.repository.defaultReviewers,
+      // 腾讯云 MySQL 使用 JSON 保存数组型仓库规则，交给 Worker 前恢复为 string[]，保持安全检查逻辑单一。
+      allowedPaths: fromJsonStringArray(job.repository.allowedPaths),
+      blockedPaths: fromJsonStringArray(job.repository.blockedPaths),
+      defaultReviewers: fromJsonStringArray(job.repository.defaultReviewers),
       status: job.repository.status,
       createdAt: job.repository.createdAt.toISOString(),
       updatedAt: job.repository.updatedAt.toISOString()

@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
 }
 
 model Workspace {
@@ -34,7 +34,7 @@ model DashboardMember {
   workspaceId  String
   name         String
   email        String?
-  avatarUrl    String?
+  avatarUrl    String? @db.VarChar(1024)
   role         String
   status       String
   identities   Json
@@ -58,14 +58,14 @@ model Project {
   ownerUnionId   String?
   ownerUserId    String?
   ownerEmail     String?
-  ownerAvatarUrl String?
+  ownerAvatarUrl String? @db.VarChar(1024)
   status         String
   progress       Int
   health         Int
   dueDate        String
   team           Int
   riskCount      Int
-  summary        String
+  summary        String  @db.Text
   milestones     Json
 
   workspace    Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -87,14 +87,14 @@ model ProjectTask {
   ownerUnionId   String?
   ownerUserId    String?
   ownerEmail     String?
-  ownerAvatarUrl String?
+  ownerAvatarUrl String? @db.VarChar(1024)
   project        String
   versionId      String?
   versionName    String?
   priority       String
   startDate      String
   dueDate        String
-  aiHint         String
+  aiHint         String  @db.Text
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
@@ -115,9 +115,9 @@ model Risk {
   ownerUnionId   String?
   ownerUserId    String?
   ownerEmail     String?
-  ownerAvatarUrl String?
+  ownerAvatarUrl String? @db.VarChar(1024)
   project        String
-  mitigation     String
+  mitigation     String  @db.Text
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
@@ -141,18 +141,18 @@ model BugReport {
   ownerUnionId     String?
   ownerUserId      String?
   ownerEmail       String?
-  ownerAvatarUrl   String?
-  environment      String
-  reproduction     String
-  expected         String
-  actual           String
+  ownerAvatarUrl   String?          @db.VarChar(1024)
+  environment      String           @db.Text
+  reproduction     String           @db.Text
+  expected         String           @db.Text
+  actual           String           @db.Text
   createdAt        String
   aiFixLatestJobId String?
   aiFixStatus      BugFixJobStatus?
   aiFixBranch      String?
-  aiFixMrUrl       String?
-  aiFixSummary     String?
-  aiFixError       String?
+  aiFixMrUrl       String?          @db.Text
+  aiFixSummary     String?          @db.Text
+  aiFixError       String?          @db.Text
   aiFixUpdatedAt   DateTime?
 
   workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -169,9 +169,9 @@ model BugReport {
 model BugAttachment {
   id         String @id
   bugId      String
-  key        String
+  key        String @db.VarChar(512)
   name       String
-  url        String
+  url        String @db.Text
   type       String
   mimeType   String
   size       Int
@@ -191,7 +191,7 @@ model BugFlowRecord {
   operator String
   from     String?
   to       String?
-  note     String?
+  note     String? @db.Text
 
   bug BugReport @relation(fields: [bugId], references: [id], onDelete: Cascade)
 
@@ -209,28 +209,28 @@ model RequirementVersion {
   status                String
   startDate             String
   releaseDate           String
-  goal                  String
+  goal                  String  @db.Text
   productOwner          String?
   productOwnerMemberId  String?
   productOwnerOpenId    String?
   productOwnerUnionId   String?
   productOwnerUserId    String?
   productOwnerEmail     String?
-  productOwnerAvatarUrl String?
+  productOwnerAvatarUrl String? @db.VarChar(1024)
   uiOwner               String?
   uiOwnerMemberId       String?
   uiOwnerOpenId         String?
   uiOwnerUnionId        String?
   uiOwnerUserId         String?
   uiOwnerEmail          String?
-  uiOwnerAvatarUrl      String?
+  uiOwnerAvatarUrl      String? @db.VarChar(1024)
   devOwner              String?
   devOwnerMemberId      String?
   devOwnerOpenId        String?
   devOwnerUnionId       String?
   devOwnerUserId        String?
   devOwnerEmail         String?
-  devOwnerAvatarUrl     String?
+  devOwnerAvatarUrl     String? @db.VarChar(1024)
   milestones            Json
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -241,7 +241,7 @@ model RequirementVersion {
 }
 
 model Requirement {
-  id                  String   @id
+  id                  String  @id
   workspaceId         String
   title               String
   priority            String
@@ -255,16 +255,16 @@ model Requirement {
   ownerUnionId        String?
   ownerUserId         String?
   ownerEmail          String?
-  ownerAvatarUrl      String?
-  uiLink              String?
-  documentLink        String?
-  acceptance          String
-  aiSummary           String?
-  aiRisks             String[] @default([])
-  aiMissingItems      String[] @default([])
-  aiFrontendNotes     String[] @default([])
-  aiBackendNotes      String[] @default([])
-  aiTestingNotes      String[] @default([])
+  ownerAvatarUrl      String? @db.VarChar(1024)
+  uiLink              String? @db.Text
+  documentLink        String? @db.Text
+  acceptance          String  @db.Text
+  aiSummary           String? @db.Text
+  aiRisks             Json    @default("[]")
+  aiMissingItems      Json    @default("[]")
+  aiFrontendNotes     Json    @default("[]")
+  aiBackendNotes      Json    @default("[]")
+  aiTestingNotes      Json    @default("[]")
   aiCompletenessScore Int?
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -280,7 +280,7 @@ model DocumentItem {
   title       String
   type        String
   updatedAt   String
-  aiSummary   String
+  aiSummary   String @db.Text
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
@@ -291,7 +291,7 @@ model DocumentItem {
 model WeeklyInsight {
   id          String @id
   workspaceId String
-  content     String
+  content     String @db.Text
   sortOrder   Int
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -306,16 +306,16 @@ model ProjectRepository {
   projectId        String?
   provider         GitProvider
   repoFullName     String
-  cloneUrl         String
+  cloneUrl         String           @db.VarChar(1024)
   defaultBranch    String           @default("main")
   packageManager   String           @default("pnpm")
   installCommand   String
   lintCommand      String?
   testCommand      String?
   buildCommand     String?
-  allowedPaths     String[]         @default([])
-  blockedPaths     String[]         @default([])
-  defaultReviewers String[]         @default([])
+  allowedPaths     Json             @default("[]")
+  blockedPaths     Json             @default("[]")
+  defaultReviewers Json             @default("[]")
   status           RepositoryStatus @default(active)
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
@@ -338,12 +338,12 @@ model BugFixJob {
   baseBranch   String
   fixBranch    String?
   commitSha    String?
-  mrUrl        String?
+  mrUrl        String?         @db.Text
   mrNumber     String?
   mrState      String?
-  summary      String?
-  changedFiles String[]        @default([])
-  error        String?
+  summary      String?         @db.Text
+  changedFiles Json            @default("[]")
+  error        String?         @db.Text
   requestedBy  String?
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
@@ -366,7 +366,7 @@ model BugFixJobLog {
   id        String      @id @default(cuid())
   jobId     String
   level     JobLogLevel @default(info)
-  message   String
+  message   String      @db.Text
   createdAt DateTime    @default(now())
 
   job BugFixJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
@@ -379,10 +379,10 @@ model BugFixJobCheck {
   id         String      @id @default(cuid())
   jobId      String
   name       String
-  command    String
+  command    String      @db.Text
   status     CheckStatus
   durationMs Int?
-  outputTail String?
+  outputTail String?     @db.Text
   createdAt  DateTime    @default(now())
 
   job BugFixJob @relation(fields: [jobId], references: [id], onDelete: Cascade)

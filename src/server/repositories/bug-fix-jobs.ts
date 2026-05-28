@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
+import { fromJsonStringArray, toJsonValue } from "@/lib/database/json";
 import { getPrismaClient } from "@/lib/database/prisma";
 import type { BugFixCheckResult, BugFixJob, BugFixJobLog, BugFixJobStatus } from "@/types/dashboard";
 
@@ -30,7 +31,7 @@ function toBugFixJob(job: BugFixJobWithRelations): BugFixJob {
     mrNumber: job.mrNumber ?? undefined,
     mrState: job.mrState ?? undefined,
     summary: job.summary ?? undefined,
-    changedFiles: job.changedFiles,
+    changedFiles: fromJsonStringArray(job.changedFiles),
     error: job.error ?? undefined,
     requestedBy: job.requestedBy ?? undefined,
     createdAt: job.createdAt.toISOString(),
@@ -152,6 +153,8 @@ export async function createBugFixJob({
         bugId,
         repositoryId,
         baseBranch,
+        // MySQL 迁移中 JSON 字段没有数据库默认值，创建任务时显式写入空数组，避免首个任务插入失败。
+        changedFiles: toJsonValue([]),
         requestedBy,
         status: "queued"
       },
@@ -302,6 +305,8 @@ export async function updateBugFixJobStatus(jobId: string, status: BugFixJobStat
     },
     data: {
       ...data,
+      // MySQL 使用 JSON 保存改动文件列表，这里在 repository 层统一转换，避免调用方关心数据库方言。
+      changedFiles: data.changedFiles ? toJsonValue(data.changedFiles) : undefined,
       status,
       startedAt: status === "preparing" ? new Date() : undefined,
       finishedAt: ["mr_created", "failed", "canceled"].includes(status) ? new Date() : undefined
@@ -370,7 +375,7 @@ export async function completeBugFixJobWithMr({
       },
       data: {
         status: "mr_created",
-        changedFiles,
+        changedFiles: toJsonValue(changedFiles),
         commitSha,
         mrNumber,
         mrState,
