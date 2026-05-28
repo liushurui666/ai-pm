@@ -2,8 +2,8 @@ services:
   ai-pm:
     # 本 compose 文件面向单机部署：服务器直接从公开仓库拉代码，然后本地构建镜像。
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
     image: ai-pm:latest
     container_name: ai-pm
     restart: unless-stopped

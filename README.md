@@ -109,7 +109,7 @@ sudo vim /etc/ai-pm/ai-pm.env
 ```bash
 git clone https://github.com/liushurui666/ai-pm.git ai-pm-source
 cd ai-pm-source
-docker compose -f docker-compose.example.yml up -d --build
+docker compose -f deploy/docker/docker-compose.example.yml up -d --build
 ```
 
 更新：
@@ -117,7 +117,7 @@ docker compose -f docker-compose.example.yml up -d --build
 ```bash
 cd ai-pm-source
 git pull
-docker compose -f docker-compose.example.yml up -d --build
+docker compose -f deploy/docker/docker-compose.example.yml up -d --build
 ```
 
 容器启动时会检查 `DATABASE_URL` 和 `SESSION_SECRET`，并默认执行 `pnpm db:migrate`。如果数据库迁移由外部发布系统统一控制，可在 compose 里设置 `RUN_MIGRATIONS=0`。
