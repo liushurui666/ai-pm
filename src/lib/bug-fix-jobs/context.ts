@@ -1,4 +1,4 @@
-import { getPrismaClient } from "@/lib/db";
+import { getPrismaClient } from "@/lib/database/prisma";
 import type { BugReport, ProjectRepository } from "@/types/dashboard";
 
 export type BugFixExecutionContext = {

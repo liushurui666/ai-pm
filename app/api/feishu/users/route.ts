@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listFeishuPeople } from "@/lib/feishu-users";
-import { isFeishuAuthConfigured } from "@/lib/feishu-auth";
-import { getSession } from "@/lib/session";
+import { listFeishuPeople } from "@/lib/feishu/users";
+import { isFeishuAuthConfigured } from "@/lib/feishu/auth";
+import { getSession } from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
   const session = await getSession();

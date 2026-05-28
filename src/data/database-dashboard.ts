@@ -1,5 +1,5 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { getPrismaClient } from "@/lib/db";
+import { getPrismaClient } from "@/lib/database/prisma";
 import type {
   BugAttachment,
   BugFlowRecord,

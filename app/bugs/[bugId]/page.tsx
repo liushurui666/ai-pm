@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { ProjectManagementPlatform } from "@/components/project-management-platform";
-import { isFeishuAuthConfigured } from "@/lib/feishu-auth";
-import { getSession } from "@/lib/session";
+import { isFeishuAuthConfigured } from "@/lib/feishu/auth";
+import { getSession } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 

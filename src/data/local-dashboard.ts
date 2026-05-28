@@ -5,8 +5,8 @@ import {
   writeDashboardDatabase
 } from "@/data/database-dashboard";
 import { dashboardData } from "@/data/dashboard";
-import { sendFeishuBotTaskCard } from "@/lib/feishu-message";
-import { findWorkspaceMemberForUser, getDashboardPermissions } from "@/lib/permissions";
+import { sendFeishuBotTaskCard } from "@/lib/feishu/message";
+import { findWorkspaceMemberForUser, getDashboardPermissions } from "@/lib/access/permissions";
 import type {
   BugReport,
   BugAttachment,

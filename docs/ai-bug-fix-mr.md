@@ -273,7 +273,7 @@ model BugReport {
 ```text
 prisma/schema.prisma
 prisma/migrations/
-src/lib/db.ts
+src/lib/database/prisma.ts
 src/server/repositories/bugs.ts
 src/server/repositories/projects.ts
 src/server/repositories/project-repositories.ts
@@ -554,7 +554,7 @@ MR 创建成功时：
 package.json
 prisma/schema.prisma
 prisma/migrations/
-src/lib/db.ts
+src/lib/database/prisma.ts
 src/server/repositories/
 app/api/bug-fix-jobs/route.ts
 app/api/bug-fix-jobs/[jobId]/route.ts

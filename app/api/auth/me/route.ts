@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { isFeishuAuthConfigured } from "@/lib/feishu-auth";
-import { getSession } from "@/lib/session";
+import { isFeishuAuthConfigured } from "@/lib/feishu/auth";
+import { getSession } from "@/lib/auth/session";
 
 export async function GET() {
   const session = await getSession();

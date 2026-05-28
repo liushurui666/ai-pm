@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { NextRequest } from "next/server";
 import type { AppSession } from "@/types/auth";
 import type { FeishuUser } from "@/types/dashboard";
-import { getFeishuAppAccessToken } from "@/lib/feishu-client";
+import { getFeishuAppAccessToken } from "@/lib/feishu/client";
 
 export const FEISHU_STATE_COOKIE_NAME = "ai_pm_feishu_state";
 

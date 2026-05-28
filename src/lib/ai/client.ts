@@ -2,7 +2,7 @@ import type { DashboardData } from "@/types/dashboard";
 import { requirementStatusOptions } from "@/lib/requirements/requirement-quality";
 import type { Requirement } from "@/types/dashboard";
 import type { DocumentTaskBreakdown, RequirementAnalyzeResult } from "@/types/records";
-import { createWeeklyReportAiPrompt } from "@/lib/weekly-report-ai";
+import { createWeeklyReportAiPrompt } from "@/lib/reports/weekly-report-ai";
 
 const DEFAULT_AI_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1";
 const DEFAULT_AI_MODEL = "qwen-plus";

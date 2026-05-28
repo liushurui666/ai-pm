@@ -109,7 +109,7 @@ import { ProjectsView } from "@/components/project-management-platform/views/pro
 import { RequirementsView } from "@/components/project-management-platform/views/requirements-view";
 import { TasksView } from "@/components/project-management-platform/views/tasks-view";
 import { VersionDashboardView } from "@/components/project-management-platform/views/version-dashboard-view";
-import { createWeeklyReportFileName } from "@/lib/weekly-report";
+import { createWeeklyReportFileName } from "@/lib/reports/weekly-report";
 
 export type { AppView } from "@/components/project-management-platform/types";
 

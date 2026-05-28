@@ -1,5 +1,5 @@
 // 首屏脚本在 CSS 和 React 水合前写入主题底色，避免刷新时暴露浏览器默认白底。
-import { themeSnapshotCookieName, themeStorageKey } from "@/lib/theme-preference";
+import { themeSnapshotCookieName, themeStorageKey } from "@/lib/theme/preference";
 
 export const themeInitScript = `
 (() => {

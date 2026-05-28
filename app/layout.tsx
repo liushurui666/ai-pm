@@ -3,7 +3,7 @@ import { AntdRegistry } from "@ant-design/nextjs-registry";
 import { cookies } from "next/headers";
 import { themeInitScript } from "@/components/theme-init-script";
 import { ThemePreferenceProvider } from "@/components/theme-mode";
-import { getInitialThemeSnapshot, parseThemeSnapshot, themeBackground, themeSnapshotCookieName } from "@/lib/theme-preference";
+import { getInitialThemeSnapshot, parseThemeSnapshot, themeBackground, themeSnapshotCookieName } from "@/lib/theme/preference";
 import "./globals.css";
 import "@/components/project-management-platform/index.less";
 

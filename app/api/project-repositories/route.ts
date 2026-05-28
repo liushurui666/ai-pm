@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDashboardData } from "@/data/local-dashboard";
-import { isFeishuAuthConfigured } from "@/lib/feishu-auth";
-import { canPerformAction, getPermissionDeniedReason } from "@/lib/permissions";
-import { getSession } from "@/lib/session";
+import { isFeishuAuthConfigured } from "@/lib/feishu/auth";
+import { canPerformAction, getPermissionDeniedReason } from "@/lib/access/permissions";
+import { getSession } from "@/lib/auth/session";
 import {
   createProjectRepository,
   listProjectRepositories

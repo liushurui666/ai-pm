@@ -1,4 +1,4 @@
-import { getFeishuTenantAccessToken } from "@/lib/feishu-client";
+import { getFeishuTenantAccessToken } from "@/lib/feishu/client";
 
 type FeishuMessageResponse = {
   code: number;

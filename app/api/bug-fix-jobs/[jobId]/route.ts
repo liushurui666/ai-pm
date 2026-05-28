@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDashboardData } from "@/data/local-dashboard";
-import { isFeishuAuthConfigured } from "@/lib/feishu-auth";
-import { getSession } from "@/lib/session";
+import { isFeishuAuthConfigured } from "@/lib/feishu/auth";
+import { getSession } from "@/lib/auth/session";
 import { getBugFixJob } from "@/server/repositories/bug-fix-jobs";
 
 export async function GET(

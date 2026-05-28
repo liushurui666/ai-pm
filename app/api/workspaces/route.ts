@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createDashboardWorkspace, getDashboardData } from "@/data/local-dashboard";
-import { isFeishuAuthConfigured } from "@/lib/feishu-auth";
-import { getPermissionDeniedReason } from "@/lib/permissions";
-import { getSession } from "@/lib/session";
+import { isFeishuAuthConfigured } from "@/lib/feishu/auth";
+import { getPermissionDeniedReason } from "@/lib/access/permissions";
+import { getSession } from "@/lib/auth/session";
 
 export async function POST(request: NextRequest) {
   const session = await getSession();

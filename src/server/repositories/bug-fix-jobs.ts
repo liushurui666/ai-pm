@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
-import { getPrismaClient } from "@/lib/db";
+import { getPrismaClient } from "@/lib/database/prisma";
 import type { BugFixCheckResult, BugFixJob, BugFixJobLog, BugFixJobStatus } from "@/types/dashboard";
 
 const activeJobStatuses: BugFixJobStatus[] = ["queued", "preparing", "analyzing", "coding", "testing", "pushing"];

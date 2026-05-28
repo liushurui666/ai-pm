@@ -3,10 +3,10 @@ import {
   createAiRequirementAnalysis,
   createFallbackRequirementAnalysis,
   isAiAssistantConfigured
-} from "@/lib/ai-client";
-import { isFeishuAuthConfigured } from "@/lib/feishu-auth";
+} from "@/lib/ai/client";
+import { isFeishuAuthConfigured } from "@/lib/feishu/auth";
 import { readFeishuDocumentFromLink } from "@/lib/requirements/feishu-document";
-import { getSession } from "@/lib/session";
+import { getSession } from "@/lib/auth/session";
 
 const MAX_REQUIREMENT_TEXT_LENGTH = 30_000;
 

@@ -15,9 +15,9 @@ import {
   themeStorageKey,
   type EffectiveTheme,
   type ThemeMode
-} from "@/lib/theme-preference";
+} from "@/lib/theme/preference";
 
-export type { EffectiveTheme, ThemeMode } from "@/lib/theme-preference";
+export type { EffectiveTheme, ThemeMode } from "@/lib/theme/preference";
 
 const ThemePreferenceContext = createContext(defaultThemeSnapshot);
 const themeModes: ThemeMode[] = ["system", "light", "dark"];

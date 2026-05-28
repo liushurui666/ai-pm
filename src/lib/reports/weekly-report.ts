@@ -1,5 +1,5 @@
 import type { BugReport, DashboardData, Project, RequirementVersion, Risk, Task } from "@/types/dashboard";
-import { createWeeklyReportScope } from "@/lib/weekly-report-scope";
+import { createWeeklyReportScope } from "@/lib/reports/weekly-report-scope";
 
 type WeekRange = {
   end: Date;

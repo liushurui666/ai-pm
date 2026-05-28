@@ -1,4 +1,4 @@
-import { getPrismaClient } from "@/lib/db";
+import { getPrismaClient } from "@/lib/database/prisma";
 import type { ProjectRepository } from "@/types/dashboard";
 
 function toProjectRepository(repository: {

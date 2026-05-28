@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSessionFromFeishuCode, FEISHU_STATE_COOKIE_NAME } from "@/lib/feishu-auth";
-import { createSessionToken, getSessionCookieOptions, SESSION_COOKIE_NAME } from "@/lib/session";
+import { createSessionFromFeishuCode, FEISHU_STATE_COOKIE_NAME } from "@/lib/feishu/auth";
+import { createSessionToken, getSessionCookieOptions, SESSION_COOKIE_NAME } from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);

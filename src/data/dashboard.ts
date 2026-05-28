@@ -1,5 +1,5 @@
 import type { DashboardData, Project, TaskStage } from "@/types/dashboard";
-import { createWeeklyReportMarkdown, isWeeklyReportRequest } from "@/lib/weekly-report";
+import { createWeeklyReportMarkdown, isWeeklyReportRequest } from "@/lib/reports/weekly-report";
 
 export const dashboardData: DashboardData = {
   metrics: {

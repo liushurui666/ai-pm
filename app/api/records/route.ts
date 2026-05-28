@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createDashboardRecord, deleteDashboardRecord, getDashboardData, updateDashboardRecord } from "@/data/local-dashboard";
-import { isFeishuAuthConfigured } from "@/lib/feishu-auth";
-import { canPerformAction, getPermissionDeniedReason } from "@/lib/permissions";
-import { getSession } from "@/lib/session";
+import { isFeishuAuthConfigured } from "@/lib/feishu/auth";
+import { canPerformAction, getPermissionDeniedReason } from "@/lib/access/permissions";
+import { getSession } from "@/lib/auth/session";
 import type { BugReport } from "@/types/dashboard";
 import type { DashboardEntityType } from "@/types/records";
 

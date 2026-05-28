@@ -1,4 +1,4 @@
-import { getFeishuTenantAccessToken } from "@/lib/feishu-client";
+import { getFeishuTenantAccessToken } from "@/lib/feishu/client";
 
 const FEISHU_API_BASE = "https://open.feishu.cn/open-apis";
 

@@ -1,4 +1,4 @@
-import { isFeishuAuthConfigured } from "@/lib/feishu-auth";
+import { isFeishuAuthConfigured } from "@/lib/feishu/auth";
 import type { DashboardMember, DashboardPermissions, FeishuUser, MemberRole } from "@/types/dashboard";
 
 export type DashboardPermissionAction =

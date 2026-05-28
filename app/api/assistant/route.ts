@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAssistantReply } from "@/data/dashboard";
 import { getDashboardData } from "@/data/local-dashboard";
-import { createAiAssistantReply, createAiWeeklyReportReply, isAiAssistantConfigured } from "@/lib/ai-client";
-import { isFeishuAuthConfigured } from "@/lib/feishu-auth";
-import { getSession } from "@/lib/session";
-import { createWeeklyReportMarkdown, isWeeklyReportRequest } from "@/lib/weekly-report";
+import { createAiAssistantReply, createAiWeeklyReportReply, isAiAssistantConfigured } from "@/lib/ai/client";
+import { isFeishuAuthConfigured } from "@/lib/feishu/auth";
+import { getSession } from "@/lib/auth/session";
+import { createWeeklyReportMarkdown, isWeeklyReportRequest } from "@/lib/reports/weekly-report";
 
 export async function POST(request: NextRequest) {
   const session = await getSession();

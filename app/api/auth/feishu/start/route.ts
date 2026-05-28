@@ -4,8 +4,8 @@ import {
   FEISHU_STATE_COOKIE_NAME,
   getFeishuAuthorizeUrl,
   isFeishuAuthConfigured
-} from "@/lib/feishu-auth";
-import { shouldUseSecureCookie } from "@/lib/session";
+} from "@/lib/feishu/auth";
+import { shouldUseSecureCookie } from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
   if (!isFeishuAuthConfigured()) {

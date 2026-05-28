@@ -2,10 +2,10 @@ import dayjs from "dayjs";
 import mammoth from "mammoth";
 import { NextRequest, NextResponse } from "next/server";
 import { createDashboardRecord, getDashboardData } from "@/data/local-dashboard";
-import { createAiDocumentTaskBreakdown, isAiAssistantConfigured } from "@/lib/ai-client";
-import { createFallbackDocumentTaskBreakdown } from "@/lib/document-breakdown";
-import { isFeishuAuthConfigured } from "@/lib/feishu-auth";
-import { getSession } from "@/lib/session";
+import { createAiDocumentTaskBreakdown, isAiAssistantConfigured } from "@/lib/ai/client";
+import { createFallbackDocumentTaskBreakdown } from "@/lib/documents/breakdown";
+import { isFeishuAuthConfigured } from "@/lib/feishu/auth";
+import { getSession } from "@/lib/auth/session";
 import type { DashboardMember, RequirementVersion } from "@/types/dashboard";
 import type { DocumentAnalyzeResult, DocumentTaskBreakdown, DocumentTaskDraft } from "@/types/records";
 
