@@ -9,6 +9,12 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="${PNPM_HOME}:${PATH}"
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Prisma 在容器内执行 generate/migrate 时会探测 OpenSSL；slim 镜像默认不完整，
+# 这里补齐 openssl 与 CA 证书，避免生产启动时出现 libssl 探测警告或 TLS 连接异常。
+RUN apt-get update -y \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
 # 只先复制依赖清单，充分利用 Docker 层缓存；后续业务代码变化不会反复下载依赖。
 COPY package.json pnpm-lock.yaml ./
 
@@ -39,7 +45,11 @@ ENV PATH="${PNPM_HOME}:${PATH}"
 ENV PORT=3003
 ENV HOSTNAME=0.0.0.0
 
-RUN corepack enable \
+# 运行阶段同样需要 OpenSSL：容器启动入口会先执行 Prisma migrate，再启动 Next 服务。
+RUN apt-get update -y \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/* \
+  && corepack enable \
   && corepack prepare pnpm@10.15.1 --activate
 
 # 运行镜像保留完整发布目录，原因是容器启动时需要 Prisma CLI 执行迁移，同时 Next start 需要 .next 构建产物。
@@ -50,4 +60,5 @@ RUN chmod +x scripts/docker-entrypoint.sh
 EXPOSE 3003
 
 ENTRYPOINT ["scripts/docker-entrypoint.sh"]
-CMD ["pnpm", "start", "--", "-p", "3003"]
+# 直接调用 Next CLI，避免 `pnpm start -- -p 3003` 被 Next 解析成项目目录 `/app/-p`。
+CMD ["pnpm", "exec", "next", "start", "-p", "3003"]
