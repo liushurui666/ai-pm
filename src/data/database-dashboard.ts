@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
+import { DASHBOARD_SYNC_TRANSACTION_OPTIONS, seedDashboardDatabase } from "@/data/dashboard-database-seed";
 import { fromJsonStringArray, toJsonValue } from "@/lib/database/json";
 import { getPrismaClient } from "@/lib/database/prisma";
 import type {
@@ -56,7 +57,7 @@ async function seedDatabaseIfEmpty(prisma: PrismaClient, createSeed: () => Dashb
     return;
   }
 
-  await writeDashboardDatabase(createSeed(), prisma);
+  await seedDashboardDatabase(createSeed(), prisma);
 }
 
 export async function readDashboardDatabase(createSeed: () => DashboardDatabase): Promise<DashboardDatabase> {
@@ -694,16 +695,20 @@ async function syncWeeklyInsights(prisma: DashboardPrisma, data: DashboardDataba
 export async function writeDashboardDatabase(data: DashboardDatabase, client?: PrismaClient) {
   const prisma = client ?? getPrismaClient();
 
-  await prisma.$transaction(async (tx) => {
-    await syncWorkspaces(tx, data.workspaces);
-    await syncMembers(tx, data.members);
-    await syncProjects(tx, data.projects);
-    await syncTasks(tx, data.tasks);
-    await syncRisks(tx, data.risks);
-    await syncBugs(tx, data.bugs);
-    await syncRequirementVersions(tx, data.requirementVersions);
-    await syncRequirements(tx, data.requirements);
-    await syncDocuments(tx, data.documents);
-    await syncWeeklyInsights(tx, data);
-  });
+  await prisma.$transaction(
+    async (tx) => {
+      await syncWorkspaces(tx, data.workspaces);
+      await syncMembers(tx, data.members);
+      await syncProjects(tx, data.projects);
+      await syncTasks(tx, data.tasks);
+      await syncRisks(tx, data.risks);
+      await syncBugs(tx, data.bugs);
+      await syncRequirementVersions(tx, data.requirementVersions);
+      await syncRequirements(tx, data.requirements);
+      await syncDocuments(tx, data.documents);
+      await syncWeeklyInsights(tx, data);
+    },
+    // 腾讯云 MySQL 公网访问比本地库延迟高，首次空库种子同步会连续写入多张表；保留事务原子性，同时把等待和执行窗口拉到足够覆盖冷启动。
+    DASHBOARD_SYNC_TRANSACTION_OPTIONS
+  );
 }
