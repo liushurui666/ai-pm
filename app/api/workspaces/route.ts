@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createDashboardWorkspace, getDashboardData } from "@/data/local-dashboard";
+import { createDashboardWorkspace } from "@/data/local-dashboard";
 import { isFeishuAuthConfigured } from "@/lib/feishu/auth";
-import { getPermissionDeniedReason } from "@/lib/access/permissions";
 import { getSession } from "@/lib/auth/session";
 
+// 工作区是平台顶层隔离空间，创建新工作区不应继承“当前工作区成员管理”权限；否则新用户在旧工作区里是只读角色时，会被挡在创建自己的工作区之前。
 export async function POST(request: NextRequest) {
   const session = await getSession();
 
@@ -15,19 +15,6 @@ export async function POST(request: NextRequest) {
     currentWorkspaceId?: string;
     values?: Record<string, unknown>;
   } | null;
-  const data = await getDashboardData(session?.user, body?.currentWorkspaceId);
-  const permissions = data.meta?.permissions;
-
-  if (!permissions?.canManageMembers) {
-    return NextResponse.json(
-      {
-        error: permissions ? getPermissionDeniedReason(permissions, "member:manage") : "无工作区管理权限"
-      },
-      {
-        status: 403
-      }
-    );
-  }
 
   if (!body?.values) {
     return NextResponse.json({ error: "工作区参数不完整" }, { status: 400 });

@@ -1,7 +1,9 @@
 import dayjs from "dayjs";
 import {
+  createDashboardWorkspaceDatabase,
   DASHBOARD_DATABASE_STORAGE,
   readDashboardDatabase,
+  readDashboardWorkspacesDatabase,
   writeDashboardDatabase,
   writeDashboardIdentityDatabase
 } from "@/data/database-dashboard";
@@ -83,6 +85,11 @@ function createLocalId(type: DashboardEntityType | "bugFlow" | "member" | "miles
 
 async function readDatabase() {
   return readDashboardDatabase(() => applyProjectMetrics(cloneSeedData()));
+}
+
+async function readWorkspaces() {
+  // 工作区创建只需要读取工作区列表做重名校验，拆出轻量读取路径，避免每次打开创建抽屉都扫全量任务与需求数据。
+  return readDashboardWorkspacesDatabase(() => applyProjectMetrics(cloneSeedData()));
 }
 
 async function writeDatabase(data: LocalDatabase) {
@@ -2151,9 +2158,8 @@ export async function updateDashboardMember(id: string, values: Record<string, u
 }
 
 export async function createDashboardWorkspace(values: Record<string, unknown>, user?: FeishuUser) {
-  const data = await readDatabase();
   const now = new Date().toISOString();
-  const workspaces = normalizeWorkspaces(data.workspaces);
+  const workspaces = normalizeWorkspaces(await readWorkspaces());
   const workspace: DashboardWorkspace = {
     id: createLocalId("workspace"),
     name: asText(values.name, "未命名工作区"),
@@ -2167,16 +2173,14 @@ export async function createDashboardWorkspace(values: Record<string, unknown>, 
     throw new Error("工作区名称已存在");
   }
 
-  data.workspaces = [workspace, ...workspaces];
-
   let member: DashboardMember | undefined;
 
   if (user) {
     member = createMemberFromUser(user, "owner", workspace.id);
-    data.members = [member, ...data.members.map((item) => normalizeMember(item))];
   }
 
-  await writeDatabase(data);
+  // 新建工作区只会新增工作区本身以及创建者 owner 身份，项目/任务/需求等业务数据没有变化；增量插入可以避免公网 MySQL 下全量重写数据导致事务超时。
+  await createDashboardWorkspaceDatabase(workspace, member);
 
   return {
     workspace,

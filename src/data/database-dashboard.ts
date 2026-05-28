@@ -50,6 +50,52 @@ function getDeleteWhere(ids: string[]) {
   return ids.length ? { id: { notIn: ids } } : {};
 }
 
+// Prisma 返回的 nullable 字段需要在数据层统一转成前端类型，避免页面侧到处判断 null/undefined 差异。
+function mapWorkspaceRecord(workspace: {
+  id: string;
+  name: string;
+  description: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}): DashboardWorkspace {
+  return {
+    id: workspace.id,
+    name: workspace.name,
+    description: toOptionalText(workspace.description),
+    status: workspace.status as DashboardWorkspace["status"],
+    createdAt: workspace.createdAt,
+    updatedAt: workspace.updatedAt
+  };
+}
+
+// 工作区写库字段被全量同步和增量创建复用，集中组装可以保证两条路径的数据结构一致。
+function getWorkspacePayload(workspace: DashboardWorkspace) {
+  return {
+    name: workspace.name,
+    description: workspace.description,
+    status: workspace.status,
+    createdAt: workspace.createdAt,
+    updatedAt: workspace.updatedAt
+  };
+}
+
+// 成员身份字段包含 JSON 和通知配置，集中转换 Prisma JSON 可以避免不同写入路径出现结构漂移。
+function getMemberPayload(member: DashboardMember) {
+  return {
+    workspaceId: member.workspaceId,
+    name: member.name,
+    email: member.email,
+    avatarUrl: member.avatarUrl,
+    role: member.role,
+    status: member.status,
+    identities: asJson(member.identities),
+    notification: asJson(member.notification),
+    createdAt: member.createdAt,
+    updatedAt: member.updatedAt
+  };
+}
+
 async function seedDatabaseIfEmpty(prisma: PrismaClient, createSeed: () => DashboardDatabase) {
   const workspaceCount = await prisma.workspace.count();
 
@@ -104,14 +150,7 @@ export async function readDashboardDatabase(createSeed: () => DashboardDatabase)
       deliveryRate: 0,
       overdueTasks: 0
     },
-    workspaces: workspaces.map((workspace): DashboardWorkspace => ({
-      id: workspace.id,
-      name: workspace.name,
-      description: toOptionalText(workspace.description),
-      status: workspace.status as DashboardWorkspace["status"],
-      createdAt: workspace.createdAt,
-      updatedAt: workspace.updatedAt
-    })),
+    workspaces: workspaces.map(mapWorkspaceRecord),
     members: members.map((member): DashboardMember => ({
       id: member.id,
       workspaceId: member.workspaceId,
@@ -307,28 +346,31 @@ export async function readDashboardDatabase(createSeed: () => DashboardDatabase)
   };
 }
 
+export async function readDashboardWorkspacesDatabase(createSeed: () => DashboardDatabase): Promise<DashboardWorkspace[]> {
+  const prisma = getPrismaClient();
+
+  // 工作区创建只需要校验名称是否重复，不能为了一个下拉/抽屉动作读取项目、任务、Bug 全量数据；空库时仍沿用统一种子保护。
+  await seedDatabaseIfEmpty(prisma, createSeed);
+
+  const workspaces = await prisma.workspace.findMany({ orderBy: { createdAt: "asc" } });
+
+  return workspaces.map(mapWorkspaceRecord);
+}
+
 async function syncWorkspaces(prisma: DashboardPrisma, workspaces: DashboardWorkspace[]) {
   await prisma.workspace.deleteMany({
     where: getDeleteWhere(workspaces.map((workspace) => workspace.id))
   });
 
   for (const workspace of workspaces) {
+    const payload = getWorkspacePayload(workspace);
+
     await prisma.workspace.upsert({
       where: { id: workspace.id },
-      update: {
-        name: workspace.name,
-        description: workspace.description,
-        status: workspace.status,
-        createdAt: workspace.createdAt,
-        updatedAt: workspace.updatedAt
-      },
+      update: payload,
       create: {
         id: workspace.id,
-        name: workspace.name,
-        description: workspace.description,
-        status: workspace.status,
-        createdAt: workspace.createdAt,
-        updatedAt: workspace.updatedAt
+        ...payload
       }
     });
   }
@@ -340,18 +382,7 @@ async function syncMembers(prisma: DashboardPrisma, members: DashboardMember[]) 
   });
 
   for (const member of members) {
-    const payload = {
-      workspaceId: member.workspaceId,
-      name: member.name,
-      email: member.email,
-      avatarUrl: member.avatarUrl,
-      role: member.role,
-      status: member.status,
-      identities: asJson(member.identities),
-      notification: asJson(member.notification),
-      createdAt: member.createdAt,
-      updatedAt: member.updatedAt
-    };
+    const payload = getMemberPayload(member);
 
     await prisma.dashboardMember.upsert({
       where: { id: member.id },
@@ -722,6 +753,32 @@ export async function writeDashboardIdentityDatabase(data: Pick<DashboardDatabas
       await syncMembers(tx, data.members);
     },
     // 首次登录或会话资料变化只会影响工作区/成员身份；只写身份表，避免 GET 页面数据时把所有任务在公网 MySQL 上逐条 upsert。
+    DASHBOARD_SYNC_TRANSACTION_OPTIONS
+  );
+}
+
+export async function createDashboardWorkspaceDatabase(workspace: DashboardWorkspace, member?: DashboardMember, client?: PrismaClient) {
+  const prisma = client ?? getPrismaClient();
+
+  await prisma.$transaction(
+    async (tx) => {
+      // 新建工作区是增量写入场景，只插入新空间和创建者 owner 成员；不触碰旧业务表，避免公网 MySQL 下无关数据被批量 upsert。
+      await tx.workspace.create({
+        data: {
+          id: workspace.id,
+          ...getWorkspacePayload(workspace)
+        }
+      });
+
+      if (member) {
+        await tx.dashboardMember.create({
+          data: {
+            id: member.id,
+            ...getMemberPayload(member)
+          }
+        });
+      }
+    },
     DASHBOARD_SYNC_TRANSACTION_OPTIONS
   );
 }
