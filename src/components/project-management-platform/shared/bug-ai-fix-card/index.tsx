@@ -3,8 +3,8 @@
 import { BranchesOutlined, RobotOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { Button, Card, Descriptions, Space, Typography } from "antd";
 import { useState } from "react";
-import type { BugReport } from "@/types/dashboard";
-import { BugAiFixDrawer } from "@/components/project-management-platform/forms/bug-ai-fix-drawer";
+import type { BugReport, Project } from "@/types/dashboard";
+import { BugAiFixDrawer, type BugAiFixFormValues } from "@/components/project-management-platform/forms/bug-ai-fix-drawer";
 import { BugAiFixStatus } from "@/components/project-management-platform/shared/bug-ai-fix-status";
 import "./index.less";
 
@@ -15,24 +15,30 @@ export function BugAiFixCard({
   bug,
   canCreate,
   disabledReason,
-  onCreate
+  onCreate,
+  projects,
+  workspaceId
 }: {
   bug: BugReport;
   canCreate: boolean;
   disabledReason: string;
-  onCreate: (bug: BugReport) => Promise<void>;
+  onCreate: (bug: BugReport, values: BugAiFixFormValues) => Promise<void>;
+  projects: Project[];
+  workspaceId: string;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const aiFix = bug.aiFix;
   const active = aiFix?.status && !["mr_created", "failed", "canceled"].includes(aiFix.status);
 
-  async function handleCreate() {
+  async function handleCreate(values: BugAiFixFormValues) {
     setSubmitting(true);
 
     try {
-      await onCreate(bug);
+      await onCreate(bug, values);
       setDrawerOpen(false);
+    } catch {
+      // 创建失败时主容器已经弹出具体错误，抽屉保持打开，便于操作者立即调整仓库或分支后重试。
     } finally {
       setSubmitting(false);
     }
@@ -77,6 +83,8 @@ export function BugAiFixCard({
         bug={bug}
         loading={submitting}
         open={drawerOpen}
+        projects={projects}
+        workspaceId={workspaceId}
         onClose={() => setDrawerOpen(false)}
         onConfirm={handleCreate}
       />

@@ -4,11 +4,12 @@ import { Button, Card, Empty, Form, Popconfirm, Space, Tag, Timeline, Tooltip, T
 import { ArrowLeftOutlined, BugOutlined, DeleteOutlined, EditOutlined, PaperClipOutlined, SaveOutlined } from "@ant-design/icons";
 import { useEffect } from "react";
 import dayjs from "dayjs";
-import type { BugReport } from "@/types/dashboard";
+import type { BugReport, Project } from "@/types/dashboard";
 import type { OwnerSelectableMember, RequirementVersionOption } from "@/components/project-management-platform/types";
 import { BugFields } from "@/components/project-management-platform/forms/form-fields";
 import { getBugFormValues } from "@/components/project-management-platform/forms/form-utils";
 import { hydrateOwnerFormValues } from "@/components/project-management-platform/forms/owner-select";
+import type { BugAiFixFormValues } from "@/components/project-management-platform/forms/bug-ai-fix-drawer";
 import { BugAiFixCard } from "@/components/project-management-platform/shared/bug-ai-fix-card";
 import { PageTitle } from "@/components/project-management-platform/shared/page-shell";
 import { bugFlowActionColor, bugFlowActionLabel, formatBugCreatedAt, getAttachmentLabel, getBugFlowDescription, getBugFlowRecords } from "@/components/project-management-platform/views/bugs-view";
@@ -31,8 +32,10 @@ export function BugRouteEditView({
   peopleError,
   peopleLoading,
   permissionDeniedReason,
+  projects,
   submitting,
-  versionOptions
+  versionOptions,
+  workspaceId
 }: {
   bug: BugReport | null;
   canEditBugs: boolean;
@@ -41,14 +44,16 @@ export function BugRouteEditView({
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   onBack: () => void;
   onDelete: (bug: BugReport) => void;
-  onCreateAiFix: (bug: BugReport) => Promise<void>;
+  onCreateAiFix: (bug: BugReport, values: BugAiFixFormValues) => Promise<void>;
   onSubmit: (bug: BugReport, values: Record<string, unknown>) => void;
   people: OwnerSelectableMember[];
   peopleError: string;
   peopleLoading: boolean;
   permissionDeniedReason: string;
+  projects: Project[];
   submitting: boolean;
   versionOptions: RequirementVersionOption[];
+  workspaceId: string;
 }) {
   useEffect(() => {
     if (!bug) {
@@ -151,6 +156,8 @@ export function BugRouteEditView({
             bug={bug}
             canCreate={canEditBugs}
             disabledReason={permissionDeniedReason}
+            projects={projects}
+            workspaceId={workspaceId}
             onCreate={onCreateAiFix}
           />
 

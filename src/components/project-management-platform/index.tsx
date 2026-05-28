@@ -70,6 +70,7 @@ import {
   getTaskFormValues,
   serializeCreateValues
 } from "@/components/project-management-platform/forms/form-utils";
+import type { BugAiFixFormValues } from "@/components/project-management-platform/forms/bug-ai-fix-drawer";
 import { hydrateOwnerFormValues } from "@/components/project-management-platform/forms/owner-select";
 import {
   BugEditDrawer,
@@ -876,7 +877,7 @@ export function ProjectManagementPlatform({
     }
   }
 
-  async function handleCreateBugFixJob(bug: BugReport) {
+  async function handleCreateBugFixJob(bug: BugReport, values: BugAiFixFormValues) {
     try {
       const response = await fetch("/api/bug-fix-jobs", {
         method: "POST",
@@ -885,7 +886,10 @@ export function ProjectManagementPlatform({
         },
         body: JSON.stringify({
           workspaceId: currentWorkspaceId,
-          bugId: bug.id
+          bugId: bug.id,
+          // 前端允许操作者覆盖默认仓库和基准分支，服务端仍会二次校验仓库归属、启用状态和分支名。
+          repositoryId: values.repositoryId,
+          baseBranch: values.baseBranch.trim()
         })
       });
       const payload = (await response.json()) as { error?: string; message?: string };
@@ -904,6 +908,7 @@ export function ProjectManagementPlatform({
       await refreshDashboardState();
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : "创建 AI 修复任务失败");
+      throw error;
     }
   }
 
@@ -1759,8 +1764,10 @@ export function ProjectManagementPlatform({
                       peopleError={ownerSelectError}
                       peopleLoading={ownerSelectLoading}
                       permissionDeniedReason={permissions?.deniedReason ?? "只有所有者、管理员或测试可以删除 Bug。"}
+                      projects={data.projects}
                       submitting={bugEditSubmitting}
                       versionOptions={requirementVersionOptions}
+                      workspaceId={currentWorkspaceId}
                       onBack={() => navigateToView("bugs")}
                       onDelete={async (bug) => {
                         const deleted = await handleDeleteRecord("bug", bug.id);
