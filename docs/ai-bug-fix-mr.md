@@ -379,6 +379,10 @@ Runner 规则：
 - diff 越权时任务置为 `failed`，不 push。
 - 校验通过后创建 Ready MR/PR。
 - 校验失败但已有有效代码 diff 时创建 Draft MR/PR，并在 MR body 写入失败命令、失败日志和风险说明。
+- 必须遵守 `AI-CONSTRAINTS.md` 的项目级规则。
+- React 组件必须使用 `组件目录/index.tsx` + `组件目录/index.less`，不得新增平铺组件文件。
+- `src/lib` 工具代码必须按领域放入 `ai`、`auth`、`database`、`documents`、`feishu`、`access`、`theme`、`reports`、`bug-fix-jobs`、`git-providers`、`requirements` 等目录，不得新增根目录平铺工具文件。
+- 新增或修改代码必须补齐详细中文注释，尤其是业务判断、数据转换、数据库读写、权限安全、AI Prompt、第三方接口和复杂边界处理。
 
 环境变量：
 
@@ -491,6 +495,41 @@ component-name/
 - Bug AI 修复卡片、确认抽屉、任务状态标签等新增组件全部使用目录组件。
 - 如果改造既有 Bug 详情页或 Bug 列表页时发生组件拆分，同步迁移到 `index.tsx` + `index.less`。
 - 组件样式放在同目录 `index.less`，不继续堆到全局样式文件。
+- AI Runner 生成或移动组件时必须执行上述目录规范，不能创建 `SomeComponent.tsx` 这类平铺组件。
+
+### Lib 文件规范
+
+AI Runner 生成或移动工具函数时必须遵守 `src/lib` 领域目录规范：
+
+```text
+src/lib/ai/
+src/lib/auth/
+src/lib/database/
+src/lib/documents/
+src/lib/feishu/
+src/lib/access/
+src/lib/theme/
+src/lib/reports/
+src/lib/bug-fix-jobs/
+src/lib/git-providers/
+src/lib/requirements/
+```
+
+执行要求：
+
+- 不在 `src/lib` 根目录新增 `.ts` 工具文件。
+- 优先放入现有领域目录；新增领域必须先给出清晰领域名，再创建目录。
+- 移动 lib 文件时必须同步更新所有 import 和方案文档中的路径。
+
+### 中文注释规范
+
+AI Runner 新增或修改代码必须补齐详细中文注释：
+
+- 说明模块职责、业务意图、边界条件和关键取舍。
+- 说明数据库、权限、第三方接口、AI Prompt、自动修复安全限制等高风险逻辑。
+- 说明时间、版本、负责人、项目范围等容易产生歧义的计算规则。
+- 不写只重复代码字面意思的空泛注释。
+- 除第三方协议名、API 字段名、命令、错误码等不可翻译内容外，不新增英文注释。
 
 ### Bug 详情页
 

@@ -110,6 +110,15 @@ export async function getBugFixExecutionContext(jobId: string): Promise<BugFixEx
 
 export function createBugFixPrompt(context: BugFixExecutionContext) {
   const { bug, repository } = context;
+  // 这些规则会随每次 AI 自动修复任务一起下发，确保 Runner 生成的代码也遵守项目结构、注释和安全边界。
+  const projectCodeGenerationRules = [
+    "必须遵守仓库根目录 AI-CONSTRAINTS.md。",
+    "React 组件必须使用 组件目录/index.tsx + 组件目录/index.less，禁止新增平铺组件文件。",
+    "src/lib 工具代码必须按领域放入 ai、auth、database、documents、feishu、access、theme、reports、bug-fix-jobs、git-providers、requirements 等目录，禁止在 src/lib 根目录新增 .ts 工具文件。",
+    "新增或修改代码必须补齐详细中文注释，说明业务意图、边界条件、关键取舍和不这样处理的风险。",
+    "涉及数据库、权限、会话、第三方接口、AI Prompt、自动修复安全限制、时间版本负责人计算等逻辑时，必须写清楚中文注释。",
+    "禁止新增只重复代码字面意思的空泛注释；除第三方协议名、API 字段名、命令、错误码等不可翻译内容外，不新增英文注释。"
+  ];
 
   return [
     "你是 AI PM 的自动修复执行器。必须直接修改当前 checkout 工作区代码，不能只输出修改建议。",
@@ -124,6 +133,8 @@ export function createBugFixPrompt(context: BugFixExecutionContext) {
     `预期结果：${bug.expected}`,
     `实际结果：${bug.actual}`,
     `附件：${bug.attachments?.map((attachment) => `${attachment.name}(${attachment.url})`).join("，") || "无"}`,
+    "项目级代码生成规则：",
+    ...projectCodeGenerationRules.map((rule, index) => `${index + 1}. ${rule}`),
     "交付要求：",
     "1. 定位问题并直接修改代码。",
     "2. 保持改动最小化，禁止修改密钥、CI、部署和基础设施文件。",
