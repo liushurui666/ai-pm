@@ -712,3 +712,16 @@ export async function writeDashboardDatabase(data: DashboardDatabase, client?: P
     DASHBOARD_SYNC_TRANSACTION_OPTIONS
   );
 }
+
+export async function writeDashboardIdentityDatabase(data: Pick<DashboardDatabase, "members" | "workspaces">, client?: PrismaClient) {
+  const prisma = client ?? getPrismaClient();
+
+  await prisma.$transaction(
+    async (tx) => {
+      await syncWorkspaces(tx, data.workspaces);
+      await syncMembers(tx, data.members);
+    },
+    // 首次登录或会话资料变化只会影响工作区/成员身份；只写身份表，避免 GET 页面数据时把所有任务在公网 MySQL 上逐条 upsert。
+    DASHBOARD_SYNC_TRANSACTION_OPTIONS
+  );
+}

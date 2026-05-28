@@ -2,7 +2,8 @@ import dayjs from "dayjs";
 import {
   DASHBOARD_DATABASE_STORAGE,
   readDashboardDatabase,
-  writeDashboardDatabase
+  writeDashboardDatabase,
+  writeDashboardIdentityDatabase
 } from "@/data/database-dashboard";
 import { dashboardData } from "@/data/dashboard";
 import { sendFeishuBotTaskCard } from "@/lib/feishu/message";
@@ -1367,7 +1368,8 @@ function ensureCurrentMember(data: LocalDatabase, workspaceId: string, user?: Fe
 
   if (existingMember) {
     const syncedMember = syncMemberProfile(existingMember, user);
-    const changed = syncedMember !== existingMember || JSON.stringify(members) !== JSON.stringify(data.members);
+    // 页面读取阶段会对成员结构做一次兼容性规范化，但这不应该反复触发数据库写入；只有登录成员资料真的补齐或变化时才持久化。
+    const changed = syncedMember !== existingMember;
 
     return {
       data: {
@@ -1984,7 +1986,8 @@ export async function getDashboardData(user?: FeishuUser, workspaceId?: string):
   const scopedData = scopeDataToWorkspace(data, workspaceResult.currentWorkspace.id);
 
   if (changed) {
-    await writeDatabase(data);
+    // 读取仪表盘时只可能因为当前工作区规范化或登录用户资料同步而变化，不能走全量写库，否则腾讯云 MySQL 公网下会反复 upsert 大量任务导致首屏超时。
+    await writeDashboardIdentityDatabase(data);
   }
 
   return {
