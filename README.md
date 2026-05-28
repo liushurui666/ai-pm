@@ -107,7 +107,17 @@ AI_MODEL=deepseek-chat
 
 ### Docker 部署
 
-服务器只需要准备 Docker、Compose 和运行时密钥文件：
+服务器只需要准备 Docker、Compose 和运行时密钥文件。CI/CD 可以像 Jenkins 一样在仓库根目录生成 `.env`，Docker Compose 默认会把这份 `.env` 注入容器：
+
+```bash
+cat > .env <<'EOF'
+APP_URL=https://ai-pm.chainthink.cn
+FEISHU_REDIRECT_URI=https://ai-pm.chainthink.cn/api/auth/feishu/callback
+# 其他 DATABASE_URL、SESSION_SECRET、FEISHU_APP_ID 等变量同样写在这里
+EOF
+```
+
+如果是传统单机部署，也可以把运行时密钥集中放到 `/etc/ai-pm/ai-pm.env`：
 
 ```bash
 sudo mkdir -p /etc/ai-pm
@@ -122,6 +132,12 @@ sudo vim /etc/ai-pm/ai-pm.env
 git clone https://github.com/liushurui666/ai-pm.git ai-pm-source
 cd ai-pm-source
 docker compose -f deploy/docker/docker-compose.example.yml up -d --build
+```
+
+使用 `/etc/ai-pm/ai-pm.env` 时指定环境文件路径：
+
+```bash
+AI_PM_ENV_FILE=/etc/ai-pm/ai-pm.env docker compose -f deploy/docker/docker-compose.example.yml up -d --build
 ```
 
 更新：

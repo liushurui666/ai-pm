@@ -8,7 +8,9 @@ services:
     container_name: ai-pm
     restart: unless-stopped
     env_file:
-      - /etc/ai-pm/ai-pm.env
+      # CI/CD 通常会在仓库根目录生成 .env；env_file 路径相对 compose 文件所在目录，
+      # 因此默认使用 ../../.env。传统单机部署仍可用 AI_PM_ENV_FILE=/etc/ai-pm/ai-pm.env 覆盖。
+      - ${AI_PM_ENV_FILE:-../../.env}
     environment:
       NODE_ENV: production
       PORT: "3003"
