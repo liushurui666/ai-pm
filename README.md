@@ -46,6 +46,7 @@ cp .env.example .env.local
 - `FEISHU_APP_SECRET`
 - `FEISHU_REDIRECT_URI`
 - `SESSION_SECRET`
+- `APP_URL`，生产环境填写公网访问地址，例如 `https://ai-pm.chainthink.cn`
 
 需求模块权限由站内“成员管理”维护，并按工作区生效。配置飞书登录后，首个进入某个工作区的用户会自动成为该工作区 `owner`，后续首次进入的用户会作为 `viewer` 只读成员登记，再由 `owner / admin` 调整角色；`owner / admin / productAdmin` 可以删除需求和版本，`productMember` 可以创建和编辑但不能删除，`viewer` 只读。本地演示模式如果还没有成员，会保留完整管理权限，方便开发调试。
 
@@ -54,6 +55,15 @@ cp .env.example .env.local
 ```txt
 http://localhost:3000/api/auth/feishu/callback
 ```
+
+生产环境不要继续使用 localhost，公网部署应配置成：
+
+```txt
+APP_URL=https://ai-pm.chainthink.cn
+FEISHU_REDIRECT_URI=https://ai-pm.chainthink.cn/api/auth/feishu/callback
+```
+
+如果站点前面有 Nginx、负载均衡或网关，也要透传 `Host`、`X-Forwarded-Host` 和 `X-Forwarded-Proto`，否则服务端只能看到容器内地址，登录成功后就可能跳回 `localhost:3003`。
 
 项目管理主数据不写入飞书云文档。AI PM 平台会把项目、任务、风险、需求、文档、洞察、Bug 和 AI 修复任务保存到 MySQL；首次启动时如果数据库为空，系统会从内置种子数据初始化。后续通过“新建项目 / 新建任务 / 登记风险 / 新建需求 / 新建文档 / 登记 Bug”创建的记录会由站内 API 持久化到数据库，刷新页面后仍然保留。
 

@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { NextRequest } from "next/server";
 import type { AppSession } from "@/types/auth";
 import type { FeishuUser } from "@/types/dashboard";
+import { createPublicAppUrl, getPublicAppOrigin, isLocalUrl } from "@/lib/auth/public-url";
 import { getFeishuAppAccessToken } from "@/lib/feishu/client";
 
 export const FEISHU_STATE_COOKIE_NAME = "ai_pm_feishu_state";
@@ -49,11 +50,19 @@ export function createOauthState() {
 }
 
 export function getFeishuRedirectUri(request: NextRequest) {
-  if (process.env.FEISHU_REDIRECT_URI) {
-    return process.env.FEISHU_REDIRECT_URI;
+  const configuredRedirectUri = process.env.FEISHU_REDIRECT_URI?.trim();
+
+  if (configuredRedirectUri) {
+    const publicOrigin = getPublicAppOrigin(request);
+
+    // 生产域名访问时如果仍使用 localhost 回调，飞书授权完成后会把用户浏览器带到自己的电脑。
+    // 当 APP_URL 或代理头已经能识别出公网域名时，自动改用公网回调；本地开发仍保留 localhost 配置。
+    if (!isLocalUrl(configuredRedirectUri) || isLocalUrl(publicOrigin)) {
+      return configuredRedirectUri;
+    }
   }
 
-  return new URL("/api/auth/feishu/callback", request.url).toString();
+  return createPublicAppUrl("/api/auth/feishu/callback", request).toString();
 }
 
 export function getFeishuAuthorizeUrl(request: NextRequest, state: string) {
