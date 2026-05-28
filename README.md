@@ -91,12 +91,45 @@ AI_MODEL=deepseek-chat
 
 ## 远程部署
 
-项目提供两种部署脚本：
+项目提供 Docker 与脚本两种部署方式。优先推荐 Docker，运维不用在宿主机维护 Node/pnpm 进程。
+
+### Docker 部署
+
+服务器只需要准备 Docker、Compose 和运行时密钥文件：
+
+```bash
+sudo mkdir -p /etc/ai-pm
+sudo cp scripts/runtime.env.example /etc/ai-pm/ai-pm.env
+sudo chmod 600 /etc/ai-pm/ai-pm.env
+sudo vim /etc/ai-pm/ai-pm.env
+```
+
+部署：
+
+```bash
+git clone https://github.com/liushurui666/ai-pm.git ai-pm-source
+cd ai-pm-source
+docker compose -f docker-compose.example.yml up -d --build
+```
+
+更新：
+
+```bash
+cd ai-pm-source
+git pull
+docker compose -f docker-compose.example.yml up -d --build
+```
+
+容器启动时会检查 `DATABASE_URL` 和 `SESSION_SECRET`，并默认执行 `pnpm db:migrate`。如果数据库迁移由外部发布系统统一控制，可在 compose 里设置 `RUN_MIGRATIONS=0`。
+
+### 脚本部署
+
+脚本部署适合不使用 Docker 的服务器：
 
 - `scripts/deploy.ops.sh`：给运维在目标服务器上直接执行，脚本内置仓库、分支、目录、端口、服务名等非敏感默认值。
 - `scripts/deploy.sh`：给开发机或发布机通过 SSH 推送到远端，适合接入外部 CI/CD。
 
-### 运维服务器一键执行
+#### 运维服务器一键执行
 
 运维只需要在服务器上先准备一次运行时密钥文件：
 
@@ -134,7 +167,7 @@ ExecStart=/usr/bin/pnpm start -- -p 3003
 Restart=always
 ```
 
-### 发布机 SSH 推送
+#### 发布机 SSH 推送
 
 ```bash
 cp scripts/deploy.env.example scripts/deploy.env

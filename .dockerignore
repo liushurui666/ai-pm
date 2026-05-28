@@ -1,0 +1,18 @@
+# Docker 构建上下文只需要源码和依赖清单；本地依赖、构建产物和密钥必须排除。
+.git
+.next
+node_modules
+.pnpm-store
+.playwright-mcp
+.ai-pm
+
+.env
+.env.*
+scripts/deploy.env
+
+ai-pm-*.png
+console-desktop.json
+
+*.log
+*.tsbuildinfo
+.DS_Store
