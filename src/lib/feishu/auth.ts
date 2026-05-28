@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { NextRequest } from "next/server";
 import type { AppSession } from "@/types/auth";
 import type { FeishuUser } from "@/types/dashboard";
-import { createPublicAppUrl, getPublicAppOrigin, isLocalUrl } from "@/lib/auth/public-url";
+import { createPublicAppUrl } from "@/lib/auth/public-url";
 import { getFeishuAppAccessToken } from "@/lib/feishu/client";
 
 export const FEISHU_STATE_COOKIE_NAME = "ai_pm_feishu_state";
@@ -53,13 +53,9 @@ export function getFeishuRedirectUri(request: NextRequest) {
   const configuredRedirectUri = process.env.FEISHU_REDIRECT_URI?.trim();
 
   if (configuredRedirectUri) {
-    const publicOrigin = getPublicAppOrigin(request);
-
-    // 生产域名访问时如果仍使用 localhost 回调，飞书授权完成后会把用户浏览器带到自己的电脑。
-    // 当 APP_URL 或代理头已经能识别出公网域名时，自动改用公网回调；本地开发仍保留 localhost 配置。
-    if (!isLocalUrl(configuredRedirectUri) || isLocalUrl(publicOrigin)) {
-      return configuredRedirectUri;
-    }
+    // 飞书开放平台会严格校验 redirect_uri，服务端必须忠实使用运维配置的回调地址。
+    // 生产环境如果误填 localhost，由 docker-entrypoint 在启动阶段拦截，避免这里静默改写导致排查困难。
+    return configuredRedirectUri;
   }
 
   return createPublicAppUrl("/api/auth/feishu/callback", request).toString();

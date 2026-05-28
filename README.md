@@ -65,6 +65,8 @@ FEISHU_REDIRECT_URI=https://ai-pm.chainthink.cn/api/auth/feishu/callback
 
 如果站点前面有 Nginx、负载均衡或网关，也要透传 `Host`、`X-Forwarded-Host` 和 `X-Forwarded-Proto`，否则服务端只能看到容器内地址，登录成功后就可能跳回 `localhost:3003`。
 
+Docker 生产容器启动时会校验这两个变量：`APP_URL` 必须是公网域名，`FEISHU_REDIRECT_URI` 不能是 localhost。配置不正确时容器会直接退出，避免用户进入错误的飞书授权链接。
+
 项目管理主数据不写入飞书云文档。AI PM 平台会把项目、任务、风险、需求、文档、洞察、Bug 和 AI 修复任务保存到 MySQL；首次启动时如果数据库为空，系统会从内置种子数据初始化。后续通过“新建项目 / 新建任务 / 登记风险 / 新建需求 / 新建文档 / 登记 Bug”创建的记录会由站内 API 持久化到数据库，刷新页面后仍然保留。
 
 飞书只承担三件事：

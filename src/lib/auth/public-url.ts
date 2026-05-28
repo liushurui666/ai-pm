@@ -1,7 +1,5 @@
 import type { NextRequest } from "next/server";
 
-const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1"]);
-
 /**
  * 获取代理链路头里的第一个值。
  *
@@ -27,22 +25,6 @@ function normalizeOrigin(value?: string) {
     return new URL(value).origin;
   } catch {
     return null;
-  }
-}
-
-/**
- * 判断 URL 是否指向本机地址。
- *
- * 本地开发允许使用 localhost 回调；但生产域名后面如果仍出现 localhost，浏览器会跳到用户自己的电脑，
- * 这就是线上登录完成后被带到 `localhost:3003` 的根因之一。
- */
-export function isLocalUrl(value: string | URL) {
-  try {
-    const url = value instanceof URL ? value : new URL(value);
-
-    return LOCAL_HOSTNAMES.has(url.hostname);
-  } catch {
-    return false;
   }
 }
 
