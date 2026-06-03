@@ -41,16 +41,12 @@ const aiPmLoginPageComponent = createHostedAuthLoginPageComponent({
  */
 export const hostedAuth = createHostedAuthRouteHandlers({
   allowDevLogin: readEnv("AUTH_ALLOW_DEV_LOGIN", "true") !== "false",
-  applications: [
-    {
-      allowedRedirectURIs: [resolveRedirectURI()],
-      clientId: readEnv("AUTH_CLIENT_ID", "ai-pm"),
-      loginPageComponent: aiPmLoginPageComponent,
-      name: readEnv("AUTH_CLIENT_NAME", "AI PM"),
-      redirectURI: resolveRedirectURI(),
-    },
-  ],
+  // AI PM 是单业务应用内嵌模式，业务侧只声明当前项目自己的身份和回跳白名单。
+  // SDK 内部会把这些字段转换成登录页和 OAuth state 需要的运行时模型，业务代码不再维护多应用数组。
+  allowedRedirectURIs: [resolveRedirectURI()],
+  appName: readEnv("AUTH_CLIENT_NAME", "AI PM"),
   authBaseURL: resolveAppBaseURL(),
+  clientId: readEnv("AUTH_CLIENT_ID", "ai-pm"),
   feishu: {
     appId: readEnv("FEISHU_APP_ID") || undefined,
     appSecret: readEnv("FEISHU_APP_SECRET") || undefined,
@@ -66,6 +62,8 @@ export const hostedAuth = createHostedAuthRouteHandlers({
     clientSecret: readEnv("GOOGLE_CLIENT_SECRET") || undefined,
     redirectURI: readEnv("GOOGLE_REDIRECT_URI") || undefined,
   },
+  loginPageComponent: aiPmLoginPageComponent,
+  redirectURI: resolveRedirectURI(),
   sessionSecret: readEnv("AUTH_SESSION_SECRET", "ai-pm-local-auth-secret"),
   // AI PM 自己的业务数据库是 MySQL；认证 SDK 的 Prisma store 面向独立认证库。
   // 内嵌模式先用 file store，保证跑 npx init 后不需要额外准备第二套数据库。

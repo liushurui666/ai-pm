@@ -33,11 +33,11 @@ importers:
         specifier: ^7.8.0
         version: 7.8.0(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@5.9.3))(typescript@5.9.3)
       '@rc-tool/unified-auth-hosted-service':
-        specifier: ^0.2.8
-        version: 0.2.8(react@19.2.6)
+        specifier: ^0.2.10
+        version: 0.2.10(react@19.2.6)
       '@rc-tool/unified-auth-sdk':
-        specifier: ^0.2.7
-        version: 0.2.7(react@19.2.6)
+        specifier: ^0.2.9
+        version: 0.2.9(react@19.2.6)
       antd:
         specifier: ^6.0.0
         version: 6.4.2(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -1134,12 +1134,12 @@ packages:
       react: '>=16.9.0'
       react-dom: '>=16.9.0'
 
-  '@rc-tool/unified-auth-hosted-service@0.2.8':
-    resolution: {integrity: sha512-qdL94O1/eXHyy40uH7pcD7OLBFt4dLSduqXOQd9zAU3SxgBgd6udjf8x6qPEgZ4dbOIhQ65QphOX+wb7kPFlBg==}
+  '@rc-tool/unified-auth-hosted-service@0.2.10':
+    resolution: {integrity: sha512-Ji6orI0ZYxK9S44NXpsjT/UQ0NfQz1liRPNKKbCXfjjzFl8JBJJ1hGh8vP20sE9xBDXiDnbCs7GxI4HojhjdzQ==}
     hasBin: true
 
-  '@rc-tool/unified-auth-sdk@0.2.7':
-    resolution: {integrity: sha512-YGyas3kWwgdQIUsrPMpmLU/ZSjPsZSVfh6Ff68pOCS1tVRgy7MHs4zfMh5pIkBmdBwSbxyYIlW7O7eggIN1d3A==}
+  '@rc-tool/unified-auth-sdk@0.2.9':
+    resolution: {integrity: sha512-Y6gO7mS/4fFw99pYBVVa/lRS5iveo1t7L9DjBLyD9zsgxvu4MiTpxrSDTpa9P0wKHfsg2S/2FOOiZjWyqQU1Ig==}
     peerDependencies:
       better-auth: ^1.6.10
       drizzle-orm: ^0.45.2 || ^1.0.0-rc.1
@@ -4150,16 +4150,16 @@ snapshots:
       react: 19.2.6
       react-dom: 19.2.6(react@19.2.6)
 
-  '@rc-tool/unified-auth-hosted-service@0.2.8(react@19.2.6)':
+  '@rc-tool/unified-auth-hosted-service@0.2.10(react@19.2.6)':
     dependencies:
-      '@rc-tool/unified-auth-sdk': 0.2.7(react@19.2.6)
+      '@rc-tool/unified-auth-sdk': 0.2.9(react@19.2.6)
       dotenv: 17.4.2
     transitivePeerDependencies:
       - better-auth
       - drizzle-orm
       - react
 
-  '@rc-tool/unified-auth-sdk@0.2.7(react@19.2.6)':
+  '@rc-tool/unified-auth-sdk@0.2.9(react@19.2.6)':
     optionalDependencies:
       react: 19.2.6
 
