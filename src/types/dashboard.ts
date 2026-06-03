@@ -292,6 +292,8 @@ export type DocumentItem = {
 };
 
 export type FeishuUser = {
+  authProvider?: MemberIdentityProvider;
+  authUserId?: string;
   openId: string;
   unionId?: string;
   userId?: string;
@@ -370,6 +372,7 @@ export type DashboardMember = {
   name: string;
   email?: string;
   avatarUrl?: string;
+  registrationChannel: MemberIdentityProvider;
   role: MemberRole;
   status: MemberStatus;
   identities: MemberIdentity[];

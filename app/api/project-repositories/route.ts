@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDashboardData } from "@/data/local-dashboard";
-import { isFeishuAuthConfigured } from "@/lib/feishu/auth";
+import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 import { canPerformAction, getPermissionDeniedReason } from "@/lib/access/permissions";
 import { getSession } from "@/lib/auth/session";
 import {
@@ -16,7 +16,7 @@ function asStringArray(value: unknown) {
 export async function GET(request: NextRequest) {
   const session = await getSession();
 
-  if (isFeishuAuthConfigured() && !session) {
+  if (isAuthServiceConfigured() && !session) {
     return NextResponse.json({ error: "未登录" }, { status: 401 });
   }
 
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const session = await getSession();
 
-  if (isFeishuAuthConfigured() && !session) {
+  if (isAuthServiceConfigured() && !session) {
     return NextResponse.json({ error: "未登录" }, { status: 401 });
   }
 

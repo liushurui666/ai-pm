@@ -1,4 +1,4 @@
-import { isFeishuAuthConfigured } from "@/lib/feishu/auth";
+import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 import type { DashboardMember, DashboardPermissions, FeishuUser, MemberRole } from "@/types/dashboard";
 
 export type DashboardPermissionAction =
@@ -129,24 +129,17 @@ function normalizeIdentity(value?: string) {
   return value?.trim().toLowerCase() ?? "";
 }
 
-function getMemberIdentities(member: DashboardMember) {
-  return [
-    member.id,
-    member.email,
-    member.name,
-    ...member.identities.flatMap((identity) => [
-      identity.providerUserId,
-      identity.providerUnionId,
-      identity.providerTenantUserId,
-      identity.email
-    ])
-  ]
+function getMemberAuthUserIds(member: DashboardMember) {
+  return member.identities
+    .map((identity) => identity.providerUserId)
     .map(normalizeIdentity)
     .filter(Boolean);
 }
 
 function getUserIdentities(user?: FeishuUser | null) {
-  return [user?.openId, user?.unionId, user?.userId, user?.email, user?.name, user?.enName]
+  // AI PM 登录已经完全切到 Unified Auth，运行时只认 SDK 返回的 authUserId。
+  // 老成员行如果还只有 openId/email，需要先运行 sync:auth-members 一次性写入 auth_... 身份；这里不再做猜测匹配。
+  return [user?.authUserId]
     .map(normalizeIdentity)
     .filter(Boolean);
 }
@@ -159,7 +152,7 @@ export function findMemberForUser(members: DashboardMember[], user?: FeishuUser 
   }
 
   return members.find((member) => {
-    const memberIdentities = getMemberIdentities(member);
+    const memberIdentities = getMemberAuthUserIds(member);
 
     return userIdentities.some((identity) => memberIdentities.includes(identity));
   });
@@ -173,7 +166,7 @@ export function findWorkspaceMemberForUser(members: DashboardMember[], workspace
 }
 
 export function getDashboardPermissions(member?: DashboardMember | null): DashboardPermissions {
-  if (!member && !isFeishuAuthConfigured()) {
+  if (!member && !isAuthServiceConfigured()) {
     return localAdminPermissions;
   }
 

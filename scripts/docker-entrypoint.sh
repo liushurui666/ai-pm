@@ -21,8 +21,8 @@ if [ -z "${DATABASE_URL:-}" ]; then
   exit 1
 fi
 
-if [ -z "${SESSION_SECRET:-}" ]; then
-  echo "[docker-entrypoint][error] 缺少 SESSION_SECRET，生产会话无法安全签名。" >&2
+if [ -z "${AUTH_SESSION_SECRET:-}" ]; then
+  echo "[docker-entrypoint][error] 缺少 AUTH_SESSION_SECRET，统一认证会话无法安全签名。" >&2
   exit 1
 fi
 

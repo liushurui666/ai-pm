@@ -35,6 +35,7 @@ model DashboardMember {
   name         String
   email        String?
   avatarUrl    String? @db.VarChar(1024)
+  registrationChannel String @default("email")
   role         String
   status       String
   identities   Json

@@ -39,9 +39,9 @@ require_command() {
 check_runtime_env_file() {
   [[ -f "${RUNTIME_ENV_FILE}" ]] || fail "缺少运行时环境变量文件：${RUNTIME_ENV_FILE}。请先按 scripts/runtime.env.example 准备。"
 
-  # 部署前只校验最小启动条件；飞书、AI、COS 可以按功能逐步打开，但 DATABASE_URL 和 SESSION_SECRET 是生产启动的底线。
+  # 部署前只校验最小启动条件；飞书、AI、COS 可以按功能逐步打开，但 DATABASE_URL 和 AUTH_SESSION_SECRET 是生产启动的底线。
   grep -Eq '^DATABASE_URL=.+' "${RUNTIME_ENV_FILE}" || fail "${RUNTIME_ENV_FILE} 缺少 DATABASE_URL"
-  grep -Eq '^SESSION_SECRET=.+' "${RUNTIME_ENV_FILE}" || fail "${RUNTIME_ENV_FILE} 缺少 SESSION_SECRET"
+  grep -Eq '^AUTH_SESSION_SECRET=.+' "${RUNTIME_ENV_FILE}" || fail "${RUNTIME_ENV_FILE} 缺少 AUTH_SESSION_SECRET"
 }
 
 run_hook() {

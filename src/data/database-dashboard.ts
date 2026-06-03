@@ -87,6 +87,7 @@ function getMemberPayload(member: DashboardMember) {
     name: member.name,
     email: member.email,
     avatarUrl: member.avatarUrl,
+    registrationChannel: member.registrationChannel,
     role: member.role,
     status: member.status,
     identities: asJson(member.identities),
@@ -151,19 +152,24 @@ export async function readDashboardDatabase(createSeed: () => DashboardDatabase)
       overdueTasks: 0
     },
     workspaces: workspaces.map(mapWorkspaceRecord),
-    members: members.map((member): DashboardMember => ({
-      id: member.id,
-      workspaceId: member.workspaceId,
-      name: member.name,
-      email: toOptionalText(member.email),
-      avatarUrl: toOptionalText(member.avatarUrl),
-      role: member.role as DashboardMember["role"],
-      status: member.status as DashboardMember["status"],
-      identities: fromJsonArray(member.identities),
-      notification: member.notification as DashboardMember["notification"],
-      createdAt: member.createdAt,
-      updatedAt: member.updatedAt
-    })),
+    members: members.map((member): DashboardMember => {
+      const identities = fromJsonArray<DashboardMember["identities"][number]>(member.identities);
+
+      return {
+        id: member.id,
+        workspaceId: member.workspaceId,
+        name: member.name,
+        email: toOptionalText(member.email),
+        avatarUrl: toOptionalText(member.avatarUrl),
+        registrationChannel: member.registrationChannel as DashboardMember["registrationChannel"],
+        role: member.role as DashboardMember["role"],
+        status: member.status as DashboardMember["status"],
+        identities,
+        notification: member.notification as DashboardMember["notification"],
+        createdAt: member.createdAt,
+        updatedAt: member.updatedAt
+      };
+    }),
     projects: projects.map((project): Project => ({
       id: project.id,
       workspaceId: project.workspaceId,
@@ -381,6 +387,36 @@ async function syncMembers(prisma: DashboardPrisma, members: DashboardMember[]) 
     where: getDeleteWhere(members.map((member) => member.id))
   });
 
+  for (const member of members) {
+    const payload = getMemberPayload(member);
+
+    await prisma.dashboardMember.upsert({
+      where: { id: member.id },
+      update: payload,
+      create: {
+        id: member.id,
+        ...payload
+      }
+    });
+  }
+}
+
+async function upsertIdentityWorkspaces(prisma: PrismaClient, workspaces: DashboardWorkspace[]) {
+  for (const workspace of workspaces) {
+    const payload = getWorkspacePayload(workspace);
+
+    await prisma.workspace.upsert({
+      where: { id: workspace.id },
+      update: payload,
+      create: {
+        id: workspace.id,
+        ...payload
+      }
+    });
+  }
+}
+
+async function upsertIdentityMembers(prisma: PrismaClient, members: DashboardMember[]) {
   for (const member of members) {
     const payload = getMemberPayload(member);
 
@@ -747,14 +783,11 @@ export async function writeDashboardDatabase(data: DashboardDatabase, client?: P
 export async function writeDashboardIdentityDatabase(data: Pick<DashboardDatabase, "members" | "workspaces">, client?: PrismaClient) {
   const prisma = client ?? getPrismaClient();
 
-  await prisma.$transaction(
-    async (tx) => {
-      await syncWorkspaces(tx, data.workspaces);
-      await syncMembers(tx, data.members);
-    },
-    // 首次登录或会话资料变化只会影响工作区/成员身份；只写身份表，避免 GET 页面数据时把所有任务在公网 MySQL 上逐条 upsert。
-    DASHBOARD_SYNC_TRANSACTION_OPTIONS
-  );
+  // 页面读取阶段触发的身份同步只负责补齐当前工作区和登录成员资料，不能使用交互式事务包住全量 delete/upsert。
+  // 腾讯云 MySQL 公网访问偶尔会因为锁等待或网络抖动让 interactive transaction 过期，导致成员页这样的只读页面被 60 秒事务拖崩。
+  // 这里改为幂等 upsert：不删除历史成员、不触碰业务表，即使中途失败也只会留下旧身份资料，下一次请求仍可继续补齐。
+  await upsertIdentityWorkspaces(prisma, data.workspaces);
+  await upsertIdentityMembers(prisma, data.members);
 }
 
 export async function createDashboardWorkspaceDatabase(workspace: DashboardWorkspace, member?: DashboardMember, client?: PrismaClient) {

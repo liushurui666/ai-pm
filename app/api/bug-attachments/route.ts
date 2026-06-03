@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { isFeishuAuthConfigured } from "@/lib/feishu/auth";
+import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 import { getSession } from "@/lib/auth/session";
 import type { BugAttachment } from "@/types/dashboard";
 
@@ -116,7 +116,7 @@ function getCosConfig() {
 export async function POST(request: NextRequest) {
   const session = await getSession();
 
-  if (isFeishuAuthConfigured() && !session) {
+  if (isAuthServiceConfigured() && !session) {
     return NextResponse.json({ error: "未登录" }, { status: 401 });
   }
 

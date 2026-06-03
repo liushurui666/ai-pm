@@ -110,6 +110,7 @@ import { ProjectsView } from "@/components/project-management-platform/views/pro
 import { RequirementsView } from "@/components/project-management-platform/views/requirements-view";
 import { TasksView } from "@/components/project-management-platform/views/tasks-view";
 import { VersionDashboardView } from "@/components/project-management-platform/views/version-dashboard-view";
+import { getAiPmAuthLogoutHref } from "@/lib/auth/unified-auth";
 import { createWeeklyReportFileName } from "@/lib/reports/weekly-report";
 
 export type { AppView } from "@/components/project-management-platform/types";
@@ -1274,8 +1275,15 @@ export function ProjectManagementPlatform({
     { key: "requirements", icon: <NodeIndexOutlined />, label: "需求管理" },
     { key: "members", icon: <TeamOutlined />, label: "成员管理" }
   ];
-  const userName = data?.meta?.user?.name ?? "苏";
-  const userInitial = userName.slice(0, 1);
+  // 顶部账号入口只能展示真实认证上下文或当前成员信息，不能硬编码个人昵称兜底；
+  // OAuth 切换时数据还在加载，使用中性文案可以避免 GitHub/Google 登录看起来都变成同一个人。
+  const currentAuthUser = data?.meta?.user;
+  const currentMember = data?.meta?.currentMember;
+  const userName = currentAuthUser?.name || currentAuthUser?.enName || currentAuthUser?.email || currentMember?.name || "用户";
+  const userAvatarUrl = currentAuthUser?.avatarUrl || currentMember?.avatarUrl;
+  const userInitial = userName.trim().slice(0, 1) || "用";
+  // 退出仍由本地 route 清理 Cookie；统一由 SDK 适配层生成 href，避免业务壳散落认证端点路径。
+  const logoutHref = getAiPmAuthLogoutHref("/login");
   const projectOptions = data?.projects.map((project) => project.name) ?? [];
   const workspaceOptions = useMemo(
     () =>
@@ -1592,7 +1600,7 @@ export function ProjectManagementPlatform({
                   content={
                     <Space className="pm-avatar-menu" orientation="vertical" size={12}>
                       <Space className="pm-avatar-profile" size={10}>
-                        <Avatar className="pm-avatar" src={data?.meta?.user?.avatarUrl}>
+                        <Avatar className="pm-avatar" src={userAvatarUrl}>
                           {userInitial}
                         </Avatar>
                         <Space orientation="vertical" size={0}>
@@ -1652,7 +1660,7 @@ export function ProjectManagementPlatform({
                         </div>
                       ) : null}
                       {data?.meta?.user ? (
-                        <Button block href="/api/auth/logout" icon={<LogoutOutlined />}>
+                        <Button block href={logoutHref} icon={<LogoutOutlined />}>
                           退出登录
                         </Button>
                       ) : null}

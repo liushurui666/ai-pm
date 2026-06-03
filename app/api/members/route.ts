@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createDashboardMember, getDashboardData, updateDashboardMember } from "@/data/local-dashboard";
-import { isFeishuAuthConfigured } from "@/lib/feishu/auth";
+import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 import { getPermissionDeniedReason } from "@/lib/access/permissions";
 import { getSession } from "@/lib/auth/session";
 
 async function getAuthorizedMemberContext(workspaceId?: string) {
   const session = await getSession();
 
-  if (isFeishuAuthConfigured() && !session) {
+  if (isAuthServiceConfigured() && !session) {
     return {
       response: NextResponse.json({ error: "未登录" }, { status: 401 })
     };

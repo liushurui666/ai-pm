@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDashboardData } from "@/data/local-dashboard";
-import { isFeishuAuthConfigured } from "@/lib/feishu/auth";
+import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 import { canPerformAction, getPermissionDeniedReason } from "@/lib/access/permissions";
 import { getSession } from "@/lib/auth/session";
 import { cancelBugFixJob, getBugFixJob } from "@/server/repositories/bug-fix-jobs";
@@ -15,7 +15,7 @@ export async function POST(
 ) {
   const session = await getSession();
 
-  if (isFeishuAuthConfigured() && !session) {
+  if (isAuthServiceConfigured() && !session) {
     return NextResponse.json({ error: "未登录" }, { status: 401 });
   }
 

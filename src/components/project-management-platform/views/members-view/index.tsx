@@ -9,6 +9,7 @@ import type {
   DashboardMember,
   DashboardPermissions,
   FeishuPerson,
+  MemberIdentityProvider,
   MemberNotificationChannelProvider,
   MemberNotificationScene,
   MemberRole,
@@ -47,12 +48,23 @@ const notificationSceneOptions: Array<{ value: MemberNotificationScene; label: s
   { value: "bugFlowChanged", label: "Bug 流转" }
 ];
 
+const registrationChannelOptions: Array<{ value: MemberIdentityProvider; label: string; color: string }> = [
+  { value: "github", label: "GitHub", color: "default" },
+  { value: "google", label: "Google", color: "blue" },
+  { value: "feishu", label: "飞书", color: "cyan" },
+  { value: "email", label: "邮箱/手动", color: "gold" }
+];
+
 function getRoleMeta(role: MemberRole) {
   return roleOptions.find((option) => option.value === role) ?? roleOptions.at(-1)!;
 }
 
 function getChannelProviderMeta(provider: MemberNotificationChannelProvider) {
   return channelProviderOptions.find((option) => option.value === provider) ?? channelProviderOptions[0];
+}
+
+function getRegistrationChannelMeta(provider: MemberIdentityProvider) {
+  return registrationChannelOptions.find((option) => option.value === provider) ?? registrationChannelOptions.at(-1)!;
 }
 
 function getMemberInitial(name?: string) {
@@ -407,6 +419,19 @@ export function MembersView({
       )
     },
     {
+      title: "注册渠道",
+      dataIndex: "registrationChannel",
+      key: "registrationChannel",
+      width: 130,
+      render: (_, member) => {
+        const channelMeta = getRegistrationChannelMeta(member.registrationChannel);
+
+        // 注册渠道来自统一认证服务的 provider，只做展示和审计；后续绑定邮箱或飞书通知渠道时，
+        // 不应覆盖这个首次进入成员表的来源，否则就分不清用户到底是 GitHub、Google 还是飞书注册。
+        return <Tag color={channelMeta.color}>{channelMeta.label}</Tag>;
+      }
+    },
+    {
       title: "角色",
       dataIndex: "role",
       key: "role",
@@ -528,7 +553,7 @@ export function MembersView({
         dataSource={members}
         pagination={false}
         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无成员" /> }}
-        scroll={{ x: 980 }}
+        scroll={{ x: 1120 }}
       />
       <Modal
         title={notificationMember ? `通知配置 · ${notificationMember.name}` : "通知配置"}

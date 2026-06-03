@@ -19,6 +19,7 @@ import type {
   DashboardWorkspaceStatus,
   DocumentItem,
   FeishuUser,
+  MemberIdentityProvider,
   MemberNotificationChannel,
   MemberNotificationChannelProvider,
   MemberNotificationScene,
@@ -67,6 +68,7 @@ const DEFAULT_REQUIREMENT_VERSION: RequirementVersion = {
 const DEFAULT_REQUIREMENT_VERSION_ID = DEFAULT_REQUIREMENT_VERSION.id;
 const defaultNotificationScenes: MemberNotificationScene[] = ["taskAssigned", "requirementChanged", "bugFlowChanged"];
 const validNotificationScenes = new Set<MemberNotificationScene>(defaultNotificationScenes);
+const validMemberIdentityProviders = new Set<MemberIdentityProvider>(["feishu", "email", "google", "github"]);
 
 type LocalDatabase = Omit<DashboardData, "meta"> & {
   updatedAt: string;
@@ -131,6 +133,12 @@ function asTextArray(value: unknown) {
     .map((item) => (typeof item === "string" ? item.trim() : ""))
     .filter(Boolean)
     .slice(0, 12);
+}
+
+function normalizeMemberIdentityProvider(value: unknown, fallback: MemberIdentityProvider = "email") {
+  const provider = asText(value) as MemberIdentityProvider;
+
+  return validMemberIdentityProviders.has(provider) ? provider : fallback;
 }
 
 function asBugAttachmentType(value: unknown): BugAttachment["type"] {
@@ -1162,7 +1170,7 @@ function normalizeMember(value: unknown, fallbackWorkspaceId = DEFAULT_WORKSPACE
         .map((identity) => (typeof identity === "object" && identity ? (identity as Record<string, unknown>) : null))
         .filter(Boolean)
         .map((identity) => ({
-          provider: asText(identity?.provider, "email") as DashboardMember["identities"][number]["provider"],
+          provider: normalizeMemberIdentityProvider(identity?.provider),
           providerUserId: asText(identity?.providerUserId),
           providerUnionId: asText(identity?.providerUnionId) || undefined,
           providerTenantUserId: asText(identity?.providerTenantUserId) || undefined,
@@ -1192,6 +1200,7 @@ function normalizeMember(value: unknown, fallbackWorkspaceId = DEFAULT_WORKSPACE
     name: asText(member.name, "未命名成员"),
     email: asText(member.email) || undefined,
     avatarUrl: asText(member.avatarUrl) || undefined,
+    registrationChannel: normalizeMemberIdentityProvider(member.registrationChannel),
     role: normalizeMemberRole(member.role),
     status: normalizeMemberStatus(member.status),
     identities,
@@ -1212,21 +1221,17 @@ function normalizeMember(value: unknown, fallbackWorkspaceId = DEFAULT_WORKSPACE
 function createMemberFromUser(user: FeishuUser, role: MemberRole, workspaceId = DEFAULT_WORKSPACE.id): DashboardMember {
   const now = new Date().toISOString();
   const identities: DashboardMember["identities"] = [];
+  const authProvider = getAuthIdentityProvider(user);
+  const authUserId = getAuthIdentityUserId(user);
 
-  if (user.openId) {
+  // 登录身份只保存 SDK 的 authUserId；OAuth provider 的原始 id 仅用于飞书通知字段，不再参与运行时成员匹配。
+  // 线上已有成员如需和 auth_... 绑定，先运行 scripts/sync-auth-members.ts 一次性同步。
+  if (authUserId) {
     identities.push({
-      provider: "feishu",
-      providerUserId: user.openId,
-      providerUnionId: user.unionId,
-      providerTenantUserId: user.userId,
-      email: user.email
-    });
-  }
-
-  if (user.email) {
-    identities.push({
-      provider: "email",
-      providerUserId: user.email,
+      provider: authProvider,
+      providerUserId: authUserId,
+      providerUnionId: authProvider === "feishu" ? user.unionId : undefined,
+      providerTenantUserId: authProvider === "feishu" ? user.userId : undefined,
       email: user.email
     });
   }
@@ -1237,11 +1242,12 @@ function createMemberFromUser(user: FeishuUser, role: MemberRole, workspaceId = 
     name: user.name || user.enName || user.email || "未命名成员",
     email: user.email,
     avatarUrl: user.avatarUrl,
+    registrationChannel: authProvider,
     role,
     status: "active",
     identities,
     notification: {
-      channels: user.openId
+      channels: authProvider === "feishu" && user.openId
         ? [
             {
               id: createLocalId("notificationChannel"),
@@ -1256,10 +1262,10 @@ function createMemberFromUser(user: FeishuUser, role: MemberRole, workspaceId = 
             }
           ]
         : [],
-      feishuEnabled: Boolean(user.openId),
-      feishuOpenId: user.openId || undefined,
-      feishuUnionId: user.unionId,
-      feishuUserId: user.userId,
+      feishuEnabled: authProvider === "feishu" && Boolean(user.openId),
+      feishuOpenId: authProvider === "feishu" ? user.openId || undefined : undefined,
+      feishuUnionId: authProvider === "feishu" ? user.unionId : undefined,
+      feishuUserId: authProvider === "feishu" ? user.userId : undefined,
       taskAssigned: true,
       requirementChanged: true
     },
@@ -1268,11 +1274,23 @@ function createMemberFromUser(user: FeishuUser, role: MemberRole, workspaceId = 
   };
 }
 
+function getAuthIdentityProvider(user: FeishuUser): MemberIdentityProvider {
+  return user.authProvider ?? "feishu";
+}
+
+function getAuthIdentityUserId(user: FeishuUser) {
+  return user.authUserId;
+}
+
 function syncMemberProfile(member: DashboardMember, user: FeishuUser) {
   const channels = [...member.notification.channels];
   const feishuChannelIndex = channels.findIndex((channel) => channel.provider === "feishu");
+  const authProvider = getAuthIdentityProvider(user);
+  const authUserId = getAuthIdentityUserId(user);
 
-  if (user.openId && feishuChannelIndex >= 0) {
+  // 资料同步发生在页面读数据时，只补齐 SDK authUserId 对应的身份；飞书通知通道必须限定飞书来源，
+  // 避免 Google/GitHub 登录用户被错误创建机器人通知目标。
+  if (authProvider === "feishu" && user.openId && feishuChannelIndex >= 0) {
     channels[feishuChannelIndex] = {
       ...channels[feishuChannelIndex],
       target: channels[feishuChannelIndex].target || user.openId,
@@ -1280,7 +1298,7 @@ function syncMemberProfile(member: DashboardMember, user: FeishuUser) {
       feishuUnionId: channels[feishuChannelIndex].feishuUnionId || user.unionId,
       feishuUserId: channels[feishuChannelIndex].feishuUserId || user.userId
     };
-  } else if (user.openId) {
+  } else if (authProvider === "feishu" && user.openId) {
     channels.push({
       id: createLocalId("notificationChannel"),
       provider: "feishu",
@@ -1299,36 +1317,26 @@ function syncMemberProfile(member: DashboardMember, user: FeishuUser) {
     name: user.name || member.name,
     email: user.email || member.email,
     avatarUrl: user.avatarUrl || member.avatarUrl,
+    registrationChannel: member.registrationChannel,
     identities: [...member.identities],
     notification: {
       ...member.notification,
       channels,
-      feishuOpenId: member.notification.feishuOpenId || user.openId || undefined,
-      feishuUnionId: member.notification.feishuUnionId || user.unionId,
-      feishuUserId: member.notification.feishuUserId || user.userId
+      feishuOpenId: authProvider === "feishu" ? member.notification.feishuOpenId || user.openId || undefined : member.notification.feishuOpenId,
+      feishuUnionId: authProvider === "feishu" ? member.notification.feishuUnionId || user.unionId : member.notification.feishuUnionId,
+      feishuUserId: authProvider === "feishu" ? member.notification.feishuUserId || user.userId : member.notification.feishuUserId
     }
   };
-  const hasFeishuIdentity = nextMember.identities.some(
-    (identity) => identity.provider === "feishu" && identity.providerUserId === user.openId
+  const hasAuthProviderIdentity = nextMember.identities.some(
+    (identity) => identity.provider === authProvider && identity.providerUserId === authUserId
   );
-  const hasEmailIdentity = user.email
-    ? nextMember.identities.some((identity) => identity.provider === "email" && identity.providerUserId === user.email)
-    : true;
 
-  if (user.openId && !hasFeishuIdentity) {
+  if (authUserId && !hasAuthProviderIdentity) {
     nextMember.identities.push({
-      provider: "feishu",
-      providerUserId: user.openId,
-      providerUnionId: user.unionId,
-      providerTenantUserId: user.userId,
-      email: user.email
-    });
-  }
-
-  if (user.email && !hasEmailIdentity) {
-    nextMember.identities.push({
-      provider: "email",
-      providerUserId: user.email,
+      provider: authProvider,
+      providerUserId: authUserId,
+      providerUnionId: authProvider === "feishu" ? user.unionId : undefined,
+      providerTenantUserId: authProvider === "feishu" ? user.userId : undefined,
       email: user.email
     });
   }
@@ -2068,6 +2076,7 @@ function normalizeMemberInput(values: Record<string, unknown>, fallback?: Dashbo
     name: asText(values.name, fallback?.name ?? "未命名成员"),
     email: email || undefined,
     avatarUrl: asText(values.avatarUrl, fallback?.avatarUrl) || undefined,
+    registrationChannel: fallback?.registrationChannel ?? "email",
     role: normalizeMemberRole(values.role ?? fallback?.role),
     status: normalizeMemberStatus(values.status ?? fallback?.status),
     identities,
@@ -2179,7 +2188,9 @@ export async function createDashboardWorkspace(values: Record<string, unknown>, 
     member = createMemberFromUser(user, "owner", workspace.id);
   }
 
-  // 新建工作区只会新增工作区本身以及创建者 owner 身份，项目/任务/需求等业务数据没有变化；增量插入可以避免公网 MySQL 下全量重写数据导致事务超时。
+  // 新建工作区是 AI PM 的业务动作，不回写 SDK/Auth Service；SDK 只提供稳定 authUserId，
+  // 这里把当前登录用户挂到 AI PM 自己的 workspace_members，避免其他接入 SDK 的系统被迫接受工作区模型。
+  // 该动作只新增工作区本身以及创建者 owner 身份，项目/任务/需求等业务数据没有变化；增量插入可以避免公网 MySQL 下全量重写数据导致事务超时。
   await createDashboardWorkspaceDatabase(workspace, member);
 
   return {

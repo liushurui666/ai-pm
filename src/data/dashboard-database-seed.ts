@@ -44,6 +44,8 @@ export async function seedDashboardDatabase(data: DashboardDatabase, prisma: Pri
             name: member.name,
             email: member.email,
             avatarUrl: member.avatarUrl,
+            // 新版本成员种子必须显式携带注册渠道；缺失时只给手动成员默认值，不再从旧 identities 反推登录来源。
+            registrationChannel: member.registrationChannel ?? "email",
             role: member.role,
             status: member.status,
             identities: asJson(member.identities),

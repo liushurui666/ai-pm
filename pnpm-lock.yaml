@@ -32,6 +32,12 @@ importers:
       '@prisma/client':
         specifier: ^7.8.0
         version: 7.8.0(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@5.9.3))(typescript@5.9.3)
+      '@rc-tool/unified-auth-hosted-service':
+        specifier: ^0.2.8
+        version: 0.2.8(react@19.2.6)
+      '@rc-tool/unified-auth-sdk':
+        specifier: ^0.2.7
+        version: 0.2.7(react@19.2.6)
       antd:
         specifier: ^6.0.0
         version: 6.4.2(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -1127,6 +1133,24 @@ packages:
     peerDependencies:
       react: '>=16.9.0'
       react-dom: '>=16.9.0'
+
+  '@rc-tool/unified-auth-hosted-service@0.2.8':
+    resolution: {integrity: sha512-qdL94O1/eXHyy40uH7pcD7OLBFt4dLSduqXOQd9zAU3SxgBgd6udjf8x6qPEgZ4dbOIhQ65QphOX+wb7kPFlBg==}
+    hasBin: true
+
+  '@rc-tool/unified-auth-sdk@0.2.7':
+    resolution: {integrity: sha512-YGyas3kWwgdQIUsrPMpmLU/ZSjPsZSVfh6Ff68pOCS1tVRgy7MHs4zfMh5pIkBmdBwSbxyYIlW7O7eggIN1d3A==}
+    peerDependencies:
+      better-auth: ^1.6.10
+      drizzle-orm: ^0.45.2 || ^1.0.0-rc.1
+      react: '>=18'
+    peerDependenciesMeta:
+      better-auth:
+        optional: true
+      drizzle-orm:
+        optional: true
+      react:
+        optional: true
 
   '@rtsao/scc@1.1.0':
     resolution: {integrity: sha512-zt6OdqaDoOnJ1ZYsCYGt9YmWzDXl4vQdKTyJev62gFhRGKdx7mcT54V9KIjg+d2wi9EXsPvAPKe7i7WjfVWB8g==}
@@ -4125,6 +4149,19 @@ snapshots:
       clsx: 2.1.1
       react: 19.2.6
       react-dom: 19.2.6(react@19.2.6)
+
+  '@rc-tool/unified-auth-hosted-service@0.2.8(react@19.2.6)':
+    dependencies:
+      '@rc-tool/unified-auth-sdk': 0.2.7(react@19.2.6)
+      dotenv: 17.4.2
+    transitivePeerDependencies:
+      - better-auth
+      - drizzle-orm
+      - react
+
+  '@rc-tool/unified-auth-sdk@0.2.7(react@19.2.6)':
+    optionalDependencies:
+      react: 19.2.6
 
   '@rtsao/scc@1.1.0': {}
 

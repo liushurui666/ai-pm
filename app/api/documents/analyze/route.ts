@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createDashboardRecord, getDashboardData } from "@/data/local-dashboard";
 import { createAiDocumentTaskBreakdown, isAiAssistantConfigured } from "@/lib/ai/client";
 import { createFallbackDocumentTaskBreakdown } from "@/lib/documents/breakdown";
-import { isFeishuAuthConfigured } from "@/lib/feishu/auth";
+import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 import { getSession } from "@/lib/auth/session";
 import type { DashboardMember, RequirementVersion } from "@/types/dashboard";
 import type { DocumentAnalyzeResult, DocumentTaskBreakdown, DocumentTaskDraft } from "@/types/records";
@@ -225,7 +225,7 @@ function ensureUsefulBreakdown(breakdown: DocumentTaskBreakdown) {
 
 export async function POST(request: NextRequest) {
   const session = await getSession();
-  const configured = isFeishuAuthConfigured();
+  const configured = isAuthServiceConfigured();
 
   if (configured && !session) {
     return NextResponse.json(

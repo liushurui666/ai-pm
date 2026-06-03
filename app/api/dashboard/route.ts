@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { getDashboardData } from "@/data/local-dashboard";
-import { isFeishuAuthConfigured } from "@/lib/feishu/auth";
+import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 import { getSession } from "@/lib/auth/session";
 
 export async function GET(request: Request) {
   const session = await getSession();
   const workspaceId = new URL(request.url).searchParams.get("workspaceId") || undefined;
 
-  if (isFeishuAuthConfigured() && !session) {
+  if (isAuthServiceConfigured() && !session) {
     return NextResponse.json(
       {
         error: "未登录"

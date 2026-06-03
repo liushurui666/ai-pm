@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { ProjectManagementPlatform } from "@/components/project-management-platform";
 import type { AppView } from "@/components/project-management-platform";
-import { isFeishuAuthConfigured } from "@/lib/feishu/auth";
+import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 import { getSession } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +32,7 @@ export default async function Home({
 }) {
   const session = await getSession();
 
-  if (isFeishuAuthConfigured() && !session) {
+  if (isAuthServiceConfigured() && !session) {
     redirect("/login");
   }
 

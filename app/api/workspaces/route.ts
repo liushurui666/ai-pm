@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createDashboardWorkspace } from "@/data/local-dashboard";
-import { isFeishuAuthConfigured } from "@/lib/feishu/auth";
+import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 import { getSession } from "@/lib/auth/session";
 
 // 工作区是平台顶层隔离空间，创建新工作区不应继承“当前工作区成员管理”权限；否则新用户在旧工作区里是只读角色时，会被挡在创建自己的工作区之前。
 export async function POST(request: NextRequest) {
   const session = await getSession();
 
-  if (isFeishuAuthConfigured() && !session) {
+  if (isAuthServiceConfigured() && !session) {
     return NextResponse.json({ error: "未登录" }, { status: 401 });
   }
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createDashboardRecord, deleteDashboardRecord, getDashboardData, updateDashboardRecord } from "@/data/local-dashboard";
-import { isFeishuAuthConfigured } from "@/lib/feishu/auth";
+import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 import { canPerformAction, getPermissionDeniedReason } from "@/lib/access/permissions";
 import { getSession } from "@/lib/auth/session";
 import type { BugReport } from "@/types/dashboard";
@@ -58,7 +58,7 @@ function createLimitedBugUpdateValues(existingBug: BugReport, values: Record<str
 export async function POST(request: NextRequest) {
   const session = await getSession();
 
-  if (isFeishuAuthConfigured() && !session) {
+  if (isAuthServiceConfigured() && !session) {
     return NextResponse.json(
       {
         error: "未登录"
@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const session = await getSession();
 
-  if (isFeishuAuthConfigured() && !session) {
+  if (isAuthServiceConfigured() && !session) {
     return NextResponse.json(
       {
         error: "未登录"
@@ -216,7 +216,7 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const session = await getSession();
 
-  if (isFeishuAuthConfigured() && !session) {
+  if (isAuthServiceConfigured() && !session) {
     return NextResponse.json(
       {
         error: "未登录"
