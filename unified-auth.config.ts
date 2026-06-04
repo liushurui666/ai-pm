@@ -1,4 +1,5 @@
 import { defineUnifiedAuthConfig } from "@rc-tool/unified-auth-hosted-service/config";
+import type { CreateAuthServerOptions } from "@rc-tool/unified-auth-sdk/server";
 
 const DEFAULT_APP_ORIGIN = "http://localhost:3004";
 const LOCAL_AUTH_DATABASE_URL = "postgresql://ai_pm_auth:ai_pm_auth_local@localhost:5432/ai_pm_auth";
@@ -32,6 +33,38 @@ function resolveBetterAuthSecret() {
 }
 
 const appOrigin = resolveAppOrigin();
+
+type UnifiedAuthProviderCredentials = Pick<
+  CreateAuthServerOptions,
+  "feishuProviders" | "githubProvider" | "googleProvider"
+>;
+
+/**
+ * AI PM 支持的三方登录凭证统一收口在业务侧配置文件。
+ *
+ * CLI 只关心 app、database、realm 等通用配置；Better Auth server 启动时会调用这个函数，把业务项目已有的
+ * 飞书、GitHub、Google 环境变量显式传给 SDK。这样登录页展示哪些 provider、Better Auth 注册哪些 provider、
+ * 部署流水线检查哪些变量都能从同一个 config 文件追踪，避免再回到旧版散落 env 的维护方式。
+ */
+export function resolveUnifiedAuthProviderCredentials(): UnifiedAuthProviderCredentials {
+  return {
+    feishuProviders: [
+      {
+        appId: readEnv("FEISHU_APP_ID") ?? "",
+        appSecret: readEnv("FEISHU_APP_SECRET") ?? "",
+        providerId: "feishu",
+      },
+    ],
+    githubProvider: {
+      clientId: readEnv("GITHUB_CLIENT_ID") ?? "",
+      clientSecret: readEnv("GITHUB_CLIENT_SECRET") ?? "",
+    },
+    googleProvider: {
+      clientId: readEnv("GOOGLE_CLIENT_ID") ?? "",
+      clientSecret: readEnv("GOOGLE_CLIENT_SECRET") ?? "",
+    },
+  };
+}
 
 export default defineUnifiedAuthConfig({
   app: {

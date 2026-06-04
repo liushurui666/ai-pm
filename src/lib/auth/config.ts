@@ -1,4 +1,4 @@
-import config from "../../../unified-auth.config";
+import config, { resolveUnifiedAuthProviderCredentials } from "../../../unified-auth.config";
 
 /**
  * AI PM 的 Unified Auth 单一配置入口。
@@ -8,5 +8,7 @@ import config from "../../../unified-auth.config";
  * 分散环境变量重新扩散到业务模块里。
  */
 export const unifiedAuthConfig = config;
+
+export { resolveUnifiedAuthProviderCredentials };
 
 export default unifiedAuthConfig;
