@@ -13,7 +13,7 @@ pnpm dev
 
 默认访问 `http://localhost:3004`。当前 `pnpm dev` 固定使用 3004，统一认证登录页和 `/api/auth/*` 也挂在同一个 origin 下。
 
-本地开发使用本机 MySQL。当前默认连接串为：
+本地开发使用本机 MySQL 保存 AI PM 业务数据。当前默认连接串为：
 
 ```txt
 DATABASE_URL=mysql://ai_pm:ai_pm_local@localhost:3306/ai_pm
@@ -33,6 +33,22 @@ pnpm db:migrate
 DATABASE_URL=mysql://用户名:密码@腾讯云MySQL地址:3306/数据库名
 ```
 
+统一认证使用独立 PostgreSQL 保存 Better Auth 用户、账号、session 和验证码表。当前本地默认连接串为：
+
+```txt
+AUTH_DATABASE_URL=postgresql://ai_pm_auth:ai_pm_auth_local@localhost:5432/ai_pm_auth
+```
+
+如果本机还没有认证库，可以用 PostgreSQL 管理员账号执行一次：
+
+```bash
+createdb ai_pm_auth
+createuser ai_pm_auth
+psql -d ai_pm_auth -c "ALTER USER ai_pm_auth WITH PASSWORD 'ai_pm_auth_local';"
+psql -d ai_pm_auth -c "GRANT ALL PRIVILEGES ON DATABASE ai_pm_auth TO ai_pm_auth;"
+pnpm dlx @rc-tool/unified-auth-hosted-service db migrate
+```
+
 ## 统一认证与协同集成
 
 AI PM 使用 Unified Auth 黑盒认证。业务代码通过 `@rc-tool/unified-auth-sdk` 读取当前用户和会话，登录页、OAuth start/callback、session/context 接口由 `@rc-tool/unified-auth-hosted-service` 内嵌到 AI PM 自己的 Next.js 路由：
@@ -41,7 +57,7 @@ AI PM 使用 Unified Auth 黑盒认证。业务代码通过 `@rc-tool/unified-au
 - `/logout`
 - `/api/auth/*`
 
-本地不需要额外启动 3005 认证服务；认证 file store 默认写入 `.auth/unified-auth-store.json`，该目录已被 `.gitignore` 忽略。
+本地不需要额外启动认证服务；AI PM 自己只保留业务成员、权限、项目和任务数据，认证用户、OAuth 账号绑定、session 和 cookie 全部由 Better Auth 管理。
 
 复制 `.env.example` 为 `.env.local`，先准备统一认证基础配置：
 
@@ -52,21 +68,17 @@ cp .env.example .env.local
 本地常用配置：
 
 ```txt
-AUTH_SERVICE_URL=http://localhost:3004
-NEXT_PUBLIC_AUTH_SERVICE_URL=http://localhost:3004
-AUTH_CLIENT_ID=ai-pm
-NEXT_PUBLIC_AUTH_CLIENT_ID=ai-pm
-AUTH_CLIENT_NAME=AI PM
-AUTH_ALLOWED_REDIRECT_URI=http://localhost:3004/
-AUTH_SESSION_SECRET=本地随机密钥
-AUTH_ALLOW_DEV_LOGIN=true
-AUTH_STORE_FILE=.auth/unified-auth-store.json
+APP_URL=http://localhost:3004
+NEXT_PUBLIC_APP_URL=http://localhost:3004
+DATABASE_URL=mysql://ai_pm:ai_pm_local@localhost:3306/ai_pm
+AUTH_DATABASE_URL=postgresql://ai_pm_auth:ai_pm_auth_local@localhost:5432/ai_pm_auth
+BETTER_AUTH_SECRET=本地随机密钥
 ```
 
-也可以用 SDK CLI 自动补齐缺失项：
+AI PM 已提交 `unified-auth.config.ts`，CLI 会直接读取这份配置，不再通过一串命令参数生成 env：
 
 ```bash
-pnpm dlx @rc-tool/unified-auth-hosted-service init --app ai-pm --redirect http://localhost:3004/
+pnpm dlx @rc-tool/unified-auth-hosted-service db migrate
 pnpm dlx @rc-tool/unified-auth-hosted-service doctor
 ```
 
@@ -74,34 +86,33 @@ pnpm dlx @rc-tool/unified-auth-hosted-service doctor
 
 - `FEISHU_APP_ID`
 - `FEISHU_APP_SECRET`
-- `FEISHU_REDIRECT_URI`
 - `APP_URL`，生产环境填写公网访问地址，例如 `https://ai-pm.chainthink.cn`
 
-需求模块权限由站内“成员管理”维护，并按工作区生效。配置 Unified Auth 后，首个进入某个工作区的用户会自动成为该工作区 `owner`，后续首次进入的用户会作为 `viewer` 只读成员登记，再由 `owner / admin` 调整角色；`owner / admin / productAdmin` 可以删除需求和版本，`productMember` 可以创建和编辑但不能删除，`viewer` 只读。本地开发可以开启 `AUTH_ALLOW_DEV_LOGIN=true` 使用 SDK 内置开发账号。
+需求模块权限由站内“成员管理”维护，并按工作区生效。配置 Unified Auth 后，首个进入某个工作区的用户会自动成为该工作区 `owner`，后续首次进入的用户会作为 `viewer` 只读成员登记，再由 `owner / admin` 调整角色；`owner / admin / productAdmin` 可以删除需求和版本，`productMember` 可以创建和编辑但不能删除，`viewer` 只读。
 
-飞书开放平台里需要把 `FEISHU_REDIRECT_URI` 配到应用的重定向 URL，例如：
+飞书开放平台里需要把 Better Auth 标准回调 URL 配到应用的重定向 URL，例如：
 
 ```txt
-http://localhost:3004/api/auth/feishu/callback
+http://localhost:3004/api/auth/oauth2/callback/feishu
 ```
 
 生产环境不要继续使用 localhost，公网部署应配置成：
 
 ```txt
 APP_URL=https://ai-pm.chainthink.cn
-FEISHU_REDIRECT_URI=https://ai-pm.chainthink.cn/api/auth/feishu/callback
+https://ai-pm.chainthink.cn/api/auth/oauth2/callback/feishu
+```
+
+Google 和 GitHub 使用 Better Auth 内置回调路径：
+
+```txt
+https://ai-pm.chainthink.cn/api/auth/callback/google
+https://ai-pm.chainthink.cn/api/auth/callback/github
 ```
 
 如果站点前面有 Nginx、负载均衡或网关，也要透传 `Host`、`X-Forwarded-Host` 和 `X-Forwarded-Proto`，否则服务端只能看到容器内地址，登录成功后就可能跳回 `localhost:3003`。
 
 Docker 生产容器启动时会对公网地址变量打印警告，但不会因为飞书配置错误直接退出；登录错误由 Unified Auth 登录页统一展示。
-
-旧线上成员如果已经存在邮箱或飞书身份，切换到 Unified Auth 后可以先跑一次同步脚本，把当前 Auth Store 里的 `auth_...` 用户写回 AI PM 成员表。同步后运行时代码只按 `authUserId` 匹配成员，不再在页面/API 里猜测旧 openId 或邮箱：
-
-```bash
-pnpm sync:auth-members -- --dry-run
-pnpm sync:auth-members
-```
 
 项目管理主数据不写入飞书云文档。AI PM 平台会把项目、任务、风险、需求、文档、洞察、Bug 和 AI 修复任务保存到 MySQL；首次启动时如果数据库为空，系统会从内置种子数据初始化。后续通过“新建项目 / 新建任务 / 登记风险 / 新建需求 / 新建文档 / 登记 Bug”创建的记录会由站内 API 持久化到数据库，刷新页面后仍然保留。
 
@@ -119,7 +130,7 @@ pnpm sync:auth-members
 
 负责人下拉框能展示哪些人，取决于飞书开放平台里“通讯录权限范围”。如果只看到自己，需要把应用的通讯录权限范围调整为全员或目标部门，并重新发布应用。
 
-如果未配置真实 OAuth，本地可以通过 `/login` 里的开发账号进入。生产环境应关闭 `AUTH_ALLOW_DEV_LOGIN`，并配置真实的 Feishu / Google / GitHub provider。
+如果未配置真实 OAuth，登录页只会展示 provider 入口但无法完成第三方授权；本地联调需要至少配置一个真实的 Feishu / Google / GitHub provider。
 
 ## AI 助手模型配置
 
@@ -148,8 +159,11 @@ AI_MODEL=deepseek-chat
 ```bash
 cat > .env <<'EOF'
 APP_URL=https://ai-pm.chainthink.cn
-FEISHU_REDIRECT_URI=https://ai-pm.chainthink.cn/api/auth/feishu/callback
-# 其他 DATABASE_URL、AUTH_SESSION_SECRET、FEISHU_APP_ID 等变量同样写在这里
+DATABASE_URL=mysql://用户名:密码@业务数据库地址:端口/数据库名
+AUTH_DATABASE_URL=postgresql://用户名:密码@认证数据库地址:端口/数据库名
+BETTER_AUTH_SECRET=replace-with-a-long-random-string
+FEISHU_APP_ID=cli_xxxxxxxxxxxxxxxx
+FEISHU_APP_SECRET=xxxxxxxxxxxxxxxx
 EOF
 ```
 
@@ -184,7 +198,7 @@ git pull
 docker compose -f deploy/docker/docker-compose.example.yml up -d --build
 ```
 
-容器启动时会检查 `DATABASE_URL` 和 `AUTH_SESSION_SECRET`，并默认执行 `pnpm db:migrate`。如果数据库迁移由外部发布系统统一控制，可在 compose 里设置 `RUN_MIGRATIONS=0`。
+容器启动时会检查 `DATABASE_URL`、`AUTH_DATABASE_URL` 和 `BETTER_AUTH_SECRET`，并默认执行 `pnpm db:migrate` 与 `unified-auth db migrate/doctor`。如果数据库迁移由外部发布系统统一控制，可在 compose 里设置 `RUN_MIGRATIONS=0`。
 
 ### 脚本部署
 
@@ -238,7 +252,7 @@ cp scripts/deploy.env.example scripts/deploy.env
 cp .env.example .env.production
 ```
 
-在 `scripts/deploy.env` 中填写服务器 SSH、目标目录、端口、重启方式等部署变量；在 `.env.production` 中填写运行时密钥，例如 `DATABASE_URL`、`AUTH_SESSION_SECRET`、`FEISHU_*`、`AI_*`、`TENCENT_COS_*`。真实的 `scripts/deploy.env` 和 `.env.production` 已被 `.gitignore` 忽略，不要提交。
+在 `scripts/deploy.env` 中填写服务器 SSH、目标目录、端口、重启方式等部署变量；在 `.env.production` 中填写运行时密钥，例如 `DATABASE_URL`、`AUTH_DATABASE_URL`、`BETTER_AUTH_SECRET`、`FEISHU_*`、`AI_*`、`TENCENT_COS_*`。真实的 `scripts/deploy.env` 和 `.env.production` 已被 `.gitignore` 忽略，不要提交。
 
 执行部署：
 
@@ -250,7 +264,7 @@ pnpm deploy:remote
 
 - 用 `git archive` 打包当前提交，避免把 `.env.local`、`.next`、`node_modules` 等本地文件带到服务器。
 - 上传到 `${DEPLOY_TARGET_DIR}/releases/{时间戳-commit}`，并把运行时 env 放到 `${DEPLOY_TARGET_DIR}/shared`。
-- 在服务器执行 `pnpm install --frozen-lockfile`、`pnpm db:migrate`、`pnpm build`。
+- 在服务器执行 `pnpm install --frozen-lockfile`、`pnpm db:migrate`、`pnpm exec unified-auth db migrate`、`pnpm build`。
 - 切换 `${DEPLOY_TARGET_DIR}/current` 软链，再按 `DEPLOY_RESTART_STRATEGY` 选择 `systemd`、`pm2`、`custom` 或 `none` 重启。
 - 可通过 `DEPLOY_BEFORE_REMOTE_SCRIPT` 和 `DEPLOY_AFTER_REMOTE_SCRIPT` 插入内部运维脚本，适合接入 Nginx reload、健康检查、通知等流程。
 

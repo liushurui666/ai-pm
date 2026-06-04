@@ -1,23 +1,9 @@
 import {
-  createFileAuthStore,
   createHostedAuthLoginPageComponent,
   createHostedAuthRouteHandlers,
 } from "@rc-tool/unified-auth-hosted-service";
-
-const DEFAULT_APP_URL = "http://localhost:3004";
-const DEFAULT_AUTH_STORE_FILE = ".auth/unified-auth-store.json";
-
-function readEnv(name: string, fallback = "") {
-  return process.env[name]?.trim() || fallback;
-}
-
-function resolveAppBaseURL() {
-  return readEnv("AUTH_SERVICE_URL", readEnv("APP_URL", DEFAULT_APP_URL)).replace(/\/$/, "");
-}
-
-function resolveRedirectURI() {
-  return readEnv("AUTH_ALLOWED_REDIRECT_URI", `${resolveAppBaseURL()}/`);
-}
+import { auth } from "@/lib/auth/server";
+import { unifiedAuthConfig } from "@/lib/auth/config";
 
 const aiPmLoginPageComponent = createHostedAuthLoginPageComponent({
   backgroundImageUrl: "https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=1800&q=80",
@@ -35,41 +21,15 @@ const aiPmLoginPageComponent = createHostedAuthLoginPageComponent({
  * AI PM 内嵌统一认证路由。
  *
  * 这里把 SDK 的 Hosted Auth Service 挂到 AI PM 自己的 Next.js 路由上，让登录页、OAuth start/callback
- * 和 session/context 查询都发生在同一个 origin 下。这样本地开发不再需要单独启动 3005 端口，也能避免
+ * 和 session/context 查询都发生在同一个 origin 下。这样本地开发不需要单独认证服务，也能避免
  * 跨站 Cookie、回跳域名和业务项目端口不一致导致的登录状态丢失。
- * 登录页外观直接通过 SDK 组件 props 固定在代码里，避免业务运行时再维护 AUTH_LOGIN_* 这类全局样式环境变量。
+ * 旧版自维护存储和 provider callback 代码已经移除；这些状态现在全部由 Better Auth 通过 SDK 标准
+ * Drizzle schema 写入独立 PostgreSQL 认证库。
  */
 export const hostedAuth = createHostedAuthRouteHandlers({
-  allowDevLogin: readEnv("AUTH_ALLOW_DEV_LOGIN", "true") !== "false",
-  // AI PM 是单业务应用内嵌模式，业务侧只声明当前项目自己的身份和回跳白名单。
-  // SDK 内部会把这些字段转换成登录页和 OAuth state 需要的运行时模型，业务代码不再维护多应用数组。
-  allowedRedirectURIs: [resolveRedirectURI()],
-  appName: readEnv("AUTH_CLIENT_NAME", "AI PM"),
-  authBaseURL: resolveAppBaseURL(),
-  clientId: readEnv("AUTH_CLIENT_ID", "ai-pm"),
-  feishu: {
-    appId: readEnv("FEISHU_APP_ID") || undefined,
-    appSecret: readEnv("FEISHU_APP_SECRET") || undefined,
-    redirectURI: readEnv("FEISHU_REDIRECT_URI") || undefined,
-  },
-  github: {
-    clientId: readEnv("GITHUB_CLIENT_ID") || undefined,
-    clientSecret: readEnv("GITHUB_CLIENT_SECRET") || undefined,
-    redirectURI: readEnv("GITHUB_REDIRECT_URI") || undefined,
-  },
-  google: {
-    clientId: readEnv("GOOGLE_CLIENT_ID") || undefined,
-    clientSecret: readEnv("GOOGLE_CLIENT_SECRET") || undefined,
-    redirectURI: readEnv("GOOGLE_REDIRECT_URI") || undefined,
-  },
+  auth,
+  config: unifiedAuthConfig,
   loginPageComponent: aiPmLoginPageComponent,
-  redirectURI: resolveRedirectURI(),
-  sessionSecret: readEnv("AUTH_SESSION_SECRET", "ai-pm-local-auth-secret"),
-  // AI PM 自己的业务数据库是 MySQL；认证 SDK 的 Prisma store 面向独立认证库。
-  // 内嵌模式先用 file store，保证跑 npx init 后不需要额外准备第二套数据库。
-  store: createFileAuthStore({
-    filePath: readEnv("AUTH_STORE_FILE", DEFAULT_AUTH_STORE_FILE),
-  }),
 });
 
 export const GET = hostedAuth.GET;

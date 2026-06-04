@@ -182,6 +182,11 @@ ln -sfn "${runtime_env_file}" "${release_dir}/.env"
 run_hook "${before_script}"
 
 cd "${release_dir}"
+set -a
+# Unified Auth CLI 直接执行 unified-auth.config.ts，不会自动加载 .env；远端迁移和构建前必须先导出运行时变量。
+# shellcheck disable=SC1090
+source "${runtime_env_file}"
+set +a
 export NODE_ENV=production
 export PORT="${app_port}"
 
@@ -191,8 +196,11 @@ if [[ "${run_install}" == "1" ]]; then
 fi
 
 if [[ "${run_migrate}" == "1" ]]; then
-  remote_log "执行 Prisma 迁移"
+  remote_log "执行 Prisma 业务数据库迁移"
   pnpm db:migrate
+  remote_log "执行 Unified Auth 认证数据库迁移"
+  pnpm exec unified-auth db migrate
+  pnpm exec unified-auth doctor
 fi
 
 if [[ "${run_build}" == "1" ]]; then

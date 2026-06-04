@@ -39,9 +39,10 @@ require_command() {
 check_runtime_env_file() {
   [[ -f "${RUNTIME_ENV_FILE}" ]] || fail "缺少运行时环境变量文件：${RUNTIME_ENV_FILE}。请先按 scripts/runtime.env.example 准备。"
 
-  # 部署前只校验最小启动条件；飞书、AI、COS 可以按功能逐步打开，但 DATABASE_URL 和 AUTH_SESSION_SECRET 是生产启动的底线。
+  # 部署前只校验最小启动条件；飞书、AI、COS 可以按功能逐步打开，但业务库、认证库和 Better Auth 密钥是生产启动底线。
   grep -Eq '^DATABASE_URL=.+' "${RUNTIME_ENV_FILE}" || fail "${RUNTIME_ENV_FILE} 缺少 DATABASE_URL"
-  grep -Eq '^AUTH_SESSION_SECRET=.+' "${RUNTIME_ENV_FILE}" || fail "${RUNTIME_ENV_FILE} 缺少 AUTH_SESSION_SECRET"
+  grep -Eq '^AUTH_DATABASE_URL=.+' "${RUNTIME_ENV_FILE}" || fail "${RUNTIME_ENV_FILE} 缺少 AUTH_DATABASE_URL"
+  grep -Eq '^BETTER_AUTH_SECRET=.+' "${RUNTIME_ENV_FILE}" || fail "${RUNTIME_ENV_FILE} 缺少 BETTER_AUTH_SECRET"
 }
 
 run_hook() {
@@ -134,6 +135,11 @@ main() {
   run_hook "${BEFORE_DEPLOY_HOOK}" "${release_dir}" "${current_dir}" "${shared_dir}"
 
   cd "${release_dir}"
+  # Unified Auth CLI 不主动读取 .env 文件；这里显式导出运行时变量，确保 db migrate/doctor 和 Next build 读取同一份配置。
+  set -a
+  # shellcheck disable=SC1090
+  source "${RUNTIME_ENV_FILE}"
+  set +a
   export NODE_ENV=production
   export PORT="${APP_PORT}"
 
@@ -143,8 +149,11 @@ main() {
   fi
 
   if [[ "${RUN_MIGRATE}" == "1" ]]; then
-    log "执行数据库迁移"
+    log "执行业务数据库迁移"
     pnpm db:migrate
+    log "执行 Unified Auth 认证数据库迁移"
+    pnpm exec unified-auth db migrate
+    pnpm exec unified-auth doctor
   fi
 
   if [[ "${RUN_BUILD}" == "1" ]]; then

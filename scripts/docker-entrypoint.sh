@@ -21,8 +21,13 @@ if [ -z "${DATABASE_URL:-}" ]; then
   exit 1
 fi
 
-if [ -z "${AUTH_SESSION_SECRET:-}" ]; then
-  echo "[docker-entrypoint][error] 缺少 AUTH_SESSION_SECRET，统一认证会话无法安全签名。" >&2
+if [ -z "${AUTH_DATABASE_URL:-}" ]; then
+  echo "[docker-entrypoint][error] 缺少 AUTH_DATABASE_URL，Unified Auth 认证表需要独立 PostgreSQL。" >&2
+  exit 1
+fi
+
+if [ -z "${BETTER_AUTH_SECRET:-}" ]; then
+  echo "[docker-entrypoint][error] 缺少 BETTER_AUTH_SECRET，Better Auth 会话无法安全签名。" >&2
   exit 1
 fi
 
@@ -35,15 +40,17 @@ if [ "${NODE_ENV:-production}" = "production" ]; then
     echo "[docker-entrypoint][warn] APP_URL 当前是 localhost，生产登录跳转可能回到用户本机。" >&2
   fi
 
-  if [ -n "${FEISHU_REDIRECT_URI:-}" ] && is_local_url "${FEISHU_REDIRECT_URI}"; then
-    echo "[docker-entrypoint][warn] FEISHU_REDIRECT_URI 仍指向 localhost。请改为 ${APP_URL:-https://ai-pm.chainthink.cn}/api/auth/feishu/callback，并同步到飞书开放平台。" >&2
-  fi
+  echo "[docker-entrypoint] 请确认 OAuth 控制台已配置 Better Auth 标准回调：/api/auth/oauth2/callback/feishu、/api/auth/callback/google、/api/auth/callback/github"
 fi
 
 if [ "${RUN_MIGRATIONS}" = "1" ]; then
-  # 迁移放到容器启动阶段，运维只需要更新镜像并重启容器；如果由独立发布系统统一迁移，可设置 RUN_MIGRATIONS=0。
-  echo "[docker-entrypoint] 执行数据库迁移"
+  # 业务库和认证库边界不同：Prisma 只管理 AI PM 的 MySQL 业务表，Unified Auth CLI 只管理 Better Auth PostgreSQL 表。
+  # 两个迁移都放到容器启动阶段，运维更新镜像并重启即可；如由独立发布系统统一迁移，可设置 RUN_MIGRATIONS=0。
+  echo "[docker-entrypoint] 执行业务数据库迁移"
   pnpm db:migrate
+  echo "[docker-entrypoint] 执行 Unified Auth 认证数据库迁移"
+  pnpm exec unified-auth db migrate
+  pnpm exec unified-auth doctor
 fi
 
 echo "[docker-entrypoint] 启动应用：$*"

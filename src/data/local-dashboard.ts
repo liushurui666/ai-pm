@@ -1225,7 +1225,7 @@ function createMemberFromUser(user: FeishuUser, role: MemberRole, workspaceId = 
   const authUserId = getAuthIdentityUserId(user);
 
   // 登录身份只保存 SDK 的 authUserId；OAuth provider 的原始 id 仅用于飞书通知字段，不再参与运行时成员匹配。
-  // 线上已有成员如需和 auth_... 绑定，先运行 scripts/sync-auth-members.ts 一次性同步。
+  // 线上已有成员如需和 auth_... 绑定，应通过受控数据修正写入 identities，避免运行时继续猜 openId 或邮箱。
   if (authUserId) {
     identities.push({
       provider: authProvider,

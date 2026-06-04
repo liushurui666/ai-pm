@@ -5,9 +5,9 @@ import type {
   AuthUser,
   CreateAuthServiceClientOptions
 } from "@rc-tool/unified-auth-sdk/service-client";
+import { unifiedAuthConfig } from "@/lib/auth/config";
 import type { FeishuUser } from "@/types/dashboard";
 
-const AI_PM_AUTH_CLIENT_ID = process.env.NEXT_PUBLIC_AUTH_CLIENT_ID || "ai-pm";
 const DEFAULT_APP_URL = "http://localhost:3004";
 const SUPPORTED_MEMBER_IDENTITY_PROVIDERS = new Set(["feishu", "google", "github", "email"]);
 
@@ -15,12 +15,12 @@ type AiPmAuthClientOptions = Partial<Pick<CreateAuthServiceClientOptions, "authB
 
 function resolveAuthServiceBaseURL() {
   if (typeof window !== "undefined") {
-    // 前端运行时优先使用当前页面 origin，保证 /login、/logout 和 /api/auth/*
-    // 都落在 AI PM 自己的路由上；只有显式配置 NEXT_PUBLIC_AUTH_SERVICE_URL 时才切到独立服务。
-    return process.env.NEXT_PUBLIC_AUTH_SERVICE_URL || window.location.origin;
+    // 前端运行时优先使用当前页面 origin，保证 /login、/logout 和 /api/auth/* 都落在 AI PM 自己的路由上。
+    // root config 主要给服务端和 CLI 使用；浏览器里继续信任当前 origin，可以避免构建期把 localhost 写入生产 href。
+    return window.location.origin;
   }
 
-  return process.env.AUTH_SERVICE_URL || process.env.NEXT_PUBLIC_AUTH_SERVICE_URL || process.env.APP_URL || DEFAULT_APP_URL;
+  return unifiedAuthConfig.auth?.origin ?? unifiedAuthConfig.app?.origin ?? process.env.APP_URL ?? DEFAULT_APP_URL;
 }
 
 function resolveAppBaseURL() {
@@ -42,13 +42,13 @@ function toAbsoluteAppURL(pathOrURL: string) {
 /**
  * 创建面向 AI PM 的统一认证 SDK 客户端。
  *
- * AI PM 不再维护 OAuth、用户表和会话签发，只通过 Auth Service 的黑盒 API 读取认证上下文；
- * 这里保留唯一的 clientId/baseURL 配置入口，业务代码不要直接拼认证服务地址。
+ * AI PM 不再维护 OAuth、用户表和会话签发，只通过 Auth Service 的黑盒 API 读取认证上下文。
+ * clientId、redirectURI 和 realm 均来自 unified-auth.config.ts；这里仅在浏览器侧补当前 origin，避免业务组件散落环境变量。
  */
 export function createAiPmAuthServiceClient(options: AiPmAuthClientOptions = {}): AuthServiceClient {
   return createAuthServiceClient({
     authBaseURL: options.authBaseURL ?? resolveAuthServiceBaseURL(),
-    clientId: AI_PM_AUTH_CLIENT_ID,
+    config: unifiedAuthConfig,
     defaultRedirectURI: options.defaultRedirectURI ?? toAbsoluteAppURL("/"),
     fetcher: options.fetcher
   });
