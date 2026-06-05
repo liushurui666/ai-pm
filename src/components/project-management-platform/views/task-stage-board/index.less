@@ -94,17 +94,20 @@
   background: color-mix(in srgb, var(--surface) 82%, var(--task-stage-tone) 8%);
 }
 
-.task-stage-sortable {
+.task-stage-draggable {
   min-width: 0;
 }
 
-.task-stage-sortable-active {
+.task-stage-draggable-active {
   opacity: 0.32;
 }
 
 .task-stage-drag-overlay {
   width: min(360px, 72vw);
   cursor: grabbing;
+  pointer-events: none;
+  will-change: transform;
+  transform: translateZ(0);
 }
 
 .task-stage-card {
@@ -150,6 +153,7 @@
   background: color-mix(in srgb, var(--surface) 88%, var(--task-stage-tone, var(--brand)) 8%);
   cursor: grab;
   touch-action: none;
+  user-select: none;
 }
 
 .task-stage-card-handle:hover {

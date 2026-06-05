@@ -6,9 +6,9 @@ import { CalendarOutlined, EditOutlined, HolderOutlined } from "@ant-design/icon
 import {
   DndContext,
   DragOverlay,
-  KeyboardSensor,
   PointerSensor,
   closestCorners,
+  useDraggable,
   useDroppable,
   useSensor,
   useSensors,
@@ -17,13 +17,6 @@ import {
   type DraggableAttributes,
   type DraggableSyntheticListeners
 } from "@dnd-kit/core";
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import dayjs from "dayjs";
 import { memo, useMemo, useState } from "react";
 import type { ReactNode } from "react";
@@ -72,8 +65,7 @@ function TaskStageColumn({
   hiddenCount,
   onShowMore,
   stage,
-  tasks,
-  visibleCount
+  tasks
 }: {
   children: ReactNode;
   draggingTask: boolean;
@@ -81,7 +73,6 @@ function TaskStageColumn({
   onShowMore: () => void;
   stage: TaskStage;
   tasks: Task[];
-  visibleCount: number;
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: `stage:${stage}` });
   const overdueCount = tasks.filter(getTaskOverdue).length;
@@ -106,21 +97,19 @@ function TaskStageColumn({
         <div className="task-stage-progress-bar">
           <Progress percent={donePercent} size="small" showInfo={false} />
         </div>
-        <SortableContext items={tasks.slice(0, visibleCount).map((task) => task.id)} strategy={verticalListSortingStrategy}>
-          <div className="task-stage-list">
-            {children}
-            {hiddenCount > 0 ? (
-              <Button className="task-stage-show-more" size="small" block onClick={onShowMore}>
-                展开 {Math.min(hiddenCount, visibleTaskStep)} 项，剩余 {hiddenCount}
-              </Button>
-            ) : null}
-            {!tasks.length ? (
-              <div className={`task-stage-empty${draggingTask ? " task-stage-empty-active" : ""}`}>
-                <Text type="secondary">{emptyText}</Text>
-              </div>
-            ) : null}
-          </div>
-        </SortableContext>
+        <div className="task-stage-list">
+          {children}
+          {hiddenCount > 0 ? (
+            <Button className="task-stage-show-more" size="small" block onClick={onShowMore}>
+              展开 {Math.min(hiddenCount, visibleTaskStep)} 项，剩余 {hiddenCount}
+            </Button>
+          ) : null}
+          {!tasks.length ? (
+            <div className={`task-stage-empty${draggingTask ? " task-stage-empty-active" : ""}`}>
+              <Text type="secondary">{emptyText}</Text>
+            </div>
+          ) : null}
+        </div>
       </Card>
     </div>
   );
@@ -179,7 +168,10 @@ function TaskStageCard({
   );
 }
 
-const SortableTaskCard = memo(function SortableTaskCard({
+// 每张卡片只注册为轻量 Draggable，不再注册 Sortable。
+// 当前产品只需要把任务从一个阶段拖到另一个阶段，列内排序没有实际业务入口；
+// 如果继续使用 Sortable，dnd-kit 会在拖动过程中持续测量同列卡片位置，数据量一大就会明显卡顿。
+const DraggableTaskCard = memo(function DraggableTaskCard({
   onEdit,
   task
 }: {
@@ -191,10 +183,8 @@ const SortableTaskCard = memo(function SortableTaskCard({
     isDragging,
     listeners,
     setActivatorNodeRef,
-    setNodeRef,
-    transform,
-    transition
-  } = useSortable({
+    setNodeRef
+  } = useDraggable({
     data: {
       stage: task.stage,
       type: "task"
@@ -205,11 +195,7 @@ const SortableTaskCard = memo(function SortableTaskCard({
   return (
     <div
       ref={setNodeRef}
-      className={isDragging ? "task-stage-sortable task-stage-sortable-active" : "task-stage-sortable"}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition
-      }}
+      className={isDragging ? "task-stage-draggable task-stage-draggable-active" : "task-stage-draggable"}
     >
       <TaskStageCard
         dragAttributes={attributes}
@@ -241,9 +227,6 @@ export function TaskStageBoard({
       activationConstraint: {
         distance: 6
       }
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates
     })
   );
   const tasksByStage = useMemo(() => {
@@ -310,8 +293,9 @@ export function TaskStageBoard({
 
     const task = tasks.find((item) => item.id === event.active.id);
     const overId = event.over?.id ? String(event.over.id) : "";
-    const overTask = tasks.find((item) => item.id === overId);
-    const targetStage = getStageFromDropId(overId) ?? overTask?.stage ?? null;
+    // 任务看板现在只允许跨阶段投放，不做列内排序；目标只认阶段列，
+    // 避免每张任务卡都成为碰撞/排序目标导致拖拽时频繁测量和重排。
+    const targetStage = getStageFromDropId(overId);
 
     if (!task || !targetStage || task.stage === targetStage) {
       return;
@@ -342,10 +326,9 @@ export function TaskStageBoard({
               onShowMore={() => handleShowMore(stage)}
               stage={stage}
               tasks={tasksByStage[stage]}
-              visibleCount={visibleCount}
             >
               {visibleTasks.map((task) => (
-                <SortableTaskCard key={task.id} task={task} onEdit={onEdit} />
+                <DraggableTaskCard key={task.id} task={task} onEdit={onEdit} />
               ))}
             </TaskStageColumn>
           );
