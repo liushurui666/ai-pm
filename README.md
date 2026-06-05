@@ -174,6 +174,8 @@ FEISHU_APP_ID=cli_xxxxxxxxxxxxxxxx
 FEISHU_APP_SECRET=xxxxxxxxxxxxxxxx
 ```
 
+这里的 `AUTH_DATABASE_URL` 不是让 AI PM 部署 PostgreSQL；认证 PostgreSQL/Unified Auth 基础设施应由外部提前部署好，AI PM 只拿连接串读取登录会话。默认部署只迁移 AI PM 自己的业务 MySQL。
+
 首次部署或更新都执行同一个脚本：
 
 ```bash
@@ -201,7 +203,7 @@ curl -fsSL https://raw.githubusercontent.com/liushurui666/ai-pm/main/scripts/dep
 AI_PM_ENV_FILE=/etc/ai-pm/test.env AI_PM_HOST_PORT=3004 AI_PM_CONTAINER_NAME=ai-pm-test AI_PM_IMAGE=ai-pm:test bash scripts/deploy.docker.sh
 ```
 
-容器启动时会检查 `APP_URL`、`DATABASE_URL`、`AUTH_DATABASE_URL` 和 `BETTER_AUTH_SECRET`，并默认执行 `pnpm db:migrate` 与 `unified-auth db migrate/doctor`。如果数据库迁移由外部发布系统统一控制，可设置 `RUN_MIGRATIONS=0`。
+容器启动时会检查 `APP_URL`、`DATABASE_URL`、`AUTH_DATABASE_URL` 和 `BETTER_AUTH_SECRET`，并默认只执行 `pnpm db:migrate` 迁移 AI PM 业务 MySQL。如果业务数据库迁移由外部发布系统统一控制，可设置 `RUN_MIGRATIONS=0`；只有认证平台 schema 也要随本次发布升级时，才设置 `RUN_AUTH_MIGRATIONS=1` 执行 `unified-auth db migrate/doctor`。
 
 手动调试 Compose 时仍可直接执行：
 

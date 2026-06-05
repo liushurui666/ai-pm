@@ -18,6 +18,7 @@ set -Eeuo pipefail
 : "${AI_PM_HOST_PORT:=3003}"
 : "${AI_PM_CONTAINER_PORT:=3003}"
 : "${RUN_MIGRATIONS:=1}"
+: "${RUN_AUTH_MIGRATIONS:=0}"
 : "${COMPOSE_PROJECT_NAME:=ai-pm}"
 : "${COMPOSE_SERVICE:=ai-pm}"
 : "${COMPOSE_FILE:=deploy/docker/docker-compose.example.yml}"
@@ -68,7 +69,7 @@ require_runtime_env() {
 validate_runtime_env_file() {
   [[ -f "${AI_PM_ENV_FILE}" ]] || fail "缺少运行时环境变量文件：${AI_PM_ENV_FILE}。请先按 scripts/runtime.env.example 准备。"
 
-  # 这些是生产容器启动的硬性底线：业务库、认证库、会话密钥和公网域名缺任何一个都会导致运行时异常或登录跳转错误。
+  # 这些是生产容器启动的硬性底线：业务 MySQL、外部认证库连接串、会话密钥和公网域名缺任何一个都会导致运行时异常或登录跳转错误。
   require_runtime_env APP_URL
   require_runtime_env DATABASE_URL
   require_runtime_env AUTH_DATABASE_URL
@@ -83,7 +84,7 @@ validate_runtime_env_file() {
   fi
 
   if ! grep -Eq '^AUTH_DATABASE_URL=(postgresql|postgres)://' "${AI_PM_ENV_FILE}"; then
-    fail "${AI_PM_ENV_FILE} 的 AUTH_DATABASE_URL 必须是独立 PostgreSQL 连接串，不能复用业务 MySQL。"
+    fail "${AI_PM_ENV_FILE} 的 AUTH_DATABASE_URL 必须指向已部署好的外部认证 PostgreSQL，不能复用业务 MySQL。"
   fi
 
   grep -Eq '^FEISHU_APP_ID=.+' "${AI_PM_ENV_FILE}" || warn "未配置 FEISHU_APP_ID，飞书登录入口会不可用。"
@@ -126,6 +127,7 @@ deploy_with_compose() {
   export AI_PM_HOST_PORT
   export AI_PM_CONTAINER_PORT
   export RUN_MIGRATIONS
+  export RUN_AUTH_MIGRATIONS
   export COMPOSE_PROJECT_NAME
 
   if [[ "${BUILD_PULL}" == "1" ]]; then

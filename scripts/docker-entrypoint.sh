@@ -4,6 +4,7 @@
 set -eu
 
 RUN_MIGRATIONS="${RUN_MIGRATIONS:-1}"
+RUN_AUTH_MIGRATIONS="${RUN_AUTH_MIGRATIONS:-0}"
 
 is_local_url() {
   case "$1" in
@@ -22,7 +23,7 @@ if [ -z "${DATABASE_URL:-}" ]; then
 fi
 
 if [ -z "${AUTH_DATABASE_URL:-}" ]; then
-  echo "[docker-entrypoint][error] 缺少 AUTH_DATABASE_URL，Unified Auth 认证表需要独立 PostgreSQL。" >&2
+  echo "[docker-entrypoint][error] 缺少 AUTH_DATABASE_URL。认证服务/认证库由外部部署，但 AI PM 运行时仍需要连接它读取登录会话。" >&2
   exit 1
 fi
 
@@ -64,13 +65,20 @@ if [ "${NODE_ENV:-production}" = "production" ]; then
 fi
 
 if [ "${RUN_MIGRATIONS}" = "1" ]; then
-  # 业务库和认证库边界不同：Prisma 只管理 AI PM 的 MySQL 业务表，Unified Auth CLI 只管理 Better Auth PostgreSQL 表。
-  # 两个迁移都放到容器启动阶段，运维更新镜像并重启即可；如由独立发布系统统一迁移，可设置 RUN_MIGRATIONS=0。
+  # AI PM 只管理自己的 MySQL 业务表；认证 PostgreSQL 是外部已部署依赖，不在本项目部署范围内。
   echo "[docker-entrypoint] 执行业务数据库迁移"
   pnpm db:migrate
+else
+  echo "[docker-entrypoint] 跳过业务数据库迁移：RUN_MIGRATIONS=${RUN_MIGRATIONS}"
+fi
+
+if [ "${RUN_AUTH_MIGRATIONS}" = "1" ]; then
+  # 只有认证平台 schema 也需要跟随本次发布升级时才打开这个开关；默认关闭，避免 AI PM 部署流程误操作外部认证库。
   echo "[docker-entrypoint] 执行 Unified Auth 认证数据库迁移"
   pnpm exec unified-auth db migrate
   pnpm exec unified-auth doctor
+else
+  echo "[docker-entrypoint] 跳过 Unified Auth 认证数据库迁移：RUN_AUTH_MIGRATIONS=${RUN_AUTH_MIGRATIONS}"
 fi
 
 echo "[docker-entrypoint] 启动应用：$*"

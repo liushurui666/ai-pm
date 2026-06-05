@@ -101,6 +101,7 @@ remote_deploy_release() {
   local keep_releases="${DEPLOY_KEEP_RELEASES:-5}"
   local run_install="${DEPLOY_RUN_INSTALL:-1}"
   local run_migrate="${DEPLOY_RUN_MIGRATE:-1}"
+  local run_auth_migrate="${DEPLOY_RUN_AUTH_MIGRATE:-0}"
   local run_build="${DEPLOY_RUN_BUILD:-1}"
   local restart_strategy="${DEPLOY_RESTART_STRATEGY:-systemd}"
   local systemd_service="${DEPLOY_SYSTEMD_SERVICE:-${app_name}}"
@@ -118,6 +119,7 @@ remote_deploy_release() {
     "${keep_releases}" \
     "${run_install}" \
     "${run_migrate}" \
+    "${run_auth_migrate}" \
     "${run_build}" \
     "${restart_strategy}" \
     "${systemd_service}" \
@@ -135,12 +137,13 @@ app_port="$6"
 keep_releases="$7"
 run_install="$8"
 run_migrate="$9"
-run_build="${10}"
-restart_strategy="${11}"
-systemd_service="${12}"
-restart_command="${13}"
-before_script="${14}"
-after_script="${15}"
+run_auth_migrate="${10}"
+run_build="${11}"
+restart_strategy="${12}"
+systemd_service="${13}"
+restart_command="${14}"
+before_script="${15}"
+after_script="${16}"
 
 releases_dir="${target_dir}/releases"
 shared_dir="${target_dir}/shared"
@@ -198,6 +201,10 @@ fi
 if [[ "${run_migrate}" == "1" ]]; then
   remote_log "执行 Prisma 业务数据库迁移"
   pnpm db:migrate
+fi
+
+if [[ "${run_auth_migrate}" == "1" ]]; then
+  # 认证 PostgreSQL 由外部认证平台/基础设施提前部署；这里默认不触碰，只有认证 schema 需要升级时才执行。
   remote_log "执行 Unified Auth 认证数据库迁移"
   pnpm exec unified-auth db migrate
   pnpm exec unified-auth doctor

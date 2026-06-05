@@ -15,5 +15,6 @@ services:
       NODE_ENV: production
       PORT: ${AI_PM_CONTAINER_PORT:-3003}
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-1}
+      RUN_AUTH_MIGRATIONS: ${RUN_AUTH_MIGRATIONS:-0}
     ports:
       - "${AI_PM_HOST_PORT:-3003}:${AI_PM_CONTAINER_PORT:-3003}"
