@@ -154,20 +154,7 @@ AI_MODEL=deepseek-chat
 
 ### Docker 部署
 
-服务器只需要准备 Docker、Compose 和运行时密钥文件。CI/CD 可以像 Jenkins 一样在仓库根目录生成 `.env`，Docker Compose 默认会把这份 `.env` 注入容器：
-
-```bash
-cat > .env <<'EOF'
-APP_URL=https://ai-pm.chainthink.cn
-DATABASE_URL=mysql://用户名:密码@业务数据库地址:端口/数据库名
-AUTH_DATABASE_URL=postgresql://用户名:密码@认证数据库地址:端口/数据库名
-BETTER_AUTH_SECRET=replace-with-a-long-random-string
-FEISHU_APP_ID=cli_xxxxxxxxxxxxxxxx
-FEISHU_APP_SECRET=xxxxxxxxxxxxxxxx
-EOF
-```
-
-如果是传统单机部署，也可以把运行时密钥集中放到 `/etc/ai-pm/ai-pm.env`：
+服务器只需要准备 Docker、Compose 和运行时密钥文件。现在推荐使用 `scripts/deploy.docker.sh`，脚本会自动拉取公开仓库、构建镜像、执行容器启动迁移并等待健康检查。
 
 ```bash
 sudo mkdir -p /etc/ai-pm
@@ -176,29 +163,52 @@ sudo chmod 600 /etc/ai-pm/ai-pm.env
 sudo vim /etc/ai-pm/ai-pm.env
 ```
 
-部署：
+运行时 env 至少要包含这些生产必填项：
 
-```bash
-git clone https://github.com/liushurui666/ai-pm.git ai-pm-source
-cd ai-pm-source
-docker compose -f deploy/docker/docker-compose.example.yml up -d --build
+```txt
+APP_URL=https://ai-pm.chainthink.cn
+DATABASE_URL=mysql://用户名:密码@业务数据库地址:端口/数据库名
+AUTH_DATABASE_URL=postgresql://用户名:密码@认证数据库地址:端口/数据库名
+BETTER_AUTH_SECRET=replace-with-a-long-random-string
+FEISHU_APP_ID=cli_xxxxxxxxxxxxxxxx
+FEISHU_APP_SECRET=xxxxxxxxxxxxxxxx
 ```
 
-使用 `/etc/ai-pm/ai-pm.env` 时指定环境文件路径：
+首次部署或更新都执行同一个脚本：
 
 ```bash
+bash scripts/deploy.docker.sh
+```
+
+如果运维想在服务器上直接从公网拉脚本，也可以这样执行：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/liushurui666/ai-pm/main/scripts/deploy.docker.sh | bash
+```
+
+脚本默认使用：
+
+- 仓库：`https://github.com/liushurui666/ai-pm.git`
+- 分支：`main`
+- 源码目录：`/srv/ai-pm/source`
+- 运行时 env：`/etc/ai-pm/ai-pm.env`
+- 宿主机端口：`3003`
+- 容器端口：`3003`
+
+换环境时直接覆盖同名变量：
+
+```bash
+AI_PM_ENV_FILE=/etc/ai-pm/test.env AI_PM_HOST_PORT=3004 AI_PM_CONTAINER_NAME=ai-pm-test AI_PM_IMAGE=ai-pm:test bash scripts/deploy.docker.sh
+```
+
+容器启动时会检查 `APP_URL`、`DATABASE_URL`、`AUTH_DATABASE_URL` 和 `BETTER_AUTH_SECRET`，并默认执行 `pnpm db:migrate` 与 `unified-auth db migrate/doctor`。如果数据库迁移由外部发布系统统一控制，可设置 `RUN_MIGRATIONS=0`。
+
+手动调试 Compose 时仍可直接执行：
+
+```bash
+cd /srv/ai-pm/source
 AI_PM_ENV_FILE=/etc/ai-pm/ai-pm.env docker compose -f deploy/docker/docker-compose.example.yml up -d --build
 ```
-
-更新：
-
-```bash
-cd ai-pm-source
-git pull
-docker compose -f deploy/docker/docker-compose.example.yml up -d --build
-```
-
-容器启动时会检查 `DATABASE_URL`、`AUTH_DATABASE_URL` 和 `BETTER_AUTH_SECRET`，并默认执行 `pnpm db:migrate` 与 `unified-auth db migrate/doctor`。如果数据库迁移由外部发布系统统一控制，可在 compose 里设置 `RUN_MIGRATIONS=0`。
 
 ### 脚本部署
 
@@ -241,7 +251,9 @@ BEFORE_DEPLOY_HOOK=/opt/company/hooks/before-ai-pm.sh AFTER_DEPLOY_HOOK=/opt/com
 ```ini
 [Service]
 WorkingDirectory=/srv/ai-pm/current
-ExecStart=/usr/bin/pnpm start -- -p 3003
+Environment=NODE_ENV=production
+Environment=PORT=3003
+ExecStart=/usr/bin/pnpm exec next start -p 3003
 Restart=always
 ```
 

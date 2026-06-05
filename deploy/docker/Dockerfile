@@ -60,5 +60,5 @@ RUN chmod +x scripts/docker-entrypoint.sh
 EXPOSE 3003
 
 ENTRYPOINT ["scripts/docker-entrypoint.sh"]
-# 直接调用 Next CLI，避免 `pnpm start -- -p 3003` 被 Next 解析成项目目录 `/app/-p`。
-CMD ["pnpm", "exec", "next", "start", "-p", "3003"]
+# 通过 PORT 读取容器端口，方便同一镜像热插拔到不同服务器；仍然直接调用 Next CLI，避免 `pnpm start -- -p` 被解析成项目目录。
+CMD ["sh", "-c", "pnpm exec next start -p \"${PORT:-3003}\""]

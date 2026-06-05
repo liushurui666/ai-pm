@@ -4,8 +4,8 @@ services:
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile
-    image: ai-pm:latest
-    container_name: ai-pm
+    image: ${AI_PM_IMAGE:-ai-pm:latest}
+    container_name: ${AI_PM_CONTAINER_NAME:-ai-pm}
     restart: unless-stopped
     env_file:
       # CI/CD 通常会在仓库根目录生成 .env；env_file 路径相对 compose 文件所在目录，
@@ -13,7 +13,7 @@ services:
       - ${AI_PM_ENV_FILE:-../../.env}
     environment:
       NODE_ENV: production
-      PORT: "3003"
-      RUN_MIGRATIONS: "1"
+      PORT: ${AI_PM_CONTAINER_PORT:-3003}
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-1}
     ports:
-      - "3003:3003"
+      - "${AI_PM_HOST_PORT:-3003}:${AI_PM_CONTAINER_PORT:-3003}"
