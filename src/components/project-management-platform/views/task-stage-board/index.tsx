@@ -25,7 +25,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import dayjs from "dayjs";
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { Task, TaskStage } from "@/types/dashboard";
 import { OwnerInline } from "@/components/project-management-platform/shared/owner-inline";
@@ -33,6 +33,8 @@ import { priorityColor, taskStages } from "@/components/project-management-platf
 import { sortTasksForDelivery } from "@/components/project-management-platform/views/version-task-board";
 
 const { Text } = Typography;
+const initialVisibleTaskCount = 18;
+const visibleTaskStep = 18;
 
 const stageToneClass: Record<TaskStage, string> = {
   待处理: "task-stage-column-pending",
@@ -59,17 +61,27 @@ function getStageFromDropId(id: string) {
   return taskStages.includes(stage) ? stage : null;
 }
 
+function getVisibleCountKey(stage: TaskStage, tasks: Task[]) {
+  return `${stage}:${tasks.map((task) => task.id).join("|")}`;
+}
+
 // 阶段列同时是空列投放区，避免某个阶段没有任务时无法拖入。
 function TaskStageColumn({
   children,
   draggingTask,
+  hiddenCount,
+  onShowMore,
   stage,
-  tasks
+  tasks,
+  visibleCount
 }: {
   children: ReactNode;
   draggingTask: boolean;
+  hiddenCount: number;
+  onShowMore: () => void;
   stage: TaskStage;
   tasks: Task[];
+  visibleCount: number;
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: `stage:${stage}` });
   const overdueCount = tasks.filter(getTaskOverdue).length;
@@ -94,9 +106,14 @@ function TaskStageColumn({
         <div className="task-stage-progress-bar">
           <Progress percent={donePercent} size="small" showInfo={false} />
         </div>
-        <SortableContext items={tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
+        <SortableContext items={tasks.slice(0, visibleCount).map((task) => task.id)} strategy={verticalListSortingStrategy}>
           <div className="task-stage-list">
             {children}
+            {hiddenCount > 0 ? (
+              <Button className="task-stage-show-more" size="small" block onClick={onShowMore}>
+                展开 {Math.min(hiddenCount, visibleTaskStep)} 项，剩余 {hiddenCount}
+              </Button>
+            ) : null}
             {!tasks.length ? (
               <div className={`task-stage-empty${draggingTask ? " task-stage-empty-active" : ""}`}>
                 <Text type="secondary">{emptyText}</Text>
@@ -162,7 +179,7 @@ function TaskStageCard({
   );
 }
 
-function SortableTaskCard({
+const SortableTaskCard = memo(function SortableTaskCard({
   onEdit,
   task
 }: {
@@ -204,7 +221,7 @@ function SortableTaskCard({
       />
     </div>
   );
-}
+});
 
 // dnd-kit 阶段看板只负责阶段流转，业务更新交给父容器复用现有记录接口。
 export function TaskStageBoard({
@@ -229,16 +246,60 @@ export function TaskStageBoard({
       coordinateGetter: sortableKeyboardCoordinates
     })
   );
-  const tasksByStage = useMemo(
-    () =>
-      taskStages.reduce<Record<TaskStage, Task[]>>((groups, stage) => {
-        groups[stage] = tasks.filter((task) => task.stage === stage).sort(sortTasksForDelivery);
+  const tasksByStage = useMemo(() => {
+    const groups = taskStages.reduce<Record<TaskStage, Task[]>>((currentGroups, stage) => {
+      currentGroups[stage] = [];
 
-        return groups;
-      }, {} as Record<TaskStage, Task[]>),
-    [tasks]
+      return currentGroups;
+    }, {} as Record<TaskStage, Task[]>);
+
+    // 任务看板可能一次展示完整版本范围，单次遍历分桶能避免每个阶段重复 filter 全量任务。
+    for (const task of tasks) {
+      groups[task.stage].push(task);
+    }
+
+    for (const stage of taskStages) {
+      groups[stage].sort(sortTasksForDelivery);
+    }
+
+    return groups;
+  }, [tasks]);
+  const visibleCountKeys = useMemo(
+    () =>
+      taskStages.reduce<Record<TaskStage, string>>((keys, stage) => {
+        keys[stage] = getVisibleCountKey(stage, tasksByStage[stage]);
+
+        return keys;
+      }, {} as Record<TaskStage, string>),
+    [tasksByStage]
   );
+  const [visibleCounts, setVisibleCounts] = useState<Partial<Record<TaskStage, { count: number; key: string }>>>({});
   const activeTask = activeTaskId ? tasks.find((task) => task.id === activeTaskId) ?? null : null;
+
+  function getVisibleCount(stage: TaskStage) {
+    const stageTasks = tasksByStage[stage];
+    const stored = visibleCounts[stage];
+
+    // 任务列表经过版本、负责人筛选或阶段变更后，旧的可见数量可能对应另一批任务；这里用 id 列表签名重置，
+    // 保证用户切换筛选条件时每列回到轻量首屏，避免一次性重新挂载大量卡片拖慢拖拽。
+    if (!stored || stored.key !== visibleCountKeys[stage]) {
+      return Math.min(initialVisibleTaskCount, stageTasks.length);
+    }
+
+    return Math.min(stored.count, stageTasks.length);
+  }
+
+  function handleShowMore(stage: TaskStage) {
+    const currentCount = getVisibleCount(stage);
+
+    setVisibleCounts((current) => ({
+      ...current,
+      [stage]: {
+        count: Math.min(currentCount + visibleTaskStep, tasksByStage[stage].length),
+        key: visibleCountKeys[stage]
+      }
+    }));
+  }
 
   function handleDragStart(event: DragStartEvent) {
     setActiveTaskId(String(event.active.id));
@@ -268,13 +329,27 @@ export function TaskStageBoard({
       onDragCancel={() => setActiveTaskId(null)}
     >
       <div className="task-stage-board">
-        {taskStages.map((stage) => (
-          <TaskStageColumn key={stage} draggingTask={Boolean(activeTask)} stage={stage} tasks={tasksByStage[stage]}>
-            {tasksByStage[stage].map((task) => (
-              <SortableTaskCard key={task.id} task={task} onEdit={onEdit} />
-            ))}
-          </TaskStageColumn>
-        ))}
+        {taskStages.map((stage) => {
+          const visibleCount = getVisibleCount(stage);
+          const visibleTasks = tasksByStage[stage].slice(0, visibleCount);
+          const hiddenCount = Math.max(0, tasksByStage[stage].length - visibleCount);
+
+          return (
+            <TaskStageColumn
+              key={stage}
+              draggingTask={Boolean(activeTask)}
+              hiddenCount={hiddenCount}
+              onShowMore={() => handleShowMore(stage)}
+              stage={stage}
+              tasks={tasksByStage[stage]}
+              visibleCount={visibleCount}
+            >
+              {visibleTasks.map((task) => (
+                <SortableTaskCard key={task.id} task={task} onEdit={onEdit} />
+              ))}
+            </TaskStageColumn>
+          );
+        })}
       </div>
       <DragOverlay dropAnimation={null}>
         {activeTask ? (
