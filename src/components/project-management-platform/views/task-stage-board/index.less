@@ -157,12 +157,27 @@
   box-shadow: 0 22px 44px color-mix(in srgb, var(--brand) 22%, #000 26%);
 }
 
+.task-stage-card-head {
+  min-width: 0;
+}
+
+.task-stage-card-head > .ant-btn {
+  flex: none;
+  margin-top: -2px;
+}
+
 .task-stage-card-title {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
   min-width: 0;
 }
 
 .task-stage-card-title .ant-typography {
   display: -webkit-box;
+  grid-column: 2;
   min-width: 0;
   overflow: hidden;
   line-height: 1.35;
@@ -173,16 +188,22 @@
 .task-stage-card-handle {
   display: inline-grid;
   flex: none;
-  width: 32px;
-  height: 32px;
+  grid-column: 1;
+  width: 24px;
+  height: 24px;
+  margin-top: 1px;
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--task-stage-tone, var(--brand)) 18%, var(--border));
-  border-radius: 8px;
-  color: var(--muted);
-  background: color-mix(in srgb, var(--surface) 88%, var(--task-stage-tone, var(--brand)) 8%);
+  border-radius: 6px;
+  color: color-mix(in srgb, var(--muted) 86%, var(--text));
+  background: color-mix(in srgb, var(--surface) 92%, var(--task-stage-tone, var(--brand)) 5%);
   cursor: grab;
   touch-action: none;
   user-select: none;
+}
+
+.task-stage-card-handle .anticon {
+  font-size: 13px;
 }
 
 .task-stage-card-handle:hover {

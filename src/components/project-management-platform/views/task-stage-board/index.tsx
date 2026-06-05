@@ -64,6 +64,14 @@ const stageToneClass: Record<TaskStage, string> = {
   已完成: "task-stage-column-done"
 };
 
+type StageTaskGroups = Record<TaskStage, Task[]>;
+
+type DragStagePreview = {
+  overId: string | null;
+  stage: TaskStage;
+  taskId: string;
+};
+
 const animateTaskLayoutChanges: AnimateLayoutChanges = (args) => {
   // 只有拖拽排序相关的位移需要动画，其余列表刷新不做过渡，避免筛选/翻页时产生额外布局动画。
   return args.isSorting || args.wasDragging ? defaultAnimateLayoutChanges(args) : false;
@@ -174,6 +182,23 @@ function getOrderedStageTasks(
   });
 }
 
+function resolveVisibleCount({
+  stageTasks,
+  storedVisibleCount,
+  visibleCountKey
+}: {
+  stageTasks: Task[];
+  storedVisibleCount?: { count: number; key: string };
+  visibleCountKey: string;
+}) {
+  // 可见数量和阶段真实任务集绑定，拖拽预览只是临时视觉状态；这样跨阶段拖动不会把“展开更多”的状态错误写到别的任务集。
+  if (!storedVisibleCount || storedVisibleCount.key !== visibleCountKey) {
+    return Math.min(initialVisibleTaskCount, stageTasks.length);
+  }
+
+  return Math.min(storedVisibleCount.count, stageTasks.length);
+}
+
 function getNextStageOrder({
   activeId,
   overId,
@@ -203,6 +228,95 @@ function getNextStageOrder({
   return {
     ...taskOrderByStage,
     [stage]: [...nextVisibleIds, ...hiddenOrderedIds]
+  };
+}
+
+function getPreviewInsertIndex<T extends { id: string }>({
+  fallbackVisibleCount,
+  overId,
+  tasks
+}: {
+  fallbackVisibleCount: number;
+  overId: string | null;
+  tasks: T[];
+}) {
+  const overIndex = overId ? tasks.findIndex((task) => task.id === overId) : -1;
+
+  // 拖到具体卡片时按卡片位置插入；只命中阶段列时放到当前可见列表末尾，避免插到隐藏任务后面导致用户看不到预览卡。
+  return overIndex >= 0 ? overIndex : Math.min(fallbackVisibleCount, tasks.length);
+}
+
+function getPreviewStageGroups({
+  activeTask,
+  preview,
+  tasksByStage,
+  visibleCountByStage
+}: {
+  activeTask: Task;
+  preview: DragStagePreview | null;
+  tasksByStage: StageTaskGroups;
+  visibleCountByStage: Record<TaskStage, number>;
+}) {
+  if (!preview || preview.stage === activeTask.stage) {
+    return tasksByStage;
+  }
+
+  const previewGroups = taskStages.reduce<StageTaskGroups>((groups, stage) => {
+    groups[stage] = tasksByStage[stage].filter((task) => task.id !== activeTask.id);
+
+    return groups;
+  }, {} as StageTaskGroups);
+  const targetTasks = previewGroups[preview.stage];
+  const insertIndex = getPreviewInsertIndex({
+    fallbackVisibleCount: visibleCountByStage[preview.stage],
+    overId: preview.overId,
+    tasks: targetTasks
+  });
+
+  // 跨阶段拖动时把 active 任务临时改成目标阶段，让目标列的 SortableContext 能包含 active id 并立即产生让位动画。
+  previewGroups[preview.stage] = [
+    ...targetTasks.slice(0, insertIndex),
+    { ...activeTask, stage: preview.stage },
+    ...targetTasks.slice(insertIndex)
+  ];
+
+  return previewGroups;
+}
+
+function getNextCrossStageOrder({
+  activeId,
+  overId,
+  sourceStage,
+  targetStage,
+  taskOrderByStage,
+  tasksByStage,
+  visibleCount
+}: {
+  activeId: string;
+  overId: string | null;
+  sourceStage: TaskStage;
+  targetStage: TaskStage;
+  taskOrderByStage: Partial<Record<TaskStage, string[]>>;
+  tasksByStage: StageTaskGroups;
+  visibleCount: number;
+}) {
+  const sourceIds = getOrderedStageTasks(tasksByStage[sourceStage], sourceStage, taskOrderByStage)
+    .map((task) => task.id)
+    .filter((id) => id !== activeId);
+  const targetIds = getOrderedStageTasks(tasksByStage[targetStage], targetStage, taskOrderByStage)
+    .map((task) => task.id)
+    .filter((id) => id !== activeId);
+  const insertIndex = getPreviewInsertIndex({
+    fallbackVisibleCount: visibleCount,
+    overId,
+    tasks: targetIds.map((id) => ({ id }))
+  });
+
+  // 后端目前没有独立 order 字段，跨阶段拖动松手后也要写本地顺序；否则任务状态已变更，但刷新后仍会被默认排序打回去。
+  return {
+    ...taskOrderByStage,
+    [sourceStage]: sourceIds,
+    [targetStage]: [...targetIds.slice(0, insertIndex), activeId, ...targetIds.slice(insertIndex)]
   };
 }
 
@@ -289,8 +403,8 @@ const TaskStageCard = memo(function TaskStageCard({
 
   return (
     <div className={`task-stage-card${dragging ? " task-stage-card-dragging" : ""}`}>
-      <Flex justify="space-between" align="start" gap={10}>
-        <Space size={8} align="start" className="task-stage-card-title">
+      <Flex justify="space-between" align="start" gap={8} className="task-stage-card-head">
+        <div className="task-stage-card-title">
           <span
             ref={setDragHandleRef}
             className="task-stage-card-handle"
@@ -300,7 +414,7 @@ const TaskStageCard = memo(function TaskStageCard({
             <HolderOutlined />
           </span>
           <Text strong>{task.title}</Text>
-        </Space>
+        </div>
         <Tooltip title="编辑任务">
           <Button size="small" type="text" icon={<EditOutlined />} onClick={() => onEdit(task)} />
         </Tooltip>
@@ -413,6 +527,7 @@ export function TaskStageBoard({
   tasks: Task[];
 }) {
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const [dragStagePreview, setDragStagePreview] = useState<DragStagePreview | null>(null);
   const [taskOrderByStage, setTaskOrderByStage] = useState<Partial<Record<TaskStage, string[]>>>(getStoredStageOrder);
   const lastOverStageRef = useRef<TaskStage | null>(null);
   const sensors = useSensors(
@@ -452,27 +567,42 @@ export function TaskStageBoard({
   );
   const [visibleCounts, setVisibleCounts] = useState<Partial<Record<TaskStage, { count: number; key: string }>>>({});
   const activeTask = activeTaskId ? taskById.get(activeTaskId) ?? null : null;
+  const visibleCountByStage = useMemo(
+    () =>
+      taskStages.reduce<Record<TaskStage, number>>((counts, stage) => {
+        counts[stage] = resolveVisibleCount({
+          stageTasks: tasksByStage[stage],
+          storedVisibleCount: visibleCounts[stage],
+          visibleCountKey: visibleCountKeys[stage]
+        });
+
+        return counts;
+      }, {} as Record<TaskStage, number>),
+    [tasksByStage, visibleCounts, visibleCountKeys]
+  );
+  const visibleTasksByStage = useMemo(
+    () => {
+      if (!activeTask) {
+        return tasksByStage;
+      }
+
+      return getPreviewStageGroups({
+        activeTask,
+        preview: dragStagePreview,
+        tasksByStage,
+        visibleCountByStage
+      });
+    },
+    [activeTask, dragStagePreview, tasksByStage, visibleCountByStage]
+  );
 
   useEffect(() => {
     // 同阶段排序是本地看板偏好，后端暂未设计任务 order 字段；保存到 localStorage 让刷新后仍保持 PM 手动排好的顺序。
     window.localStorage.setItem(taskStageOrderStorageKey, JSON.stringify(taskOrderByStage));
   }, [taskOrderByStage]);
 
-  function getVisibleCount(stage: TaskStage) {
-    const stageTasks = tasksByStage[stage];
-    const stored = visibleCounts[stage];
-
-    // 任务列表经过版本、负责人筛选或阶段变更后，旧的可见数量可能对应另一批任务；这里用 id 列表签名重置，
-    // 保证用户切换筛选条件时每列回到轻量首屏，避免一次性重新挂载大量卡片拖慢拖拽。
-    if (!stored || stored.key !== visibleCountKeys[stage]) {
-      return Math.min(initialVisibleTaskCount, stageTasks.length);
-    }
-
-    return Math.min(stored.count, stageTasks.length);
-  }
-
   function handleShowMore(stage: TaskStage) {
-    const currentCount = getVisibleCount(stage);
+    const currentCount = visibleCountByStage[stage];
 
     setVisibleCounts((current) => ({
       ...current,
@@ -485,10 +615,13 @@ export function TaskStageBoard({
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     lastOverStageRef.current = null;
+    setDragStagePreview(null);
     setActiveTaskId(String(event.active.id));
   }, []);
 
   const handleDragOver = useCallback((event: DragOverEvent) => {
+    const activeId = String(event.active.id);
+    const activeTaskItem = taskById.get(activeId);
     const overId = event.over?.id ? String(event.over.id) : "";
     const overTask = taskById.get(overId);
     const overStage = getStageFromDropId(overId) ?? overTask?.stage ?? null;
@@ -498,15 +631,37 @@ export function TaskStageBoard({
     if (overStage) {
       lastOverStageRef.current = overStage;
     }
+
+    if (!activeTaskItem || !overStage || overStage === activeTaskItem.stage) {
+      setDragStagePreview((current) => (current ? null : current));
+      return;
+    }
+
+    const nextPreview: DragStagePreview = {
+      overId: overTask?.id ?? null,
+      stage: overStage,
+      taskId: activeId
+    };
+
+    // onDragOver 会按帧触发；只有目标阶段或目标卡片变化时才刷新预览列表，避免无意义重渲染拖慢跟手感。
+    setDragStagePreview((current) =>
+      current?.taskId === nextPreview.taskId &&
+      current.stage === nextPreview.stage &&
+      current.overId === nextPreview.overId
+        ? current
+        : nextPreview
+    );
   }, [taskById]);
 
   const handleDragEnd = useCallback(async (event: DragEndEvent) => {
+    const currentPreview = dragStagePreview;
     setActiveTaskId(null);
+    setDragStagePreview(null);
 
     const task = taskById.get(String(event.active.id));
     const overId = event.over?.id ? String(event.over.id) : "";
     const overTask = taskById.get(overId);
-    const targetStage = getStageFromDropId(overId) ?? overTask?.stage ?? lastOverStageRef.current;
+    const targetStage = getStageFromDropId(overId) ?? overTask?.stage ?? currentPreview?.stage ?? lastOverStageRef.current;
 
     lastOverStageRef.current = null;
 
@@ -530,12 +685,27 @@ export function TaskStageBoard({
       return;
     }
 
-    await onStageChange(task, targetStage);
-  }, [onStageChange, taskById, tasksByStage]);
+    const saved = await onStageChange(task, targetStage);
+
+    if (saved) {
+      setTaskOrderByStage((currentOrder) =>
+        getNextCrossStageOrder({
+          activeId: task.id,
+          overId: overTask?.id ?? currentPreview?.overId ?? null,
+          sourceStage: task.stage,
+          targetStage,
+          taskOrderByStage: currentOrder,
+          tasksByStage,
+          visibleCount: visibleCountByStage[targetStage]
+        })
+      );
+    }
+  }, [dragStagePreview, onStageChange, taskById, tasksByStage, visibleCountByStage]);
 
   const handleDragCancel = useCallback(() => {
     lastOverStageRef.current = null;
     setActiveTaskId(null);
+    setDragStagePreview(null);
   }, []);
 
   return (
@@ -550,9 +720,10 @@ export function TaskStageBoard({
     >
       <div className={`task-stage-board${activeTask ? " task-stage-board-dragging" : ""}`}>
         {taskStages.map((stage) => {
-          const visibleCount = getVisibleCount(stage);
-          const visibleTasks = tasksByStage[stage].slice(0, visibleCount);
-          const hiddenCount = Math.max(0, tasksByStage[stage].length - visibleCount);
+          const visibleCount = visibleCountByStage[stage];
+          const stageTasks = visibleTasksByStage[stage];
+          const visibleTasks = stageTasks.slice(0, visibleCount + (dragStagePreview?.stage === stage ? 1 : 0));
+          const hiddenCount = Math.max(0, stageTasks.length - visibleTasks.length);
 
           return (
             <TaskStageColumn
@@ -562,7 +733,7 @@ export function TaskStageBoard({
               itemIds={visibleTasks.map((task) => task.id)}
               onShowMore={() => handleShowMore(stage)}
               stage={stage}
-              tasks={tasksByStage[stage]}
+              tasks={stageTasks}
             >
               {visibleTasks.map((task) => (
                 <SortableTaskCard key={task.id} task={task} onEdit={onEdit} />
