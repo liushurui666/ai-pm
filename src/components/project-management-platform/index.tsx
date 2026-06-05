@@ -691,6 +691,27 @@ export function ProjectManagementPlatform({
       return true;
     }
 
+    const optimisticTask = {
+      ...task,
+      stage
+    };
+    let previousData: DashboardData | null = null;
+
+    // 拖拽交互需要在松手后立刻反馈，否则公网数据库或通知链路稍慢时会像“没有拖成功”。
+    // 这里先做本地乐观移动，接口失败再回滚，真实数据仍由 PATCH 后的服务端结果校准。
+    setData((current) => {
+      previousData = current;
+
+      return current
+        ? updateDashboardWithRecordUpdate(current, {
+            type: "task",
+            record: optimisticTask,
+            persisted: false,
+            message: current.meta?.message ?? ""
+          })
+        : current;
+    });
+
     try {
       // 阶段拖拽只改任务流转状态，其余字段沿用原任务，避免 PATCH 时丢失版本、负责人和日期。
       const response = await fetch("/api/records", {
@@ -703,8 +724,7 @@ export function ProjectManagementPlatform({
           type: "task",
           id: task.id,
           values: serializeCreateValues({
-            ...task,
-            stage
+            ...optimisticTask
           })
         })
       });
@@ -732,6 +752,10 @@ export function ProjectManagementPlatform({
 
       return true;
     } catch (error) {
+      if (previousData) {
+        setData(previousData);
+      }
+
       messageApi.error(error instanceof Error ? error.message : "更新任务阶段失败");
 
       return false;
@@ -759,6 +783,26 @@ export function ProjectManagementPlatform({
       return true;
     }
 
+    const optimisticTask = {
+      ...task,
+      ...nextOwnerFields
+    };
+    let previousData: DashboardData | null = null;
+
+    // 负责人转交同样先本地移动，避免等待数据库写入时卡片停在原列造成“拖了没反应”的错觉。
+    setData((current) => {
+      previousData = current;
+
+      return current
+        ? updateDashboardWithRecordUpdate(current, {
+            type: "task",
+            record: optimisticTask,
+            persisted: false,
+            message: current.meta?.message ?? ""
+          })
+        : current;
+    });
+
     try {
       // 负责人拖拽必须同步成员 ID、头像、邮箱和飞书身份字段；只改 owner 字符串会导致后续通知和成员匹配继续指向旧人。
       const response = await fetch("/api/records", {
@@ -770,10 +814,7 @@ export function ProjectManagementPlatform({
           workspaceId: currentWorkspaceId,
           type: "task",
           id: task.id,
-          values: serializeCreateValues({
-            ...task,
-            ...nextOwnerFields
-          })
+          values: serializeCreateValues(optimisticTask)
         })
       });
       const payload = (await response.json()) as CreateRecordResult | { error?: string };
@@ -800,6 +841,10 @@ export function ProjectManagementPlatform({
 
       return true;
     } catch (error) {
+      if (previousData) {
+        setData(previousData);
+      }
+
       messageApi.error(error instanceof Error ? error.message : "更新任务负责人失败");
 
       return false;

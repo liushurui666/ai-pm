@@ -13,11 +13,12 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
   type DraggableAttributes,
   type DraggableSyntheticListeners
 } from "@dnd-kit/core";
-import { memo, useMemo, useState } from "react";
+import { memo, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Task } from "@/types/dashboard";
 import type { OwnerSelectableMember } from "@/components/project-management-platform/types";
@@ -280,6 +281,7 @@ export function TaskOwnerBoard({
   tasks: Task[];
 }) {
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const lastOverOwnerKeyRef = useRef("");
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -293,15 +295,26 @@ export function TaskOwnerBoard({
   function handleDragStart(event: DragStartEvent) {
     const task = tasks.find((item) => item.id === event.active.id) ?? null;
 
+    lastOverOwnerKeyRef.current = "";
     setActiveTask(task);
+  }
+
+  function handleDragOver(event: DragOverEvent) {
+    const ownerKey = event.over?.id ? getOwnerKeyFromDropId(String(event.over.id)) : "";
+
+    // 负责人列拖拽同样记录最后命中的列，避免松手瞬间 over 为空导致“提示可放入但没有保存”。
+    if (ownerKey) {
+      lastOverOwnerKeyRef.current = ownerKey;
+    }
   }
 
   async function handleDragEnd(event: DragEndEvent) {
     const task = activeTask;
-    const ownerKey = event.over?.id ? getOwnerKeyFromDropId(String(event.over.id)) : "";
+    const ownerKey = (event.over?.id ? getOwnerKeyFromDropId(String(event.over.id)) : "") || lastOverOwnerKeyRef.current;
     const targetGroup = groupByKey.get(ownerKey);
 
     setActiveTask(null);
+    lastOverOwnerKeyRef.current = "";
 
     if (!task || !targetGroup || isSameOwner(task, targetGroup)) {
       return;
@@ -323,8 +336,12 @@ export function TaskOwnerBoard({
       collisionDetection={pointerWithin}
       sensors={sensors}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
-      onDragCancel={() => setActiveTask(null)}
+      onDragCancel={() => {
+        lastOverOwnerKeyRef.current = "";
+        setActiveTask(null);
+      }}
     >
       <div className="owner-kanban-grid task-owner-board">
         {ownerGroups.map((group) => (

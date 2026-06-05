@@ -13,12 +13,13 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
   type DraggableAttributes,
   type DraggableSyntheticListeners
 } from "@dnd-kit/core";
 import dayjs from "dayjs";
-import { memo, useMemo, useState } from "react";
+import { memo, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Task, TaskStage } from "@/types/dashboard";
 import { OwnerInline } from "@/components/project-management-platform/shared/owner-inline";
@@ -223,6 +224,7 @@ export function TaskStageBoard({
   tasks: Task[];
 }) {
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const lastOverStageRef = useRef<TaskStage | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -286,7 +288,19 @@ export function TaskStageBoard({
   }
 
   function handleDragStart(event: DragStartEvent) {
+    lastOverStageRef.current = null;
     setActiveTaskId(String(event.active.id));
+  }
+
+  function handleDragOver(event: DragOverEvent) {
+    const overId = event.over?.id ? String(event.over.id) : "";
+    const overStage = getStageFromDropId(overId);
+
+    // 用户拖动中已经看到“松手移入某阶段”时，松手瞬间 event.over 偶尔会为空；
+    // 记录最后一次命中的阶段，保证视觉反馈和实际保存结果一致。
+    if (overStage) {
+      lastOverStageRef.current = overStage;
+    }
   }
 
   async function handleDragEnd(event: DragEndEvent) {
@@ -296,7 +310,9 @@ export function TaskStageBoard({
     const overId = event.over?.id ? String(event.over.id) : "";
     // 任务看板现在只允许跨阶段投放，不做列内排序；目标只认阶段列，
     // 避免每张任务卡都成为碰撞/排序目标导致拖拽时频繁测量和重排。
-    const targetStage = getStageFromDropId(overId);
+    const targetStage = getStageFromDropId(overId) ?? lastOverStageRef.current;
+
+    lastOverStageRef.current = null;
 
     if (!task || !targetStage || task.stage === targetStage) {
       return;
@@ -310,8 +326,12 @@ export function TaskStageBoard({
       collisionDetection={pointerWithin}
       sensors={sensors}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
-      onDragCancel={() => setActiveTaskId(null)}
+      onDragCancel={() => {
+        lastOverStageRef.current = null;
+        setActiveTaskId(null);
+      }}
     >
       <div className="task-stage-board">
         {taskStages.map((stage) => {
