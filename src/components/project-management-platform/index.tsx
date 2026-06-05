@@ -1654,6 +1654,7 @@ export function ProjectManagementPlatform({
                 {!isMobile ? (
                   <Tooltip title={collapsed ? "展开导航" : "收起导航"}>
                     <Button
+                      className="pm-nav-toggle-button"
                       type="text"
                       icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
                       onClick={() => setCollapsed((current) => !current)}

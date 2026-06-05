@@ -114,6 +114,7 @@
 
 .pm-header-left {
   flex: 1 1 auto;
+  align-items: center;
 }
 
 .pm-header-actions {
@@ -123,14 +124,40 @@
   justify-content: flex-end;
 }
 
-/* 顶栏右侧每个 AntD Space 子项都按同一条中线排布，避免头像这种自定义触发器被行高或基线拉偏。 */
+/* 顶栏左右两组控件都按同一条中线排布，避免自定义触发器或 text button 被行高、基线拉偏。 */
+.pm-header-left > .ant-space-item,
 .pm-header-actions > .ant-space-item {
   display: inline-flex;
   align-items: center;
 }
 
+.pm-header .pm-nav-toggle-button.ant-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 12px;
+  color: var(--muted);
+  line-height: 1;
+}
+
+.pm-header .pm-nav-toggle-button.ant-btn .anticon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .pm-search {
   width: min(36vw, 420px);
+}
+
+.pm-search.ant-input-affix-wrapper {
+  height: 40px;
+  align-items: center;
+  border-radius: 12px;
 }
 
 .pm-workspace-control {
