@@ -4,6 +4,7 @@ import {
   DASHBOARD_DATABASE_STORAGE,
   readDashboardDatabase,
   readDashboardWorkspacesDatabase,
+  updateDashboardTaskDatabase,
   writeDashboardDatabase,
   writeDashboardIdentityDatabase
 } from "@/data/database-dashboard";
@@ -86,7 +87,8 @@ function createLocalId(type: DashboardEntityType | "bugFlow" | "member" | "miles
 }
 
 async function readDatabase() {
-  return readDashboardDatabase(() => applyProjectMetrics(cloneSeedData()));
+  // 项目进度、健康度和风险数本质上是任务/Bug/风险的派生值；任务拖拽现在只持久化单行任务，读取时统一重算可以保证项目视图不读到旧统计。
+  return applyProjectMetrics(await readDashboardDatabase(() => applyProjectMetrics(cloneSeedData())));
 }
 
 async function readWorkspaces() {
@@ -2412,7 +2414,12 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
       : ""
   ].filter(Boolean);
 
-  await writeDatabase(savedData);
+  if (type === "task") {
+    // 任务看板拖拽会高频调用 PATCH，只更新当前任务一行即可；如果走 writeDatabase 会触发整库同步事务并放大 MySQL 锁等待。
+    await updateDashboardTaskDatabase(savedRecord as Task);
+  } else {
+    await writeDatabase(savedData);
+  }
 
   return {
     type,

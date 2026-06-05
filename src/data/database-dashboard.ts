@@ -97,6 +97,30 @@ function getMemberPayload(member: DashboardMember) {
   };
 }
 
+// 任务看板的拖拽、排序和跨负责人流转属于高频单行更新，必须只写 project_tasks 当前记录。
+// 如果继续复用全量同步事务，会在公网 MySQL 上反复 delete/upsert 多张业务表，容易和页面并发读取或连续拖拽保存产生锁等待。
+function getTaskPayload(task: Task) {
+  return {
+    workspaceId: getWorkspaceId(task),
+    title: task.title,
+    stage: task.stage,
+    owner: task.owner,
+    ownerMemberId: task.ownerMemberId ?? null,
+    ownerOpenId: task.ownerOpenId ?? null,
+    ownerUnionId: task.ownerUnionId ?? null,
+    ownerUserId: task.ownerUserId ?? null,
+    ownerEmail: task.ownerEmail ?? null,
+    ownerAvatarUrl: task.ownerAvatarUrl ?? null,
+    project: task.project,
+    versionId: task.versionId ?? null,
+    versionName: task.versionName ?? null,
+    priority: task.priority,
+    startDate: task.startDate,
+    dueDate: task.dueDate,
+    aiHint: task.aiHint
+  };
+}
+
 async function seedDatabaseIfEmpty(prisma: PrismaClient, createSeed: () => DashboardDatabase) {
   const workspaceCount = await prisma.workspace.count();
 
@@ -474,25 +498,7 @@ async function syncTasks(prisma: DashboardPrisma, tasks: Task[]) {
   });
 
   for (const task of tasks) {
-    const payload = {
-      workspaceId: getWorkspaceId(task),
-      title: task.title,
-      stage: task.stage,
-      owner: task.owner,
-      ownerMemberId: task.ownerMemberId,
-      ownerOpenId: task.ownerOpenId,
-      ownerUnionId: task.ownerUnionId,
-      ownerUserId: task.ownerUserId,
-      ownerEmail: task.ownerEmail,
-      ownerAvatarUrl: task.ownerAvatarUrl,
-      project: task.project,
-      versionId: task.versionId,
-      versionName: task.versionName,
-      priority: task.priority,
-      startDate: task.startDate,
-      dueDate: task.dueDate,
-      aiHint: task.aiHint
-    };
+    const payload = getTaskPayload(task);
 
     await prisma.projectTask.upsert({
       where: { id: task.id },
@@ -778,6 +784,17 @@ export async function writeDashboardDatabase(data: DashboardDatabase, client?: P
     // 腾讯云 MySQL 公网访问比本地库延迟高，首次空库种子同步会连续写入多张表；保留事务原子性，同时把等待和执行窗口拉到足够覆盖冷启动。
     DASHBOARD_SYNC_TRANSACTION_OPTIONS
   );
+}
+
+export async function updateDashboardTaskDatabase(task: Task, client?: PrismaClient) {
+  const prisma = client ?? getPrismaClient();
+
+  // 任务卡片拖拽保存只需要命中主键更新一行，不包交互式事务，也不触碰其他表。
+  // 这样可以把锁持有时间压到单条 SQL 级别，避免 “Lock wait timeout exceeded” 在连续拖拽时放大。
+  await prisma.projectTask.update({
+    where: { id: task.id },
+    data: getTaskPayload(task)
+  });
 }
 
 export async function writeDashboardIdentityDatabase(data: Pick<DashboardDatabase, "members" | "workspaces">, client?: PrismaClient) {
