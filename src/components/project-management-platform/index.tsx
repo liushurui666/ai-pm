@@ -1782,11 +1782,11 @@ export function ProjectManagementPlatform({
                   placement="bottomRight"
                   trigger={isMobile ? "click" : "hover"}
                 >
-                  <span className="pm-avatar-trigger">
+                  <button className="pm-avatar-trigger" type="button" aria-label="打开账户菜单">
                     <Avatar className="pm-avatar" src={data?.meta?.user?.avatarUrl}>
                       {userInitial}
                     </Avatar>
-                  </span>
+                  </button>
                 </Popover>
               </Space>
             </Header>

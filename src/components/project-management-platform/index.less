@@ -118,8 +118,15 @@
 
 .pm-header-actions {
   flex: 0 1 auto;
+  align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+/* 顶栏右侧每个 AntD Space 子项都按同一条中线排布，避免头像这种自定义触发器被行高或基线拉偏。 */
+.pm-header-actions > .ant-space-item {
+  display: inline-flex;
+  align-items: center;
 }
 
 .pm-search {
@@ -171,9 +178,18 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  line-height: 1;
   cursor: pointer;
+}
+
+.pm-avatar-trigger:hover {
+  background: var(--surface-muted);
 }
 
 .pm-avatar-menu {
