@@ -8,7 +8,6 @@ import {
   DragOverlay,
   PointerSensor,
   pointerWithin,
-  useDraggable,
   useDroppable,
   useSensor,
   useSensors,
@@ -18,8 +17,15 @@ import {
   type DraggableAttributes,
   type DraggableSyntheticListeners
 } from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import dayjs from "dayjs";
-import { memo, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Task, TaskStage } from "@/types/dashboard";
 import { OwnerInline } from "@/components/project-management-platform/shared/owner-inline";
@@ -30,6 +36,7 @@ const { Text } = Typography;
 const initialVisibleTaskCount = 18;
 const visibleTaskStep = 18;
 const dragActivationDistance = 1;
+const taskStageOrderStorageKey = "ai-pm.task-stage-board-order.v1";
 
 const stageToneClass: Record<TaskStage, string> = {
   待处理: "task-stage-column-pending",
@@ -57,7 +64,83 @@ function getStageFromDropId(id: string) {
 }
 
 function getVisibleCountKey(stage: TaskStage, tasks: Task[]) {
-  return `${stage}:${tasks.map((task) => task.id).join("|")}`;
+  // 可见数量只应该跟“这批任务是谁”有关，不能跟手动排序后的顺序有关；
+  // 否则用户展开更多后再拖动排序，会因为 id 顺序变化把可见数量重置回首屏。
+  return `${stage}:${tasks.map((task) => task.id).sort().join("|")}`;
+}
+
+function getStoredStageOrder() {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const storedValue = window.localStorage.getItem(taskStageOrderStorageKey);
+
+    return storedValue ? JSON.parse(storedValue) as Partial<Record<TaskStage, string[]>> : {};
+  } catch {
+    return {};
+  }
+}
+
+function getOrderedStageTasks(
+  tasks: Task[],
+  stage: TaskStage,
+  taskOrderByStage: Partial<Record<TaskStage, string[]>>
+) {
+  const order = taskOrderByStage[stage] ?? [];
+  const orderIndex = new Map(order.map((id, index) => [id, index]));
+
+  return [...tasks].sort((left, right) => {
+    const leftIndex = orderIndex.get(left.id);
+    const rightIndex = orderIndex.get(right.id);
+
+    if (typeof leftIndex === "number" && typeof rightIndex === "number") {
+      return leftIndex - rightIndex;
+    }
+
+    if (typeof leftIndex === "number") {
+      return -1;
+    }
+
+    if (typeof rightIndex === "number") {
+      return 1;
+    }
+
+    return sortTasksForDelivery(left, right);
+  });
+}
+
+function getNextStageOrder({
+  activeId,
+  overId,
+  stage,
+  taskOrderByStage,
+  tasks
+}: {
+  activeId: string;
+  overId: string;
+  stage: TaskStage;
+  taskOrderByStage: Partial<Record<TaskStage, string[]>>;
+  tasks: Task[];
+}) {
+  const orderedIds = getOrderedStageTasks(tasks, stage, taskOrderByStage).map((task) => task.id);
+  const activeIndex = orderedIds.indexOf(activeId);
+  const overIndex = orderedIds.indexOf(overId);
+
+  if (activeIndex < 0 || overIndex < 0 || activeId === overId) {
+    return taskOrderByStage;
+  }
+
+  const nextVisibleIds = arrayMove(orderedIds, activeIndex, overIndex);
+  const visibleIdSet = new Set(orderedIds);
+  const hiddenOrderedIds = (taskOrderByStage[stage] ?? []).filter((id) => !visibleIdSet.has(id));
+
+  // 任务顺序目前是看板体验偏好，后端没有 order 字段；先保存在本地，避免同阶段排序刷新后马上丢失。
+  return {
+    ...taskOrderByStage,
+    [stage]: [...nextVisibleIds, ...hiddenOrderedIds]
+  };
 }
 
 // 阶段列同时是空列投放区，避免某个阶段没有任务时无法拖入。
@@ -65,6 +148,7 @@ function TaskStageColumn({
   children,
   draggingTask,
   hiddenCount,
+  itemIds,
   onShowMore,
   stage,
   tasks
@@ -72,6 +156,7 @@ function TaskStageColumn({
   children: ReactNode;
   draggingTask: boolean;
   hiddenCount: number;
+  itemIds: string[];
   onShowMore: () => void;
   stage: TaskStage;
   tasks: Task[];
@@ -99,19 +184,21 @@ function TaskStageColumn({
         <div className="task-stage-progress-bar">
           <Progress percent={donePercent} size="small" showInfo={false} />
         </div>
-        <div className="task-stage-list">
-          {children}
-          {hiddenCount > 0 ? (
-            <Button className="task-stage-show-more" size="small" block onClick={onShowMore}>
-              展开 {Math.min(hiddenCount, visibleTaskStep)} 项，剩余 {hiddenCount}
-            </Button>
-          ) : null}
-          {!tasks.length ? (
-            <div className={`task-stage-empty${draggingTask ? " task-stage-empty-active" : ""}`}>
-              <Text type="secondary">{emptyText}</Text>
-            </div>
-          ) : null}
-        </div>
+        <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
+          <div className="task-stage-list">
+            {children}
+            {hiddenCount > 0 ? (
+              <Button className="task-stage-show-more" size="small" block onClick={onShowMore}>
+                展开 {Math.min(hiddenCount, visibleTaskStep)} 项，剩余 {hiddenCount}
+              </Button>
+            ) : null}
+            {!tasks.length ? (
+              <div className={`task-stage-empty${draggingTask ? " task-stage-empty-active" : ""}`}>
+                <Text type="secondary">{emptyText}</Text>
+              </div>
+            ) : null}
+          </div>
+        </SortableContext>
       </Card>
     </div>
   );
@@ -170,10 +257,9 @@ function TaskStageCard({
   );
 }
 
-// 每张卡片只注册为轻量 Draggable，不再注册 Sortable。
-// 当前产品只需要把任务从一个阶段拖到另一个阶段，列内排序没有实际业务入口；
-// 如果继续使用 Sortable，dnd-kit 会在拖动过程中持续测量同列卡片位置，数据量一大就会明显卡顿。
-const DraggableTaskCard = memo(function DraggableTaskCard({
+// 同阶段拖拽现在需要“让位”动画，所以卡片重新接入 Sortable；
+// 但 SortableContext 只包当前可见任务，避免全量版本任务都参与测量导致拖动卡顿。
+const SortableTaskCard = memo(function SortableTaskCard({
   onEdit,
   task
 }: {
@@ -185,8 +271,10 @@ const DraggableTaskCard = memo(function DraggableTaskCard({
     isDragging,
     listeners,
     setActivatorNodeRef,
-    setNodeRef
-  } = useDraggable({
+    setNodeRef,
+    transform,
+    transition
+  } = useSortable({
     data: {
       stage: task.stage,
       type: "task"
@@ -198,6 +286,10 @@ const DraggableTaskCard = memo(function DraggableTaskCard({
     <div
       ref={setNodeRef}
       className={isDragging ? "task-stage-draggable task-stage-draggable-active" : "task-stage-draggable"}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition
+      }}
     >
       <TaskStageCard
         dragAttributes={attributes}
@@ -224,6 +316,7 @@ export function TaskStageBoard({
   tasks: Task[];
 }) {
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const [taskOrderByStage, setTaskOrderByStage] = useState<Partial<Record<TaskStage, string[]>>>(getStoredStageOrder);
   const lastOverStageRef = useRef<TaskStage | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -245,11 +338,11 @@ export function TaskStageBoard({
     }
 
     for (const stage of taskStages) {
-      groups[stage].sort(sortTasksForDelivery);
+      groups[stage] = getOrderedStageTasks(groups[stage], stage, taskOrderByStage);
     }
 
     return groups;
-  }, [tasks]);
+  }, [taskOrderByStage, tasks]);
   const visibleCountKeys = useMemo(
     () =>
       taskStages.reduce<Record<TaskStage, string>>((keys, stage) => {
@@ -261,6 +354,11 @@ export function TaskStageBoard({
   );
   const [visibleCounts, setVisibleCounts] = useState<Partial<Record<TaskStage, { count: number; key: string }>>>({});
   const activeTask = activeTaskId ? tasks.find((task) => task.id === activeTaskId) ?? null : null;
+
+  useEffect(() => {
+    // 同阶段排序是本地看板偏好，后端暂未设计任务 order 字段；保存到 localStorage 让刷新后仍保持 PM 手动排好的顺序。
+    window.localStorage.setItem(taskStageOrderStorageKey, JSON.stringify(taskOrderByStage));
+  }, [taskOrderByStage]);
 
   function getVisibleCount(stage: TaskStage) {
     const stageTasks = tasksByStage[stage];
@@ -294,7 +392,8 @@ export function TaskStageBoard({
 
   function handleDragOver(event: DragOverEvent) {
     const overId = event.over?.id ? String(event.over.id) : "";
-    const overStage = getStageFromDropId(overId);
+    const overTask = tasks.find((item) => item.id === overId);
+    const overStage = getStageFromDropId(overId) ?? overTask?.stage ?? null;
 
     // 用户拖动中已经看到“松手移入某阶段”时，松手瞬间 event.over 偶尔会为空；
     // 记录最后一次命中的阶段，保证视觉反馈和实际保存结果一致。
@@ -308,13 +407,28 @@ export function TaskStageBoard({
 
     const task = tasks.find((item) => item.id === event.active.id);
     const overId = event.over?.id ? String(event.over.id) : "";
-    // 任务看板现在只允许跨阶段投放，不做列内排序；目标只认阶段列，
-    // 避免每张任务卡都成为碰撞/排序目标导致拖拽时频繁测量和重排。
-    const targetStage = getStageFromDropId(overId) ?? lastOverStageRef.current;
+    const overTask = tasks.find((item) => item.id === overId);
+    const targetStage = getStageFromDropId(overId) ?? overTask?.stage ?? lastOverStageRef.current;
 
     lastOverStageRef.current = null;
 
-    if (!task || !targetStage || task.stage === targetStage) {
+    if (!task || !targetStage) {
+      return;
+    }
+
+    if (task.stage === targetStage) {
+      if (overTask) {
+        setTaskOrderByStage((currentOrder) =>
+          getNextStageOrder({
+            activeId: task.id,
+            overId: overTask.id,
+            stage: targetStage,
+            taskOrderByStage: currentOrder,
+            tasks: tasksByStage[targetStage]
+          })
+        );
+      }
+
       return;
     }
 
@@ -344,12 +458,13 @@ export function TaskStageBoard({
               key={stage}
               draggingTask={Boolean(activeTask)}
               hiddenCount={hiddenCount}
+              itemIds={visibleTasks.map((task) => task.id)}
               onShowMore={() => handleShowMore(stage)}
               stage={stage}
               tasks={tasksByStage[stage]}
             >
               {visibleTasks.map((task) => (
-                <DraggableTaskCard key={task.id} task={task} onEdit={onEdit} />
+                <SortableTaskCard key={task.id} task={task} onEdit={onEdit} />
               ))}
             </TaskStageColumn>
           );
