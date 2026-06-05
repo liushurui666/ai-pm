@@ -1,0 +1,109 @@
+/* 负责人看板的拖拽样式单独收敛在组件目录，避免继续扩大平台全局样式。 */
+.task-owner-board {
+  align-items: stretch;
+}
+
+.task-owner-column-shell {
+  min-width: 300px;
+}
+
+.task-owner-column {
+  height: 100%;
+  min-height: 420px;
+}
+
+.task-owner-column .ant-card-body {
+  min-height: 320px;
+}
+
+.task-owner-column-over {
+  border-color: color-mix(in srgb, var(--brand) 48%, var(--border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--brand) 10%, transparent), transparent 220px),
+    var(--surface);
+}
+
+.task-owner-list {
+  min-height: 300px;
+}
+
+.task-owner-empty {
+  display: grid;
+  min-height: 88px;
+  place-items: center;
+  border: 1px dashed color-mix(in srgb, var(--brand) 28%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 82%, var(--brand) 6%);
+}
+
+.task-owner-empty-active {
+  min-height: 132px;
+  border-color: color-mix(in srgb, var(--brand) 52%, var(--border));
+  background: color-mix(in srgb, var(--surface) 72%, var(--brand) 14%);
+}
+
+.task-owner-column-over .task-owner-empty-active {
+  background: color-mix(in srgb, var(--surface) 58%, var(--brand) 22%);
+}
+
+.task-owner-draggable {
+  min-width: 0;
+}
+
+.task-owner-draggable-active {
+  opacity: 0.32;
+}
+
+.task-owner-drag-overlay {
+  width: min(360px, 74vw);
+  cursor: grabbing;
+  pointer-events: none;
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+.task-owner-card {
+  box-shadow: var(--shadow-card);
+}
+
+.task-owner-card-dragging {
+  border-color: color-mix(in srgb, var(--brand) 48%, var(--border));
+  box-shadow: 0 18px 34px color-mix(in srgb, var(--brand) 16%, transparent);
+}
+
+.task-owner-card-title {
+  min-width: 0;
+}
+
+.task-owner-card-title .ant-typography {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.task-owner-card-handle {
+  display: inline-grid;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--brand) 18%, var(--border));
+  border-radius: 8px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--surface) 88%, var(--brand) 8%);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.task-owner-card-handle:hover {
+  color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.task-owner-card-handle:active {
+  cursor: grabbing;
+}

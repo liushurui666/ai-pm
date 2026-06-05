@@ -1,18 +1,18 @@
 "use client";
 
 import "./index.less";
-import { Alert, Badge, Button, Card, Flex, Segmented, Select, Space, Switch, Table, Tag, Tooltip, Typography } from "antd";
-import { CalendarOutlined, CheckCircleOutlined, EditOutlined, PlusOutlined, UnorderedListOutlined, UserOutlined } from "@ant-design/icons";
+import { Button, Card, Segmented, Select, Space, Switch, Table, Tag, Tooltip, Typography } from "antd";
+import { CheckCircleOutlined, EditOutlined, PlusOutlined, UnorderedListOutlined, UserOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo, useState } from "react";
 import dayjs from "dayjs";
 import type { FeishuUser, Task, TaskStage } from "@/types/dashboard";
-import type { RequirementVersionOption } from "@/components/project-management-platform/types";
-import { OwnerAvatar, OwnerInline } from "@/components/project-management-platform/shared/owner-inline";
+import type { OwnerSelectableMember, RequirementVersionOption } from "@/components/project-management-platform/types";
+import { OwnerInline } from "@/components/project-management-platform/shared/owner-inline";
 import { PageTitle } from "@/components/project-management-platform/shared/page-shell";
 import { priorityColor, taskStages } from "@/components/project-management-platform/constants";
+import { TaskOwnerBoard } from "@/components/project-management-platform/views/task-owner-board";
 import { TaskStageBoard } from "@/components/project-management-platform/views/task-stage-board";
-import { sortTasksForDelivery } from "@/components/project-management-platform/views/version-task-board";
 
 const { Text } = Typography;
 const allTaskVersionValue = "全部";
@@ -71,16 +71,20 @@ function getTaskVersionScopeIds(versionOptions: RequirementVersionOption[], sele
 export function TasksView({
   tasks,
   currentUser,
+  ownerOptions,
   versionOptions,
   onCreate,
   onEdit,
+  onOwnerChange,
   onStageChange
 }: {
   tasks: Task[];
   currentUser?: FeishuUser;
+  ownerOptions: OwnerSelectableMember[];
   versionOptions: RequirementVersionOption[];
   onCreate: () => void;
   onEdit: (task: Task) => void;
+  onOwnerChange: (task: Task, owner: OwnerSelectableMember | null) => Promise<boolean>;
   onStageChange: (task: Task, stage: TaskStage) => Promise<boolean>;
 }) {
   const [viewMode, setViewMode] = useState<"stage" | "table" | "owner">("stage");
@@ -114,26 +118,6 @@ export function TasksView({
     return scopedTasks.filter((task) => task.versionId && versionScopeIds.has(task.versionId));
   }, [scopedTasks, taskVersionFilter, versionOptions]);
   const visibleTasks = versionFilteredTasks;
-  const ownerGroups = useMemo(() => {
-    const groups = new Map<string, { avatarUrl?: string; tasks: Task[] }>();
-
-    for (const task of visibleTasks) {
-      const owner = task.owner?.trim() || "未分配";
-      const current = groups.get(owner) ?? { avatarUrl: task.ownerAvatarUrl, tasks: [] };
-      groups.set(owner, {
-        avatarUrl: current.avatarUrl || task.ownerAvatarUrl,
-        tasks: [...current.tasks, task]
-      });
-    }
-
-    return Array.from(groups.entries())
-      .map(([owner, group]) => ({
-        avatarUrl: group.avatarUrl,
-        owner,
-        tasks: group.tasks.sort(sortTasksForDelivery)
-      }))
-      .sort((left, right) => right.tasks.length - left.tasks.length || left.owner.localeCompare(right.owner, "zh-CN"));
-  }, [visibleTasks]);
   const taskColumns: ColumnsType<Task> = [
     {
       title: "任务",
@@ -276,62 +260,13 @@ export function TasksView({
           />
         </Card>
       ) : (
-        <div className="owner-kanban-grid">
-          {ownerGroups.length ? (
-            ownerGroups.map((group) => (
-              <Card
-                className="owner-kanban-column"
-                key={group.owner}
-                title={
-                  <Flex justify="space-between" align="center">
-                    <Space>
-                      <OwnerAvatar name={group.owner} avatarUrl={group.avatarUrl} />
-                      <Text strong>{group.owner}</Text>
-                    </Space>
-                    <Badge count={group.tasks.length} color="var(--brand)" />
-                  </Flex>
-                }
-              >
-                <Space orientation="vertical" size={12} className="pm-wide">
-                  {group.tasks.map((task) => (
-                    <div className="task-card" key={task.id}>
-                      <Flex justify="space-between" align="start" gap={12}>
-                        <Text strong>{task.title}</Text>
-                        <Space size={4}>
-                          <Tag color={priorityColor[task.priority]}>{task.priority}</Tag>
-                          <Tooltip title="编辑任务">
-                            <Button size="small" type="text" icon={<EditOutlined />} onClick={() => onEdit(task)} />
-                          </Tooltip>
-                        </Space>
-                      </Flex>
-                      <Space wrap size={[6, 6]} className="task-meta-tags">
-                        <Tag>{task.stage}</Tag>
-                        <Tag color="blue">{task.project}</Tag>
-                        {task.versionName ? <Tag color="cyan">{task.versionName}</Tag> : null}
-                        <Tag>开始 {task.startDate}</Tag>
-                        <Tag icon={<CalendarOutlined />}>{task.dueDate}</Tag>
-                      </Space>
-                      <Alert
-                        className="task-ai-hint"
-                        type={task.priority === "高" ? "warning" : "info"}
-                        showIcon
-                        message={task.aiHint}
-                      />
-                    </div>
-                  ))}
-                </Space>
-              </Card>
-            ))
-          ) : (
-            <Card className="pm-wide">
-              <Alert
-                type="info"
-                showIcon
-                message={getTaskEmptyText(onlyMine, taskVersionFilter)}
-              />
-            </Card>
-          )}
-        </div>
+        <TaskOwnerBoard
+          emptyText={getTaskEmptyText(onlyMine, taskVersionFilter)}
+          ownerOptions={ownerOptions}
+          tasks={visibleTasks}
+          onEdit={onEdit}
+          onOwnerChange={onOwnerChange}
+        />
       )}
     </Space>
   );

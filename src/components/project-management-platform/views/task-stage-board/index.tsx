@@ -7,7 +7,7 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
-  closestCorners,
+  pointerWithin,
   useDraggable,
   useDroppable,
   useSensor,
@@ -28,6 +28,7 @@ import { sortTasksForDelivery } from "@/components/project-management-platform/v
 const { Text } = Typography;
 const initialVisibleTaskCount = 18;
 const visibleTaskStep = 18;
+const dragActivationDistance = 1;
 
 const stageToneClass: Record<TaskStage, string> = {
   待处理: "task-stage-column-pending",
@@ -225,7 +226,7 @@ export function TaskStageBoard({
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 6
+        distance: dragActivationDistance
       }
     })
   );
@@ -306,7 +307,7 @@ export function TaskStageBoard({
 
   return (
     <DndContext
-      collisionDetection={closestCorners}
+      collisionDetection={pointerWithin}
       sensors={sensors}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}

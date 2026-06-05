@@ -71,7 +71,7 @@ import {
   serializeCreateValues
 } from "@/components/project-management-platform/forms/form-utils";
 import type { BugAiFixFormValues } from "@/components/project-management-platform/forms/bug-ai-fix-drawer";
-import { hydrateOwnerFormValues } from "@/components/project-management-platform/forms/owner-select";
+import { createOwnerFormFieldsFromMember, hydrateOwnerFormValues } from "@/components/project-management-platform/forms/owner-select";
 import {
   BugEditDrawer,
   CreateRecordDrawer,
@@ -733,6 +733,74 @@ export function ProjectManagementPlatform({
       return true;
     } catch (error) {
       messageApi.error(error instanceof Error ? error.message : "更新任务阶段失败");
+
+      return false;
+    }
+  }
+
+  async function handleUpdateTaskOwner(task: Task, owner: OwnerSelectableMember | null) {
+    if (!data) {
+      return false;
+    }
+
+    const nextOwnerFields = owner
+      ? createOwnerFormFieldsFromMember(owner)
+      : {
+          owner: "",
+          ownerAvatarUrl: "",
+          ownerEmail: "",
+          ownerMemberId: "",
+          ownerOpenId: "",
+          ownerUnionId: "",
+          ownerUserId: ""
+        };
+
+    if (owner ? task.ownerMemberId === owner.id : !task.ownerMemberId && !task.owner?.trim()) {
+      return true;
+    }
+
+    try {
+      // 负责人拖拽必须同步成员 ID、头像、邮箱和飞书身份字段；只改 owner 字符串会导致后续通知和成员匹配继续指向旧人。
+      const response = await fetch("/api/records", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          workspaceId: currentWorkspaceId,
+          type: "task",
+          id: task.id,
+          values: serializeCreateValues({
+            ...task,
+            ...nextOwnerFields
+          })
+        })
+      });
+      const payload = (await response.json()) as CreateRecordResult | { error?: string };
+
+      if (response.status === 401) {
+        window.location.assign("/login");
+
+        return false;
+      }
+
+      if (!response.ok) {
+        throw new Error("error" in payload ? payload.error || "更新任务负责人失败" : "更新任务负责人失败");
+      }
+
+      if ("error" in payload) {
+        throw new Error(payload.error || "更新任务负责人失败");
+      }
+
+      const result = payload as CreateRecordResult;
+
+      setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
+      void refreshDashboardState();
+      showRecordResultMessage(result.message);
+
+      return true;
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "更新任务负责人失败");
 
       return false;
     }
@@ -1741,9 +1809,11 @@ export function ProjectManagementPlatform({
                     <TasksView
                       tasks={data.tasks}
                       currentUser={data.meta?.user}
+                      ownerOptions={ownerOptions}
                       versionOptions={requirementVersionOptions}
                       onCreate={() => openCreateDrawer("task")}
                       onEdit={openEditTaskDrawer}
+                      onOwnerChange={handleUpdateTaskOwner}
                       onStageChange={handleUpdateTaskStage}
                     />
                   ) : null}
