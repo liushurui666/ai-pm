@@ -6,11 +6,14 @@ import { CalendarOutlined, EditOutlined, HolderOutlined } from "@ant-design/icon
 import {
   DndContext,
   DragOverlay,
+  MeasuringFrequency,
+  MeasuringStrategy,
   PointerSensor,
   pointerWithin,
   useDroppable,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
@@ -20,12 +23,14 @@ import {
 import {
   SortableContext,
   arrayMove,
+  defaultAnimateLayoutChanges,
   useSortable,
+  type AnimateLayoutChanges,
   verticalListSortingStrategy
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import dayjs from "dayjs";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Task, TaskStage } from "@/types/dashboard";
 import { OwnerInline } from "@/components/project-management-platform/shared/owner-inline";
@@ -36,13 +41,59 @@ const { Text } = Typography;
 const initialVisibleTaskCount = 18;
 const visibleTaskStep = 18;
 const dragActivationDistance = 1;
+const stageDropPrefix = "stage:";
 const taskStageOrderStorageKey = "ai-pm.task-stage-board-order.v1";
+const sortableTransition = {
+  duration: 120,
+  easing: "cubic-bezier(0.2, 0, 0, 1)"
+};
+const taskStageMeasuring = {
+  droppable: {
+    frequency: MeasuringFrequency.Optimized,
+    strategy: MeasuringStrategy.WhileDragging
+  }
+};
+const disabledResizeObserverConfig = {
+  disabled: true
+};
 
 const stageToneClass: Record<TaskStage, string> = {
   待处理: "task-stage-column-pending",
   进行中: "task-stage-column-progress",
   评审中: "task-stage-column-review",
   已完成: "task-stage-column-done"
+};
+
+const animateTaskLayoutChanges: AnimateLayoutChanges = (args) => {
+  // 只有拖拽排序相关的位移需要动画，其余列表刷新不做过渡，避免筛选/翻页时产生额外布局动画。
+  return args.isSorting || args.wasDragging ? defaultAnimateLayoutChanges(args) : false;
+};
+
+const taskStageCollisionDetection: CollisionDetection = (args) => {
+  const collisions = pointerWithin(args);
+
+  if (collisions.length <= 1) {
+    return collisions;
+  }
+
+  const activeId = String(args.active.id);
+  const availableCollisions = collisions.filter((collision) => String(collision.id) !== activeId);
+
+  if (!availableCollisions.length) {
+    return collisions;
+  }
+
+  // 同一位置经常同时命中“任务卡片”和“阶段列”；优先返回任务卡片，Sortable 才能立刻计算同列让位顺序。
+  return availableCollisions.sort((left, right) => {
+    const leftIsStage = isStageDropId(String(left.id));
+    const rightIsStage = isStageDropId(String(right.id));
+
+    if (leftIsStage === rightIsStage) {
+      return 0;
+    }
+
+    return leftIsStage ? 1 : -1;
+  });
 };
 
 function getTaskOverdue(task: Task) {
@@ -58,9 +109,21 @@ function getColumnPercent(tasks: Task[]) {
 }
 
 function getStageFromDropId(id: string) {
-  const stage = id.replace(/^stage:/, "") as TaskStage;
+  if (!isStageDropId(id)) {
+    return null;
+  }
+
+  const stage = id.slice(stageDropPrefix.length) as TaskStage;
 
   return taskStages.includes(stage) ? stage : null;
+}
+
+function getStageDropId(stage: TaskStage) {
+  return `${stageDropPrefix}${stage}`;
+}
+
+function isStageDropId(id: string) {
+  return id.startsWith(stageDropPrefix);
 }
 
 function getVisibleCountKey(stage: TaskStage, tasks: Task[]) {
@@ -161,7 +224,10 @@ function TaskStageColumn({
   stage: TaskStage;
   tasks: Task[];
 }) {
-  const { isOver, setNodeRef } = useDroppable({ id: `stage:${stage}` });
+  const { isOver, setNodeRef } = useDroppable({
+    id: getStageDropId(stage),
+    resizeObserverConfig: disabledResizeObserverConfig
+  });
   const overdueCount = tasks.filter(getTaskOverdue).length;
   const donePercent = getColumnPercent(tasks);
   const emptyText = draggingTask ? (isOver ? `松手移入${stage}` : "可拖入此阶段") : "暂无任务";
@@ -204,7 +270,7 @@ function TaskStageColumn({
   );
 }
 
-function TaskStageCard({
+const TaskStageCard = memo(function TaskStageCard({
   dragAttributes,
   dragListeners,
   dragging,
@@ -255,6 +321,34 @@ function TaskStageCard({
       </Text>
     </div>
   );
+}, areTaskStageCardPropsEqual);
+
+function areTaskStageCardPropsEqual(
+  previous: {
+    dragAttributes?: DraggableAttributes;
+    dragListeners?: DraggableSyntheticListeners;
+    dragging?: boolean;
+    onEdit: (task: Task) => void;
+    setDragHandleRef?: (element: HTMLElement | null) => void;
+    task: Task;
+  },
+  next: {
+    dragAttributes?: DraggableAttributes;
+    dragListeners?: DraggableSyntheticListeners;
+    dragging?: boolean;
+    onEdit: (task: Task) => void;
+    setDragHandleRef?: (element: HTMLElement | null) => void;
+    task: Task;
+  }
+) {
+  return (
+    previous.task === next.task &&
+    previous.dragging === next.dragging &&
+    previous.onEdit === next.onEdit &&
+    previous.setDragHandleRef === next.setDragHandleRef &&
+    previous.dragAttributes === next.dragAttributes &&
+    previous.dragListeners === next.dragListeners
+  );
 }
 
 // 同阶段拖拽现在需要“让位”动画，所以卡片重新接入 Sortable；
@@ -275,11 +369,14 @@ const SortableTaskCard = memo(function SortableTaskCard({
     transform,
     transition
   } = useSortable({
+    animateLayoutChanges: animateTaskLayoutChanges,
     data: {
       stage: task.stage,
       type: "task"
     },
-    id: task.id
+    id: task.id,
+    resizeObserverConfig: disabledResizeObserverConfig,
+    transition: sortableTransition
   });
 
   return (
@@ -287,7 +384,7 @@ const SortableTaskCard = memo(function SortableTaskCard({
       ref={setNodeRef}
       className={isDragging ? "task-stage-draggable task-stage-draggable-active" : "task-stage-draggable"}
       style={{
-        transform: CSS.Transform.toString(transform),
+        transform: transform ? `${CSS.Transform.toString(transform)} translateZ(0)` : undefined,
         transition
       }}
     >
@@ -325,6 +422,7 @@ export function TaskStageBoard({
       }
     })
   );
+  const taskById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
   const tasksByStage = useMemo(() => {
     const groups = taskStages.reduce<Record<TaskStage, Task[]>>((currentGroups, stage) => {
       currentGroups[stage] = [];
@@ -353,7 +451,7 @@ export function TaskStageBoard({
     [tasksByStage]
   );
   const [visibleCounts, setVisibleCounts] = useState<Partial<Record<TaskStage, { count: number; key: string }>>>({});
-  const activeTask = activeTaskId ? tasks.find((task) => task.id === activeTaskId) ?? null : null;
+  const activeTask = activeTaskId ? taskById.get(activeTaskId) ?? null : null;
 
   useEffect(() => {
     // 同阶段排序是本地看板偏好，后端暂未设计任务 order 字段；保存到 localStorage 让刷新后仍保持 PM 手动排好的顺序。
@@ -385,14 +483,14 @@ export function TaskStageBoard({
     }));
   }
 
-  function handleDragStart(event: DragStartEvent) {
+  const handleDragStart = useCallback((event: DragStartEvent) => {
     lastOverStageRef.current = null;
     setActiveTaskId(String(event.active.id));
-  }
+  }, []);
 
-  function handleDragOver(event: DragOverEvent) {
+  const handleDragOver = useCallback((event: DragOverEvent) => {
     const overId = event.over?.id ? String(event.over.id) : "";
-    const overTask = tasks.find((item) => item.id === overId);
+    const overTask = taskById.get(overId);
     const overStage = getStageFromDropId(overId) ?? overTask?.stage ?? null;
 
     // 用户拖动中已经看到“松手移入某阶段”时，松手瞬间 event.over 偶尔会为空；
@@ -400,14 +498,14 @@ export function TaskStageBoard({
     if (overStage) {
       lastOverStageRef.current = overStage;
     }
-  }
+  }, [taskById]);
 
-  async function handleDragEnd(event: DragEndEvent) {
+  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
     setActiveTaskId(null);
 
-    const task = tasks.find((item) => item.id === event.active.id);
+    const task = taskById.get(String(event.active.id));
     const overId = event.over?.id ? String(event.over.id) : "";
-    const overTask = tasks.find((item) => item.id === overId);
+    const overTask = taskById.get(overId);
     const targetStage = getStageFromDropId(overId) ?? overTask?.stage ?? lastOverStageRef.current;
 
     lastOverStageRef.current = null;
@@ -433,21 +531,24 @@ export function TaskStageBoard({
     }
 
     await onStageChange(task, targetStage);
-  }
+  }, [onStageChange, taskById, tasksByStage]);
+
+  const handleDragCancel = useCallback(() => {
+    lastOverStageRef.current = null;
+    setActiveTaskId(null);
+  }, []);
 
   return (
     <DndContext
-      collisionDetection={pointerWithin}
+      collisionDetection={taskStageCollisionDetection}
+      measuring={taskStageMeasuring}
       sensors={sensors}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
-      onDragCancel={() => {
-        lastOverStageRef.current = null;
-        setActiveTaskId(null);
-      }}
+      onDragCancel={handleDragCancel}
     >
-      <div className="task-stage-board">
+      <div className={`task-stage-board${activeTask ? " task-stage-board-dragging" : ""}`}>
         {taskStages.map((stage) => {
           const visibleCount = getVisibleCount(stage);
           const visibleTasks = tasksByStage[stage].slice(0, visibleCount);

@@ -5,10 +5,16 @@
   align-items: start;
   overflow-x: auto;
   padding: 2px 2px 8px;
+  contain: layout;
+}
+
+.task-stage-board-dragging {
+  cursor: grabbing;
 }
 
 .task-stage-column-shell {
   min-width: 270px;
+  contain: layout paint style;
 }
 
 .task-stage-column {
@@ -17,6 +23,8 @@
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--task-stage-tone) 8%, transparent), transparent 220px),
     var(--surface-subtle);
+  backface-visibility: hidden;
+  transform: translateZ(0);
 }
 
 .task-stage-column .ant-card-body {
@@ -64,6 +72,7 @@
   align-content: start;
   gap: 10px;
   min-height: 360px;
+  contain: layout;
 }
 
 .task-stage-empty {
@@ -96,6 +105,10 @@
 
 .task-stage-draggable {
   min-width: 0;
+  backface-visibility: hidden;
+  contain: layout paint;
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 .task-stage-draggable-active {
@@ -121,11 +134,27 @@
     linear-gradient(135deg, color-mix(in srgb, var(--brand) 5%, transparent), transparent 70%),
     var(--surface);
   box-shadow: var(--shadow-card);
+  backface-visibility: hidden;
+  contain: content;
+  transform: translateZ(0);
 }
 
 .task-stage-card-dragging {
   border-color: color-mix(in srgb, var(--brand) 46%, var(--border));
   box-shadow: 0 18px 34px color-mix(in srgb, var(--brand) 16%, transparent);
+}
+
+.task-stage-board-dragging .task-stage-card:not(.task-stage-card-dragging) {
+  box-shadow: 0 8px 18px color-mix(in srgb, #000 20%, transparent);
+}
+
+.task-stage-board-dragging .task-stage-card,
+.task-stage-board-dragging .task-stage-column {
+  transition: none;
+}
+
+.task-stage-drag-overlay .task-stage-card {
+  box-shadow: 0 22px 44px color-mix(in srgb, var(--brand) 22%, #000 26%);
 }
 
 .task-stage-card-title {
