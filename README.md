@@ -205,6 +205,8 @@ AI_PM_ENV_FILE=/etc/ai-pm/test.env AI_PM_HOST_PORT=3004 AI_PM_CONTAINER_NAME=ai-
 
 容器启动时会检查 `APP_URL`、`DATABASE_URL`、`AUTH_DATABASE_URL` 和 `BETTER_AUTH_SECRET`，并默认只执行 `pnpm db:migrate` 迁移 AI PM 业务 MySQL。如果业务数据库迁移由外部发布系统统一控制，可设置 `RUN_MIGRATIONS=0`；只有认证平台 schema 也要随本次发布升级时，才设置 `RUN_AUTH_MIGRATIONS=1` 执行 `unified-auth db migrate/doctor`。
 
+Docker 构建阶段不会注入真实 `AUTH_DATABASE_URL`，镜像里只使用占位连接串让 Next 完成认证路由静态收集；真实认证库连接只在容器运行时通过 `AI_PM_ENV_FILE` 注入。
+
 手动调试 Compose 时仍可直接执行：
 
 ```bash
