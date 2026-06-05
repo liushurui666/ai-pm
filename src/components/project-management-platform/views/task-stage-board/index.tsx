@@ -30,7 +30,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import dayjs from "dayjs";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { Task, TaskStage } from "@/types/dashboard";
 import { OwnerInline } from "@/components/project-management-platform/shared/owner-inline";
@@ -63,8 +63,6 @@ const stageToneClass: Record<TaskStage, string> = {
   评审中: "task-stage-column-review",
   已完成: "task-stage-column-done"
 };
-
-type StageTaskGroups = Record<TaskStage, Task[]>;
 
 type DragStagePreview = {
   overId: string | null;
@@ -246,43 +244,6 @@ function getPreviewInsertIndex<T extends { id: string }>({
   return overIndex >= 0 ? overIndex : Math.min(fallbackVisibleCount, tasks.length);
 }
 
-function getPreviewStageGroups({
-  activeTask,
-  preview,
-  tasksByStage,
-  visibleCountByStage
-}: {
-  activeTask: Task;
-  preview: DragStagePreview | null;
-  tasksByStage: StageTaskGroups;
-  visibleCountByStage: Record<TaskStage, number>;
-}) {
-  if (!preview || preview.stage === activeTask.stage) {
-    return tasksByStage;
-  }
-
-  const previewGroups = taskStages.reduce<StageTaskGroups>((groups, stage) => {
-    groups[stage] = tasksByStage[stage].filter((task) => task.id !== activeTask.id);
-
-    return groups;
-  }, {} as StageTaskGroups);
-  const targetTasks = previewGroups[preview.stage];
-  const insertIndex = getPreviewInsertIndex({
-    fallbackVisibleCount: visibleCountByStage[preview.stage],
-    overId: preview.overId,
-    tasks: targetTasks
-  });
-
-  // 跨阶段拖动时把 active 任务临时改成目标阶段，让目标列的 SortableContext 能包含 active id 并立即产生让位动画。
-  previewGroups[preview.stage] = [
-    ...targetTasks.slice(0, insertIndex),
-    { ...activeTask, stage: preview.stage },
-    ...targetTasks.slice(insertIndex)
-  ];
-
-  return previewGroups;
-}
-
 function getNextCrossStageOrder({
   activeId,
   overId,
@@ -297,7 +258,7 @@ function getNextCrossStageOrder({
   sourceStage: TaskStage;
   targetStage: TaskStage;
   taskOrderByStage: Partial<Record<TaskStage, string[]>>;
-  tasksByStage: StageTaskGroups;
+  tasksByStage: Record<TaskStage, Task[]>;
   visibleCount: number;
 }) {
   const sourceIds = getOrderedStageTasks(tasksByStage[sourceStage], sourceStage, taskOrderByStage)
@@ -318,6 +279,16 @@ function getNextCrossStageOrder({
     [sourceStage]: sourceIds,
     [targetStage]: [...targetIds.slice(0, insertIndex), activeId, ...targetIds.slice(insertIndex)]
   };
+}
+
+function TaskStagePreviewSlot({ stage }: { stage: TaskStage }) {
+  // 跨状态拖拽时不把 active 任务重新挂到目标 SortableContext，避免 dnd-kit 在拖拽中循环派发布局更新；
+  // 这里只渲染不可拖拽占位槽，让目标列先腾出落点空间，真实状态变更仍然在松手后保存。
+  return (
+    <div className={`task-stage-preview-slot ${stageToneClass[stage]}`}>
+      <Text type="secondary">松手移入{stage}</Text>
+    </div>
+  );
 }
 
 // 阶段列同时是空列投放区，避免某个阶段没有任务时无法拖入。
@@ -580,21 +551,6 @@ export function TaskStageBoard({
       }, {} as Record<TaskStage, number>),
     [tasksByStage, visibleCounts, visibleCountKeys]
   );
-  const visibleTasksByStage = useMemo(
-    () => {
-      if (!activeTask) {
-        return tasksByStage;
-      }
-
-      return getPreviewStageGroups({
-        activeTask,
-        preview: dragStagePreview,
-        tasksByStage,
-        visibleCountByStage
-      });
-    },
-    [activeTask, dragStagePreview, tasksByStage, visibleCountByStage]
-  );
 
   useEffect(() => {
     // 同阶段排序是本地看板偏好，后端暂未设计任务 order 字段；保存到 localStorage 让刷新后仍保持 PM 手动排好的顺序。
@@ -721,8 +677,16 @@ export function TaskStageBoard({
       <div className={`task-stage-board${activeTask ? " task-stage-board-dragging" : ""}`}>
         {taskStages.map((stage) => {
           const visibleCount = visibleCountByStage[stage];
-          const stageTasks = visibleTasksByStage[stage];
-          const visibleTasks = stageTasks.slice(0, visibleCount + (dragStagePreview?.stage === stage ? 1 : 0));
+          const stageTasks = tasksByStage[stage];
+          const visibleTasks = stageTasks.slice(0, visibleCount);
+          const previewIndex =
+            activeTask && dragStagePreview?.stage === stage && activeTask.stage !== stage
+              ? getPreviewInsertIndex({
+                  fallbackVisibleCount: visibleCount,
+                  overId: dragStagePreview.overId,
+                  tasks: visibleTasks
+                })
+              : -1;
           const hiddenCount = Math.max(0, stageTasks.length - visibleTasks.length);
 
           return (
@@ -735,9 +699,13 @@ export function TaskStageBoard({
               stage={stage}
               tasks={stageTasks}
             >
-              {visibleTasks.map((task) => (
-                <SortableTaskCard key={task.id} task={task} onEdit={onEdit} />
+              {visibleTasks.map((task, index) => (
+                <Fragment key={task.id}>
+                  {previewIndex === index ? <TaskStagePreviewSlot stage={stage} /> : null}
+                  <SortableTaskCard task={task} onEdit={onEdit} />
+                </Fragment>
               ))}
+              {previewIndex === visibleTasks.length ? <TaskStagePreviewSlot stage={stage} /> : null}
             </TaskStageColumn>
           );
         })}
