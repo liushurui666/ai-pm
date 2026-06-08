@@ -1284,11 +1284,31 @@ function getAuthIdentityUserId(user: FeishuUser) {
   return user.authUserId;
 }
 
+function normalizeIdentityEmail(value: unknown) {
+  return asText(value).trim().toLowerCase();
+}
+
+function findUniqueWorkspaceMemberByEmail(members: DashboardMember[], workspaceId: string, user: FeishuUser) {
+  const email = normalizeIdentityEmail(user.email);
+
+  if (!email) {
+    return undefined;
+  }
+
+  const candidates = members.filter((member) => member.workspaceId === workspaceId && normalizeIdentityEmail(member.email) === email);
+
+  return candidates.length === 1 ? candidates[0] : undefined;
+}
+
 function syncMemberProfile(member: DashboardMember, user: FeishuUser) {
   const channels = [...member.notification.channels];
   const feishuChannelIndex = channels.findIndex((channel) => channel.provider === "feishu");
   const authProvider = getAuthIdentityProvider(user);
   const authUserId = getAuthIdentityUserId(user);
+  const hasAuthProviderIdentity = member.identities.some(
+    (identity) => identity.provider === authProvider && identity.providerUserId === authUserId
+  );
+  const shouldAttachAuthIdentity = Boolean(authUserId && !hasAuthProviderIdentity);
 
   // 资料同步发生在页面读数据时，只补齐 SDK authUserId 对应的身份；飞书通知通道必须限定飞书来源，
   // 避免 Google/GitHub 登录用户被错误创建机器人通知目标。
@@ -1319,7 +1339,7 @@ function syncMemberProfile(member: DashboardMember, user: FeishuUser) {
     name: user.name || member.name,
     email: user.email || member.email,
     avatarUrl: user.avatarUrl || member.avatarUrl,
-    registrationChannel: member.registrationChannel,
+    registrationChannel: shouldAttachAuthIdentity && member.registrationChannel === "email" ? authProvider : member.registrationChannel,
     identities: [...member.identities],
     notification: {
       ...member.notification,
@@ -1329,11 +1349,8 @@ function syncMemberProfile(member: DashboardMember, user: FeishuUser) {
       feishuUserId: authProvider === "feishu" ? member.notification.feishuUserId || user.userId : member.notification.feishuUserId
     }
   };
-  const hasAuthProviderIdentity = nextMember.identities.some(
-    (identity) => identity.provider === authProvider && identity.providerUserId === authUserId
-  );
 
-  if (authUserId && !hasAuthProviderIdentity) {
+  if (shouldAttachAuthIdentity) {
     nextMember.identities.push({
       provider: authProvider,
       providerUserId: authUserId,
@@ -1381,7 +1398,7 @@ function ensureCurrentMember(data: LocalDatabase, workspaceId: string, user?: Fe
   }
 
   const members = data.members.map((member) => normalizeMember(member, workspaceId));
-  const existingMember = findWorkspaceMemberForUser(members, workspaceId, user);
+  const existingMember = findWorkspaceMemberForUser(members, workspaceId, user) ?? findUniqueWorkspaceMemberByEmail(members, workspaceId, user);
 
   if (existingMember) {
     const syncedMember = syncMemberProfile(existingMember, user);
