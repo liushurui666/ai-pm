@@ -20,7 +20,7 @@ import {
   ThunderboltOutlined
 } from "@ant-design/icons";
 import Link from "next/link";
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { PointerEvent } from "react";
 
 type LandingHomeProps = {
@@ -74,9 +74,35 @@ const workflowItems = [
   { icon: <ApiOutlined />, title: "AI 接修复", text: "Bug 进入代码分支，生成 PR 等人确认" }
 ];
 
+const scrollStoryItems = [
+  {
+    badge: "01 / Requirement Map",
+    icon: <FileTextOutlined />,
+    metric: "12 条验收点",
+    title: "需求进入后，先变成可执行地图",
+    text: "AI 把 PRD、会议纪要和口头描述拆成角色、验收点、前后端事项与测试边界，项目经理不用再手动补一遍上下文。"
+  },
+  {
+    badge: "02 / Delivery Pulse",
+    icon: <RadarChartOutlined />,
+    metric: "86% 健康度",
+    title: "版本推进时，风险会自己浮上来",
+    text: "阶段拖拽、负责人变更、延期任务和阻塞 Bug 进入同一个节奏盘，滚动就像看一场项目推进的实时回放。"
+  },
+  {
+    badge: "03 / AI Fix Loop",
+    icon: <ApiOutlined />,
+    metric: "5 个 PR",
+    title: "Bug 不止被记录，而是被推进到代码",
+    text: "复现、附件、仓库、分支和 AI 修复任务被串成闭环，最终停在可确认的 PR，而不是停在聊天里的“我看看”。"
+  }
+];
+
 // 首页参考 ai-interview 的多层背景、产品截图与滚动叙事，但不复刻招聘语境；
 // AI PM 的首屏必须直接表达“项目现场正在流动”，所以这里用动态指挥台、脉冲节点和任务流来替代静态大图。
 export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref, workbenchHref }: LandingHomeProps) {
+  const homeRef = useRef<HTMLElement>(null);
+
   const handlePointerMove = useCallback((event: PointerEvent<HTMLElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
 
@@ -85,8 +111,83 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     event.currentTarget.style.setProperty("--cursor-y", `${event.clientY - rect.top}px`);
   }, []);
 
+  useEffect(() => {
+    const root = homeRef.current;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (!root || reducedMotion) {
+      root?.querySelectorAll<HTMLElement>("[data-landing-reveal]").forEach((element) => {
+        element.classList.add("is-visible");
+      });
+      return;
+    }
+
+    let frame = 0;
+    const hero = root.querySelector<HTMLElement>(".landing-hero");
+    const story = root.querySelector<HTMLElement>(".landing-scroll-story");
+    const revealObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+          }
+        });
+      },
+      {
+        rootMargin: "0px 0px -12% 0px",
+        threshold: 0.18
+      }
+    );
+
+    root.querySelectorAll<HTMLElement>("[data-landing-reveal]").forEach((element) => {
+      revealObserver.observe(element);
+    });
+
+    const clampProgress = (value: number) => Math.min(1, Math.max(0, value));
+    const updateScrollProgress = () => {
+      frame = 0;
+
+      // 这里不用额外引入 GSAP：只把滚动进度写成 CSS 变量，由样式层驱动首屏缩放和滚动剧场进度条；
+      // 这样既能做出参考站的滚动感，又不会把首页依赖变重。
+      if (hero) {
+        const rect = hero.getBoundingClientRect();
+        const range = Math.max(1, rect.height - window.innerHeight * 0.42);
+        const progress = clampProgress(-rect.top / range);
+        root.style.setProperty("--hero-command-y", `${Math.round(progress * -34)}px`);
+        root.style.setProperty("--hero-command-scale", `${1 - progress * 0.045}`);
+      }
+
+      if (story) {
+        const rect = story.getBoundingClientRect();
+        const range = Math.max(1, rect.height - window.innerHeight);
+        const progress = clampProgress(-rect.top / range);
+        root.style.setProperty("--story-progress", progress.toFixed(3));
+      }
+    };
+
+    const requestScrollUpdate = () => {
+      if (!frame) {
+        frame = window.requestAnimationFrame(updateScrollProgress);
+      }
+    };
+
+    updateScrollProgress();
+    window.addEventListener("scroll", requestScrollUpdate, { passive: true });
+    window.addEventListener("resize", requestScrollUpdate);
+
+    return () => {
+      revealObserver.disconnect();
+      window.removeEventListener("scroll", requestScrollUpdate);
+      window.removeEventListener("resize", requestScrollUpdate);
+
+      if (frame) {
+        window.cancelAnimationFrame(frame);
+      }
+    };
+  }, []);
+
   return (
-    <main className="landing-home" id="main-content" onPointerMove={handlePointerMove}>
+    <main className="landing-home" id="main-content" onPointerMove={handlePointerMove} ref={homeRef}>
       <section className="landing-hero" aria-labelledby="landing-title">
         <div className="landing-hero__media" aria-hidden="true" />
         <div className="landing-hero__shade" aria-hidden="true" />
@@ -213,7 +314,59 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         </div>
       </section>
 
-      <section className="landing-workflow" id="workflow" aria-labelledby="workflow-title">
+      <section className="landing-scroll-story" aria-labelledby="scroll-story-title">
+        <div className="landing-scroll-story__intro" data-landing-reveal>
+          <p className="landing-section-kicker">Scroll Command</p>
+          <h2 id="scroll-story-title">往下滚，项目不是换几张图，而是在你眼前推进</h2>
+          <p>
+            参考站的滚动强在“画面留住、信息切换”。AI PM 这里把它做成项目流转剧场：左边工作台固定，右边三段现场逐步点亮。
+          </p>
+        </div>
+
+        <div className="landing-scroll-story__stage">
+          <div className="landing-scroll-story__sticky" aria-hidden="true">
+            <div className="landing-scroll-meter">
+              <span />
+            </div>
+            <div className="landing-story-screen">
+              <div className="landing-story-screen__top">
+                <span>AI PM / live delivery replay</span>
+                <strong>项目推进轨迹</strong>
+              </div>
+              <div className="landing-story-screen__body">
+                <div className="landing-story-map">
+                  <span className="landing-story-map__line landing-story-map__line--one" />
+                  <span className="landing-story-map__line landing-story-map__line--two" />
+                  {scrollStoryItems.map((item, index) => (
+                    <div className={`landing-story-map__node landing-story-map__node--${index + 1}`} key={item.title}>
+                      {item.icon}
+                      <strong>{item.metric}</strong>
+                    </div>
+                  ))}
+                </div>
+                <div className="landing-story-table">
+                  <span>需求拆分完成</span>
+                  <span>任务已进入看板</span>
+                  <span>AI 修复 PR 等待确认</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <ol className="landing-scroll-story__steps">
+            {scrollStoryItems.map((item) => (
+              <li data-landing-reveal key={item.title}>
+                <span>{item.badge}</span>
+                <h3>{item.title}</h3>
+                <p>{item.text}</p>
+                <strong>{item.metric}</strong>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      <section className="landing-workflow" data-landing-reveal id="workflow" aria-labelledby="workflow-title">
         <div className="landing-section-head">
           <p className="landing-section-kicker">从想法到交付</p>
           <h2 id="workflow-title">把项目每天最乱的四件事，串成一条会动的链路</h2>
@@ -229,7 +382,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         </ol>
       </section>
 
-      <section className="landing-capabilities" id="capabilities" aria-labelledby="capabilities-title">
+      <section className="landing-capabilities" data-landing-reveal id="capabilities" aria-labelledby="capabilities-title">
         <div className="landing-section-head">
           <p className="landing-section-kicker">内建能力</p>
           <h2 id="capabilities-title">不是再加一个报表页，而是把项目现场接起来</h2>
@@ -245,7 +398,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         </div>
       </section>
 
-      <section className="landing-final">
+      <section className="landing-final" data-landing-reveal>
         <div>
           <p className="landing-section-kicker">准备接入你的项目现场</p>
           <h2>从首页进入，回到真正可用的工作台</h2>
