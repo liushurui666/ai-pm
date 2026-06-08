@@ -295,6 +295,7 @@ function TaskStagePreviewSlot({ stage }: { stage: TaskStage }) {
 function TaskStageColumn({
   children,
   draggingTask,
+  hasDropPreview,
   hiddenCount,
   itemIds,
   onShowMore,
@@ -303,6 +304,7 @@ function TaskStageColumn({
 }: {
   children: ReactNode;
   draggingTask: boolean;
+  hasDropPreview: boolean;
   hiddenCount: number;
   itemIds: string[];
   onShowMore: () => void;
@@ -316,6 +318,9 @@ function TaskStageColumn({
   const overdueCount = tasks.filter(getTaskOverdue).length;
   const donePercent = getColumnPercent(tasks);
   const emptyText = draggingTask ? (isOver ? `松手移入${stage}` : "可拖入此阶段") : "暂无任务";
+  // 空阶段被跨阶段拖拽命中时，children 中已经有不可拖拽的预览槽；
+  // 此时继续渲染空态投放提示会出现两块“松手移入”占位，造成用户以为任务被复制了两份。
+  const shouldShowEmptyDropHint = !tasks.length && !hasDropPreview;
 
   return (
     <div ref={setNodeRef} className="task-stage-column-shell">
@@ -343,7 +348,7 @@ function TaskStageColumn({
                 展开 {Math.min(hiddenCount, visibleTaskStep)} 项，剩余 {hiddenCount}
               </Button>
             ) : null}
-            {!tasks.length ? (
+            {shouldShowEmptyDropHint ? (
               <div className={`task-stage-empty${draggingTask ? " task-stage-empty-active" : ""}`}>
                 <Text type="secondary">{emptyText}</Text>
               </div>
@@ -693,6 +698,7 @@ export function TaskStageBoard({
             <TaskStageColumn
               key={stage}
               draggingTask={Boolean(activeTask)}
+              hasDropPreview={previewIndex >= 0}
               hiddenCount={hiddenCount}
               itemIds={visibleTasks.map((task) => task.id)}
               onShowMore={() => handleShowMore(stage)}
