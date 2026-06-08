@@ -1,7 +1,11 @@
 import { cookies } from "next/headers";
 import type { AuthContext } from "@rc-tool/unified-auth-sdk/service-client";
 import type { AppSession } from "@/types/auth";
+import { authPgPool } from "@/lib/auth/database";
+import { unifiedAuthConfig } from "@/lib/auth/config";
 import { createAiPmAuthServiceClient, createEmptyAuthContext, mapAuthUserToFeishuUser } from "@/lib/auth/unified-auth";
+
+const supportedAuthProviders = new Set(["feishu", "google", "github", "email"]);
 
 function serializeCookieHeader(cookieStore: Awaited<ReturnType<typeof cookies>>) {
   return cookieStore
@@ -46,7 +50,18 @@ export async function getAuthContext(): Promise<AuthContext> {
  */
 export async function getSession(): Promise<AppSession | null> {
   const context = await getAuthContext();
-  const user = mapAuthUserToFeishuUser(context.user);
+  const authProvider = await resolveAccountProvider(context);
+  const user = mapAuthUserToFeishuUser(
+    authProvider && context.user
+      ? {
+          ...context.user,
+          metadata: {
+            ...context.user.metadata,
+            provider: authProvider
+          }
+        }
+      : context.user
+  );
 
   if (!context.session || !user) {
     return null;
@@ -56,4 +71,44 @@ export async function getSession(): Promise<AppSession | null> {
     loginAt: context.session.id.split(":").slice(2).join(":") || new Date().toISOString(),
     user
   };
+}
+
+function getAuthSchemaName() {
+  const realm = unifiedAuthConfig.realm ?? unifiedAuthConfig.app?.id ?? "default";
+
+  return `auth_${realm.replace(/[^a-zA-Z0-9_]/g, "_")}`;
+}
+
+function quotePgIdentifier(identifier: string) {
+  return `"${identifier.replace(/"/g, "\"\"")}"`;
+}
+
+/**
+ * SDK 当前的 AuthUser 只稳定返回 user/session，某些 Better Auth 路径不会把 account.providerId
+ * 带进 metadata；AI PM 的成员注册渠道必须展示真实 OAuth 来源，所以服务端会按当前 authUserId
+ * 回查认证库账号表。查询失败时退回 SDK metadata，避免认证库短暂抖动影响用户进入业务页面。
+ */
+async function resolveAccountProvider(context: AuthContext) {
+  const metadataProvider = typeof context.user?.metadata?.provider === "string" ? context.user.metadata.provider : undefined;
+
+  if (metadataProvider && supportedAuthProviders.has(metadataProvider)) {
+    return metadataProvider;
+  }
+
+  if (!context.session || !context.user?.id) {
+    return undefined;
+  }
+
+  try {
+    const schemaName = quotePgIdentifier(getAuthSchemaName());
+    const result = await authPgPool.query<{ providerId: string }>(
+      `select "providerId" from ${schemaName}."account" where "userId" = $1 order by "updatedAt" desc nulls last limit 1`,
+      [context.user.id]
+    );
+    const providerId = result.rows[0]?.providerId;
+
+    return providerId && supportedAuthProviders.has(providerId) ? providerId : undefined;
+  } catch {
+    return undefined;
+  }
 }

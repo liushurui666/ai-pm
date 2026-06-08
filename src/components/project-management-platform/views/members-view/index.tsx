@@ -426,8 +426,8 @@ export function MembersView({
       render: (_, member) => {
         const channelMeta = getRegistrationChannelMeta(member.registrationChannel);
 
-        // 注册渠道来自统一认证服务的 provider，只做展示和审计；后续绑定邮箱或飞书通知渠道时，
-        // 不应覆盖这个首次进入成员表的来源，否则就分不清用户到底是 GitHub、Google 还是飞书注册。
+        // 注册渠道展示成员当前已确认的主登录 provider，和飞书通知渠道是两件事；
+        // 同邮箱多身份归并后仍要显示 Google/GitHub 等真实 OAuth 来源，避免把通知能力误当成登录来源。
         return <Tag color={channelMeta.color}>{channelMeta.label}</Tag>;
       }
     },

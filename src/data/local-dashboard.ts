@@ -1277,7 +1277,9 @@ function createMemberFromUser(user: FeishuUser, role: MemberRole, workspaceId = 
 }
 
 function getAuthIdentityProvider(user: FeishuUser): MemberIdentityProvider {
-  return user.authProvider ?? "feishu";
+  // authProvider 只能来自 SDK 或服务端对 account.providerId 的回查；缺失时说明当前身份来源不可判定，
+  // 不能再默认当作飞书，否则 Google/GitHub 用户在成员表里会被误标成飞书注册渠道。
+  return user.authProvider ?? "email";
 }
 
 function getAuthIdentityUserId(user: FeishuUser) {
@@ -1339,7 +1341,10 @@ function syncMemberProfile(member: DashboardMember, user: FeishuUser) {
     name: user.name || member.name,
     email: user.email || member.email,
     avatarUrl: user.avatarUrl || member.avatarUrl,
-    registrationChannel: shouldAttachAuthIdentity && member.registrationChannel === "email" ? authProvider : member.registrationChannel,
+    // 成员行合并后，registrationChannel 展示的是当前已确认的主登录来源，而不是通知渠道。
+    // 当服务端确认本次登录来自 Google/GitHub/飞书时，要覆盖历史误写的 email/feishu 值；
+    // 只有邮箱/手动身份不覆盖已有 OAuth 来源，避免弱身份把强身份冲掉。
+    registrationChannel: authProvider !== "email" ? authProvider : member.registrationChannel,
     identities: [...member.identities],
     notification: {
       ...member.notification,
