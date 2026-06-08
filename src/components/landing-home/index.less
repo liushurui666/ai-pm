@@ -165,6 +165,12 @@
   transform: translateY(-1px);
 }
 
+.landing-nav__tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .landing-nav__status {
   display: inline-flex;
   align-items: center;
@@ -177,6 +183,14 @@
   color: rgba(230, 255, 248, 0.84);
   font-size: 12px;
   font-weight: 800;
+  backdrop-filter: blur(16px);
+}
+
+.landing-nav__tools .theme-toggle-button {
+  border-color: rgba(124, 242, 219, 0.28);
+  background: rgba(4, 18, 34, 0.48);
+  color: rgba(230, 255, 248, 0.9);
+  font-weight: 900;
   backdrop-filter: blur(16px);
 }
 
@@ -1377,6 +1391,181 @@
 
 .landing-final .landing-section-kicker {
   color: #72f2d9;
+}
+
+/* 首页主题切换复用全局 data-theme；这里不另建存储，确保登录前后的主题偏好完全同步。 */
+:root[data-theme="light"] .landing-home {
+  background:
+    radial-gradient(circle at 84% 34%, rgba(45, 212, 191, 0.18), transparent 25rem),
+    radial-gradient(circle at 14% 62%, rgba(37, 99, 235, 0.13), transparent 28rem),
+    radial-gradient(circle at 76% 88%, rgba(245, 158, 11, 0.12), transparent 24rem),
+    linear-gradient(180deg, #eef7fb 0%, #f6fbff 44%, #eef6f8 100%);
+  color: #102033;
+}
+
+:root[data-theme="light"] .landing-hero {
+  color: #102033;
+}
+
+:root[data-theme="light"] .landing-hero__shade {
+  background:
+    radial-gradient(circle at var(--cursor-x) var(--cursor-y), rgba(45, 212, 191, 0.2), transparent 24rem),
+    linear-gradient(120deg, rgba(248, 252, 255, 0.94) 0%, rgba(235, 247, 250, 0.84) 48%, rgba(32, 132, 122, 0.52) 100%),
+    linear-gradient(180deg, rgba(248, 252, 255, 0.34) 0%, rgba(238, 247, 251, 0.84) 100%);
+}
+
+:root[data-theme="light"] .landing-hero__motion {
+  background-image:
+    linear-gradient(rgba(15, 118, 110, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 118, 110, 0.08) 1px, transparent 1px);
+}
+
+:root[data-theme="light"] .landing-brand,
+:root[data-theme="light"] .landing-nav__links a,
+:root[data-theme="light"] .landing-hero h1,
+:root[data-theme="light"] .landing-hero__signals dd,
+:root[data-theme="light"] .landing-command__header strong,
+:root[data-theme="light"] .landing-command__metric strong,
+:root[data-theme="light"] .landing-task strong,
+:root[data-theme="light"] .landing-radar__core strong,
+:root[data-theme="light"] .landing-radar__node b,
+:root[data-theme="light"] .landing-story-screen__top strong,
+:root[data-theme="light"] .landing-story-map__node strong,
+:root[data-theme="light"] .landing-scroll-story__intro h2,
+:root[data-theme="light"] .landing-scroll-story__steps h3,
+:root[data-theme="light"] .landing-system__head h2,
+:root[data-theme="light"] .landing-system__node strong,
+:root[data-theme="light"] .landing-role h3,
+:root[data-theme="light"] .landing-proof span,
+:root[data-theme="light"] .landing-workflow h2,
+:root[data-theme="light"] .landing-capabilities h2,
+:root[data-theme="light"] .landing-final h2,
+:root[data-theme="light"] .landing-capability-grid h3 {
+  color: #102033;
+}
+
+:root[data-theme="light"] .landing-brand small,
+:root[data-theme="light"] .landing-hero__lead,
+:root[data-theme="light"] .landing-command__header span,
+:root[data-theme="light"] .landing-command__metric span,
+:root[data-theme="light"] .landing-command__metric small,
+:root[data-theme="light"] .landing-task span,
+:root[data-theme="light"] .landing-task small,
+:root[data-theme="light"] .landing-scroll-story__intro p:last-child,
+:root[data-theme="light"] .landing-story-screen__top span,
+:root[data-theme="light"] .landing-story-table span,
+:root[data-theme="light"] .landing-scroll-story__steps p,
+:root[data-theme="light"] .landing-system__head p:last-child,
+:root[data-theme="light"] .landing-system__node em,
+:root[data-theme="light"] .landing-role p,
+:root[data-theme="light"] .landing-proof p,
+:root[data-theme="light"] .landing-workflow__rail small,
+:root[data-theme="light"] .landing-capability-grid p {
+  color: #506176;
+}
+
+:root[data-theme="light"] .landing-eyebrow,
+:root[data-theme="light"] .landing-section-kicker,
+:root[data-theme="light"] .landing-workflow .landing-section-kicker,
+:root[data-theme="light"] .landing-final .landing-section-kicker {
+  color: #0f766e;
+}
+
+:root[data-theme="light"] .landing-hero h1 span,
+:root[data-theme="light"] .landing-radar__core,
+:root[data-theme="light"] .landing-proof strong,
+:root[data-theme="light"] .landing-scroll-story__steps strong {
+  color: #b45309;
+  text-shadow: none;
+}
+
+:root[data-theme="light"] .landing-nav__status,
+:root[data-theme="light"] .landing-nav__tools .theme-toggle-button,
+:root[data-theme="light"] .landing-hero__signals div,
+:root[data-theme="light"] .landing-float {
+  border-color: rgba(15, 118, 110, 0.2);
+  background: rgba(255, 255, 255, 0.72);
+  color: #17415f;
+}
+
+:root[data-theme="light"] .landing-button--ghost {
+  border-color: rgba(15, 118, 110, 0.24);
+  background: rgba(255, 255, 255, 0.62);
+  color: #102033;
+}
+
+:root[data-theme="light"] .landing-command,
+:root[data-theme="light"] .landing-story-screen,
+:root[data-theme="light"] .landing-system,
+:root[data-theme="light"] .landing-workflow,
+:root[data-theme="light"] .landing-final {
+  border-color: rgba(15, 118, 110, 0.16);
+  background:
+    radial-gradient(circle at 78% 18%, rgba(37, 99, 235, 0.12), transparent 18rem),
+    radial-gradient(circle at 18% 84%, rgba(45, 212, 191, 0.16), transparent 20rem),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.84), rgba(235, 247, 250, 0.86));
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.12);
+  color: #102033;
+}
+
+:root[data-theme="light"] .landing-command::before,
+:root[data-theme="light"] .landing-system::before {
+  background-image:
+    linear-gradient(rgba(15, 118, 110, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 118, 110, 0.05) 1px, transparent 1px);
+}
+
+:root[data-theme="light"] .landing-radar,
+:root[data-theme="light"] .landing-story-map {
+  border-color: rgba(15, 118, 110, 0.14);
+  background:
+    radial-gradient(circle at 50% 50%, rgba(45, 212, 191, 0.14), transparent 34%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(235, 247, 250, 0.7));
+}
+
+:root[data-theme="light"] .landing-radar__core,
+:root[data-theme="light"] .landing-radar__node,
+:root[data-theme="light"] .landing-command__metric,
+:root[data-theme="light"] .landing-task,
+:root[data-theme="light"] .landing-story-map__node,
+:root[data-theme="light"] .landing-story-table span,
+:root[data-theme="light"] .landing-scroll-story__steps li,
+:root[data-theme="light"] .landing-system__node,
+:root[data-theme="light"] .landing-role,
+:root[data-theme="light"] .landing-proof div,
+:root[data-theme="light"] .landing-workflow__rail li,
+:root[data-theme="light"] .landing-capability-grid article {
+  border-color: rgba(15, 118, 110, 0.14);
+  background:
+    radial-gradient(circle at 86% 16%, rgba(45, 212, 191, 0.12), transparent 12rem),
+    rgba(255, 255, 255, 0.72);
+  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.1);
+  color: #102033;
+}
+
+:root[data-theme="light"] .landing-radar__node em,
+:root[data-theme="light"] .landing-scroll-story__steps span,
+:root[data-theme="light"] .landing-role__top small,
+:root[data-theme="light"] .landing-role__tags b {
+  border-color: rgba(15, 118, 110, 0.14);
+  background: rgba(204, 251, 241, 0.58);
+  color: #0f766e;
+}
+
+:root[data-theme="light"] .landing-story-map__node .anticon,
+:root[data-theme="light"] .landing-system__node > span,
+:root[data-theme="light"] .landing-capability-grid article > span {
+  background: rgba(204, 251, 241, 0.6);
+  color: #0f766e;
+}
+
+:root[data-theme="light"] .landing-workflow__rail li > span {
+  background: #0f766e;
+  color: #ffffff;
+}
+
+:root[data-theme="light"] .landing-scroll-meter {
+  background: rgba(15, 118, 110, 0.12);
 }
 
 @keyframes landing-grid-drift {

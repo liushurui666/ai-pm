@@ -19,6 +19,7 @@ import {
   SafetyCertificateOutlined,
   ThunderboltOutlined
 } from "@ant-design/icons";
+import { ThemeToggleButton, useThemePreference } from "@/components/theme-mode";
 import Link from "next/link";
 import { useCallback, useEffect, useRef } from "react";
 import type { PointerEvent } from "react";
@@ -147,6 +148,7 @@ const scrollStoryItems = [
 // AI PM 的首屏必须直接表达“项目现场正在流动”，所以这里用动态指挥台、脉冲节点和任务流来替代静态大图。
 export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref, workbenchHref }: LandingHomeProps) {
   const homeRef = useRef<HTMLElement>(null);
+  const { cycleMode, effectiveTheme, mode: themeMode } = useThemePreference();
 
   const handlePointerMove = useCallback((event: PointerEvent<HTMLElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -258,10 +260,19 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
             <a href="#capabilities">能力</a>
             <a href={workbenchHref}>工作台</a>
           </nav>
-          <span className="landing-nav__status">
-            <i aria-hidden="true" />
-            Live delivery OS
-          </span>
+          <div className="landing-nav__tools">
+            <span className="landing-nav__status">
+              <i aria-hidden="true" />
+              Live delivery OS
+            </span>
+            {/* 首页和登录后工作台共用同一个主题 hook：这里写入的 localStorage/cookie 会被 /workbench 首屏脚本直接读取。 */}
+            <ThemeToggleButton
+              mode={themeMode}
+              effectiveTheme={effectiveTheme}
+              onClick={cycleMode}
+              showLabel
+            />
+          </div>
         </header>
 
         <div className="landing-hero__content">
