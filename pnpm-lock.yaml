@@ -39,8 +39,8 @@ importers:
         specifier: ^0.3.1
         version: 0.3.1(b052faaa7e7afd6e38597a57bfbc896c)
       '@rc-tool/unified-auth-sdk':
-        specifier: ^0.3.1
-        version: 0.3.1(b052faaa7e7afd6e38597a57bfbc896c)
+        specifier: ^0.3.2
+        version: 0.3.2(b052faaa7e7afd6e38597a57bfbc896c)
       antd:
         specifier: ^6.0.0
         version: 6.4.2(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -1247,8 +1247,8 @@ packages:
     resolution: {integrity: sha512-fp/PhbUGzoF9u96yUjz66aXaaHef7uVh5cmAxjY0Hj1Jn9sXJz0ENG/KB2kJjBUSIellhQXd8uhj4dM8yQrNKw==}
     hasBin: true
 
-  '@rc-tool/unified-auth-sdk@0.3.1':
-    resolution: {integrity: sha512-xPWZYPGECNBt0KHJ3VBICTyKZwfF9L2Zm1b47ed1ASyo3TYksDJF0QwQljkqIZFMPO5f6aL5JViPTL9J3OmKmw==}
+  '@rc-tool/unified-auth-sdk@0.3.2':
+    resolution: {integrity: sha512-K0peVUYCsht43+CUq0cm7SpU6O3XN7QcL9BkyciStl4AkSxMKiSrOdmWWAPf8+FgXZYG5+J4wqs0rOojn35Bsw==}
     peerDependencies:
       better-auth: ^1.6.14
       drizzle-orm: ^0.45.2 || ^1.0.0-rc.1
@@ -4563,7 +4563,7 @@ snapshots:
 
   '@rc-tool/unified-auth-hosted-service@0.3.1(b052faaa7e7afd6e38597a57bfbc896c)':
     dependencies:
-      '@rc-tool/unified-auth-sdk': 0.3.1(b052faaa7e7afd6e38597a57bfbc896c)
+      '@rc-tool/unified-auth-sdk': 0.3.2(b052faaa7e7afd6e38597a57bfbc896c)
       pg: 8.21.0
       typescript: 5.9.3
     transitivePeerDependencies:
@@ -4572,7 +4572,7 @@ snapshots:
       - pg-native
       - react
 
-  '@rc-tool/unified-auth-sdk@0.3.1(b052faaa7e7afd6e38597a57bfbc896c)':
+  '@rc-tool/unified-auth-sdk@0.3.2(b052faaa7e7afd6e38597a57bfbc896c)':
     optionalDependencies:
       better-auth: 1.6.14(@prisma/client@7.8.0(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@5.9.3))(typescript@5.9.3))(drizzle-orm@0.45.2(@electric-sql/pglite@0.4.1)(@prisma/client@7.8.0(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@5.9.3))(typescript@5.9.3))(@types/pg@8.20.0)(kysely@0.28.8)(mysql2@3.15.3)(pg@8.21.0)(postgres@3.4.7)(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@5.9.3)))(mysql2@3.15.3)(next@16.2.6(@babel/core@7.29.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(pg@8.21.0)(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@5.9.3))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       drizzle-orm: 0.45.2(@electric-sql/pglite@0.4.1)(@prisma/client@7.8.0(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@5.9.3))(typescript@5.9.3))(@types/pg@8.20.0)(kysely@0.28.8)(mysql2@3.15.3)(pg@8.21.0)(postgres@3.4.7)(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@5.9.3))
