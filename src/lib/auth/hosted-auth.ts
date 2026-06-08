@@ -17,6 +17,19 @@ const aiPmLoginPageComponent = createHostedAuthLoginPageComponent({
   statusText: "AI PM Unified Auth"
 });
 
+const aiPmAppOrigin = (unifiedAuthConfig.app?.origin ?? "http://localhost:3004").replace(/\/$/, "");
+const aiPmAllowedRedirectPaths = [
+  "/",
+  "/workbench",
+  "/workbench?view=projects",
+  "/workbench?view=versionDashboard",
+  "/workbench?view=tasks",
+  "/workbench?view=bugs",
+  "/workbench?view=requirements",
+  "/workbench?view=members"
+];
+const aiPmAllowedRedirectURIs = aiPmAllowedRedirectPaths.map((path) => new URL(path, `${aiPmAppOrigin}/`).toString());
+
 /**
  * AI PM 内嵌统一认证路由。
  *
@@ -27,6 +40,8 @@ const aiPmLoginPageComponent = createHostedAuthLoginPageComponent({
  * Drizzle schema 写入独立 PostgreSQL 认证库。
  */
 export const hostedAuth = createHostedAuthRouteHandlers({
+  // Hosted Auth 的回跳白名单是精确匹配；首页和工作台入口需要显式放行，避免登录按钮被 400 拦截。
+  allowedRedirectURIs: aiPmAllowedRedirectURIs,
   auth,
   authProviders: {
     google: {

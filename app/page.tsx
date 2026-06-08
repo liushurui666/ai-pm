@@ -1,44 +1,26 @@
-import { redirect } from "next/navigation";
-import { ProjectManagementPlatform } from "@/components/project-management-platform";
-import type { AppView } from "@/components/project-management-platform";
-import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
+import { LandingHome } from "@/components/landing-home";
 import { getSession } from "@/lib/auth/session";
+import { getAiPmAuthLoginHref, isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 
 export const dynamic = "force-dynamic";
 
-const validAppViews = new Set<AppView>([
-  "overview",
-  "projects",
-  "versionDashboard",
-  "tasks",
-  "bugs",
-  "requirements",
-  "members"
-]);
+export default async function Home() {
+  const authEnabled = isAuthServiceConfigured();
+  const session = authEnabled ? await getSession() : null;
+  const canEnterWorkbench = !authEnabled || Boolean(session);
+  const workbenchHref = "/workbench";
+  const versionDashboardPath = "/workbench?view=versionDashboard";
 
-function resolveInitialView(value?: string | string[]) {
-  const view = Array.isArray(value) ? value[0] : value;
+  // 首页只负责公开产品叙事和入口分流；未登录访客不加载工作台，避免触发成员权限和业务接口副作用。
+  const primaryHref = canEnterWorkbench ? workbenchHref : getAiPmAuthLoginHref(workbenchHref);
+  const versionDashboardHref = canEnterWorkbench ? versionDashboardPath : getAiPmAuthLoginHref(versionDashboardPath);
 
-  return view && validAppViews.has(view as AppView) ? (view as AppView) : "overview";
-}
-
-export default async function Home({
-  searchParams
-}: {
-  searchParams?: Promise<{
-    view?: string | string[];
-    workspaceId?: string | string[];
-  }>;
-}) {
-  const session = await getSession();
-
-  if (isAuthServiceConfigured() && !session) {
-    redirect("/login");
-  }
-
-  const params = await searchParams;
-
-  const initialWorkspaceId = Array.isArray(params?.workspaceId) ? params?.workspaceId[0] : params?.workspaceId;
-
-  return <ProjectManagementPlatform initialView={resolveInitialView(params?.view)} initialWorkspaceId={initialWorkspaceId} />;
+  return (
+    <LandingHome
+      isAuthenticated={canEnterWorkbench}
+      primaryHref={primaryHref}
+      versionDashboardHref={versionDashboardHref}
+      workbenchHref={workbenchHref}
+    />
+  );
 }
