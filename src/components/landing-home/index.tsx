@@ -74,6 +74,51 @@ const workflowItems = [
   { icon: <ApiOutlined />, title: "AI 接修复", text: "Bug 进入代码分支，生成 PR 等人确认" }
 ];
 
+// 这三组数据把首页从“展示亮点”扩展为完整交付主题：主线、角色现场和落地证明必须讲同一件事。
+const operatingSignals = [
+  { icon: <FileTextOutlined />, label: "需求输入", value: "PRD / 会议 / 链接" },
+  { icon: <PartitionOutlined />, label: "AI 编排", value: "任务 / 验收 / 风险" },
+  { icon: <BranchesOutlined />, label: "阶段推进", value: "看板 / 版本 / 成员" },
+  { icon: <BugOutlined />, label: "代码闭环", value: "Bug / 分支 / PR" }
+];
+
+const roleLanes = [
+  {
+    icon: <DashboardOutlined />,
+    role: "项目经理",
+    title: "节奏总控",
+    text: "版本健康、延期任务和阻塞风险在同一条线上滚动，早会不再从群消息里捞进度。",
+    points: ["版本健康", "成员负载", "周报导出"]
+  },
+  {
+    icon: <FileTextOutlined />,
+    role: "产品",
+    title: "需求变交付",
+    text: "每个需求都带着验收点、边界条件和前后端事项进入版本，评审后能直接推进。",
+    points: ["PRD 拆解", "验收清单", "需求版本"]
+  },
+  {
+    icon: <ApiOutlined />,
+    role: "研发",
+    title: "任务进分支",
+    text: "缺陷不是只停在描述里，仓库、分支、复现材料和 AI 修复任务会一起进入执行链路。",
+    points: ["Bug 复现", "AI 修复", "PR 确认"]
+  },
+  {
+    icon: <SafetyCertificateOutlined />,
+    role: "测试验收",
+    title: "风险能回归",
+    text: "测试风险、回归结果和版本验收状态沉淀下来，交付前能看到真正没闭合的地方。",
+    points: ["风险标记", "回归记录", "上线校验"]
+  }
+];
+
+const proofItems = [
+  { value: "1 条主线", label: "需求到 PR", text: "所有页面围绕同一条交付链路展开，首页、看板和版本大屏不再像三个孤岛。" },
+  { value: "4 个现场", label: "产品 / 项目 / 研发 / 测试", text: "不同角色看到的是自己的推进动作，但数据源保持一致。" },
+  { value: "实时反馈", label: "风险先亮起来", text: "延期、阻塞、未验收和 AI 修复状态会进入统一节奏盘。" }
+];
+
 const scrollStoryItems = [
   {
     badge: "01 / Requirement Map",
@@ -208,6 +253,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
             </span>
           </Link>
           <nav className="landing-nav__links" aria-label="首页导航">
+            <a href="#system">系统</a>
             <a href="#workflow">工作流</a>
             <a href="#capabilities">能力</a>
             <a href={workbenchHref}>工作台</a>
@@ -319,7 +365,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           <p className="landing-section-kicker">Scroll Command</p>
           <h2 id="scroll-story-title">往下滚，项目不是换几张图，而是在你眼前推进</h2>
           <p>
-            参考站的滚动强在“画面留住、信息切换”。AI PM 这里把它做成项目流转剧场：左边工作台固定，右边三段现场逐步点亮。
+            AI PM 把需求地图、版本脉冲和修复闭环放在同一条滚动时间线上，项目从进入系统那一刻开始就能被追踪、判断和推进。
           </p>
         </div>
 
@@ -363,6 +409,56 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
               </li>
             ))}
           </ol>
+        </div>
+      </section>
+
+      <section className="landing-system" data-landing-reveal id="system" aria-labelledby="system-title">
+        <div className="landing-system__halo" aria-hidden="true" />
+        <div className="landing-system__head">
+          <p className="landing-section-kicker">统一交付主题</p>
+          <h2 id="system-title">一套交付调度系统，把需求、版本、缺陷和 PR 接在一起</h2>
+          <p>
+            AI PM 的真实产品逻辑从这里展开：需求进入、AI 编排、阶段推进、代码闭环，所有角色围绕同一条主线工作。
+          </p>
+        </div>
+
+        <div className="landing-system__flow" aria-label="AI PM 交付主线">
+          {operatingSignals.map((item, index) => (
+            <div className="landing-system__node" key={item.label}>
+              <span>{item.icon}</span>
+              <small>{String(index + 1).padStart(2, "0")}</small>
+              <strong>{item.label}</strong>
+              <em>{item.value}</em>
+            </div>
+          ))}
+        </div>
+
+        <div className="landing-system__roles" aria-label="不同角色的项目现场">
+          {roleLanes.map((item) => (
+            <article className="landing-role" key={item.role}>
+              <div className="landing-role__top">
+                <span>{item.icon}</span>
+                <small>{item.role}</small>
+              </div>
+              <h3>{item.title}</h3>
+              <p>{item.text}</p>
+              <div className="landing-role__tags">
+                {item.points.map((point) => (
+                  <b key={point}>{point}</b>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+
+        <div className="landing-proof" aria-label="首页主题落地证明">
+          {proofItems.map((item) => (
+            <div key={item.label}>
+              <strong>{item.value}</strong>
+              <span>{item.label}</span>
+              <p>{item.text}</p>
+            </div>
+          ))}
         </div>
       </section>
 
