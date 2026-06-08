@@ -62,7 +62,10 @@ export function resolveUnifiedAuthProviderCredentials(): UnifiedAuthProviderCred
     googleProvider: {
       clientId: readEnv("GOOGLE_CLIENT_ID") ?? "",
       clientSecret: readEnv("GOOGLE_CLIENT_SECRET") ?? "",
-    },
+      // Google 对同一 OAuth Client 授权过的账号会默认跳过确认页；AI PM 需要用户明确看到授权确认，
+      // 因此在 provider 配置层强制 consent，同时不扩大 scope，仍只拿基础资料。
+      prompt: "consent",
+    } as CreateAuthServerOptions["googleProvider"],
   };
 }
 
