@@ -28,6 +28,16 @@ const aiPmLoginPageComponent = createHostedAuthLoginPageComponent({
  */
 export const hostedAuth = createHostedAuthRouteHandlers({
   auth,
+  authProviders: {
+    google: {
+      // Google 登录只用于 AI PM 身份识别；显式申请 OIDC 基础资料，保证 Better Auth 能稳定拿到邮箱、昵称和头像。
+      scopes: ["openid", "email", "profile"],
+    },
+    github: {
+      // GitHub 登录同样不申请仓库权限，只补齐 read:user/user:email，避免用户资料缺少名称、头像或公开邮箱为空。
+      scopes: ["read:user", "user:email"],
+    },
+  },
   config: unifiedAuthConfig,
   loginPageComponent: aiPmLoginPageComponent,
 });
