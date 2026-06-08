@@ -1355,7 +1355,7 @@ function syncMemberProfile(member: DashboardMember, user: FeishuUser) {
     }
   };
 
-  if (shouldAttachAuthIdentity) {
+  if (authUserId && shouldAttachAuthIdentity) {
     nextMember.identities.push({
       provider: authProvider,
       providerUserId: authUserId,
