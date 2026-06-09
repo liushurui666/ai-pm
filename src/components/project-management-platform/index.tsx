@@ -1497,7 +1497,8 @@ export function ProjectManagementPlatform({
       return;
     }
 
-    window.location.assign(`/${getWorkspaceQueryString(view)}`);
+    // 根路径现在是公开首页；工作台内部视图必须固定回到 /workbench，否则切到项目视图会被送到首页。
+    window.location.assign(`/workbench${getWorkspaceQueryString(view)}`);
   }
 
   // 视图切换同步写入 URL 查询参数，让刷新和分享链接能保留当前模块。
@@ -1509,7 +1510,7 @@ export function ProjectManagementPlatform({
     setActiveView(view);
 
     if (typeof window !== "undefined") {
-      if (window.location.pathname !== "/") {
+      if (window.location.pathname !== "/workbench") {
         navigateToView(view);
 
         return;
