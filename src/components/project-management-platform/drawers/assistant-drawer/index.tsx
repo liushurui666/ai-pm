@@ -1,32 +1,105 @@
 "use client";
 
 import "./index.less";
-import { Button, Drawer, Form, Input, Space, Spin, Tag, Typography } from "antd";
-import { RobotOutlined, SendOutlined } from "@ant-design/icons";
-import type { ChatMessage } from "@/components/project-management-platform/types";
+import { Alert, Button, Drawer, Input, Space, Spin, Tag, Tooltip, Typography } from "antd";
+import { RedoOutlined, RobotOutlined, SendOutlined, StopOutlined } from "@ant-design/icons";
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport, type UIMessage } from "ai";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-const { Text } = Typography;
+const { Paragraph, Text } = Typography;
 
 type AssistantDrawerProps = {
-  chatLoading: boolean;
-  form: ReturnType<typeof Form.useForm<{ message: string }>>[0];
+  currentWorkspaceId: string;
   isMobile: boolean;
-  messages: ChatMessage[];
   open: boolean;
   onClose: () => void;
-  onSubmit: (values: { message: string }) => void;
 };
 
-// AI 助手抽屉只负责消息展示和输入提交，分析请求仍由主容器掌握工作区上下文。
+const initialMessages: UIMessage[] = [
+  {
+    id: "assistant-welcome",
+    role: "assistant",
+    parts: [
+      {
+        type: "text",
+        text: "我会持续观察项目进度、任务阻塞和风险变化。你可以问我：本周风险、生成周报、版本范围。"
+      }
+    ]
+  }
+];
+
+function renderMessagePart(part: UIMessage["parts"][number], index: number) {
+  if (part.type === "text") {
+    return (
+      <Paragraph className="assistant-message-text" key={`text-${index}`}>
+        {part.text}
+      </Paragraph>
+    );
+  }
+
+  if (part.type.startsWith("tool-")) {
+    return (
+      <Tag className="assistant-tool-tag" color="processing" key={`tool-${index}`}>
+        正在读取项目数据
+      </Tag>
+    );
+  }
+
+  return null;
+}
+
+// AI 助手抽屉现在自持 AI SDK 多轮会话状态，主容器只负责传入当前工作区上下文。
 export function AssistantDrawer({
-  chatLoading,
-  form,
+  currentWorkspaceId,
   isMobile,
-  messages,
   onClose,
-  onSubmit,
   open
 }: AssistantDrawerProps) {
+  const [input, setInput] = useState("");
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const transport = useMemo(() => new DefaultChatTransport({
+    api: "/api/assistant",
+    body: {
+      workspaceId: currentWorkspaceId
+    },
+    credentials: "same-origin"
+  }), [currentWorkspaceId]);
+  const {
+    clearError,
+    error,
+    messages,
+    regenerate,
+    sendMessage,
+    status,
+    stop
+  } = useChat({
+    messages: initialMessages,
+    transport
+  });
+  const generating = status === "submitted" || status === "streaming";
+
+  useEffect(() => {
+    messagesRef.current?.scrollTo({
+      top: messagesRef.current.scrollHeight,
+      behavior: "smooth"
+    });
+  }, [messages, status]);
+
+  async function handleSend() {
+    const message = input.trim();
+
+    if (!message || generating) {
+      return;
+    }
+
+    clearError();
+    setInput("");
+    await sendMessage({
+      text: message
+    });
+  }
+
   return (
     <Drawer
       title={
@@ -41,27 +114,71 @@ export function AssistantDrawer({
       extra={<Tag color="blue">实时分析</Tag>}
     >
       <div className="assistant-panel">
-        <div className="assistant-messages">
-          {messages.map((message, index) => (
-            <div className={`assistant-message assistant-message-${message.role}`} key={`${message.role}-${index}`}>
-              <Text>{message.content}</Text>
+        <div className="assistant-messages" ref={messagesRef}>
+          {messages.map((message) => (
+            <div className={`assistant-message assistant-message-${message.role}`} key={message.id}>
+              {message.parts.map(renderMessagePart)}
             </div>
           ))}
-          {chatLoading ? (
+          {status === "submitted" ? (
             <div className="assistant-message assistant-message-assistant">
-              <Spin size="small" /> <Text>正在分析项目数据...</Text>
+              <Spin size="small" /> <Text>正在选择项目工具...</Text>
             </div>
+          ) : null}
+          {error ? (
+            <Alert
+              className="assistant-error"
+              type="error"
+              showIcon
+              message="AI 助手暂时无法完成回复"
+              description={error.message}
+            />
           ) : null}
         </div>
 
-        <Form form={form} layout="vertical" onFinish={onSubmit}>
-          <Form.Item name="message" noStyle>
-            <Input.TextArea rows={3} placeholder="例如：帮我分析当前最大风险" maxLength={200} />
-          </Form.Item>
-          <Button className="assistant-send" type="primary" htmlType="submit" icon={<SendOutlined />} loading={chatLoading}>
-            发送
-          </Button>
-        </Form>
+        <div className="assistant-chatbox">
+          <Input.TextArea
+            value={input}
+            rows={3}
+            placeholder="例如：帮我分析当前最大风险"
+            maxLength={300}
+            disabled={generating}
+            onChange={(event) => setInput(event.target.value)}
+            onPressEnter={(event) => {
+              if (!event.shiftKey) {
+                event.preventDefault();
+                void handleSend();
+              }
+            }}
+          />
+          <div className="assistant-actions">
+            <Tooltip title="重新生成上一条回复">
+              <Button
+                icon={<RedoOutlined />}
+                disabled={generating || messages.length <= 1}
+                onClick={() => {
+                  clearError();
+                  void regenerate();
+                }}
+              />
+            </Tooltip>
+            {generating ? (
+              <Button icon={<StopOutlined />} onClick={stop}>
+                停止
+              </Button>
+            ) : null}
+            <Button
+              className="assistant-send"
+              type="primary"
+              icon={<SendOutlined />}
+              disabled={!input.trim()}
+              loading={generating}
+              onClick={() => void handleSend()}
+            >
+              发送
+            </Button>
+          </div>
+        </div>
       </div>
     </Drawer>
   );

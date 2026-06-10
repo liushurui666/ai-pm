@@ -1,10 +1,18 @@
+import type { UIMessage } from "ai";
 import { NextRequest, NextResponse } from "next/server";
-import { createAssistantReply } from "@/data/dashboard";
 import { getDashboardData } from "@/data/local-dashboard";
-import { createAiAssistantReply, createAiWeeklyReportReply, isAiAssistantConfigured } from "@/lib/ai/client";
+import { createAssistantStreamResult } from "@/lib/ai/assistant-stream";
+import { isAiAssistantConfigured } from "@/lib/ai/settings";
 import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 import { getSession } from "@/lib/auth/session";
-import { createWeeklyReportMarkdown, isWeeklyReportRequest } from "@/lib/reports/weekly-report";
+
+export const runtime = "nodejs";
+export const maxDuration = 120;
+
+type AssistantRequestBody = {
+  messages?: UIMessage[];
+  workspaceId?: string;
+};
 
 export async function POST(request: NextRequest) {
   const session = await getSession();
@@ -20,10 +28,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const body = (await request.json().catch(() => null)) as { message?: string; workspaceId?: string } | null;
-  const message = body?.message?.trim();
+  const body = (await request.json().catch(() => null)) as AssistantRequestBody | null;
+  const messages = Array.isArray(body?.messages) ? body.messages : [];
 
-  if (!message) {
+  if (!messages.length) {
     return NextResponse.json(
       {
         error: "请输入要分析的问题"
@@ -34,70 +42,25 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (!isAiAssistantConfigured()) {
+    return NextResponse.json(
+      {
+        error: "未配置 AI_API_KEY，流式 ChatBox 需要可用模型后才能回答。"
+      },
+      {
+        status: 503
+      }
+    );
+  }
+
   try {
     const data = await getDashboardData(session?.user, body?.workspaceId);
+    const result = await createAssistantStreamResult({
+      data,
+      messages
+    });
 
-    if (isWeeklyReportRequest(message)) {
-      const fallbackReply = createWeeklyReportMarkdown(data);
-
-      if (!isAiAssistantConfigured()) {
-        return NextResponse.json({
-          reply: [
-            fallbackReply,
-            "（未配置 AI_API_KEY，已使用本地固定模板兜底生成。）"
-          ].join("\n\n"),
-          source: "fallback-weekly-report",
-          warning: "未配置 AI_API_KEY，已使用本地固定模板兜底。",
-          generatedAt: new Date().toISOString()
-        });
-      }
-
-      try {
-        return NextResponse.json({
-          reply: await createAiWeeklyReportReply(data),
-          source: "ai-weekly-report",
-          generatedAt: new Date().toISOString()
-        });
-      } catch {
-        return NextResponse.json({
-          reply: [
-            fallbackReply,
-            "（AI 周报生成暂时不可用，已使用本地固定模板兜底生成。）"
-          ].join("\n\n"),
-          source: "fallback-weekly-report",
-          warning: "AI 周报生成暂时不可用，已使用本地固定模板兜底。",
-          generatedAt: new Date().toISOString()
-        });
-      }
-    }
-
-    const fallbackReply = createAssistantReply(message, data);
-
-    if (!isAiAssistantConfigured()) {
-      return NextResponse.json({
-        reply: fallbackReply,
-        source: "fallback",
-        generatedAt: new Date().toISOString()
-      });
-    }
-
-    try {
-      return NextResponse.json({
-        reply: await createAiAssistantReply(message, data),
-        source: "ai",
-        generatedAt: new Date().toISOString()
-      });
-    } catch {
-      return NextResponse.json({
-        reply: [
-          fallbackReply,
-          "（模型接口暂时不可用，以上为本地规则分析结果。）"
-        ].join("\n\n"),
-        source: "fallback",
-        warning: "AI 模型接口暂时不可用，已使用本地分析兜底。",
-        generatedAt: new Date().toISOString()
-      });
-    }
+    return result.toUIMessageStreamResponse();
   } catch (error) {
     return NextResponse.json(
       {

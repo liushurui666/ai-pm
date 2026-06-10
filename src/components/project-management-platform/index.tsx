@@ -92,7 +92,6 @@ import {
 } from "@/components/project-management-platform/state/dashboard-updates";
 import type {
   AppView,
-  ChatMessage,
   OwnerSelectableMember,
   SearchResult
 } from "@/components/project-management-platform/types";
@@ -177,14 +176,6 @@ export function ProjectManagementPlatform({
   const [workspaceSelectOpen, setWorkspaceSelectOpen] = useState(false);
   const [weeklyReportExporting, setWeeklyReportExporting] = useState(false);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(initialWorkspaceId ?? "");
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
-    {
-      role: "assistant",
-      content: "我会持续观察项目进度、任务阻塞和风险变化。你可以问我：本周风险、生成周报、版本范围。"
-    }
-  ]);
-  const [chatLoading, setChatLoading] = useState(false);
-  const [form] = Form.useForm<{ message: string }>();
   const [createForm] = Form.useForm<Record<string, unknown>>();
   const [projectEditForm] = Form.useForm<Record<string, unknown>>();
   const [editForm] = Form.useForm<Record<string, unknown>>();
@@ -330,57 +321,6 @@ export function ProjectManagementPlatform({
     onEdit: openEditRequirementDrawer
   });
 
-  async function handleAskAssistant(values: { message: string }) {
-    const message = values.message.trim();
-
-    if (!message) {
-      return;
-    }
-
-    await submitAssistantQuestion(message);
-    form.resetFields();
-  }
-
-  async function submitAssistantQuestion(message: string) {
-    if (chatLoading) {
-      messageApi.warning("AI 助手正在分析上一条问题");
-
-      return;
-    }
-
-    setChatMessages((messages) => [...messages, { role: "user", content: message }]);
-    setChatLoading(true);
-    setAssistantOpen(true);
-
-    try {
-      const response = await fetch("/api/assistant", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ message, workspaceId: currentWorkspaceId })
-      });
-      const payload = (await response.json()) as { reply?: string; error?: string };
-      const assistantContent = payload.reply ?? payload.error ?? "AI 助手暂时没有返回内容。";
-
-      if (response.status === 401) {
-        window.location.assign("/login");
-
-        return;
-      }
-
-      setChatMessages((messages) => [
-        ...messages,
-        {
-          role: "assistant",
-          content: assistantContent
-        }
-      ]);
-    } finally {
-      setChatLoading(false);
-    }
-  }
-
   async function handleGenerateWeeklyReport() {
     if (!data) {
       messageApi.warning("项目数据还在加载，稍后再生成周报。");
@@ -397,7 +337,7 @@ export function ProjectManagementPlatform({
     setWeeklyReportExporting(true);
 
     try {
-      const response = await fetch("/api/assistant", {
+      const response = await fetch("/api/assistant/weekly-report", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -1969,13 +1909,10 @@ export function ProjectManagementPlatform({
           />
 
           <AssistantDrawer
-            chatLoading={chatLoading}
-            form={form}
+            currentWorkspaceId={currentWorkspaceId}
             isMobile={isMobile}
-            messages={chatMessages}
             open={assistantOpen}
             onClose={() => setAssistantOpen(false)}
-            onSubmit={handleAskAssistant}
           />
 
           <CreateRecordDrawer

@@ -3,9 +3,7 @@ import { requirementStatusOptions } from "@/lib/requirements/requirement-quality
 import type { Requirement } from "@/types/dashboard";
 import type { DocumentTaskBreakdown, RequirementAnalyzeResult } from "@/types/records";
 import { createWeeklyReportAiPrompt } from "@/lib/reports/weekly-report-ai";
-
-const DEFAULT_AI_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1";
-const DEFAULT_AI_MODEL = "qwen-plus";
+import { getAiApiKey, getAiBaseUrl, getAiModel, isAiAssistantConfigured } from "@/lib/ai/settings";
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const DOCUMENT_BREAKDOWN_TIMEOUT_MS = 120_000;
 const DOCUMENT_BREAKDOWN_TASK_LIMIT = 24;
@@ -24,18 +22,6 @@ type ChatCompletionResponse = {
     message?: string;
   };
 };
-
-function getAiApiKey() {
-  return process.env.AI_API_KEY?.trim() ?? "";
-}
-
-function getAiBaseUrl() {
-  return (process.env.AI_BASE_URL?.trim() || DEFAULT_AI_BASE_URL).replace(/\/+$/, "");
-}
-
-function getAiModel() {
-  return process.env.AI_MODEL?.trim() || DEFAULT_AI_MODEL;
-}
 
 function compactDashboardContext(data: DashboardData) {
   return {
@@ -162,9 +148,7 @@ async function createChatCompletion(
   }
 }
 
-export function isAiAssistantConfigured() {
-  return Boolean(getAiApiKey());
-}
+export { isAiAssistantConfigured };
 
 export async function createAiAssistantReply(message: string, data: DashboardData) {
   return createChatCompletion([

@@ -1,0 +1,398 @@
+import type { ToolSet } from "ai";
+import { z } from "zod";
+import type { BugReport, DashboardData, RequirementVersion, Risk, Task } from "@/types/dashboard";
+
+const today = () => new Date();
+const defaultLimit = 8;
+
+function clampLimit(limit?: number) {
+  return Math.min(Math.max(Math.trunc(limit ?? defaultLimit), 1), 20);
+}
+
+function isBeforeToday(dateText: string) {
+  const value = Date.parse(dateText);
+
+  if (Number.isNaN(value)) {
+    return false;
+  }
+
+  return value < today().setHours(0, 0, 0, 0);
+}
+
+function taskWeight(task: Task) {
+  const priorityWeight: Record<Task["priority"], number> = { 高: 3, 中: 2, 低: 1 };
+  const stageWeight: Record<Task["stage"], number> = { 待处理: 4, 进行中: 3, 评审中: 2, 已完成: 0 };
+
+  return priorityWeight[task.priority] * 10 + stageWeight[task.stage] + (isBeforeToday(task.dueDate) ? 20 : 0);
+}
+
+function bugWeight(bug: BugReport) {
+  const severityWeight: Record<BugReport["severity"], number> = { 阻塞: 4, 严重: 3, 一般: 2, 轻微: 1 };
+  const statusWeight: Record<BugReport["status"], number> = { 新建: 4, 定位中: 3, 修复中: 2, 待验证: 1, 已关闭: 0 };
+
+  return severityWeight[bug.severity] * 10 + statusWeight[bug.status];
+}
+
+function riskWeight(risk: Risk) {
+  const levelWeight: Record<Risk["level"], number> = { 高: 3, 中: 2, 低: 1 };
+
+  return levelWeight[risk.level];
+}
+
+function normalizeText(value?: string) {
+  return value?.trim().toLowerCase() ?? "";
+}
+
+function matchesOwner(owner: string | undefined, query?: string) {
+  const normalizedQuery = normalizeText(query);
+
+  if (!normalizedQuery) {
+    return true;
+  }
+
+  return normalizeText(owner).includes(normalizedQuery);
+}
+
+function matchesVersion(version: RequirementVersion, query?: { versionId?: string; versionName?: string }) {
+  const versionId = normalizeText(query?.versionId);
+  const versionName = normalizeText(query?.versionName);
+
+  if (versionId && version.id.toLowerCase() === versionId) {
+    return true;
+  }
+
+  if (versionName && version.name.toLowerCase().includes(versionName)) {
+    return true;
+  }
+
+  return !versionId && !versionName;
+}
+
+function compactTask(task: Task) {
+  return {
+    id: task.id,
+    标题: task.title,
+    阶段: task.stage,
+    负责人: task.owner || "未分配",
+    项目: task.project,
+    版本: task.versionName || "未关联版本",
+    优先级: task.priority,
+    开始日期: task.startDate,
+    截止日期: task.dueDate,
+    是否逾期: task.stage !== "已完成" && isBeforeToday(task.dueDate),
+    AI提示: task.aiHint
+  };
+}
+
+function compactBug(bug: BugReport) {
+  return {
+    id: bug.id,
+    标题: bug.title,
+    严重程度: bug.severity,
+    状态: bug.status,
+    项目: bug.project,
+    版本: bug.versionName || "未关联版本",
+    负责人: bug.owner || "未分配",
+    提交人: bug.reporter,
+    创建时间: bug.createdAt
+  };
+}
+
+function compactRisk(risk: Risk) {
+  return {
+    id: risk.id,
+    标题: risk.title,
+    等级: risk.level,
+    负责人: risk.owner || "未分配",
+    项目: risk.project,
+    应对措施: risk.mitigation
+  };
+}
+
+function compactVersion(version: RequirementVersion) {
+  return {
+    id: version.id,
+    名称: version.name,
+    项目: version.project,
+    状态: version.status,
+    开始日期: version.startDate,
+    发布日期: version.releaseDate,
+    目标: version.goal,
+    产品负责人: version.productOwner || "未分配",
+    UI负责人: version.uiOwner || "未分配",
+    开发负责人: version.devOwner || "未分配",
+    里程碑: version.milestones.map((milestone) => ({
+      标题: milestone.title,
+      状态: milestone.status,
+      截止日期: milestone.dueDate,
+      负责人: milestone.owner || "未分配",
+      备注: milestone.note
+    }))
+  };
+}
+
+// 这些工具是 ChatBox 读取项目事实的唯一入口；工具只返回结构化数据，不直接拼最终回复，确保判断由模型基于 tools 自主完成。
+export function createAssistantTools(data: DashboardData): ToolSet {
+  return {
+    getProjectOverview: {
+      description: "读取当前工作区项目概览、核心指标、活跃版本和整体风险信号。",
+      inputSchema: z.object({
+        scope: z.enum(["all", "active", "risky"]).default("active").describe("all=全部项目，active=进行中/有风险项目，risky=风险优先项目"),
+        limit: z.number().int().min(1).max(20).default(defaultLimit).describe("返回项目数量上限")
+      }),
+      execute: ({ scope, limit }) => {
+        const rowLimit = clampLimit(limit);
+        const projects = data.projects
+          .filter((project) => {
+            if (scope === "active") {
+              return project.status === "进行中" || project.status === "有风险";
+            }
+
+            if (scope === "risky") {
+              return project.status === "有风险" || project.riskCount > 0 || project.health < 75;
+            }
+
+            return true;
+          })
+          .sort((left, right) => (right.riskCount * 10 + (100 - right.health)) - (left.riskCount * 10 + (100 - left.health)))
+          .slice(0, rowLimit)
+          .map((project) => ({
+            id: project.id,
+            名称: project.name,
+            负责人: project.owner || "未分配",
+            状态: project.status,
+            进度: project.progress,
+            健康度: project.health,
+            截止日期: project.dueDate,
+            团队人数: project.team,
+            风险数: project.riskCount,
+            摘要: project.summary
+          }));
+
+        return {
+          工作区: data.meta?.currentWorkspace?.name || "默认工作区",
+          数据源: data.meta?.source || "unknown",
+          指标: data.metrics,
+          项目: projects,
+          活跃版本数: data.requirementVersions.filter((version) => version.status === "规划中" || version.status === "进行中").length,
+          未完成任务数: data.tasks.filter((task) => task.stage !== "已完成").length,
+          未关闭Bug数: data.bugs.filter((bug) => bug.status !== "已关闭").length,
+          高风险数: data.risks.filter((risk) => risk.level === "高").length,
+          周洞察: data.weeklyInsight.slice(0, 6)
+        };
+      }
+    },
+    getDeliveryRisks: {
+      description: "读取风险、逾期任务、高优先级任务和未关闭 Bug，用于分析交付阻塞和本周风险。",
+      inputSchema: z.object({
+        riskLevel: z.enum(["全部", "高", "中", "低"]).default("全部").describe("筛选风险等级"),
+        owner: z.string().optional().describe("按负责人姓名模糊筛选，可不填"),
+        limit: z.number().int().min(1).max(20).default(defaultLimit).describe("每类返回数量上限")
+      }),
+      execute: ({ riskLevel, owner, limit }) => {
+        const rowLimit = clampLimit(limit);
+        const risks = data.risks
+          .filter((risk) => riskLevel === "全部" || risk.level === riskLevel)
+          .filter((risk) => matchesOwner(risk.owner, owner))
+          .sort((left, right) => riskWeight(right) - riskWeight(left))
+          .slice(0, rowLimit)
+          .map(compactRisk);
+        const openTasks = data.tasks.filter((task) => task.stage !== "已完成").filter((task) => matchesOwner(task.owner, owner));
+        const openBugs = data.bugs.filter((bug) => bug.status !== "已关闭").filter((bug) => matchesOwner(bug.owner, owner));
+
+        return {
+          风险: risks,
+          逾期任务: openTasks
+            .filter((task) => isBeforeToday(task.dueDate))
+            .sort((left, right) => taskWeight(right) - taskWeight(left))
+            .slice(0, rowLimit)
+            .map(compactTask),
+          高优先级任务: openTasks
+            .filter((task) => task.priority === "高")
+            .sort((left, right) => taskWeight(right) - taskWeight(left))
+            .slice(0, rowLimit)
+            .map(compactTask),
+          未关闭Bug: openBugs
+            .sort((left, right) => bugWeight(right) - bugWeight(left))
+            .slice(0, rowLimit)
+            .map(compactBug)
+        };
+      }
+    },
+    getVersionScope: {
+      description: "读取指定版本或活跃版本范围内的任务、Bug、需求和里程碑。",
+      inputSchema: z.object({
+        versionId: z.string().optional().describe("版本 id，已知时优先使用"),
+        versionName: z.string().optional().describe("版本名称关键词"),
+        limit: z.number().int().min(1).max(20).default(defaultLimit).describe("每类返回数量上限")
+      }),
+      execute: ({ versionId, versionName, limit }) => {
+        const rowLimit = clampLimit(limit);
+        const matchedVersions = data.requirementVersions
+          .filter((version) => matchesVersion(version, { versionId, versionName }))
+          .sort((left, right) => Date.parse(right.releaseDate) - Date.parse(left.releaseDate))
+          .slice(0, rowLimit);
+        const matchedVersionIds = new Set(matchedVersions.map((version) => version.id));
+        const matchedVersionNames = new Set(matchedVersions.map((version) => version.name));
+        const shouldIncludeByVersion = (record: { versionId?: string; versionName?: string }) => {
+          if (!matchedVersions.length) {
+            return false;
+          }
+
+          return Boolean(
+            (record.versionId && matchedVersionIds.has(record.versionId)) ||
+              (record.versionName && matchedVersionNames.has(record.versionName))
+          );
+        };
+
+        return {
+          匹配版本: matchedVersions.map(compactVersion),
+          任务: data.tasks
+            .filter(shouldIncludeByVersion)
+            .sort((left, right) => taskWeight(right) - taskWeight(left))
+            .slice(0, rowLimit)
+            .map(compactTask),
+          Bug: data.bugs
+            .filter(shouldIncludeByVersion)
+            .sort((left, right) => bugWeight(right) - bugWeight(left))
+            .slice(0, rowLimit)
+            .map(compactBug),
+          需求: data.requirements
+            .filter(shouldIncludeByVersion)
+            .slice(0, rowLimit)
+            .map((requirement) => ({
+              id: requirement.id,
+              标题: requirement.title,
+              优先级: requirement.priority,
+              状态: requirement.status,
+              项目: requirement.project,
+              版本: requirement.versionName || "未关联版本",
+              负责人: requirement.owner || "未分配",
+              验收标准: requirement.acceptance,
+              AI摘要: requirement.aiSummary,
+              AI风险: requirement.aiRisks
+            }))
+        };
+      }
+    },
+    getMemberWorkload: {
+      description: "读取成员当前任务、Bug 和风险负载，用于判断负责人压力与协作瓶颈。",
+      inputSchema: z.object({
+        owner: z.string().optional().describe("负责人姓名关键词，可不填表示统计全部成员"),
+        limit: z.number().int().min(1).max(20).default(defaultLimit).describe("返回成员数量上限")
+      }),
+      execute: ({ owner, limit }) => {
+        const rowLimit = clampLimit(limit);
+        const owners = new Map<string, {
+          owner: string;
+          openTasks: Task[];
+          overdueTasks: Task[];
+          highPriorityTasks: Task[];
+          openBugs: BugReport[];
+          risks: Risk[];
+        }>();
+
+        const ensureOwner = (name: string) => {
+          const key = name || "未分配";
+          const existing = owners.get(key);
+
+          if (existing) {
+            return existing;
+          }
+
+          const next = {
+            owner: key,
+            openTasks: [],
+            overdueTasks: [],
+            highPriorityTasks: [],
+            openBugs: [],
+            risks: []
+          };
+
+          owners.set(key, next);
+
+          return next;
+        };
+
+        data.tasks.filter((task) => task.stage !== "已完成").forEach((task) => {
+          const bucket = ensureOwner(task.owner || "未分配");
+
+          bucket.openTasks.push(task);
+
+          if (isBeforeToday(task.dueDate)) {
+            bucket.overdueTasks.push(task);
+          }
+
+          if (task.priority === "高") {
+            bucket.highPriorityTasks.push(task);
+          }
+        });
+        data.bugs.filter((bug) => bug.status !== "已关闭").forEach((bug) => ensureOwner(bug.owner || "未分配").openBugs.push(bug));
+        data.risks.forEach((risk) => ensureOwner(risk.owner || "未分配").risks.push(risk));
+
+        return Array.from(owners.values())
+          .filter((item) => matchesOwner(item.owner, owner))
+          .map((item) => ({
+            负责人: item.owner,
+            未完成任务数: item.openTasks.length,
+            逾期任务数: item.overdueTasks.length,
+            高优先级任务数: item.highPriorityTasks.length,
+            未关闭Bug数: item.openBugs.length,
+            风险数: item.risks.length,
+            代表任务: item.openTasks.sort((left, right) => taskWeight(right) - taskWeight(left)).slice(0, 3).map(compactTask),
+            代表Bug: item.openBugs.sort((left, right) => bugWeight(right) - bugWeight(left)).slice(0, 3).map(compactBug)
+          }))
+          .sort((left, right) => (
+            right.逾期任务数 * 20 + right.高优先级任务数 * 10 + right.未关闭Bug数 * 6 + right.风险数 * 4 + right.未完成任务数
+          ) - (
+            left.逾期任务数 * 20 + left.高优先级任务数 * 10 + left.未关闭Bug数 * 6 + left.风险数 * 4 + left.未完成任务数
+          ))
+          .slice(0, rowLimit);
+      }
+    },
+    getWeeklyReportContext: {
+      description: "读取生成周报或阶段汇报所需的结构化上下文，不直接生成周报正文。",
+      inputSchema: z.object({
+        limit: z.number().int().min(1).max(20).default(defaultLimit).describe("每类数据返回数量上限")
+      }),
+      execute: ({ limit }) => {
+        const rowLimit = clampLimit(limit);
+        const openTasks = data.tasks.filter((task) => task.stage !== "已完成");
+        const openBugs = data.bugs.filter((bug) => bug.status !== "已关闭");
+        const activeVersions = data.requirementVersions.filter((version) => version.status === "规划中" || version.status === "进行中");
+
+        return {
+          工作区: data.meta?.currentWorkspace?.name || "默认工作区",
+          核心指标: data.metrics,
+          项目: [...data.projects]
+            .sort((left, right) => (right.riskCount * 10 + (100 - right.health)) - (left.riskCount * 10 + (100 - left.health)))
+            .slice(0, rowLimit)
+            .map((project) => ({
+              名称: project.name,
+              负责人: project.owner || "未分配",
+              状态: project.status,
+              进度: project.progress,
+              健康度: project.health,
+              风险数: project.riskCount,
+              截止日期: project.dueDate,
+              摘要: project.summary
+            })),
+          活跃版本: activeVersions.slice(0, rowLimit).map(compactVersion),
+          未完成任务: openTasks.sort((left, right) => taskWeight(right) - taskWeight(left)).slice(0, rowLimit).map(compactTask),
+          未关闭Bug: openBugs.sort((left, right) => bugWeight(right) - bugWeight(left)).slice(0, rowLimit).map(compactBug),
+          风险: [...data.risks].sort((left, right) => riskWeight(right) - riskWeight(left)).slice(0, rowLimit).map(compactRisk),
+          需求: data.requirements.slice(0, rowLimit).map((requirement) => ({
+            标题: requirement.title,
+            优先级: requirement.priority,
+            状态: requirement.status,
+            项目: requirement.project,
+            版本: requirement.versionName || "未关联版本",
+            负责人: requirement.owner || "未分配",
+            验收标准: requirement.acceptance
+          })),
+          周洞察: data.weeklyInsight
+        };
+      }
+    }
+  };
+}
