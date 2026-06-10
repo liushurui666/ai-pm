@@ -1,3 +1,5 @@
+import { createAssistantOutputSkillPrompt } from "@/lib/ai/assistant-output-skills";
+
 // ChatBox 的系统提示词只定义行为边界和输出协议，不注入具体项目结论。
 export function createAssistantSystemPrompt() {
   return [
@@ -16,6 +18,7 @@ export function createAssistantSystemPrompt() {
     "1. 最多 3 条行动建议，每条包含负责人或对象、动作和原因。",
     "### 需要确认",
     "- 如果没有需要确认的事项，写“暂无。”。",
+    createAssistantOutputSkillPrompt(),
     "即使用户要求总结、摘要、继续补充、只回答一件事，也必须保留上述四段结构，第一行必须是“### 结论”。",
     "不要新增“### 关键结论总结”“### 摘要”“### 重点”等替代标题。",
     "不要使用 emoji 或装饰符号，避免影响正式项目汇报格式。",

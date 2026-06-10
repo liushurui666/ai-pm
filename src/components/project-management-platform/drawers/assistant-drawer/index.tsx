@@ -6,6 +6,7 @@ import { RedoOutlined, RobotOutlined, SendOutlined, StopOutlined } from "@ant-de
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AssistantMarkdown } from "@/components/project-management-platform/drawers/assistant-drawer/assistant-markdown";
 
 const { Paragraph, Text } = Typography;
 
@@ -29,8 +30,12 @@ const initialMessages: UIMessage[] = [
   }
 ];
 
-function renderMessagePart(part: UIMessage["parts"][number], index: number) {
+function renderMessagePart(part: UIMessage["parts"][number], index: number, role: UIMessage["role"]) {
   if (part.type === "text") {
+    if (role === "assistant") {
+      return <AssistantMarkdown content={part.text} key={`text-${index}`} />;
+    }
+
     return (
       <Paragraph className="assistant-message-text" key={`text-${index}`}>
         {part.text}
@@ -117,7 +122,7 @@ export function AssistantDrawer({
         <div className="assistant-messages" ref={messagesRef}>
           {messages.map((message) => (
             <div className={`assistant-message assistant-message-${message.role}`} key={message.id}>
-              {message.parts.map(renderMessagePart)}
+              {message.parts.map((part, index) => renderMessagePart(part, index, message.role))}
             </div>
           ))}
           {status === "submitted" ? (
