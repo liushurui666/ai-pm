@@ -13,156 +13,93 @@ import {
 } from "@ant-design/icons";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TextAreaRef } from "antd/es/input/TextArea";
-import { AssistantMarkdown } from "@/components/project-management-platform/drawers/assistant-drawer/assistant-markdown";
+import { initialAssistantMessages, assistantQuickSuggestions } from "@/components/project-management-platform/drawers/assistant-drawer/assistant-constants";
+import { AssistantMessagePart } from "@/components/project-management-platform/drawers/assistant-drawer/assistant-message-part";
+import {
+  buildConversationMarkdown,
+  downloadTextFile,
+  getCachedMessageTime,
+  getMessagePlainText
+} from "@/components/project-management-platform/drawers/assistant-drawer/assistant-message-utils";
+import {
+  createAssistantSession,
+  loadAssistantSessionState,
+  normalizeAssistantSessionState,
+  saveAssistantSessionState,
+  updateSessionMessages,
+  type AssistantSessionState
+} from "@/components/project-management-platform/drawers/assistant-drawer/assistant-session-store";
+import { AssistantSessionBar } from "@/components/project-management-platform/drawers/assistant-drawer/assistant-session-bar";
 
-const { Paragraph, Text } = Typography;
+const { Text } = Typography;
 
 type AssistantDrawerProps = {
+  assistantApiPath?: string;
   currentWorkspaceId: string;
   isMobile: boolean;
   open: boolean;
   onClose: () => void;
 };
 
-const initialMessages: UIMessage[] = [
-  {
-    id: "assistant-welcome",
-    role: "assistant",
-    parts: [
-      {
-        type: "text",
-        text: "我会持续观察项目进度、任务阻塞和风险变化。你可以问我：本周风险、生成周报、版本范围。"
-      }
-    ]
-  }
-];
-
-const quickSuggestions = [
-  "我现在还有哪些待办？",
-  "本周最大的交付风险是什么？",
-  "未关闭 Bug 先处理哪些？",
-  "生成本周项目周报摘要",
-  "总结这轮对话关键结论"
-];
-
-const messageTimeCache = new Map<string, string>();
-
-function formatMessageTime() {
-  return new Intl.DateTimeFormat("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(new Date());
-}
-
-function getCachedMessageTime(messageId: string) {
-  const cachedTime = messageTimeCache.get(messageId);
-
-  if (cachedTime) {
-    return cachedTime;
-  }
-
-  const nextTime = formatMessageTime();
-
-  messageTimeCache.set(messageId, nextTime);
-  return nextTime;
-}
-
-function getMessagePlainText(message: UIMessage) {
-  return message.parts
-    .map((part) => {
-      if (part.type === "text") {
-        return part.text;
-      }
-
-      if (part.type.startsWith("tool-")) {
-        return "[正在读取项目数据]";
-      }
-
-      return "";
-    })
-    .filter(Boolean)
-    .join("\n\n")
-    .trim();
-}
-
-function buildConversationMarkdown(messages: UIMessage[]) {
-  const lines = [
-    "# AI 项目助手对话记录",
-    "",
-    `导出时间：${new Date().toLocaleString("zh-CN")}`,
-    ""
-  ];
-
-  messages.forEach((message) => {
-    const text = getMessagePlainText(message);
-
-    if (!text) {
-      return;
-    }
-
-    lines.push(`## ${message.role === "user" ? "你" : "AI 项目助手"}`, "", text, "");
-  });
-
-  return lines.join("\n");
-}
-
-function downloadTextFile(fileName: string, content: string) {
-  const blob = new Blob([content], {
-    type: "text/markdown;charset=utf-8"
-  });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-
-  link.href = url;
-  link.download = fileName;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
-function renderMessagePart(part: UIMessage["parts"][number], index: number, role: UIMessage["role"]) {
-  if (part.type === "text") {
-    if (role === "assistant") {
-      return <AssistantMarkdown content={part.text} key={`text-${index}`} />;
-    }
-
-    return (
-      <Paragraph className="assistant-message-text" key={`text-${index}`}>
-        {part.text}
-      </Paragraph>
-    );
-  }
-
-  if (part.type.startsWith("tool-")) {
-    return (
-      <Tag className="assistant-tool-tag" color="processing" key={`tool-${index}`}>
-        正在读取项目数据
-      </Tag>
-    );
-  }
-
-  return null;
-}
-
 // AI 助手抽屉现在自持 AI SDK 多轮会话状态，主容器只负责传入当前工作区上下文。
 export function AssistantDrawer({
+  assistantApiPath = "/api/assistant",
   currentWorkspaceId,
   isMobile,
   onClose,
   open
 }: AssistantDrawerProps) {
+  const [sessionState, setSessionState] = useState<AssistantSessionState>(() =>
+    loadAssistantSessionState(currentWorkspaceId, initialAssistantMessages)
+  );
   const [input, setInput] = useState("");
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const activeSession = sessionState.sessions.find((session) => session.id === sessionState.activeSessionId);
+  const sessionStateRef = useRef(sessionState);
+  const activeSessionIdRef = useRef(sessionState.activeSessionId);
+  const latestMessagesRef = useRef<UIMessage[]>(activeSession?.messages ?? initialAssistantMessages);
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<TextAreaRef>(null);
+  const submitDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const commitSessionState = useCallback((nextState: AssistantSessionState) => {
+    const normalizedState = normalizeAssistantSessionState(nextState, initialAssistantMessages);
+
+    sessionStateRef.current = normalizedState;
+    activeSessionIdRef.current = normalizedState.activeSessionId;
+    setSessionState(normalizedState);
+    saveAssistantSessionState(currentWorkspaceId, normalizedState);
+
+    return normalizedState;
+  }, [currentWorkspaceId]);
+  const persistActiveSessionMessages = useCallback((nextMessages: UIMessage[]) => {
+    const activeSessionId = activeSessionIdRef.current;
+
+    if (!activeSessionId) {
+      return;
+    }
+
+    commitSessionState(updateSessionMessages(sessionStateRef.current, activeSessionId, nextMessages));
+  }, [commitSessionState]);
   const transport = useMemo(() => new DefaultChatTransport({
-    api: "/api/assistant",
+    api: assistantApiPath,
     body: {
+      chatSessionId: sessionState.activeSessionId,
       workspaceId: currentWorkspaceId
     },
-    credentials: "same-origin"
-  }), [currentWorkspaceId]);
+    credentials: "same-origin",
+    prepareSendMessagesRequest: ({ body, headers, id, messageId, messages, trigger }) => ({
+      body: {
+        ...body,
+        id,
+        messageId,
+        messages,
+        trigger
+      },
+      headers
+    })
+  }), [assistantApiPath, currentWorkspaceId, sessionState.activeSessionId]);
   const {
     clearError,
     error,
@@ -174,8 +111,14 @@ export function AssistantDrawer({
     stop
   } = useChat({
     experimental_throttle: 80,
-    id: `ai-pm-assistant-${currentWorkspaceId}`,
-    messages: initialMessages,
+    id: `ai-pm-assistant-${currentWorkspaceId}-${sessionState.activeSessionId}`,
+    messages: activeSession?.messages ?? initialAssistantMessages,
+    onError: () => {
+      persistActiveSessionMessages(latestMessagesRef.current);
+    },
+    onFinish: ({ messages: finishedMessages }) => {
+      persistActiveSessionMessages(finishedMessages);
+    },
     transport
   });
   const generating = status === "submitted" || status === "streaming";
@@ -187,11 +130,40 @@ export function AssistantDrawer({
     : "支持多轮上下文，Enter 发送，Shift+Enter 换行";
 
   useEffect(() => {
+    const timer = setTimeout(() => {
+      const nextState = loadAssistantSessionState(currentWorkspaceId, initialAssistantMessages);
+      const normalizedState = commitSessionState(nextState);
+      const nextActiveSession = normalizedState.sessions.find((session) => session.id === normalizedState.activeSessionId);
+      const nextMessages = nextActiveSession?.messages ?? initialAssistantMessages;
+
+      latestMessagesRef.current = nextMessages;
+      setMessages(nextMessages);
+      setInput("");
+      clearError();
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [clearError, commitSessionState, currentWorkspaceId, setMessages]);
+
+  useEffect(() => {
+    latestMessagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
     messagesRef.current?.scrollTo({
       top: messagesRef.current.scrollHeight,
       behavior: "smooth"
     });
   }, [messages, status]);
+
+  useEffect(
+    () => () => {
+      if (submitDebounceRef.current !== null) {
+        clearTimeout(submitDebounceRef.current);
+      }
+    },
+    []
+  );
 
   function focusInput() {
     window.setTimeout(() => {
@@ -213,15 +185,87 @@ export function AssistantDrawer({
   async function handleSend() {
     const message = input.trim();
 
-    if (!message || generating) {
+    if (!message || generating || submitDebounceRef.current !== null) {
       return;
     }
 
+    submitDebounceRef.current = setTimeout(() => {
+      submitDebounceRef.current = null;
+    }, 300);
     clearError();
     setInput("");
+    persistActiveSessionMessages([
+      ...latestMessagesRef.current,
+      {
+        id: `local-user-${Date.now()}`,
+        parts: [
+          {
+            text: message,
+            type: "text"
+          }
+        ],
+        role: "user"
+      }
+    ]);
     await sendMessage({
       text: message
     });
+  }
+
+  function hydrateSessionMessages(sessionId: string) {
+    const session = sessionStateRef.current.sessions.find((item) => item.id === sessionId);
+
+    if (!session) {
+      return;
+    }
+
+    latestMessagesRef.current = session.messages;
+    setMessages(session.messages);
+    clearError();
+    setInput("");
+    focusInput();
+  }
+
+  function handleNewSession() {
+    if (generating) {
+      return;
+    }
+
+    const session = createAssistantSession(initialAssistantMessages);
+    const nextState = commitSessionState({
+      activeSessionId: session.id,
+      sessions: [session, ...sessionStateRef.current.sessions]
+    });
+
+    hydrateSessionMessages(nextState.activeSessionId);
+  }
+
+  function handleSessionChange(sessionId: string) {
+    if (generating || sessionId === sessionStateRef.current.activeSessionId) {
+      return;
+    }
+
+    commitSessionState({
+      activeSessionId: sessionId,
+      sessions: sessionStateRef.current.sessions
+    });
+    hydrateSessionMessages(sessionId);
+  }
+
+  function handleDeleteSession() {
+    if (generating) {
+      return;
+    }
+
+    const currentState = sessionStateRef.current;
+    const remainingSessions = currentState.sessions.filter((session) => session.id !== currentState.activeSessionId);
+    const nextSession = remainingSessions[0] ?? createAssistantSession(initialAssistantMessages);
+    const nextState = commitSessionState({
+      activeSessionId: nextSession.id,
+      sessions: remainingSessions.length > 0 ? remainingSessions : [nextSession]
+    });
+
+    hydrateSessionMessages(nextState.activeSessionId);
   }
 
   function handleClearConversation() {
@@ -229,8 +273,27 @@ export function AssistantDrawer({
       return;
     }
 
+    const currentState = sessionStateRef.current;
+    const nextSessions = currentState.sessions.map((session) => {
+      if (session.id !== currentState.activeSessionId) {
+        return session;
+      }
+
+      return {
+        ...session,
+        messages: initialAssistantMessages,
+        title: "新对话",
+        updatedAt: Date.now()
+      };
+    });
+
+    commitSessionState({
+      activeSessionId: currentState.activeSessionId,
+      sessions: nextSessions
+    });
     clearError();
-    setMessages(initialMessages);
+    setMessages(initialAssistantMessages);
+    latestMessagesRef.current = initialAssistantMessages;
     setInput("");
     focusInput();
   }
@@ -285,6 +348,14 @@ export function AssistantDrawer({
       }
     >
       <div className="assistant-panel">
+        <AssistantSessionBar
+          activeSessionId={sessionState.activeSessionId}
+          disabled={generating}
+          sessions={sessionState.sessions}
+          onCreateSession={handleNewSession}
+          onDeleteSession={handleDeleteSession}
+          onSelectSession={handleSessionChange}
+        />
         <div className="assistant-messages" ref={messagesRef}>
           {messages.map((message) => (
             <div className={`assistant-message assistant-message-${message.role}`} key={message.id}>
@@ -292,7 +363,13 @@ export function AssistantDrawer({
                 <span>{message.role === "user" ? "你" : "AI 项目助手"}</span>
                 <span>{getCachedMessageTime(message.id)}</span>
               </div>
-              {message.parts.map((part, index) => renderMessagePart(part, index, message.role))}
+              {message.parts.map((part, index) => (
+                <AssistantMessagePart
+                  key={`${message.id}-part-${index}`}
+                  part={part}
+                  role={message.role}
+                />
+              ))}
               {message.role === "assistant" && message.id !== "assistant-welcome" && (!generating || message.id !== lastAssistantMessage?.id) ? (
                 <div className="assistant-message-actions">
                   <Tooltip title={copiedMessageId === message.id ? "已复制" : "复制回复"}>
@@ -310,7 +387,9 @@ export function AssistantDrawer({
                         disabled={!canRegenerate}
                         onClick={() => {
                           clearError();
-                          void regenerate();
+                          void regenerate({
+                            messageId: message.id
+                          });
                         }}
                       />
                     </Tooltip>
@@ -337,7 +416,7 @@ export function AssistantDrawer({
 
         <div className="assistant-chatbox">
           <div className="assistant-suggestions" aria-label="快捷提问">
-            {quickSuggestions.map((suggestion) => (
+            {assistantQuickSuggestions.map((suggestion) => (
               <Button
                 className="assistant-suggestion"
                 key={suggestion}
@@ -373,7 +452,9 @@ export function AssistantDrawer({
                 disabled={!canRegenerate}
                 onClick={() => {
                   clearError();
-                  void regenerate();
+                  void regenerate({
+                    messageId: lastAssistantMessage?.id
+                  });
                 }}
               />
             </Tooltip>

@@ -13,6 +13,26 @@
   overflow: auto;
 }
 
+.assistant-session-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.assistant-session-bar .ant-btn {
+  width: 32px;
+  height: 32px;
+}
+
+.assistant-session-select {
+  min-width: 0;
+  flex: 1;
+}
+
 .assistant-message {
   max-width: 92%;
   padding: 10px 12px 12px;
@@ -123,4 +143,15 @@
 
 .assistant-send {
   flex: 1;
+}
+
+@media (max-width: 520px) {
+  .assistant-session-bar {
+    padding: 6px;
+  }
+
+  .assistant-session-bar .ant-btn {
+    width: 30px;
+    height: 30px;
+  }
 }
