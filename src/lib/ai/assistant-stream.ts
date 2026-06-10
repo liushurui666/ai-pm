@@ -23,7 +23,7 @@ export async function createAssistantStreamResult({
   data: DashboardData;
   messages: UIMessage[];
 }) {
-  const tools = createAssistantTools(data);
+  const tools = createAssistantTools(data, messages);
 
   return streamText({
     model: createAiModel(),

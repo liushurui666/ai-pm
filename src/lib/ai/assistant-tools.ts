@@ -1,4 +1,4 @@
-import type { ToolSet } from "ai";
+import type { ToolSet, UIMessage } from "ai";
 import { z } from "zod";
 import type { BugReport, DashboardData, DashboardMember, Requirement, RequirementVersion, Risk, Task } from "@/types/dashboard";
 
@@ -41,6 +41,45 @@ function riskWeight(risk: Risk) {
 
 function normalizeText(value?: string) {
   return value?.trim().toLowerCase() ?? "";
+}
+
+function getMessageText(message: UIMessage) {
+  return message.parts
+    .filter((part): part is Extract<UIMessage["parts"][number], { type: "text" }> => part.type === "text")
+    .map((part) => part.text.trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+function createConversationContext(messages: UIMessage[]) {
+  const turns = messages
+    .map((message, index) => ({
+      序号: index + 1,
+      角色: message.role === "user" ? "用户" : "助手",
+      内容: getMessageText(message),
+      是否初始欢迎语: message.id === "assistant-welcome"
+    }))
+    .filter((turn) => turn.内容);
+  const latestUserTurnIndex = [...turns].reverse().findIndex((turn) => turn.角色 === "用户");
+  const latestUserTurn = latestUserTurnIndex >= 0 ? turns[turns.length - 1 - latestUserTurnIndex] : undefined;
+  const previousUserTurns = latestUserTurn
+    ? turns.filter((turn) => turn.角色 === "用户" && turn.序号 < latestUserTurn.序号)
+    : turns.filter((turn) => turn.角色 === "用户");
+  const previousAssistantTurns = latestUserTurn
+    ? turns.filter((turn) => turn.角色 === "助手" && turn.序号 < latestUserTurn.序号)
+    : turns.filter((turn) => turn.角色 === "助手");
+
+  // 对话回看属于聊天事实，不属于项目数据分析；这里只返回结构化历史，最终如何解释仍交给模型完成。
+  return {
+    当前用户消息: latestUserTurn?.内容 || "暂无",
+    用户上一句话: previousUserTurns.at(-1)?.内容 || "暂无上一条用户消息",
+    助手上一句话: previousAssistantTurns.at(-1)?.内容 || "暂无上一条助手消息",
+    最近用户消息: previousUserTurns.slice(-5).map((turn) => ({
+      序号: turn.序号,
+      内容: turn.内容
+    })),
+    最近对话: turns.slice(-8)
+  };
 }
 
 function matchesOwner(owner: string | undefined, query?: string) {
@@ -219,11 +258,16 @@ function compactVersion(version: RequirementVersion) {
   };
 }
 
-// 这些工具是 ChatBox 读取项目事实的唯一入口；工具只返回结构化数据，不直接拼最终回复，确保判断由模型基于 tools 自主完成。
-export function createAssistantTools(data: DashboardData): ToolSet {
+// 这些工具是 ChatBox 读取对话事实和项目事实的唯一入口；工具只返回结构化数据，不直接拼最终回复，确保判断由模型基于 tools 自主完成。
+export function createAssistantTools(data: DashboardData, messages: UIMessage[] = []): ToolSet {
   const currentUserMatcher = createCurrentUserMatcher(data);
 
   return {
+    getConversationContext: {
+      description: "读取当前 ChatBox 的多轮对话历史；当用户问“上一句/上一句话/刚才我说/我刚说/你刚才说/前面说了什么”，或纠正“我说的是我不是你/不是这个/你理解错了”这类对话指代时必须使用。这个工具只返回聊天事实，不读取项目数据。",
+      inputSchema: z.object({}),
+      execute: () => createConversationContext(messages)
+    },
     getCurrentUserContext: {
       description: "读取当前登录用户、工作区成员、角色和身份匹配依据；当用户问“我是谁”“当前账号”“我的权限/身份”时必须使用。",
       inputSchema: z.object({}),
@@ -244,7 +288,7 @@ export function createAssistantTools(data: DashboardData): ToolSet {
       })
     },
     getMyWorkItems: {
-      description: "按当前登录人/当前工作区成员读取“我的待办、我负责的任务、分配给我的 Bug、我的风险和我的需求”；用户说“我/我的/待办”时必须优先使用。",
+      description: "按当前登录人/当前工作区成员读取“我的待办、我负责的任务、分配给我的 Bug、我的风险和我的需求”；仅当用户明确询问个人项目事项、任务、Bug、风险、需求或分配关系时使用。",
       inputSchema: z.object({
         includeDone: z.boolean().default(false).describe("是否包含已完成任务、已关闭 Bug、已上线/已关闭需求"),
         limit: z.number().int().min(1).max(20).default(defaultLimit).describe("每类返回数量上限")
