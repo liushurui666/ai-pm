@@ -1,6 +1,6 @@
 import type { ToolSet } from "ai";
 import { z } from "zod";
-import type { BugReport, DashboardData, RequirementVersion, Risk, Task } from "@/types/dashboard";
+import type { BugReport, DashboardData, DashboardMember, Requirement, RequirementVersion, Risk, Task } from "@/types/dashboard";
 
 const today = () => new Date();
 const defaultLimit = 8;
@@ -51,6 +51,79 @@ function matchesOwner(owner: string | undefined, query?: string) {
   }
 
   return normalizeText(owner).includes(normalizedQuery);
+}
+
+function createCurrentUserMatcher(data: DashboardData) {
+  const member = data.meta?.currentMember;
+  const user = data.meta?.user;
+  const memberId = member?.id;
+  const identityValues = new Set(
+    [
+      member?.name,
+      member?.email,
+      member?.notification.feishuOpenId,
+      member?.notification.feishuUnionId,
+      member?.notification.feishuUserId,
+      user?.name,
+      user?.email,
+      user?.authUserId,
+      user?.openId,
+      user?.unionId,
+      user?.userId,
+      ...(member?.identities.flatMap((identity) => [
+        identity.providerUserId,
+        identity.providerUnionId,
+        identity.providerTenantUserId,
+        identity.email
+      ]) ?? [])
+    ]
+      .filter((value): value is string => Boolean(value?.trim()))
+      .map((value) => value.trim().toLowerCase())
+  );
+  const currentUser = {
+    成员ID: member?.id,
+    姓名: member?.name || user?.name || "未识别当前用户",
+    邮箱: member?.email || user?.email,
+    角色: member?.role,
+    状态: member?.status,
+    注册渠道: member?.registrationChannel,
+    工作区: data.meta?.currentWorkspace?.name || "默认工作区",
+    已绑定成员: Boolean(member),
+    匹配依据: member
+      ? "优先按 ownerMemberId，其次按姓名、邮箱、Feishu/OpenID/UnionID 等身份字段匹配。"
+      : "当前会话没有匹配到平台成员，只能按登录用户姓名、邮箱和开放平台身份字段尝试匹配。"
+  };
+
+  // 当前用户匹配同时覆盖新旧数据：新数据应优先写 ownerMemberId，历史数据可能只有姓名或飞书身份。
+  function owns(record: {
+    owner?: string;
+    ownerAvatarUrl?: string;
+    ownerEmail?: string;
+    ownerMemberId?: string;
+    ownerOpenId?: string;
+    ownerUnionId?: string;
+    ownerUserId?: string;
+  }) {
+    if (memberId && record.ownerMemberId === memberId) {
+      return true;
+    }
+
+    return [
+      record.owner,
+      record.ownerEmail,
+      record.ownerOpenId,
+      record.ownerUnionId,
+      record.ownerUserId
+    ]
+      .filter((value): value is string => Boolean(value?.trim()))
+      .some((value) => identityValues.has(value.trim().toLowerCase()));
+  }
+
+  return {
+    currentUser,
+    member,
+    owns
+  };
 }
 
 function matchesVersion(version: RequirementVersion, query?: { versionId?: string; versionName?: string }) {
@@ -109,6 +182,21 @@ function compactRisk(risk: Risk) {
   };
 }
 
+function compactRequirement(requirement: Requirement) {
+  return {
+    id: requirement.id,
+    标题: requirement.title,
+    优先级: requirement.priority,
+    状态: requirement.status,
+    项目: requirement.project,
+    版本: requirement.versionName || "未关联版本",
+    负责人: requirement.owner || "未分配",
+    验收标准: requirement.acceptance,
+    AI摘要: requirement.aiSummary,
+    AI风险: requirement.aiRisks
+  };
+}
+
 function compactVersion(version: RequirementVersion) {
   return {
     id: version.id,
@@ -133,7 +221,74 @@ function compactVersion(version: RequirementVersion) {
 
 // 这些工具是 ChatBox 读取项目事实的唯一入口；工具只返回结构化数据，不直接拼最终回复，确保判断由模型基于 tools 自主完成。
 export function createAssistantTools(data: DashboardData): ToolSet {
+  const currentUserMatcher = createCurrentUserMatcher(data);
+
   return {
+    getCurrentUserContext: {
+      description: "读取当前登录用户、工作区成员、角色和身份匹配依据；当用户问“我是谁”“当前账号”“我的权限/身份”时必须使用。",
+      inputSchema: z.object({}),
+      execute: () => ({
+        当前用户: currentUserMatcher.currentUser,
+        当前工作区: data.meta?.currentWorkspace,
+        权限: data.meta?.permissions,
+        成员总数: data.members.length,
+        可用成员: data.members
+          .filter((member: DashboardMember) => member.status === "active")
+          .map((member: DashboardMember) => ({
+            id: member.id,
+            姓名: member.name,
+            邮箱: member.email,
+            角色: member.role,
+            注册渠道: member.registrationChannel
+          }))
+      })
+    },
+    getMyWorkItems: {
+      description: "按当前登录人/当前工作区成员读取“我的待办、我负责的任务、分配给我的 Bug、我的风险和我的需求”；用户说“我/我的/待办”时必须优先使用。",
+      inputSchema: z.object({
+        includeDone: z.boolean().default(false).describe("是否包含已完成任务、已关闭 Bug、已上线/已关闭需求"),
+        limit: z.number().int().min(1).max(20).default(defaultLimit).describe("每类返回数量上限")
+      }),
+      execute: ({ includeDone, limit }) => {
+        const rowLimit = clampLimit(limit);
+        const myTasks = data.tasks.filter((task) => currentUserMatcher.owns(task));
+        const myBugs = data.bugs.filter((bug) => currentUserMatcher.owns(bug));
+        const myRisks = data.risks.filter((risk) => currentUserMatcher.owns(risk));
+        const myRequirements = data.requirements.filter((requirement) => currentUserMatcher.owns(requirement));
+        const visibleTasks = includeDone ? myTasks : myTasks.filter((task) => task.stage !== "已完成");
+        const visibleBugs = includeDone ? myBugs : myBugs.filter((bug) => bug.status !== "已关闭");
+        const visibleRequirements = includeDone
+          ? myRequirements
+          : myRequirements.filter((requirement) => !["已上线", "已关闭", "已驳回"].includes(requirement.status));
+
+        return {
+          当前用户: currentUserMatcher.currentUser,
+          统计: {
+            我的未完成任务数: myTasks.filter((task) => task.stage !== "已完成").length,
+            我的逾期任务数: myTasks.filter((task) => task.stage !== "已完成" && isBeforeToday(task.dueDate)).length,
+            我的高优先级任务数: myTasks.filter((task) => task.stage !== "已完成" && task.priority === "高").length,
+            我的未关闭Bug数: myBugs.filter((bug) => bug.status !== "已关闭").length,
+            我的风险数: myRisks.length,
+            我的待处理需求数: myRequirements.filter((requirement) => !["已上线", "已关闭", "已驳回"].includes(requirement.status)).length
+          },
+          我的任务: visibleTasks
+            .sort((left, right) => taskWeight(right) - taskWeight(left))
+            .slice(0, rowLimit)
+            .map(compactTask),
+          我的Bug: visibleBugs
+            .sort((left, right) => bugWeight(right) - bugWeight(left))
+            .slice(0, rowLimit)
+            .map(compactBug),
+          我的风险: myRisks
+            .sort((left, right) => riskWeight(right) - riskWeight(left))
+            .slice(0, rowLimit)
+            .map(compactRisk),
+          我的需求: visibleRequirements
+            .slice(0, rowLimit)
+            .map(compactRequirement)
+        };
+      }
+    },
     getProjectOverview: {
       description: "读取当前工作区项目概览、核心指标、活跃版本和整体风险信号。",
       inputSchema: z.object({
@@ -142,7 +297,7 @@ export function createAssistantTools(data: DashboardData): ToolSet {
       }),
       execute: ({ scope, limit }) => {
         const rowLimit = clampLimit(limit);
-        const projects = data.projects
+        const projects = [...data.projects]
           .filter((project) => {
             if (scope === "active") {
               return project.status === "进行中" || project.status === "有风险";
@@ -260,18 +415,7 @@ export function createAssistantTools(data: DashboardData): ToolSet {
           需求: data.requirements
             .filter(shouldIncludeByVersion)
             .slice(0, rowLimit)
-            .map((requirement) => ({
-              id: requirement.id,
-              标题: requirement.title,
-              优先级: requirement.priority,
-              状态: requirement.status,
-              项目: requirement.project,
-              版本: requirement.versionName || "未关联版本",
-              负责人: requirement.owner || "未分配",
-              验收标准: requirement.acceptance,
-              AI摘要: requirement.aiSummary,
-              AI风险: requirement.aiRisks
-            }))
+            .map(compactRequirement)
         };
       }
     },
@@ -339,8 +483,8 @@ export function createAssistantTools(data: DashboardData): ToolSet {
             高优先级任务数: item.highPriorityTasks.length,
             未关闭Bug数: item.openBugs.length,
             风险数: item.risks.length,
-            代表任务: item.openTasks.sort((left, right) => taskWeight(right) - taskWeight(left)).slice(0, 3).map(compactTask),
-            代表Bug: item.openBugs.sort((left, right) => bugWeight(right) - bugWeight(left)).slice(0, 3).map(compactBug)
+            代表任务: [...item.openTasks].sort((left, right) => taskWeight(right) - taskWeight(left)).slice(0, 3).map(compactTask),
+            代表Bug: [...item.openBugs].sort((left, right) => bugWeight(right) - bugWeight(left)).slice(0, 3).map(compactBug)
           }))
           .sort((left, right) => (
             right.逾期任务数 * 20 + right.高优先级任务数 * 10 + right.未关闭Bug数 * 6 + right.风险数 * 4 + right.未完成任务数
@@ -378,8 +522,8 @@ export function createAssistantTools(data: DashboardData): ToolSet {
               摘要: project.summary
             })),
           活跃版本: activeVersions.slice(0, rowLimit).map(compactVersion),
-          未完成任务: openTasks.sort((left, right) => taskWeight(right) - taskWeight(left)).slice(0, rowLimit).map(compactTask),
-          未关闭Bug: openBugs.sort((left, right) => bugWeight(right) - bugWeight(left)).slice(0, rowLimit).map(compactBug),
+          未完成任务: [...openTasks].sort((left, right) => taskWeight(right) - taskWeight(left)).slice(0, rowLimit).map(compactTask),
+          未关闭Bug: [...openBugs].sort((left, right) => bugWeight(right) - bugWeight(left)).slice(0, rowLimit).map(compactBug),
           风险: [...data.risks].sort((left, right) => riskWeight(right) - riskWeight(left)).slice(0, rowLimit).map(compactRisk),
           需求: data.requirements.slice(0, rowLimit).map((requirement) => ({
             标题: requirement.title,
