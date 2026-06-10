@@ -2,7 +2,7 @@
   display: flex;
   min-height: calc(100vh - 124px);
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
 .assistant-messages {
@@ -15,7 +15,7 @@
 
 .assistant-message {
   max-width: 92%;
-  padding: 12px 14px;
+  padding: 10px 12px 12px;
   border-radius: 8px;
 }
 
@@ -31,6 +31,21 @@
   background: var(--brand);
 }
 
+.assistant-message-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.assistant-message-user .assistant-message-meta {
+  color: rgb(255 255 255 / 75%);
+}
+
 .assistant-message-user .ant-typography {
   color: #ffffff;
 }
@@ -44,6 +59,21 @@
   margin: 2px 0;
 }
 
+.assistant-message-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.assistant-message-actions .ant-btn {
+  width: 28px;
+  height: 28px;
+  border-color: var(--border);
+  color: var(--muted);
+  background: transparent;
+}
+
 .assistant-error {
   max-width: 100%;
 }
@@ -52,6 +82,37 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.assistant-history-tools {
+  flex-wrap: nowrap;
+}
+
+.assistant-history-tools .ant-btn {
+  width: 28px;
+  height: 28px;
+}
+
+.assistant-suggestions {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.assistant-suggestion {
+  flex: 0 0 auto;
+  height: 30px;
+  border-color: var(--border);
+  color: var(--text-secondary);
+  background: var(--surface-subtle);
+  font-size: 12px;
+}
+
+.assistant-chatbox-footer {
+  min-height: 18px;
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .assistant-actions {

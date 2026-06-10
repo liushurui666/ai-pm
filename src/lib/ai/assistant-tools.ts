@@ -263,12 +263,12 @@ export function createAssistantTools(data: DashboardData, messages: UIMessage[] 
   const currentUserMatcher = createCurrentUserMatcher(data);
 
   return {
-    getConversationContext: {
-      description: "读取当前 ChatBox 的多轮对话历史；当用户问“上一句/上一句话/刚才我说/我刚说/你刚才说/前面说了什么”，或纠正“我说的是我不是你/不是这个/你理解错了”这类对话指代时必须使用。这个工具只返回聊天事实，不读取项目数据。",
+    conversation: {
+      description: "读取当前 ChatBox 的多轮对话历史；当用户问“上一句/上一句话/刚才我说/我刚说/你刚才说/前面说了什么”，或纠正“我说的是我不是你/不是这个/你理解错了”这类对话指代时必须使用。这个入口只返回聊天事实，不读取项目数据。",
       inputSchema: z.object({}),
       execute: () => createConversationContext(messages)
     },
-    getCurrentUserContext: {
+    account: {
       description: "读取当前登录用户、工作区成员、角色和身份匹配依据；当用户问“我是谁”“当前账号”“我的权限/身份”时必须使用。",
       inputSchema: z.object({}),
       execute: () => ({
@@ -287,7 +287,7 @@ export function createAssistantTools(data: DashboardData, messages: UIMessage[] 
           }))
       })
     },
-    getMyWorkItems: {
+    mywork: {
       description: "按当前登录人/当前工作区成员读取“我的待办、我负责的任务、分配给我的 Bug、我的风险和我的需求”；仅当用户明确询问个人项目事项、任务、Bug、风险、需求或分配关系时使用。",
       inputSchema: z.object({
         includeDone: z.boolean().default(false).describe("是否包含已完成任务、已关闭 Bug、已上线/已关闭需求"),
@@ -333,7 +333,7 @@ export function createAssistantTools(data: DashboardData, messages: UIMessage[] 
         };
       }
     },
-    getProjectOverview: {
+    projects: {
       description: "读取当前工作区项目概览、核心指标、活跃版本和整体风险信号。",
       inputSchema: z.object({
         scope: z.enum(["all", "active", "risky"]).default("active").describe("all=全部项目，active=进行中/有风险项目，risky=风险优先项目"),
@@ -381,7 +381,7 @@ export function createAssistantTools(data: DashboardData, messages: UIMessage[] 
         };
       }
     },
-    getDeliveryRisks: {
+    risks: {
       description: "读取风险、逾期任务、高优先级任务和未关闭 Bug，用于分析交付阻塞和本周风险。",
       inputSchema: z.object({
         riskLevel: z.enum(["全部", "高", "中", "低"]).default("全部").describe("筛选风险等级"),
@@ -418,7 +418,7 @@ export function createAssistantTools(data: DashboardData, messages: UIMessage[] 
         };
       }
     },
-    getVersionScope: {
+    versions: {
       description: "读取指定版本或活跃版本范围内的任务、Bug、需求和里程碑。",
       inputSchema: z.object({
         versionId: z.string().optional().describe("版本 id，已知时优先使用"),
@@ -463,7 +463,7 @@ export function createAssistantTools(data: DashboardData, messages: UIMessage[] 
         };
       }
     },
-    getMemberWorkload: {
+    workload: {
       description: "读取成员当前任务、Bug 和风险负载，用于判断负责人压力与协作瓶颈。",
       inputSchema: z.object({
         owner: z.string().optional().describe("负责人姓名关键词，可不填表示统计全部成员"),
@@ -538,7 +538,7 @@ export function createAssistantTools(data: DashboardData, messages: UIMessage[] 
           .slice(0, rowLimit);
       }
     },
-    getWeeklyReportContext: {
+    weekly: {
       description: "读取生成周报或阶段汇报所需的结构化上下文，不直接生成周报正文。",
       inputSchema: z.object({
         limit: z.number().int().min(1).max(20).default(defaultLimit).describe("每类数据返回数量上限")
