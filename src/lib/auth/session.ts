@@ -1,16 +1,18 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import type { AuthContext } from "@rc-tool/unified-auth-sdk/service-client";
 import type { AppSession } from "@/types/auth";
 import { authPgPool } from "@/lib/auth/database";
 import { unifiedAuthConfig } from "@/lib/auth/config";
+import { getRequestOriginFromHeaders, resolveTrustedRequestOrigin } from "@/lib/auth/request-origin";
 import { createAiPmAuthServiceClient, createEmptyAuthContext, mapAuthUserToFeishuUser } from "@/lib/auth/unified-auth";
 
 const supportedAuthProviders = new Set(["feishu", "google", "github", "email"]);
+const defaultAuthOrigin = unifiedAuthConfig.auth?.origin ?? unifiedAuthConfig.app?.origin ?? "http://localhost:3004";
 
 function serializeCookieHeader(cookieStore: Awaited<ReturnType<typeof cookies>>) {
   return cookieStore
     .getAll()
-    .map((item) => `${item.name}=${encodeURIComponent(item.value)}`)
+    .map((item) => `${item.name}=${item.value}`)
     .join("; ");
 }
 
@@ -22,7 +24,13 @@ function serializeCookieHeader(cookieStore: Awaited<ReturnType<typeof cookies>>)
  */
 export async function getAuthContext(): Promise<AuthContext> {
   const cookieHeader = serializeCookieHeader(await cookies());
+  const requestOrigin = resolveTrustedRequestOrigin(
+    getRequestOriginFromHeaders(await headers()),
+    defaultAuthOrigin
+  );
   const authClient = createAiPmAuthServiceClient({
+    authBaseURL: requestOrigin,
+    defaultRedirectURI: `${requestOrigin}/`,
     fetcher(input, init) {
       return fetch(input, {
         ...init,

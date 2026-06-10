@@ -12,6 +12,10 @@ const DEFAULT_APP_URL = "http://localhost:3004";
 const SUPPORTED_MEMBER_IDENTITY_PROVIDERS = new Set(["feishu", "google", "github", "email"]);
 
 type AiPmAuthClientOptions = Partial<Pick<CreateAuthServiceClientOptions, "authBaseURL" | "defaultRedirectURI" | "fetcher">>;
+type AiPmAuthHrefOptions = {
+  appBaseURL?: string;
+  authBaseURL?: string;
+};
 
 function resolveAuthServiceBaseURL() {
   if (typeof window !== "undefined") {
@@ -31,12 +35,12 @@ function resolveAppBaseURL() {
   return process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || DEFAULT_APP_URL;
 }
 
-function toAbsoluteAppURL(pathOrURL: string) {
+function toAbsoluteAppURL(pathOrURL: string, appBaseURL = resolveAppBaseURL()) {
   if (/^https?:\/\//i.test(pathOrURL)) {
     return pathOrURL;
   }
 
-  return new URL(pathOrURL, resolveAppBaseURL()).toString();
+  return new URL(pathOrURL, appBaseURL).toString();
 }
 
 /**
@@ -60,12 +64,15 @@ export function createAiPmAuthServiceClient(options: AiPmAuthClientOptions = {})
  * SDK 默认会产出绝对 URL；组件 href 使用同源相对路径可以避免服务端渲染时把 localhost 写进生产页面，
  * 同时保留 client_id、provider、redirect_uri 这些未来托管认证服务需要识别的参数。
  */
-export function getAiPmAuthLoginHref(redirectURI = "/") {
+export function getAiPmAuthLoginHref(redirectURI = "/", options: AiPmAuthHrefOptions = {}) {
+  const appBaseURL = options.appBaseURL ?? resolveAppBaseURL();
+  const absoluteRedirectURI = toAbsoluteAppURL(redirectURI, appBaseURL);
   const client = createAiPmAuthServiceClient({
-    defaultRedirectURI: toAbsoluteAppURL(redirectURI)
+    authBaseURL: options.authBaseURL,
+    defaultRedirectURI: absoluteRedirectURI
   });
 
-  return client.getLoginURL({ redirectURI: toAbsoluteAppURL(redirectURI) });
+  return client.getLoginURL({ redirectURI: absoluteRedirectURI });
 }
 
 /**
@@ -73,12 +80,15 @@ export function getAiPmAuthLoginHref(redirectURI = "/") {
  *
  * 退出也交给 Auth Service 清理统一会话 Cookie，AI PM 只提供退出后的业务回跳地址。
  */
-export function getAiPmAuthLogoutHref(redirectURI = "/login") {
+export function getAiPmAuthLogoutHref(redirectURI = "/login", options: AiPmAuthHrefOptions = {}) {
+  const appBaseURL = options.appBaseURL ?? resolveAppBaseURL();
+  const absoluteRedirectURI = toAbsoluteAppURL(redirectURI, appBaseURL);
   const client = createAiPmAuthServiceClient({
-    defaultRedirectURI: toAbsoluteAppURL(redirectURI)
+    authBaseURL: options.authBaseURL,
+    defaultRedirectURI: absoluteRedirectURI
   });
 
-  return client.getLogoutURL({ redirectURI: toAbsoluteAppURL(redirectURI) });
+  return client.getLogoutURL({ redirectURI: absoluteRedirectURI });
 }
 
 /**

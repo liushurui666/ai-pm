@@ -4,6 +4,11 @@ import {
 } from "@rc-tool/unified-auth-hosted-service";
 import { auth } from "@/lib/auth/server";
 import { unifiedAuthConfig } from "@/lib/auth/config";
+import {
+  getRequestOriginFromRequest,
+  normalizeRequestOrigin,
+  resolveTrustedRequestOrigin,
+} from "@/lib/auth/request-origin";
 
 const aiPmLoginPageComponent = createHostedAuthLoginPageComponent({
   backgroundImageUrl: "https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=1800&q=80",
@@ -28,7 +33,62 @@ const aiPmAllowedRedirectPaths = [
   "/workbench?view=requirements",
   "/workbench?view=members"
 ];
-const aiPmAllowedRedirectURIs = aiPmAllowedRedirectPaths.map((path) => new URL(path, `${aiPmAppOrigin}/`).toString());
+
+function isSafeDynamicRedirectURI(value: string | null, allowedOrigins: string[]) {
+  if (!value) {
+    return false;
+  }
+
+  try {
+    const url = new URL(value);
+    const allowedOriginSet = new Set(allowedOrigins);
+
+    // 只允许当前应用同源的首页、工作台和 Bug 深链，避免把登录接口变成开放重定向。
+    return allowedOriginSet.has(url.origin) && (
+      url.pathname === "/" ||
+      url.pathname === "/workbench" ||
+      url.pathname.startsWith("/bugs/")
+    );
+  } catch {
+    return false;
+  }
+}
+
+function createAllowedRedirectURIs(origin: string, request: Request) {
+  const origins = Array.from(new Set([aiPmAppOrigin, origin].map((item) => normalizeRequestOrigin(item))));
+  const requestedRedirectURI = new URL(request.url).searchParams.get("redirect_uri");
+  const dynamicRedirectURI = isSafeDynamicRedirectURI(requestedRedirectURI, origins) ? requestedRedirectURI : undefined;
+
+  return [
+    ...origins.flatMap((allowedOrigin) => aiPmAllowedRedirectPaths.map((path) => new URL(path, `${allowedOrigin}/`).toString())),
+    ...(dynamicRedirectURI ? [dynamicRedirectURI] : [])
+  ];
+}
+
+function createHostedAuthForRequest(request: Request) {
+  const requestOrigin = resolveTrustedRequestOrigin(getRequestOriginFromRequest(request), aiPmAppOrigin);
+
+  return createHostedAuthRouteHandlers({
+    // Hosted Auth 的回跳白名单是精确匹配；这里按当前请求 origin 动态补齐，避免访问域名和 APP_URL 不一致时登录后回到另一个 host 丢 Cookie。
+    allowedRedirectURIs: createAllowedRedirectURIs(requestOrigin, request),
+    auth,
+    authBaseURL: requestOrigin,
+    authProviders: {
+      google: {
+        // Google 登录只用于 AI PM 身份识别；显式申请 OIDC 基础资料，保证 Better Auth 能稳定拿到邮箱、昵称和头像。
+        scopes: ["openid", "email", "profile"],
+      },
+      github: {
+        // GitHub 登录同样不申请仓库权限，只补齐 read:user/user:email，避免用户资料缺少名称、头像或公开邮箱为空。
+        scopes: ["read:user", "user:email"],
+      },
+    },
+    config: unifiedAuthConfig,
+    loginPageComponent: aiPmLoginPageComponent,
+    redirectURI: `${requestOrigin}/`,
+    siteURL: requestOrigin,
+  });
+}
 
 /**
  * AI PM 内嵌统一认证路由。
@@ -39,23 +99,10 @@ const aiPmAllowedRedirectURIs = aiPmAllowedRedirectPaths.map((path) => new URL(p
  * 旧版自维护存储和 provider callback 代码已经移除；这些状态现在全部由 Better Auth 通过 SDK 标准
  * Drizzle schema 写入独立 PostgreSQL 认证库。
  */
-export const hostedAuth = createHostedAuthRouteHandlers({
-  // Hosted Auth 的回跳白名单是精确匹配；首页和工作台入口需要显式放行，避免登录按钮被 400 拦截。
-  allowedRedirectURIs: aiPmAllowedRedirectURIs,
-  auth,
-  authProviders: {
-    google: {
-      // Google 登录只用于 AI PM 身份识别；显式申请 OIDC 基础资料，保证 Better Auth 能稳定拿到邮箱、昵称和头像。
-      scopes: ["openid", "email", "profile"],
-    },
-    github: {
-      // GitHub 登录同样不申请仓库权限，只补齐 read:user/user:email，避免用户资料缺少名称、头像或公开邮箱为空。
-      scopes: ["read:user", "user:email"],
-    },
-  },
-  config: unifiedAuthConfig,
-  loginPageComponent: aiPmLoginPageComponent,
-});
+export async function GET(request: Request) {
+  return createHostedAuthForRequest(request).GET(request);
+}
 
-export const GET = hostedAuth.GET;
-export const POST = hostedAuth.POST;
+export async function POST(request: Request) {
+  return createHostedAuthForRequest(request).POST(request);
+}

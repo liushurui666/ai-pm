@@ -1,10 +1,14 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { ProjectManagementPlatform } from "@/components/project-management-platform";
 import type { AppView } from "@/components/project-management-platform";
+import { unifiedAuthConfig } from "@/lib/auth/config";
 import { getSession } from "@/lib/auth/session";
+import { getRequestOriginFromHeaders, resolveTrustedRequestOrigin } from "@/lib/auth/request-origin";
 import { getAiPmAuthLoginHref, isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 
 export const dynamic = "force-dynamic";
+const defaultAuthOrigin = unifiedAuthConfig.auth?.origin ?? unifiedAuthConfig.app?.origin ?? "http://localhost:3004";
 
 const validAppViews = new Set<AppView>([
   "overview",
@@ -29,9 +33,14 @@ function resolveSingleParam(value?: string | string[]) {
 function buildWorkbenchReturnPath(params?: { view?: string | string[]; workspaceId?: string | string[] }) {
   const query = new URLSearchParams();
   const view = resolveSingleParam(params?.view);
+  const workspaceId = resolveSingleParam(params?.workspaceId);
 
   if (view && view !== "overview" && validAppViews.has(view as AppView)) {
     query.set("view", view);
+  }
+
+  if (workspaceId) {
+    query.set("workspaceId", workspaceId);
   }
 
   const queryString = query.toString();
@@ -49,10 +58,17 @@ export default async function WorkbenchPage({
 }) {
   const params = await searchParams;
   const session = await getSession();
+  const requestOrigin = resolveTrustedRequestOrigin(
+    getRequestOriginFromHeaders(await headers()),
+    defaultAuthOrigin
+  );
 
   // 工作台仍保持强登录要求；公开首页只给入口，真实项目数据必须经过统一认证会话。
   if (isAuthServiceConfigured() && !session) {
-    redirect(getAiPmAuthLoginHref(buildWorkbenchReturnPath(params)));
+    redirect(getAiPmAuthLoginHref(buildWorkbenchReturnPath(params), {
+      appBaseURL: requestOrigin,
+      authBaseURL: requestOrigin
+    }));
   }
 
   const initialWorkspaceId = resolveSingleParam(params?.workspaceId);
