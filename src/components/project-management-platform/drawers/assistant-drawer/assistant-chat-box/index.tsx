@@ -343,20 +343,26 @@ export function AssistantChatBox({
     hydrateSessionMessages(sessionId);
   }
 
-  function handleDeleteSession() {
+  function handleDeleteSession(sessionId = sessionStateRef.current.activeSessionId) {
     if (generating) {
       return;
     }
 
     const currentState = sessionStateRef.current;
-    const remainingSessions = currentState.sessions.filter((session) => session.id !== currentState.activeSessionId);
+    const remainingSessions = currentState.sessions.filter((session) => session.id !== sessionId);
     const nextSession = remainingSessions[0] ?? createAssistantSession(initialAssistantMessages);
+    const nextActiveSessionId = currentState.activeSessionId === sessionId ? nextSession.id : currentState.activeSessionId;
+
+    // Ant Design X Conversations 的删除入口挂在每条会话菜单上；删除非当前会话时只更新列表，
+    // 删除当前会话时才切换消息内容，避免用户正在看的上下文被无关菜单操作打断。
     const nextState = commitSessionState({
-      activeSessionId: nextSession.id,
+      activeSessionId: nextActiveSessionId,
       sessions: remainingSessions.length > 0 ? remainingSessions : [nextSession]
     });
 
-    hydrateSessionMessages(nextState.activeSessionId);
+    if (currentState.activeSessionId === sessionId) {
+      hydrateSessionMessages(nextState.activeSessionId);
+    }
   }
 
   function handleClearConversation() {

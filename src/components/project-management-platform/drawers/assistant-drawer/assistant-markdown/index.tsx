@@ -19,8 +19,9 @@ const inlineTokenPattern = /(\*\*[^*\n]+?\*\*|`[^`\n]+?`)/g;
 
 function isTableRow(line: string) {
   const trimmed = line.trim();
+  const cells = splitTableRow(trimmed);
 
-  return trimmed.startsWith("|") && trimmed.endsWith("|") && trimmed.includes("|", 1);
+  return trimmed.includes("|") && cells.length >= 2;
 }
 
 function isTableDivider(line?: string) {
@@ -28,7 +29,11 @@ function isTableDivider(line?: string) {
     return false;
   }
 
-  return /^\|?(\s*:?-{3,}:?\s*\|)+\s*$/.test(line.trim());
+  // 周报表格由模型流式生成时，常见形态既可能是 `| --- | --- |`，
+  // 也可能省略首尾竖线；按单元格逐个判断能避免整张表被误当成普通段落展示。
+  const cells = splitTableRow(line);
+
+  return cells.length >= 2 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
 }
 
 function splitTableRow(line: string) {
@@ -109,6 +114,12 @@ function parseMarkdown(content: string) {
       while (index < lines.length && isTableRow(lines[index]) && !isTableDivider(lines[index])) {
         rows.push(splitTableRow(lines[index]));
         index += 1;
+      }
+
+      // 流式周报经常先到表头和分隔线，再到正文行；保持表格结构稳定，
+      // 但显式给出占位行，避免用户在生成中或无数据章节看到一块空白表格。
+      if (!rows.length) {
+        rows.push(headers.map(() => "暂无"));
       }
 
       blocks.push({

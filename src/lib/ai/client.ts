@@ -182,9 +182,20 @@ export async function createAiWeeklyReportReply(data: DashboardData) {
     maxTokens: 5_000,
     timeoutMs: WEEKLY_REPORT_TIMEOUT_MS
   });
+  const markdown = stripMarkdownFence(reply);
 
+  // 周报导出会被前端直接下载和在 ChatBox 中渲染；如果模型返回半截内容或解释性文本，
+  // 让上层接口走本地固定模板兜底，避免用户拿到结构缺章、表格展示异常的报告。
+  if (!markdown.startsWith("#") || !markdown.includes("## 1.") || !markdown.includes("## 11.")) {
+    throw new Error("AI 周报结构不完整");
+  }
+
+  return markdown;
+}
+
+function stripMarkdownFence(content: string) {
   // 有些模型会习惯性包一层 fenced block，导出 Markdown 前先去掉外壳。
-  return reply.replace(/^```(?:markdown)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  return content.replace(/^```(?:markdown)?\s*/i, "").replace(/\s*```$/i, "").trim();
 }
 
 function extractJsonObject<T>(content: string) {

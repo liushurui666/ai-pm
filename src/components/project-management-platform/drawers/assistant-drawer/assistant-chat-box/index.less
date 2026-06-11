@@ -38,7 +38,6 @@
 
 .assistant-session-bar {
   display: flex;
-  gap: 8px;
   align-items: center;
   padding: 8px;
   border: 1px solid var(--border);
@@ -46,14 +45,49 @@
   background: var(--surface-subtle);
 }
 
-.assistant-session-bar .ant-btn {
-  width: 32px;
-  height: 32px;
+.assistant-session-conversations {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  overflow-x: auto;
+  list-style: none;
 }
 
-.assistant-session-select {
+.assistant-session-conversations .ant-conversations-creation {
+  flex: 0 0 auto;
+  height: 32px;
+  margin-block-end: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  white-space: nowrap;
+}
+
+.assistant-session-conversations .ant-conversations-item {
+  flex: 0 1 220px;
+  max-width: 260px;
+  height: 32px;
+  min-height: 32px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+
+.assistant-session-conversations .ant-conversations-item-active {
+  border-color: color-mix(in srgb, var(--brand) 28%, var(--border));
+  background: var(--surface);
+}
+
+.assistant-session-conversations .ant-conversations-label {
   min-width: 0;
-  flex: 1;
+  color: var(--text-secondary);
+}
+
+.assistant-session-conversations .ant-conversations-item-active .ant-conversations-label {
+  color: var(--text-primary);
 }
 
 .assistant-message {
@@ -237,21 +271,33 @@
   text-align: center;
 }
 
+.assistant-empty-state .ant-welcome-content-wrapper {
+  max-width: 620px;
+  gap: 6px;
+}
+
+.assistant-empty-state .ant-welcome-title {
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 760;
+  letter-spacing: 0;
+}
+
 .assistant-empty-icon {
   display: grid;
   width: 58px;
   height: 58px;
   place-items: center;
-  margin-bottom: 12px;
   border: 1px solid color-mix(in srgb, var(--brand) 36%, var(--border));
   border-radius: 8px;
   color: var(--brand);
   font-size: 28px;
 }
 
-.assistant-empty-state .ant-typography-secondary {
+.assistant-empty-state .ant-welcome-description {
   max-width: 620px;
-  margin-top: 6px;
+  color: var(--text-secondary);
+  line-height: 1.7;
 }
 
 .assistant-chat-box--workspace {
@@ -293,7 +339,7 @@
 }
 
 .assistant-chat-box--workspace .assistant-history-tools .ant-btn,
-.assistant-chat-box--workspace .assistant-session-bar .ant-btn {
+.assistant-chat-box--workspace .assistant-session-conversations .ant-conversations-creation {
   width: 30px;
   height: 30px;
   border-color: transparent;
@@ -303,7 +349,7 @@
 }
 
 .assistant-chat-box--workspace .assistant-history-tools .ant-btn:hover,
-.assistant-chat-box--workspace .assistant-session-bar .ant-btn:hover {
+.assistant-chat-box--workspace .assistant-session-conversations .ant-conversations-creation:hover {
   border-color: color-mix(in srgb, var(--border) 80%, transparent);
   color: var(--text-primary);
   background: color-mix(in srgb, var(--surface-muted) 72%, transparent);
@@ -319,13 +365,28 @@
   background: transparent;
 }
 
-.assistant-chat-box--workspace .assistant-session-select .ant-select-selector {
-  border-color: transparent !important;
-  background: transparent !important;
-  box-shadow: none !important;
+.assistant-chat-box--workspace .assistant-session-conversations {
+  justify-content: flex-start;
+  scrollbar-width: thin;
 }
 
-.assistant-chat-box--workspace .assistant-session-select .ant-select-selection-item {
+.assistant-chat-box--workspace .assistant-session-conversations .ant-conversations-creation {
+  width: auto;
+  padding-inline: 10px;
+}
+
+.assistant-chat-box--workspace .assistant-session-conversations .ant-conversations-item {
+  flex-basis: 180px;
+  max-width: 220px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.assistant-chat-box--workspace .assistant-session-conversations .ant-conversations-item-active {
+  background: color-mix(in srgb, var(--surface-muted) 64%, transparent);
+}
+
+.assistant-chat-box--workspace .assistant-session-conversations .ant-conversations-label {
   color: var(--muted);
   font-size: 13px;
 }
@@ -534,9 +595,9 @@
     padding: 6px;
   }
 
-  .assistant-session-bar .ant-btn {
-    width: 30px;
-    height: 30px;
+  .assistant-session-conversations .ant-conversations-item {
+    flex-basis: 180px;
+    max-width: 210px;
   }
 
   .assistant-empty-state {
