@@ -1225,6 +1225,7 @@ function createMemberFromUser(user: FeishuUser, role: MemberRole, workspaceId = 
   const identities: DashboardMember["identities"] = [];
   const authProvider = getAuthIdentityProvider(user);
   const authUserId = getAuthIdentityUserId(user);
+  const profileEmail = getMemberProfileEmail(user);
 
   // 登录身份只保存 SDK 的 authUserId；OAuth provider 的原始 id 仅用于飞书通知字段，不再参与运行时成员匹配。
   // 线上已有成员如需和 auth_... 绑定，应通过受控数据修正写入 identities，避免运行时继续猜 openId 或邮箱。
@@ -1241,8 +1242,8 @@ function createMemberFromUser(user: FeishuUser, role: MemberRole, workspaceId = 
   return {
     id: createLocalId("member"),
     workspaceId,
-    name: user.name || user.enName || user.email || "未命名成员",
-    email: user.email,
+    name: user.name || user.enName || profileEmail || "未命名成员",
+    email: profileEmail,
     avatarUrl: user.avatarUrl,
     registrationChannel: authProvider,
     role,
@@ -1290,6 +1291,89 @@ function normalizeIdentityEmail(value: unknown) {
   return asText(value).trim().toLowerCase();
 }
 
+function normalizeIdentityToken(value: unknown) {
+  return asText(value).trim().toLowerCase();
+}
+
+function uniqueIdentityTokens(values: unknown[]) {
+  return Array.from(new Set(values.map(normalizeIdentityToken).filter(Boolean)));
+}
+
+function getLegacyFeishuOpenIdFromSyntheticEmail(email?: string) {
+  const normalizedEmail = normalizeIdentityEmail(email);
+  const suffix = "@feishu.local";
+
+  if (!normalizedEmail.endsWith(suffix)) {
+    return "";
+  }
+
+  const localPart = normalizedEmail.slice(0, -suffix.length);
+
+  // 统一认证早期会用飞书 open_id 生成本地占位邮箱；只有 `ou_` 这种飞书 open_id
+  // 才能作为历史成员桥接线索，普通邮箱或其他 provider 的本地身份不能进入该兼容分支。
+  return localPart.startsWith("ou_") ? localPart : "";
+}
+
+function getLegacyFeishuUserIdentityTokens(user: FeishuUser) {
+  if (getAuthIdentityProvider(user) !== "feishu") {
+    return [];
+  }
+
+  // 当前 SDK authUserId 是运行时主身份，但历史 owner 行曾把飞书 open_id 写进 providerUserId。
+  // 这里仅收集确定来自飞书的旧标识，用于一次性把老成员行和新 SDK 身份重新连起来。
+  return uniqueIdentityTokens([
+    user.openId?.startsWith("ou_") ? user.openId : "",
+    user.unionId,
+    user.userId,
+    getLegacyFeishuOpenIdFromSyntheticEmail(user.email)
+  ]);
+}
+
+function getMemberLegacyFeishuIdentityTokens(member: DashboardMember) {
+  return uniqueIdentityTokens([
+    member.notification.feishuOpenId,
+    member.notification.feishuUnionId,
+    member.notification.feishuUserId,
+    ...member.notification.channels
+      .filter((channel) => channel.provider === "feishu")
+      .flatMap((channel) => [
+        channel.target,
+        channel.feishuOpenId,
+        channel.feishuUnionId,
+        channel.feishuUserId
+      ]),
+    ...member.identities
+      .filter((identity) => identity.provider === "feishu")
+      .flatMap((identity) => [
+        identity.providerUserId,
+        identity.providerUnionId,
+        identity.providerTenantUserId
+      ])
+  ]);
+}
+
+function findUniqueWorkspaceMemberByLegacyFeishuIdentity(members: DashboardMember[], workspaceId: string, user: FeishuUser) {
+  const userTokens = getLegacyFeishuUserIdentityTokens(user);
+
+  if (!userTokens.length) {
+    return undefined;
+  }
+
+  const candidates = members.filter((member) => {
+    if (member.workspaceId !== workspaceId) {
+      return false;
+    }
+
+    const memberTokens = getMemberLegacyFeishuIdentityTokens(member);
+
+    return userTokens.some((token) => memberTokens.includes(token));
+  });
+
+  // 历史身份桥接必须唯一命中才可自动归并；一旦同一 open_id 被错误配置给多人，
+  // 宁可退回正常的 authUserId/email 匹配，也不能在读页面时把登录人合并到错误成员。
+  return candidates.length === 1 ? candidates[0] : undefined;
+}
+
 function findUniqueWorkspaceMemberByEmail(members: DashboardMember[], workspaceId: string, user: FeishuUser) {
   const email = normalizeIdentityEmail(user.email);
 
@@ -1300,6 +1384,62 @@ function findUniqueWorkspaceMemberByEmail(members: DashboardMember[], workspaceI
   const candidates = members.filter((member) => member.workspaceId === workspaceId && normalizeIdentityEmail(member.email) === email);
 
   return candidates.length === 1 ? candidates[0] : undefined;
+}
+
+function getMemberProfileEmail(user: FeishuUser, fallback?: string) {
+  // `ou_xxx@feishu.local` 是统一认证为了无邮箱飞书用户生成的占位邮箱，只能作为历史身份桥接线索，
+  // 不能展示到成员资料里，否则成员页会把 open_id 误当真实邮箱呈现给用户。
+  return getLegacyFeishuOpenIdFromSyntheticEmail(user.email) ? fallback : user.email || fallback;
+}
+
+function detachAuthIdentityFromDuplicateMembers(
+  members: DashboardMember[],
+  workspaceId: string,
+  currentMemberId: string,
+  user: FeishuUser
+) {
+  const authProvider = getAuthIdentityProvider(user);
+  const authUserId = normalizeIdentityToken(getAuthIdentityUserId(user));
+
+  if (!authUserId) {
+    return {
+      members,
+      changed: false
+    };
+  }
+
+  let changed = false;
+  const now = new Date().toISOString();
+  const nextMembers = members.map((member) => {
+    if (member.workspaceId !== workspaceId || member.id === currentMemberId) {
+      return member;
+    }
+
+    const identities = member.identities.filter(
+      (identity) =>
+        identity.provider !== authProvider ||
+        normalizeIdentityToken(identity.providerUserId) !== authUserId
+    );
+
+    if (identities.length === member.identities.length) {
+      return member;
+    }
+
+    changed = true;
+
+    // 同一个 SDK authUserId 只能归属一个业务成员；否则后续权限会再次命中旧的只读重复行。
+    // 这里只移除重复登录身份，不删除成员记录，避免读取路径顺手改动任务负责人或通知配置。
+    return {
+      ...member,
+      identities,
+      updatedAt: now
+    };
+  });
+
+  return {
+    members: nextMembers,
+    changed
+  };
 }
 
 function syncMemberProfile(member: DashboardMember, user: FeishuUser) {
@@ -1339,7 +1479,7 @@ function syncMemberProfile(member: DashboardMember, user: FeishuUser) {
   const nextMember: DashboardMember = {
     ...member,
     name: user.name || member.name,
-    email: user.email || member.email,
+    email: getMemberProfileEmail(user, member.email),
     avatarUrl: user.avatarUrl || member.avatarUrl,
     // 成员行合并后，registrationChannel 展示的是当前已确认的主登录来源，而不是通知渠道。
     // 当服务端确认本次登录来自 Google/GitHub/飞书时，要覆盖历史误写的 email/feishu 值；
@@ -1403,17 +1543,29 @@ function ensureCurrentMember(data: LocalDatabase, workspaceId: string, user?: Fe
   }
 
   const members = data.members.map((member) => normalizeMember(member, workspaceId));
-  const existingMember = findWorkspaceMemberForUser(members, workspaceId, user) ?? findUniqueWorkspaceMemberByEmail(members, workspaceId, user);
+  const authMatchedMember = findWorkspaceMemberForUser(members, workspaceId, user);
+  const legacyFeishuMatchedMember = findUniqueWorkspaceMemberByLegacyFeishuIdentity(members, workspaceId, user);
+  const existingMember =
+    legacyFeishuMatchedMember ??
+    authMatchedMember ??
+    findUniqueWorkspaceMemberByEmail(members, workspaceId, user);
 
   if (existingMember) {
     const syncedMember = syncMemberProfile(existingMember, user);
+    const membersWithSyncedCurrentMember = members.map((member) => member.id === existingMember.id ? syncedMember : member);
+    const duplicateIdentityResult = detachAuthIdentityFromDuplicateMembers(
+      membersWithSyncedCurrentMember,
+      workspaceId,
+      syncedMember.id,
+      user
+    );
     // 页面读取阶段会对成员结构做一次兼容性规范化，但这不应该反复触发数据库写入；只有登录成员资料真的补齐或变化时才持久化。
-    const changed = syncedMember !== existingMember;
+    const changed = syncedMember !== existingMember || duplicateIdentityResult.changed;
 
     return {
       data: {
         ...data,
-        members: members.map((member) => member.id === existingMember.id ? syncedMember : member)
+        members: duplicateIdentityResult.members
       },
       changed,
       currentMember: syncedMember
