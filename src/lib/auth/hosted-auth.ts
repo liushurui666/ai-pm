@@ -31,7 +31,8 @@ const aiPmAllowedRedirectPaths = [
   "/workbench?view=tasks",
   "/workbench?view=bugs",
   "/workbench?view=requirements",
-  "/workbench?view=members"
+  "/workbench?view=members",
+  "/workbench?view=assistant"
 ];
 
 function isSafeDynamicRedirectURI(value: string | null, allowedOrigins: string[]) {

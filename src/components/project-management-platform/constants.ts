@@ -37,6 +37,7 @@ export const validViews = new Set<AppView>([
   "bugs",
   "bugEdit",
   "requirements",
+  "assistant",
   "members"
 ]);
 

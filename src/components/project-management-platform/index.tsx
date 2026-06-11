@@ -146,7 +146,7 @@ export function ProjectManagementPlatform({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [collapsed, setCollapsed] = useState(false);
-  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(initialView === "assistant");
   const [createType, setCreateType] = useState<DashboardEntityType | null>(null);
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -199,6 +199,7 @@ export function ProjectManagementPlatform({
   const currentWorkspace = data?.meta?.currentWorkspace;
   const currentWorkspaceId = currentWorkspace?.id ?? activeWorkspaceId;
   const navigationView = activeView === "bugEdit" ? "bugs" : activeView;
+  const contentView = activeView === "assistant" ? "overview" : activeView;
   const routeBug = initialBugId ? data?.bugs.find((bug) => bug.id === initialBugId) ?? null : null;
 
   // 静默刷新用于校准乐观更新结果，失败时保留当前 UI 避免打断用户操作。
@@ -1326,6 +1327,7 @@ export function ProjectManagementPlatform({
     { key: "tasks", icon: <CheckCircleOutlined />, label: "任务看板" },
     { key: "bugs", icon: <BugOutlined />, label: "Bug 管理" },
     { key: "requirements", icon: <NodeIndexOutlined />, label: "需求管理" },
+    { key: "assistant", icon: <RobotOutlined />, label: "AI 助手" },
     { key: "members", icon: <TeamOutlined />, label: "成员管理" }
   ];
   // 顶部账号入口只能展示真实认证上下文或当前成员信息，不能硬编码个人昵称兜底；
@@ -1447,6 +1449,12 @@ export function ProjectManagementPlatform({
       return;
     }
 
+    // AI 助手作为一级菜单承担“进入助手”的导航语义；主体仍复用抽屉式 ChatBox，
+    // 这样不会复制一套对话状态，也能让 /workbench?view=assistant 直接恢复助手入口。
+    if (view === "assistant") {
+      setAssistantOpen(true);
+    }
+
     setActiveView(view);
 
     if (typeof window !== "undefined") {
@@ -1462,6 +1470,14 @@ export function ProjectManagementPlatform({
         url.searchParams.set("workspaceId", currentWorkspaceId);
       }
       window.history.replaceState(null, "", url.toString());
+    }
+  }
+
+  function closeAssistantDrawer() {
+    setAssistantOpen(false);
+
+    if (activeView === "assistant") {
+      switchView("overview");
     }
   }
 
@@ -1640,15 +1656,6 @@ export function ProjectManagementPlatform({
                   onClick={cycleMode}
                   showLabel={!isMobile}
                 />
-                <Tooltip title="打开 AI 项目助手">
-                  <Button
-                    type="primary"
-                    icon={<RobotOutlined />}
-                    onClick={() => setAssistantOpen(true)}
-                  >
-                    {!isMobile ? "AI 助手" : null}
-                  </Button>
-                </Tooltip>
                 <Popover
                   arrow={false}
                   classNames={{ root: "pm-avatar-popover" }}
@@ -1745,7 +1752,8 @@ export function ProjectManagementPlatform({
                   { label: "大屏", value: "versionDashboard" },
                   { label: "任务", value: "tasks" },
                   { label: "Bug", value: "bugs" },
-                  { label: "需求", value: "requirements" }
+                  { label: "需求", value: "requirements" },
+                  { label: "助手", value: "assistant" }
                 ]}
               />
             </div>
@@ -1761,7 +1769,7 @@ export function ProjectManagementPlatform({
                 </div>
               ) : (
                 <>
-                  {activeView === "overview" ? (
+                  {contentView === "overview" ? (
                     <OverviewView
                       data={data}
                       onGenerateReport={handleGenerateWeeklyReport}
@@ -1769,7 +1777,7 @@ export function ProjectManagementPlatform({
                       onViewTasks={() => switchView("tasks")}
                     />
                   ) : null}
-                  {activeView === "projects" ? (
+                  {contentView === "projects" ? (
                     <ProjectsView
                       projects={filteredProjects}
                       tasks={data.tasks}
@@ -1783,7 +1791,7 @@ export function ProjectManagementPlatform({
                       onVersionFilterChange={setProjectCalendarVersionId}
                     />
                   ) : null}
-                  {activeView === "versionDashboard" ? (
+                  {contentView === "versionDashboard" ? (
                     <VersionDashboardView
                       bugs={data.bugs}
                       requirements={data.requirements}
@@ -1792,7 +1800,7 @@ export function ProjectManagementPlatform({
                       onOpenVersion={openRequirementVersionFromDashboard}
                     />
                   ) : null}
-                  {activeView === "tasks" ? (
+                  {contentView === "tasks" ? (
                     <TasksView
                       tasks={data.tasks}
                       currentUser={data.meta?.user}
@@ -1804,7 +1812,7 @@ export function ProjectManagementPlatform({
                       onStageChange={handleUpdateTaskStage}
                     />
                   ) : null}
-                  {activeView === "bugs" ? (
+                  {contentView === "bugs" ? (
                     <BugsView
                       bugs={data.bugs}
                       canEditBugs={canEditBugs}
@@ -1818,7 +1826,7 @@ export function ProjectManagementPlatform({
                       onEdit={navigateToBugEdit}
                     />
                   ) : null}
-                  {activeView === "bugEdit" ? (
+                  {contentView === "bugEdit" ? (
                     <BugRouteEditView
                       bug={routeBug}
                       canEditBugs={canEditBugs}
@@ -1845,7 +1853,7 @@ export function ProjectManagementPlatform({
                       onSubmit={(bug, values) => handleUpdateBug(values, bug, { keepFormOpen: true })}
                     />
                   ) : null}
-                  {activeView === "requirements" ? (
+                  {contentView === "requirements" ? (
                     <RequirementsView
                       bugs={data.bugs}
                       canCreateRequirements={canCreateRequirements}
@@ -1873,7 +1881,7 @@ export function ProjectManagementPlatform({
                       onSelectVersion={setSelectedRequirementVersionId}
                     />
                   ) : null}
-                  {activeView === "members" ? (
+                  {contentView === "members" ? (
                     <MembersView
                       members={data.members}
                       people={people}
@@ -1912,7 +1920,7 @@ export function ProjectManagementPlatform({
             currentWorkspaceId={currentWorkspaceId}
             isMobile={isMobile}
             open={assistantOpen}
-            onClose={() => setAssistantOpen(false)}
+            onClose={closeAssistantDrawer}
           />
 
           <CreateRecordDrawer

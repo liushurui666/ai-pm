@@ -10,6 +10,7 @@ export type AppView =
   | "bugs"
   | "bugEdit"
   | "requirements"
+  | "assistant"
   | "members";
 
 export type ChatMessage = {

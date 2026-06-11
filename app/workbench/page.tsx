@@ -17,6 +17,7 @@ const validAppViews = new Set<AppView>([
   "tasks",
   "bugs",
   "requirements",
+  "assistant",
   "members"
 ]);
 
