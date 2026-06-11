@@ -139,10 +139,11 @@ AI 项目助手支持 OpenAI-compatible 的 Chat Completions 接口。把模型�
 ```txt
 AI_API_KEY=sk_xxxxxxxxxxxxxxxx
 AI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-AI_MODEL=qwen3-max
+AI_MODEL=qwen3.7-max
+AI_MODELS=qwen3.7-max
 ```
 
-`AI_BASE_URL` 默认使用 DashScope OpenAI-compatible 兼容接口，也可以替换成其他兼容服务的 base URL。配置后 `/api/assistant` 会以 AI SDK tools 读取当前项目、任务、风险、需求、版本和成员负载等上下文，由模型基于工具结果生成流式多轮回复；周报导出接口保留本地模板兜底，避免影响下载体验。
+`AI_BASE_URL` 默认使用 DashScope OpenAI-compatible 兼容接口，也可以替换成其他兼容服务的 base URL。`AI_MODELS` 是前端可切换模型白名单，服务端会做短超时探活并缓存结果，探活失败的模型不会出现在 ChatBox 下拉里。配置后 `/api/assistant` 会以 AI SDK tools 读取当前项目、任务、风险、需求、版本和成员负载等上下文，由模型基于工具结果生成流式多轮回复；周报导出接口保留本地模板兜底，避免影响下载体验。
 
 文档知识库支持上传 `.docx / .txt / .md / .csv / .json` 文档。上传后 `/api/documents/analyze` 会提取文档文本，调用 AI 拆解任务，并把生成的任务保存到任务看板；若模型接口暂时不可用，页面会明确提示并使用本地规则兜底。
 

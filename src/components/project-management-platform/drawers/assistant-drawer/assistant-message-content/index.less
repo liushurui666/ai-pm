@@ -1,0 +1,123 @@
+.assistant-process {
+  width: 100%;
+  min-width: 0;
+}
+
+.assistant-process-think {
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-subtle) 90%, transparent);
+}
+
+.assistant-process-think .ant-think-status-wrapper {
+  min-height: 38px;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.assistant-process-think .ant-think-status-icon {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.assistant-process-think .ant-think-status-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.assistant-process-think .ant-think-status-down-icon {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.assistant-process-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 20px;
+}
+
+.assistant-process-badge {
+  max-width: 180px;
+  padding: 1px 7px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-muted) 80%, transparent);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-process-think-content {
+  padding: 0 10px 10px 32px;
+}
+
+.assistant-process-content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.assistant-process-reasoning {
+  margin-bottom: 0 !important;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 76%, transparent);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.assistant-process-chain {
+  max-width: 100%;
+}
+
+.assistant-process-chain .ant-thought-chain-item-header {
+  min-height: 30px;
+}
+
+.assistant-process-chain .ant-thought-chain-item-title {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.assistant-process-chain .ant-thought-chain-item-description {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.assistant-process-chain .ant-thought-chain-item-content {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+@media (max-width: 520px) {
+  .assistant-process-title {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .assistant-process-badge {
+    max-width: 100%;
+  }
+
+  .assistant-process-think-content {
+    padding-left: 10px;
+  }
+}

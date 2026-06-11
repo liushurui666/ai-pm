@@ -13,7 +13,7 @@ import { initialAssistantMessages } from "@/components/project-management-platfo
 import { AssistantChatBoxHeader } from "@/components/project-management-platform/drawers/assistant-drawer/assistant-chat-box/assistant-chat-box-header";
 import { AssistantEmptyState } from "@/components/project-management-platform/drawers/assistant-drawer/assistant-chat-box/assistant-empty-state";
 import { AssistantSuggestions } from "@/components/project-management-platform/drawers/assistant-drawer/assistant-chat-box/assistant-suggestions";
-import { AssistantMessagePart } from "@/components/project-management-platform/drawers/assistant-drawer/assistant-message-part";
+import { AssistantMessageContent } from "@/components/project-management-platform/drawers/assistant-drawer/assistant-message-content";
 import {
   buildConversationMarkdown,
   downloadTextFile,
@@ -61,6 +61,8 @@ type WeeklyReportResponse = {
   warning?: string;
 };
 
+type PendingResponseSource = "sdk" | "weekly";
+
 function createLocalTextMessage(role: UIMessage["role"], text: string, prefix: string): UIMessage {
   return {
     id: `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -72,6 +74,16 @@ function createLocalTextMessage(role: UIMessage["role"], text: string, prefix: s
     ],
     role
   };
+}
+
+function hasCompletedMutationTool(messages: UIMessage[]) {
+  const lastAssistantMessage = [...messages].reverse().find((message) => message.role === "assistant");
+
+  // 只有 operations tool 会写业务数据；普通分析、风险读取、周报上下文读取都只是查询。
+  // 过去每条回复结束都刷新 dashboard，会让连续对话被大量数据库读请求拖慢，并增加输入框生成态交错的概率。
+  return Boolean(lastAssistantMessage?.parts.some((part) =>
+    part.type === "tool-operations" && "state" in part && part.state === "output-available"
+  ));
 }
 
 // 这是 AI 助手唯一的前端对话编排入口：AI SDK transport、会话持久化、消息渲染和输入控制都集中在这里。
@@ -89,7 +101,7 @@ export function AssistantChatBox({
   const [input, setInput] = useState("");
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
-  const [hasPendingResponse, setHasPendingResponse] = useState(false);
+  const [pendingResponseSource, setPendingResponseSource] = useState<PendingResponseSource | null>(null);
   const [userStopped, setUserStopped] = useState(false);
   const [focusRequestId, setFocusRequestId] = useState(0);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
@@ -204,7 +216,7 @@ export function AssistantChatBox({
     id: `ai-pm-assistant-${currentWorkspaceId}-${sessionState.activeSessionId}`,
     messages: activeSession?.messages ?? initialAssistantMessages,
     onError: (chatError) => {
-      setHasPendingResponse(false);
+      setPendingResponseSource(null);
       setUserStopped(false);
       if (isSessionExpiredError(chatError)) {
         setSessionExpired(true);
@@ -213,17 +225,18 @@ export function AssistantChatBox({
       persistActiveSessionMessages(latestMessagesRef.current);
     },
     onFinish: ({ messages: finishedMessages }) => {
-      setHasPendingResponse(false);
+      setPendingResponseSource(null);
       setUserStopped(false);
       persistActiveSessionMessages(finishedMessages);
-      // 助手现在可以通过服务端动作 tool 修改项目数据；流式回复完成后静默刷新一次父级数据，
-      // 让 Bug 状态、成员信息等页面内容尽快和数据库对齐，而不会打断当前对话。
-      void onInteractionSettled?.();
+      if (hasCompletedMutationTool(finishedMessages)) {
+        // 助手只有在执行内部写操作后才需要刷新父级数据；纯聊天和分析不刷新，避免输入区被无关数据加载拖慢。
+        void onInteractionSettled?.();
+      }
     },
     transport
   });
   const chatInFlight = (status === "submitted" || status === "streaming") && !userStopped;
-  const generating = !userStopped && (chatInFlight || hasPendingResponse);
+  const generating = !userStopped && (chatInFlight || pendingResponseSource !== null);
   const lastAssistantMessage = [...messages].reverse().find((message) => message.role === "assistant");
   const canRegenerate = Boolean(lastAssistantMessage) && !generating && messages.length > 1;
   const hasUserMessages = messages.some((message) => message.role === "user");
@@ -235,6 +248,12 @@ export function AssistantChatBox({
     ? "正在读取项目数据并生成回复..."
     : "支持多轮上下文，Enter 发送，Shift+Enter 换行";
   const onlyWelcomeMessage = messages.length === 1 && messages[0]?.id === "assistant-welcome";
+  const modelSwitchDisabled = generating || modelLoading || availableModels.length <= 1;
+  const modelSwitchTooltip = modelLoading
+    ? "正在校验可用模型"
+    : availableModels.length <= 1
+      ? "当前环境只开放已验证可用的模型"
+      : "切换本次回复使用的模型";
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -397,9 +416,8 @@ export function AssistantChatBox({
     const userMessage = createLocalTextMessage("user", message, "local-user");
     const nextMessages = [...latestMessagesRef.current, userMessage];
 
-    commitActiveMessages(nextMessages);
-
     try {
+      commitActiveMessages(nextMessages);
       // 周报下载是明确的 UI 动作：直接复用周报生成接口产出 Markdown，
       // 前端再由 Ant Design X FileCard 生成本地 Blob 下载，避免模型回答“当前环境不支持下载”。
       const response = await fetchWithAuthRedirect("/api/assistant/weekly-report", {
@@ -423,7 +441,6 @@ export function AssistantChatBox({
         ...nextMessages,
         createLocalTextMessage("assistant", payload.reply, "local-assistant-weekly")
       ]);
-      void onInteractionSettled?.();
     } catch (weeklyReportError) {
       if (isSessionExpiredError(weeklyReportError)) {
         setSessionExpired(true);
@@ -434,7 +451,7 @@ export function AssistantChatBox({
         ]);
       }
     } finally {
-      setHasPendingResponse(false);
+      setPendingResponseSource(null);
       setUserStopped(false);
     }
   }
@@ -450,24 +467,44 @@ export function AssistantChatBox({
       submitDebounceRef.current = null;
     }, 300);
     clearError();
-    setHasPendingResponse(true);
     setUserStopped(false);
     setInput("");
 
     if (isWeeklyReportDownloadIntent(message, latestMessagesRef.current)) {
-      await handleWeeklyReportDownload(message);
+      setPendingResponseSource("weekly");
+      try {
+        await handleWeeklyReportDownload(message);
+      } finally {
+        setPendingResponseSource(null);
+        setUserStopped(false);
+      }
       return;
     }
 
-    persistActiveSessionMessages([
-      ...latestMessagesRef.current,
-      createLocalTextMessage("user", message, "local-user")
-    ]);
-    await sendMessage({
-      text: message
-    }, {
-      body: createAssistantRequestBody()
-    });
+    setPendingResponseSource("sdk");
+    try {
+      persistActiveSessionMessages([
+        ...latestMessagesRef.current,
+        createLocalTextMessage("user", message, "local-user")
+      ]);
+      await sendMessage({
+        text: message
+      }, {
+        body: createAssistantRequestBody()
+      });
+    } catch (sendError) {
+      setPendingResponseSource(null);
+      setUserStopped(false);
+
+      if (isSessionExpiredError(sendError)) {
+        setSessionExpired(true);
+      } else {
+        commitActiveMessages([
+          ...latestMessagesRef.current,
+          createLocalTextMessage("assistant", sanitizeAssistantErrorMessage(sendError), "local-assistant-error")
+        ]);
+      }
+    }
   }
 
   function hydrateSessionMessages(sessionId: string) {
@@ -480,7 +517,7 @@ export function AssistantChatBox({
     latestMessagesRef.current = session.messages;
     setMessages(session.messages);
     clearError();
-    setHasPendingResponse(false);
+    setPendingResponseSource(null);
     setUserStopped(false);
     setInput("");
     requestInputFocus();
@@ -553,7 +590,7 @@ export function AssistantChatBox({
       sessions: nextSessions
     });
     clearError();
-    setHasPendingResponse(false);
+    setPendingResponseSource(null);
     setUserStopped(false);
     setMessages(initialAssistantMessages);
     latestMessagesRef.current = initialAssistantMessages;
@@ -579,13 +616,13 @@ export function AssistantChatBox({
 
   function handleStopGeneration() {
     stop();
-    setHasPendingResponse(false);
+    setPendingResponseSource(null);
     setUserStopped(true);
   }
 
   function handleRegenerateMessage(messageId?: string) {
     clearError();
-    setHasPendingResponse(true);
+    setPendingResponseSource("sdk");
     setUserStopped(false);
     void regenerate({
       body: createAssistantRequestBody(),
@@ -600,15 +637,7 @@ export function AssistantChatBox({
 
     return {
       content: (
-        <div className="assistant-message-content">
-          {message.parts.map((part, index) => (
-            <AssistantMessagePart
-              key={`${message.id}-part-${index}`}
-              part={part}
-              role={message.role}
-            />
-          ))}
-        </div>
+        <AssistantMessageContent message={message} />
       ),
       footer: shouldShowActions ? (
         <div className="assistant-message-actions">
@@ -752,22 +781,26 @@ export function AssistantChatBox({
               <div className="assistant-chatbox-footer">
                 <Text type="secondary">{statusText}</Text>
                 <div className="assistant-actions">
-                  <Select
-                    aria-label="切换 AI 模型"
-                    className="assistant-model-select"
-                    disabled={generating || modelLoading || availableModels.length === 0}
-                    loading={modelLoading}
-                    optionFilterProp="label"
-                    options={availableModels.map((model) => ({
-                      label: model,
-                      value: model
-                    }))}
-                    popupMatchSelectWidth={false}
-                    showSearch
-                    size="small"
-                    value={selectedModel || undefined}
-                    onChange={handleModelChange}
-                  />
+                  <Tooltip title={modelSwitchTooltip}>
+                    <span className="assistant-model-select-wrap">
+                      <Select
+                        aria-label="切换 AI 模型"
+                        className="assistant-model-select"
+                        disabled={modelSwitchDisabled}
+                        loading={modelLoading}
+                        optionFilterProp="label"
+                        options={availableModels.map((model) => ({
+                          label: model,
+                          value: model
+                        }))}
+                        popupMatchSelectWidth={false}
+                        showSearch
+                        size="small"
+                        value={selectedModel || undefined}
+                        onChange={handleModelChange}
+                      />
+                    </span>
+                  </Tooltip>
                   <Text type="secondary">{input.length}/300</Text>
                   <Tooltip title="重新生成上一条回复">
                     <Button

@@ -156,25 +156,22 @@
   min-width: 0;
 }
 
-.assistant-think {
-  max-width: 100%;
-  margin: 2px 0;
-}
-
-.assistant-reasoning-text {
-  margin-bottom: 0 !important;
-  color: var(--text-secondary);
-  white-space: pre-wrap;
-}
-
-.assistant-thought-chain {
-  max-width: 100%;
-  margin: 2px 0;
-}
-
 .assistant-weekly-report-card {
   width: min(100%, 360px);
   cursor: pointer;
+}
+
+.assistant-weekly-report-card:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--brand) 78%, #ffffff);
+  outline-offset: 3px;
+}
+
+.assistant-weekly-report-card-mask {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .assistant-error {
@@ -241,12 +238,32 @@
   align-items: center;
 }
 
-.assistant-model-select {
+.assistant-model-select-wrap {
+  display: inline-flex;
   width: clamp(132px, 18vw, 190px);
+}
+
+.assistant-model-select {
+  width: 100%;
+}
+
+.assistant-model-select .ant-select-selector {
+  border-color: color-mix(in srgb, var(--border) 82%, transparent) !important;
+  background: color-mix(in srgb, var(--surface) 76%, transparent) !important;
 }
 
 .assistant-model-select .ant-select-selection-item {
   font-size: 12px;
+  font-weight: 650;
+}
+
+.assistant-model-select.ant-select-disabled .ant-select-selector {
+  border-color: color-mix(in srgb, var(--border) 58%, transparent) !important;
+  background: color-mix(in srgb, var(--surface-muted) 52%, transparent) !important;
+}
+
+.assistant-model-select.ant-select-disabled .ant-select-selection-item {
+  color: var(--muted);
 }
 
 .assistant-send {
@@ -486,8 +503,7 @@
   line-height: 1.85;
 }
 
-.assistant-chat-box--workspace .assistant-think,
-.assistant-chat-box--workspace .assistant-thought-chain,
+.assistant-chat-box--workspace .assistant-process,
 .assistant-chat-box--workspace .assistant-weekly-report-card {
   margin-top: 12px;
 }
@@ -585,7 +601,7 @@
     justify-content: space-between;
   }
 
-  .assistant-model-select {
+  .assistant-model-select-wrap {
     width: min(100%, 190px);
   }
 
@@ -612,7 +628,7 @@
     flex-wrap: wrap;
   }
 
-  .assistant-model-select {
+  .assistant-model-select-wrap {
     flex: 1 1 150px;
   }
 }

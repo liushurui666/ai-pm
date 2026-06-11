@@ -3,7 +3,8 @@ import { requirementStatusOptions } from "@/lib/requirements/requirement-quality
 import type { Requirement } from "@/types/dashboard";
 import type { DocumentTaskBreakdown, RequirementAnalyzeResult } from "@/types/records";
 import { createWeeklyReportAiPrompt } from "@/lib/reports/weekly-report-ai";
-import { getAiApiKey, getAiBaseUrl, getAiModel, isAiAssistantConfigured } from "@/lib/ai/settings";
+import { resolveValidatedAiModel } from "@/lib/ai/model-availability";
+import { getAiApiKey, getAiBaseUrl, isAiAssistantConfigured } from "@/lib/ai/settings";
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const DOCUMENT_BREAKDOWN_TIMEOUT_MS = 120_000;
 const DOCUMENT_BREAKDOWN_TASK_LIMIT = 24;
@@ -109,6 +110,8 @@ async function createChatCompletion(
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
+    const model = await resolveValidatedAiModel();
+
     const response = await fetch(`${getAiBaseUrl()}/chat/completions`, {
       method: "POST",
       headers: {
@@ -116,7 +119,7 @@ async function createChatCompletion(
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: getAiModel(),
+        model,
         temperature: 0.2,
         messages,
         ...(options.maxTokens ? { max_tokens: options.maxTokens } : {})

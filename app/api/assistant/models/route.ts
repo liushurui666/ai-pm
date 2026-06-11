@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getAiAvailableModels, getAiModel, isAiAssistantConfigured } from "@/lib/ai/settings";
+import { getValidatedAiAvailableModels } from "@/lib/ai/model-availability";
+import { isAiAssistantConfigured } from "@/lib/ai/settings";
 import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 import { getSession } from "@/lib/auth/session";
 
@@ -19,9 +20,10 @@ export async function GET() {
     );
   }
 
+  const modelAvailability = await getValidatedAiAvailableModels();
+
   return NextResponse.json({
     configured: isAiAssistantConfigured(),
-    defaultModel: getAiModel(),
-    models: getAiAvailableModels()
+    ...modelAvailability
   });
 }

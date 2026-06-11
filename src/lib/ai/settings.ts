@@ -1,13 +1,6 @@
 const DEFAULT_AI_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1";
-const DEFAULT_AI_MODEL = "qwen3-max";
-const DEFAULT_AI_MODEL_OPTIONS = [
-  DEFAULT_AI_MODEL,
-  "qwen-plus",
-  "qwen3.7-max",
-  "qwen3.7-plus",
-  "qwen3.6-flash",
-  "qwen-turbo"
-];
+const DEFAULT_AI_MODEL = "qwen3.7-max";
+const DEFAULT_AI_MODEL_OPTIONS = [DEFAULT_AI_MODEL];
 const AI_MODEL_NAME_PATTERN = /^[\w./:-]{1,120}$/;
 
 function parseModelList(value?: string) {
@@ -31,12 +24,13 @@ export function getAiBaseUrl() {
   return (process.env.AI_BASE_URL?.trim() || DEFAULT_AI_BASE_URL).replace(/\/+$/, "");
 }
 
-// 默认模型升级为 qwen3-max，但生产环境仍可通过 AI_MODEL 快速回滚或灰度切换。
+// 默认只开放线上已确认可用的模型；更多模型必须由 AI_MODEL/AI_MODELS 明确配置，
+// 避免把供应商账号未开通、暂不支持 tools 或临时不可用的模型硬塞进生产下拉框。
 export function getAiModel() {
   return process.env.AI_MODEL?.trim() || DEFAULT_AI_MODEL;
 }
 
-// ChatBox 模型下拉只暴露文本对话可用的候选；生产可通过 AI_MODELS 精确控制可切换范围。
+// ChatBox 模型下拉先读取显式白名单；没有白名单时只返回保守默认值，真正展示前还会经过可用性探测。
 export function getAiAvailableModels() {
   const configuredModels = parseModelList(process.env.AI_MODELS || process.env.AI_AVAILABLE_MODELS);
   const fallbackModels = configuredModels.length > 0 ? configuredModels : DEFAULT_AI_MODEL_OPTIONS;

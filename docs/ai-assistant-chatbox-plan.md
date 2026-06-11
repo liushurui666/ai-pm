@@ -4,7 +4,7 @@
 
 - 当前 AI 助手是一次性 `POST /api/assistant` 返回 JSON 文本，前端只把用户问题和助手回复追加到本地数组。
 - 目标是改造成基于 AI SDK 的 ChatBox，支持多轮对话、流式输出、规范 Markdown 回复，并且所有项目分析能力必须通过 AI SDK tools 暴露给模型调用。
-- 模型默认切换为 `qwen3-max`，继续兼容现有 `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL` 环境变量。
+- 模型默认切换为 `qwen3.7-max`，继续兼容现有 `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL` 环境变量。
 
 ## 约束
 
@@ -19,7 +19,7 @@
 
 1. **依赖与模型配置**
    - 安装 `ai`、`@ai-sdk/react`、`@ai-sdk/openai-compatible`、`zod`。
-   - 将 AI 默认模型从 `qwen-plus` 调整为 `qwen3-max`。
+   - 将 AI 默认模型从 `qwen-plus` 调整为 `qwen3.7-max`。
    - 同步更新运行时环境示例，确保部署默认值一致。
 
 2. **AI SDK 服务端接入**
@@ -80,6 +80,6 @@
 - 每轮输出为流式生成，最终文本不为空。
 - 输出结构包含固定 Markdown 标题，格式稳定。
 - 模型通过 tools 获取项目数据，服务端不再手写最终分析结论。
-- `AI_MODEL` 默认值为 `qwen3-max`。
+- `AI_MODEL` 默认值为 `qwen3.7-max`。
 - `AI-CONSTRAINTS.md` 已记录后续扩展约束。
 - 本地 lint/build 与浏览器验证结果可复述。
