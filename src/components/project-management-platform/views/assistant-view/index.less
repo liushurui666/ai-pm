@@ -1,3 +1,11 @@
 .assistant-view {
-  min-height: calc(100dvh - 148px);
+  height: calc(100dvh - 148px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 720px) {
+  .assistant-view {
+    height: calc(100dvh - 172px);
+  }
 }

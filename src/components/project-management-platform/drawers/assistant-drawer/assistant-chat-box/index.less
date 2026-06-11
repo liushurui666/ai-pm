@@ -38,6 +38,7 @@
 
 .assistant-session-bar {
   display: flex;
+  gap: 8px;
   align-items: center;
   padding: 8px;
   border: 1px solid var(--border);
@@ -45,49 +46,14 @@
   background: var(--surface-subtle);
 }
 
-.assistant-session-conversations {
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  gap: 8px;
-  align-items: center;
-  margin: 0;
-  padding: 0;
-  overflow-x: auto;
-  list-style: none;
-}
-
-.assistant-session-conversations .ant-conversations-creation {
-  flex: 0 0 auto;
+.assistant-session-bar .ant-btn {
+  width: 32px;
   height: 32px;
-  margin-block-end: 0;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  white-space: nowrap;
 }
 
-.assistant-session-conversations .ant-conversations-item {
-  flex: 0 1 220px;
-  max-width: 260px;
-  height: 32px;
-  min-height: 32px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-}
-
-.assistant-session-conversations .ant-conversations-item-active {
-  border-color: color-mix(in srgb, var(--brand) 28%, var(--border));
-  background: var(--surface);
-}
-
-.assistant-session-conversations .ant-conversations-label {
+.assistant-session-select {
   min-width: 0;
-  color: var(--text-secondary);
-}
-
-.assistant-session-conversations .ant-conversations-item-active .ant-conversations-label {
-  color: var(--text-primary);
+  flex: 1;
 }
 
 .assistant-message {
@@ -301,8 +267,10 @@
 }
 
 .assistant-chat-box--workspace {
-  min-height: calc(100dvh - 148px);
+  height: calc(100dvh - 148px);
+  min-height: 0;
   gap: 12px;
+  overflow: hidden;
   padding: 0 0 6px;
 }
 
@@ -339,7 +307,7 @@
 }
 
 .assistant-chat-box--workspace .assistant-history-tools .ant-btn,
-.assistant-chat-box--workspace .assistant-session-conversations .ant-conversations-creation {
+.assistant-chat-box--workspace .assistant-session-bar .ant-btn {
   width: 30px;
   height: 30px;
   border-color: transparent;
@@ -349,7 +317,7 @@
 }
 
 .assistant-chat-box--workspace .assistant-history-tools .ant-btn:hover,
-.assistant-chat-box--workspace .assistant-session-conversations .ant-conversations-creation:hover {
+.assistant-chat-box--workspace .assistant-session-bar .ant-btn:hover {
   border-color: color-mix(in srgb, var(--border) 80%, transparent);
   color: var(--text-primary);
   background: color-mix(in srgb, var(--surface-muted) 72%, transparent);
@@ -365,28 +333,13 @@
   background: transparent;
 }
 
-.assistant-chat-box--workspace .assistant-session-conversations {
-  justify-content: flex-start;
-  scrollbar-width: thin;
+.assistant-chat-box--workspace .assistant-session-select .ant-select-selector {
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
-.assistant-chat-box--workspace .assistant-session-conversations .ant-conversations-creation {
-  width: auto;
-  padding-inline: 10px;
-}
-
-.assistant-chat-box--workspace .assistant-session-conversations .ant-conversations-item {
-  flex-basis: 180px;
-  max-width: 220px;
-  border-color: transparent;
-  background: transparent;
-}
-
-.assistant-chat-box--workspace .assistant-session-conversations .ant-conversations-item-active {
-  background: color-mix(in srgb, var(--surface-muted) 64%, transparent);
-}
-
-.assistant-chat-box--workspace .assistant-session-conversations .ant-conversations-label {
+.assistant-chat-box--workspace .assistant-session-select .ant-select-selection-item {
   color: var(--muted);
   font-size: 13px;
 }
@@ -408,9 +361,19 @@
 }
 
 .assistant-chat-box--workspace .assistant-messages {
+  flex: 1 1 auto;
   min-height: 0;
   gap: 0;
+  overflow: hidden;
   padding: 0;
+}
+
+.assistant-chat-box--workspace .assistant-bubble-list {
+  height: 100%;
+}
+
+.assistant-chat-box--workspace .assistant-bubble-list .ant-bubble-list-scroll-box {
+  overflow-y: auto;
 }
 
 .assistant-chat-box--workspace .assistant-bubble-list .ant-bubble-list-scroll-content {
@@ -515,8 +478,7 @@
 }
 
 .assistant-chat-box--workspace .assistant-chatbox {
-  position: sticky;
-  bottom: 0;
+  flex: 0 0 auto;
   padding: 0;
   border: 0;
   background: transparent;
@@ -549,7 +511,7 @@
 
 @media (max-width: 720px) {
   .assistant-chat-box--workspace {
-    min-height: calc(100dvh - 172px);
+    height: calc(100dvh - 172px);
   }
 
   .assistant-chat-box--workspace .assistant-chat-box-header {
@@ -595,9 +557,9 @@
     padding: 6px;
   }
 
-  .assistant-session-conversations .ant-conversations-item {
-    flex-basis: 180px;
-    max-width: 210px;
+  .assistant-session-bar .ant-btn {
+    width: 30px;
+    height: 30px;
   }
 
   .assistant-empty-state {

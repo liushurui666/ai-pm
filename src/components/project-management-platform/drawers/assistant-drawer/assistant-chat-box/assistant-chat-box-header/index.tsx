@@ -29,7 +29,7 @@ export function AssistantChatBoxHeader({
         <span className="assistant-chat-box-icon">
           <RobotOutlined />
         </span>
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Text strong>AI 项目助手</Text>
           <Text type="secondary">
             {isWorkspace ? "围绕当前工作区做多轮项目分析" : "实时读取项目上下文并结构化输出"}
