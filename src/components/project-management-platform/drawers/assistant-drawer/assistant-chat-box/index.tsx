@@ -39,6 +39,7 @@ type AssistantChatBoxProps = {
   assistantApiPath?: string;
   currentWorkspaceId: string;
   isMobile?: boolean;
+  onInteractionSettled?: () => void | Promise<void>;
   variant?: AssistantChatBoxVariant;
 };
 
@@ -48,6 +49,7 @@ export function AssistantChatBox({
   assistantApiPath = "/api/assistant",
   currentWorkspaceId,
   isMobile = false,
+  onInteractionSettled,
   variant = "drawer"
 }: AssistantChatBoxProps) {
   const [sessionState, setSessionState] = useState<AssistantSessionState>(() =>
@@ -178,6 +180,9 @@ export function AssistantChatBox({
       setHasPendingResponse(false);
       setUserStopped(false);
       persistActiveSessionMessages(finishedMessages);
+      // 助手现在可以通过服务端动作 tool 修改项目数据；流式回复完成后静默刷新一次父级数据，
+      // 让 Bug 状态、成员信息等页面内容尽快和数据库对齐，而不会打断当前对话。
+      void onInteractionSettled?.();
     },
     transport
   });

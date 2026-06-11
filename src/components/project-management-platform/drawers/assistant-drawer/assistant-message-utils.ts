@@ -32,7 +32,7 @@ export function getMessagePlainText(message: UIMessage) {
       }
 
       if (part.type.startsWith("tool-")) {
-        return "[正在读取项目数据]";
+        return "[正在处理项目数据]";
       }
 
       return "";

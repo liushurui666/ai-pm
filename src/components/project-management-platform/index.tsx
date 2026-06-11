@@ -1892,6 +1892,7 @@ export function ProjectManagementPlatform({
                     <AssistantView
                       currentWorkspaceId={currentWorkspaceId}
                       isMobile={isMobile}
+                      onInteractionSettled={refreshDashboardState}
                     />
                   ) : null}
                 </>

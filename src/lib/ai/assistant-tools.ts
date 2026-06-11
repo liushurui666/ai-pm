@@ -1,5 +1,9 @@
 import type { ToolSet, UIMessage } from "ai";
 import { z } from "zod";
+import {
+  executeAssistantInternalAction,
+  type AssistantInternalActionRuntime
+} from "@/lib/ai/assistant-internal-actions";
 import type { BugReport, DashboardData, DashboardMember, Requirement, RequirementVersion, Risk, Task } from "@/types/dashboard";
 
 const today = () => new Date();
@@ -291,7 +295,11 @@ function compactProject(project: DashboardData["projects"][number]) {
 }
 
 // 这些工具是 ChatBox 读取对话事实和项目事实的唯一入口；工具只返回结构化数据，不直接拼最终回复，确保判断由模型基于 tools 自主完成。
-export function createAssistantTools(data: DashboardData, messages: UIMessage[] = []): ToolSet {
+export function createAssistantTools(
+  data: DashboardData,
+  messages: UIMessage[] = [],
+  actionRuntime?: AssistantInternalActionRuntime
+): ToolSet {
   const currentUserMatcher = createCurrentUserMatcher(data);
 
   return {
@@ -585,6 +593,26 @@ export function createAssistantTools(data: DashboardData, messages: UIMessage[] 
           周洞察: data.weeklyInsight.map((item) => sanitizeAssistantFactText(item))
         };
       }
-    }
+    },
+    ...(actionRuntime
+      ? {
+          operations: {
+            description: [
+              "执行 AI PM 平台内部业务动作；当用户明确要求你帮他创建、更新、关闭、删除、保存、发起、配置或修改时使用。",
+              "只能调用当前站点同源 /api/* JSON 业务接口，不要调用认证或助手自身接口。",
+              "常见动作：更新记录使用 PATCH /api/records，body 为 { type, id, workspaceId, values }；关闭 Bug 时 type=bug，values.status=已关闭。",
+              "创建记录使用 POST /api/records；删除记录使用 DELETE /api/records；成员管理使用 /api/members；创建工作区使用 /api/workspaces；创建 AI 修复任务使用 /api/bug-fix-jobs。",
+              "调用前必须先用读取类能力确认目标记录和权限；调用后只基于业务结果回答，不要暴露接口路径、请求参数或技术过程。"
+            ].join("\n"),
+            inputSchema: z.object({
+              method: z.enum(["GET", "POST", "PATCH", "DELETE"]).describe("内部业务动作的 HTTP 方法"),
+              path: z.string().min(1).describe("内部业务接口相对路径，必须以 /api/ 开头，可携带 query"),
+              body: z.record(z.string(), z.unknown()).optional().describe("JSON 请求体；GET 不需要填写")
+            }),
+            // 动作 tool 只负责把模型决策转换为现有内部 API 调用；权限、数据校验和副作用仍由对应业务 API 承担。
+            execute: (input) => executeAssistantInternalAction(input, actionRuntime)
+          }
+        }
+      : {})
   };
 }

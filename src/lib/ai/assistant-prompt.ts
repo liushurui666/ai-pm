@@ -1,3 +1,4 @@
+import { createAssistantActionSkillPrompt } from "@/lib/ai/assistant-action-skills";
 import { createAssistantOutputSkillPrompt } from "@/lib/ai/assistant-output-skills";
 
 // ChatBox 的系统提示词只定义行为边界和输出协议，不注入具体项目结论。
@@ -31,6 +32,7 @@ export function createAssistantSystemPrompt() {
     "最终答案输出前必须自检：如果任何段落包含 get、snake_case 名称、tool、工具、调用、调用接口、数据接口、系统提示、函数名或实现过程，必须先删除并改写为业务事实表述；不要输出自检过程。",
     "不要输出 URL、API 路径、接口路径、路由路径、query 参数、带花括号的路径参数或类似 versions?scope=active、/video/{id}/access 的技术写法；如果需要表达查询方式或接口依赖，用自然语言说“视频访问权限接口”“查看当前活跃版本”。",
     "不要使用 emoji 或装饰符号，避免影响正式项目汇报格式。",
+    createAssistantActionSkillPrompt(),
     "不要输出 JSON，不要解释工具调用过程，不要使用代码块包裹整段回复。"
   ].join("\n");
 }

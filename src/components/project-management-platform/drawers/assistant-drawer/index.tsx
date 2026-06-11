@@ -9,6 +9,7 @@ type AssistantDrawerProps = {
   assistantApiPath?: string;
   currentWorkspaceId: string;
   isMobile: boolean;
+  onInteractionSettled?: () => void | Promise<void>;
   open: boolean;
   onClose: () => void;
 };
@@ -19,6 +20,7 @@ export function AssistantDrawer({
   currentWorkspaceId,
   isMobile,
   onClose,
+  onInteractionSettled,
   open
 }: AssistantDrawerProps) {
   return (
@@ -38,6 +40,7 @@ export function AssistantDrawer({
         assistantApiPath={assistantApiPath}
         currentWorkspaceId={currentWorkspaceId}
         isMobile={isMobile}
+        onInteractionSettled={onInteractionSettled}
         variant="drawer"
       />
     </Drawer>

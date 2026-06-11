@@ -29,7 +29,7 @@ export function AssistantMessagePart({
   if (part.type.startsWith("tool-")) {
     return (
       <Tag className="assistant-tool-tag" color="processing">
-        正在读取项目数据
+        正在处理项目数据
       </Tag>
     );
   }

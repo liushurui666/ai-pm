@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDashboardData } from "@/data/local-dashboard";
 import { createAssistantStreamResult } from "@/lib/ai/assistant-stream";
 import { isAiAssistantConfigured } from "@/lib/ai/settings";
+import { getRequestOriginFromRequest } from "@/lib/auth/request-origin";
 import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 import { getSession } from "@/lib/auth/session";
 
@@ -56,6 +57,12 @@ export async function POST(request: NextRequest) {
   try {
     const data = await getDashboardData(session?.user, body?.workspaceId);
     const result = await createAssistantStreamResult({
+      actionRuntime: {
+        // 动作 tool 会复用当前请求的同源 Cookie 调用站内业务 API，确保权限语义和用户手动操作一致。
+        cookieHeader: request.headers.get("cookie") ?? undefined,
+        origin: getRequestOriginFromRequest(request),
+        workspaceId: data.meta?.currentWorkspace?.id
+      },
       data,
       messages
     });
