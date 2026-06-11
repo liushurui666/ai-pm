@@ -2,6 +2,7 @@ import type { UIMessage } from "ai";
 import { NextRequest, NextResponse } from "next/server";
 import { getDashboardData } from "@/data/local-dashboard";
 import { createAssistantStreamResult } from "@/lib/ai/assistant-stream";
+import { sanitizeAssistantErrorMessage } from "@/lib/ai/assistant-error-message";
 import { isAiAssistantConfigured } from "@/lib/ai/settings";
 import { getRequestOriginFromRequest } from "@/lib/auth/request-origin";
 import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
@@ -67,11 +68,15 @@ export async function POST(request: NextRequest) {
       messages
     });
 
-    return result.toUIMessageStreamResponse();
+    return result.toUIMessageStreamResponse({
+      // AI SDK 默认会把底层异常文本写入 UI message stream；模型网关 502 时可能是完整 HTML 错误页。
+      // ChatBox 用户只需要知道模型服务暂不可用，不能看到供应商网关、HTML 或内部异常细节。
+      onError: sanitizeAssistantErrorMessage
+    });
   } catch (error) {
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : "AI 助手读取项目数据失败"
+        error: sanitizeAssistantErrorMessage(error)
       },
       {
         status: 502

@@ -29,6 +29,7 @@ import {
   type AssistantSessionState
 } from "@/components/project-management-platform/drawers/assistant-drawer/assistant-session-store";
 import { AssistantSessionBar } from "@/components/project-management-platform/drawers/assistant-drawer/assistant-session-bar";
+import { sanitizeAssistantErrorMessage } from "@/lib/ai/assistant-error-message";
 
 const { Text } = Typography;
 
@@ -193,6 +194,9 @@ export function AssistantChatBox({
   const canRegenerate = Boolean(lastAssistantMessage) && !generating && messages.length > 1;
   const hasUserMessages = messages.some((message) => message.role === "user");
   const sessionError = isSessionExpiredError(error);
+  const visibleErrorMessage = sessionError
+    ? "登录状态已失效，请重新登录后继续使用 AI 项目助手。"
+    : sanitizeAssistantErrorMessage(error);
   const statusText = generating
     ? "正在读取项目数据并生成回复..."
     : "支持多轮上下文，Enter 发送，Shift+Enter 换行";
@@ -554,7 +558,7 @@ export function AssistantChatBox({
               type="error"
               showIcon
               title="AI 助手暂时无法完成回复"
-              description={sessionError ? "登录状态已失效，请重新登录后继续使用 AI 项目助手。" : error.message}
+              description={visibleErrorMessage}
               action={sessionError ? (
                 <Button size="small" danger onClick={redirectToLogin}>
                   重新登录
