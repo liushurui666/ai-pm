@@ -18,7 +18,8 @@ import {
   buildConversationMarkdown,
   downloadTextFile,
   getCachedMessageTime,
-  getMessagePlainText
+  getMessagePlainText,
+  isWeeklyReportDownloadIntent
 } from "@/components/project-management-platform/drawers/assistant-drawer/assistant-message-utils";
 import {
   createAssistantSession,
@@ -52,6 +53,27 @@ type AssistantModelsResponse = {
   models?: string[];
 };
 
+type WeeklyReportResponse = {
+  error?: string;
+  generatedAt?: string;
+  reply?: string;
+  source?: string;
+  warning?: string;
+};
+
+function createLocalTextMessage(role: UIMessage["role"], text: string, prefix: string): UIMessage {
+  return {
+    id: `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    parts: [
+      {
+        text,
+        type: "text"
+      }
+    ],
+    role
+  };
+}
+
 // 这是 AI 助手唯一的前端对话编排入口：AI SDK transport、会话持久化、消息渲染和输入控制都集中在这里。
 // 抽屉和一级菜单全屏页只切换外层布局，避免复制两套 ChatBox 状态导致多轮上下文或本地 session 不一致。
 export function AssistantChatBox({
@@ -74,6 +96,7 @@ export function AssistantChatBox({
   const [selectedModel, setSelectedModel] = useState("");
   const [modelLoading, setModelLoading] = useState(true);
   const activeSession = sessionState.sessions.find((session) => session.id === sessionState.activeSessionId);
+  const selectedModelRef = useRef(selectedModel);
   const sessionStateRef = useRef(sessionState);
   const activeSessionIdRef = useRef(sessionState.activeSessionId);
   const latestMessagesRef = useRef<UIMessage[]>(activeSession?.messages ?? initialAssistantMessages);
@@ -136,7 +159,6 @@ export function AssistantChatBox({
     api: assistantApiPath,
     body: {
       chatSessionId: sessionState.activeSessionId,
-      model: selectedModel || undefined,
       workspaceId: currentWorkspaceId
     },
     credentials: "same-origin",
@@ -167,7 +189,7 @@ export function AssistantChatBox({
         headers
       };
     }
-  }), [assistantApiPath, assistantFetch, currentWorkspaceId, selectedModel, sessionState.activeSessionId]);
+  }), [assistantApiPath, assistantFetch, currentWorkspaceId, sessionState.activeSessionId]);
   const {
     clearError,
     error,
@@ -258,6 +280,7 @@ export function AssistantChatBox({
 
         if (!ignore) {
           setAvailableModels(nextModels);
+          selectedModelRef.current = nextModel;
           setSelectedModel(nextModel);
 
           if (nextModel) {
@@ -296,6 +319,10 @@ export function AssistantChatBox({
   useEffect(() => {
     latestMessagesRef.current = messages;
   }, [messages]);
+
+  useEffect(() => {
+    selectedModelRef.current = selectedModel;
+  }, [selectedModel]);
 
   useEffect(() => {
     messagesRef.current?.scrollTo({
@@ -347,8 +374,69 @@ export function AssistantChatBox({
       return;
     }
 
+    selectedModelRef.current = model;
     setSelectedModel(model);
     window.localStorage.setItem(modelStorageKey, model);
+  }
+
+  function createAssistantRequestBody() {
+    return {
+      chatSessionId: activeSessionIdRef.current,
+      model: selectedModelRef.current || undefined,
+      workspaceId: currentWorkspaceId
+    };
+  }
+
+  function commitActiveMessages(nextMessages: UIMessage[]) {
+    latestMessagesRef.current = nextMessages;
+    setMessages(nextMessages);
+    persistActiveSessionMessages(nextMessages);
+  }
+
+  async function handleWeeklyReportDownload(message: string) {
+    const userMessage = createLocalTextMessage("user", message, "local-user");
+    const nextMessages = [...latestMessagesRef.current, userMessage];
+
+    commitActiveMessages(nextMessages);
+
+    try {
+      // 周报下载是明确的 UI 动作：直接复用周报生成接口产出 Markdown，
+      // 前端再由 Ant Design X FileCard 生成本地 Blob 下载，避免模型回答“当前环境不支持下载”。
+      const response = await fetchWithAuthRedirect("/api/assistant/weekly-report", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          workspaceId: currentWorkspaceId
+        })
+      }, {
+        redirectOnUnauthorized: false
+      });
+      const payload = (await response.json().catch(() => null)) as WeeklyReportResponse | null;
+
+      if (!response.ok || !payload?.reply) {
+        throw new Error(payload?.error || "周报生成暂时不可用，请稍后重试。");
+      }
+
+      commitActiveMessages([
+        ...nextMessages,
+        createLocalTextMessage("assistant", payload.reply, "local-assistant-weekly")
+      ]);
+      void onInteractionSettled?.();
+    } catch (weeklyReportError) {
+      if (isSessionExpiredError(weeklyReportError)) {
+        setSessionExpired(true);
+      } else {
+        commitActiveMessages([
+          ...nextMessages,
+          createLocalTextMessage("assistant", sanitizeAssistantErrorMessage(weeklyReportError), "local-assistant-error")
+        ]);
+      }
+    } finally {
+      setHasPendingResponse(false);
+      setUserStopped(false);
+    }
   }
 
   async function handleSend(submittedInput = input) {
@@ -365,21 +453,20 @@ export function AssistantChatBox({
     setHasPendingResponse(true);
     setUserStopped(false);
     setInput("");
+
+    if (isWeeklyReportDownloadIntent(message, latestMessagesRef.current)) {
+      await handleWeeklyReportDownload(message);
+      return;
+    }
+
     persistActiveSessionMessages([
       ...latestMessagesRef.current,
-      {
-        id: `local-user-${Date.now()}`,
-        parts: [
-          {
-            text: message,
-            type: "text"
-          }
-        ],
-        role: "user"
-      }
+      createLocalTextMessage("user", message, "local-user")
     ]);
     await sendMessage({
       text: message
+    }, {
+      body: createAssistantRequestBody()
     });
   }
 
@@ -501,6 +588,7 @@ export function AssistantChatBox({
     setHasPendingResponse(true);
     setUserStopped(false);
     void regenerate({
+      body: createAssistantRequestBody(),
       messageId
     });
   }

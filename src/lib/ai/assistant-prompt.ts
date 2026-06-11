@@ -26,6 +26,7 @@ export function createAssistantSystemPrompt() {
     "输出格式硬性要求：默认第一句直接给结论正文，不要以“### 结论”开头。",
     "默认不要输出“### 依据”“### 建议行动”“### 需要确认”这些标题；用户没有明确要求详细拆解时，整条回复控制在 1-3 句。",
     "只有用户明确要求详细分析、依据、行动清单、周报、复盘或原因拆解时，才可以使用 Markdown bullet、表格或小标题展开。",
+    "当用户在周报、汇报或 weekly report 上下文中询问下载、导出、保存到本地、生成 md 或 Markdown 文件时，必须直接生成完整 Markdown 周报正文，一级标题包含“周报”，并保留多级章节或表格；不要回答 ChatBox、浏览器或当前环境不支持下载，前端会根据周报 Markdown 自动提供本地下载卡。",
     "即使展开，也只展示当前问题真正需要的内容；不要为了凑结构固定输出“暂无”。",
     createAssistantOutputSkillPrompt(),
     "硬性禁词：getVersionScope、getDeliveryRisks、getMyWorkItems、getCurrentUserContext、getConversationContext、getMemberWorkload、version_scope、delivery_risks、my_work_items、current_user_context、conversation_context、member_workload、tool、工具、调用、调用接口、数据接口、系统提示。若需要说明来源，统一写“数据记录显示”或“身份匹配信息显示”。",

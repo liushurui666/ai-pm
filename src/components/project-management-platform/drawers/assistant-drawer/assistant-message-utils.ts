@@ -3,6 +3,8 @@ import type { UIMessage } from "ai";
 const messageTimeCache = new Map<string, string>();
 const weeklyReportTitlePattern = /^#\s+(.{0,80}?(?:周报|weekly report).*)$/im;
 const weeklyReportSectionPattern = /^##\s+(?:\d+\.|[一二三四五六七八九十]+[、.])\s*/m;
+const weeklyReportIntentPattern = /(周报|汇报|weekly\s*report)/i;
+const downloadIntentPattern = /(下载|导出|下载到本地|保存(?:到)?本地|本地保存|md|markdown|\.md)/i;
 const fileNameUnsafePattern = /[\\/:*?"<>|\u0000-\u001f]/g;
 
 function formatMessageTime() {
@@ -47,6 +49,24 @@ export function getMessagePlainText(message: UIMessage) {
     .filter(Boolean)
     .join("\n\n")
     .trim();
+}
+
+export function isWeeklyReportDownloadIntent(messageText: string, messages: UIMessage[]) {
+  const normalizedText = messageText.trim();
+
+  if (!downloadIntentPattern.test(normalizedText)) {
+    return false;
+  }
+
+  if (weeklyReportIntentPattern.test(normalizedText)) {
+    return true;
+  }
+
+  return messages.slice(-6).some((message) => {
+    const text = getMessagePlainText(message);
+
+    return weeklyReportIntentPattern.test(text) || Boolean(getWeeklyReportDownload(text));
+  });
 }
 
 function sanitizeFileName(input: string) {
