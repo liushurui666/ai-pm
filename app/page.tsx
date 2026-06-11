@@ -1,5 +1,6 @@
 import { LandingHome } from "@/components/landing-home";
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { unifiedAuthConfig } from "@/lib/auth/config";
 import { getSession } from "@/lib/auth/session";
 import { getRequestOriginFromHeaders, resolveTrustedRequestOrigin } from "@/lib/auth/request-origin";
@@ -16,23 +17,28 @@ export default async function Home() {
     getRequestOriginFromHeaders(await headers()),
     defaultAuthOrigin
   );
-  const canEnterWorkbench = !authEnabled || Boolean(session);
   const workbenchHref = "/workbench";
   const versionDashboardPath = "/workbench?view=versionDashboard";
 
-  // 首页只负责公开产品叙事和入口分流；未登录访客不加载工作台，避免触发成员权限和业务接口副作用。
-  const primaryHref = canEnterWorkbench ? workbenchHref : getAiPmAuthLoginHref(workbenchHref, {
+  // 首页只服务未登录访客的产品介绍；一旦已有统一认证会话，根路由必须直接进入工作台。
+  // 这样 OAuth 回跳到 `/`、用户手动输入首页地址或登录态刷新时，都不会再看到宣传页。
+  if (!authEnabled || session) {
+    redirect(workbenchHref);
+  }
+
+  // 能走到这里说明当前请求没有登录态，首页 CTA 只负责发起登录并带回真实业务入口。
+  const primaryHref = getAiPmAuthLoginHref(workbenchHref, {
     appBaseURL: requestOrigin,
     authBaseURL: requestOrigin
   });
-  const versionDashboardHref = canEnterWorkbench ? versionDashboardPath : getAiPmAuthLoginHref(versionDashboardPath, {
+  const versionDashboardHref = getAiPmAuthLoginHref(versionDashboardPath, {
     appBaseURL: requestOrigin,
     authBaseURL: requestOrigin
   });
 
   return (
     <LandingHome
-      isAuthenticated={canEnterWorkbench}
+      isAuthenticated={false}
       primaryHref={primaryHref}
       versionDashboardHref={versionDashboardHref}
       workbenchHref={workbenchHref}
