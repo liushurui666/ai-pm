@@ -188,7 +188,7 @@ export function AssistantChatBox({
   const hasUserMessages = messages.some((message) => message.role === "user");
   const sessionError = isSessionExpiredError(error);
   const statusText = generating
-    ? "正在读取项目数据并生成结构化回复..."
+    ? "正在读取项目数据并生成回复..."
     : "支持多轮上下文，Enter 发送，Shift+Enter 换行";
   const onlyWelcomeMessage = messages.length === 1 && messages[0]?.id === "assistant-welcome";
 
@@ -427,7 +427,7 @@ export function AssistantChatBox({
         onNewSession={handleNewSession}
       />
 
-      {isWorkspace ? (
+      {isWorkspace && !hasUserMessages ? (
         <AssistantSuggestions
           className="assistant-suggestions assistant-suggestions--top"
           disabled={generating}

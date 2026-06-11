@@ -207,7 +207,8 @@
 
 .assistant-chat-box--workspace {
   min-height: calc(100dvh - 148px);
-  gap: 16px;
+  gap: 12px;
+  padding: 0 0 6px;
 }
 
 .assistant-chat-box--workspace .assistant-chat-box-header,
@@ -221,14 +222,68 @@
 }
 
 .assistant-chat-box--workspace .assistant-chat-box-header {
-  padding: 14px 16px;
-  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--surface-elevated) 88%, transparent);
+  padding: 4px 2px 8px;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 0;
+  background: transparent;
+}
+
+.assistant-chat-box--workspace .assistant-chat-box-icon {
+  display: none;
+}
+
+.assistant-chat-box--workspace .assistant-chat-box-title .ant-typography {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.assistant-chat-box--workspace .assistant-chat-box-title .ant-typography-secondary {
+  display: none;
+}
+
+.assistant-chat-box--workspace .assistant-history-tools .ant-btn,
+.assistant-chat-box--workspace .assistant-session-bar .ant-btn {
+  width: 30px;
+  height: 30px;
+  border-color: transparent;
+  color: var(--muted);
+  background: transparent;
+  box-shadow: none;
+}
+
+.assistant-chat-box--workspace .assistant-history-tools .ant-btn:hover,
+.assistant-chat-box--workspace .assistant-session-bar .ant-btn:hover {
+  border-color: color-mix(in srgb, var(--border) 80%, transparent);
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--surface-muted) 72%, transparent);
+}
+
+.assistant-chat-box--workspace .assistant-history-tools .ant-tag {
+  display: none;
+}
+
+.assistant-chat-box--workspace .assistant-session-bar {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.assistant-chat-box--workspace .assistant-session-select .ant-select-selector {
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.assistant-chat-box--workspace .assistant-session-select .ant-select-selection-item {
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .assistant-chat-box--workspace .assistant-suggestions--top {
-  padding: 0 2px 2px;
+  justify-content: center;
+  padding: 26px 2px 4px;
 }
 
 .assistant-chat-box--workspace .assistant-suggestion {
@@ -239,20 +294,115 @@
 
 .assistant-chat-box--workspace .assistant-messages {
   min-height: 0;
-  padding: 8px 2px 12px;
+  gap: 34px;
+  padding: 34px 2px 36px;
 }
 
 .assistant-chat-box--workspace .assistant-message-assistant {
-  width: min(92%, 820px);
+  width: min(78%, 860px);
+  max-width: min(78%, 860px);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.assistant-chat-box--workspace .assistant-message-user {
+  display: flex;
+  max-width: min(38%, 420px);
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 0;
+  background: transparent;
+}
+
+.assistant-chat-box--workspace .assistant-message-meta {
+  width: 100%;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.assistant-chat-box--workspace .assistant-message-assistant .assistant-message-meta {
+  padding-bottom: 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  justify-content: flex-start;
+}
+
+.assistant-chat-box--workspace .assistant-message-assistant .assistant-message-meta span:last-child {
+  display: none;
+}
+
+.assistant-chat-box--workspace .assistant-message-user .assistant-message-meta {
+  width: auto;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+  margin-bottom: 6px;
+  color: var(--muted);
+}
+
+.assistant-chat-box--workspace .assistant-message-user .assistant-message-meta span:first-child {
+  order: -1;
+}
+
+.assistant-chat-box--workspace .assistant-message-user .assistant-message-meta span:last-child {
+  display: none;
+}
+
+.assistant-chat-box--workspace .assistant-message-user .assistant-message-text {
+  display: inline-flex;
+  min-width: 46px;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0 !important;
+  padding: 12px 15px;
+  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-muted) 70%, transparent);
+  color: var(--text-primary);
+  line-height: 1.5;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 4%);
+}
+
+.assistant-chat-box--workspace .assistant-markdown {
+  padding-top: 12px;
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.85;
+}
+
+.assistant-chat-box--workspace .assistant-markdown-paragraph {
+  margin: 0 0 12px;
+}
+
+.assistant-chat-box--workspace .assistant-message-actions {
+  justify-content: flex-start;
+  margin-top: 16px;
+}
+
+.assistant-chat-box--workspace .assistant-message-actions .ant-btn {
+  width: 28px;
+  height: 28px;
+  border-color: transparent;
+  color: var(--muted);
+  background: transparent;
+}
+
+.assistant-chat-box--workspace .assistant-message-actions .ant-btn:hover {
+  border-color: color-mix(in srgb, var(--border) 76%, transparent);
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--surface-muted) 72%, transparent);
 }
 
 .assistant-chat-box--workspace .assistant-chatbox {
   position: sticky;
   bottom: 0;
-  padding: 14px;
+  padding: 14px 16px;
   border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--surface-elevated) 94%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface-elevated) 88%, transparent);
   box-shadow: 0 -18px 36px color-mix(in srgb, var(--background) 86%, transparent);
   backdrop-filter: blur(16px);
 }
@@ -282,6 +432,22 @@
   .assistant-chat-box--workspace .assistant-chat-box-header {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .assistant-chat-box--workspace .assistant-messages {
+    gap: 26px;
+    padding: 24px 0 28px;
+  }
+
+  .assistant-chat-box--workspace .assistant-message-assistant,
+  .assistant-chat-box--workspace .assistant-message-user {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .assistant-chat-box--workspace .assistant-message-user .assistant-message-text {
+    max-width: min(82%, 360px);
+    border-radius: 18px;
   }
 
   .assistant-chatbox-footer {
