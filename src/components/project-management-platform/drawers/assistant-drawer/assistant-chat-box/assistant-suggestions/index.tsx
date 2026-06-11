@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "antd";
+import { Prompts, type PromptsItemType } from "@ant-design/x";
 import { assistantQuickSuggestions } from "@/components/project-management-platform/drawers/assistant-drawer/assistant-constants";
 
 type AssistantSuggestionsProps = {
@@ -15,18 +15,27 @@ export function AssistantSuggestions({
   disabled,
   onSelectSuggestion
 }: AssistantSuggestionsProps) {
+  const promptItems: PromptsItemType[] = assistantQuickSuggestions.map((suggestion) => ({
+    disabled,
+    key: suggestion,
+    label: suggestion
+  }));
+
   return (
-    <div className={className} aria-label="快捷提问">
-      {assistantQuickSuggestions.map((suggestion) => (
-        <Button
-          className="assistant-suggestion"
-          key={suggestion}
-          disabled={disabled}
-          onClick={() => onSelectSuggestion(suggestion)}
-        >
-          {suggestion}
-        </Button>
-      ))}
-    </div>
+    <Prompts
+      aria-label="快捷提问"
+      className={className}
+      items={promptItems}
+      wrap
+      // 快捷问题仍然只补全输入，不直接触发业务接口；这样能用 Ant Design X 的交互外观，
+      // 又不破坏“由 AI SDK tools/skills 决策”的项目约束。
+      onItemClick={({ data }) => {
+        if (disabled || typeof data.label !== "string") {
+          return;
+        }
+
+        onSelectSuggestion(data.label);
+      }}
+    />
   );
 }

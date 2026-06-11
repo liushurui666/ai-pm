@@ -1,12 +1,13 @@
 "use client";
 
 import "./index.less";
-import { Alert, Button, Input, Spin, Tooltip, Typography } from "antd";
-import { CopyOutlined, RedoOutlined, SendOutlined, StopOutlined } from "@ant-design/icons";
+import { Alert, Button, Tooltip, Typography } from "antd";
+import { Bubble, Sender, XProvider, type BubbleItemType } from "@ant-design/x";
+import { CopyOutlined, RedoOutlined } from "@ant-design/icons";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { TextAreaRef } from "antd/es/input/TextArea";
+import type { SenderRef } from "@ant-design/x/es/sender";
 import { fetchWithAuthRedirect, isSessionExpiredError, redirectToLogin } from "@/components/project-management-platform/api";
 import { initialAssistantMessages } from "@/components/project-management-platform/drawers/assistant-drawer/assistant-constants";
 import { AssistantChatBoxHeader } from "@/components/project-management-platform/drawers/assistant-drawer/assistant-chat-box/assistant-chat-box-header";
@@ -66,7 +67,7 @@ export function AssistantChatBox({
   const activeSessionIdRef = useRef(sessionState.activeSessionId);
   const latestMessagesRef = useRef<UIMessage[]>(activeSession?.messages ?? initialAssistantMessages);
   const messagesRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<TextAreaRef>(null);
+  const inputRef = useRef<SenderRef>(null);
   const submitDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isWorkspace = variant === "workspace";
   const commitSessionState = useCallback((nextState: AssistantSessionState) => {
@@ -268,8 +269,8 @@ export function AssistantChatBox({
     requestInputFocus();
   }
 
-  async function handleSend() {
-    const message = input.trim();
+  async function handleSend(submittedInput = input) {
+    const message = submittedInput.trim();
 
     if (!message || generating || submitDebounceRef.current !== null) {
       return;
@@ -421,148 +422,184 @@ export function AssistantChatBox({
     });
   }
 
-  return (
-    <section className={`assistant-chat-box assistant-chat-box--${variant}`}>
-      <AssistantChatBoxHeader
-        generating={generating}
-        hasUserMessages={hasUserMessages}
-        isWorkspace={isWorkspace}
-        onClearConversation={handleClearConversation}
-        onExportConversation={handleExportConversation}
-        onNewSession={handleNewSession}
-      />
+  const bubbleItems: BubbleItemType[] = messages.map((message) => {
+    const isAssistant = message.role === "assistant";
+    const isLastAssistant = message.id === lastAssistantMessage?.id;
+    const shouldShowActions = isAssistant && message.id !== "assistant-welcome" && (!generating || !isLastAssistant);
 
-      {isWorkspace && !hasUserMessages ? (
-        <AssistantSuggestions
-          className="assistant-suggestions assistant-suggestions--top"
-          disabled={generating}
-          onSelectSuggestion={handleSuggestionClick}
-        />
-      ) : null}
-
-      <AssistantSessionBar
-        activeSessionId={sessionState.activeSessionId}
-        disabled={generating}
-        sessions={sessionState.sessions}
-        onCreateSession={handleNewSession}
-        onDeleteSession={handleDeleteSession}
-        onSelectSession={handleSessionChange}
-      />
-
-      <div className="assistant-messages" ref={messagesRef}>
-        {isWorkspace && onlyWelcomeMessage ? (
-          <AssistantEmptyState />
-        ) : messages.map((message) => (
-          <div className={`assistant-message assistant-message-${message.role}`} key={message.id}>
-            <div className="assistant-message-meta">
-              <span>{message.role === "user" ? "你" : "AI 项目助手"}</span>
-              <span>{getCachedMessageTime(message.id)}</span>
-            </div>
-            {message.parts.map((part, index) => (
-              <AssistantMessagePart
-                key={`${message.id}-part-${index}`}
-                part={part}
-                role={message.role}
+    return {
+      content: (
+        <div className="assistant-message-content">
+          {message.parts.map((part, index) => (
+            <AssistantMessagePart
+              key={`${message.id}-part-${index}`}
+              part={part}
+              role={message.role}
+            />
+          ))}
+        </div>
+      ),
+      footer: shouldShowActions ? (
+        <div className="assistant-message-actions">
+          <Tooltip title={copiedMessageId === message.id ? "已复制" : "复制回复"}>
+            <Button
+              aria-label="复制回复"
+              icon={<CopyOutlined />}
+              onClick={() => void handleCopyMessage(message)}
+            />
+          </Tooltip>
+          {isLastAssistant ? (
+            <Tooltip title="重新生成这条回复">
+              <Button
+                aria-label="重新生成这条回复"
+                icon={<RedoOutlined />}
+                disabled={!canRegenerate}
+                onClick={() => {
+                  handleRegenerateMessage(message.id);
+                }}
               />
-            ))}
-            {message.role === "assistant" && message.id !== "assistant-welcome" && (!generating || message.id !== lastAssistantMessage?.id) ? (
-              <div className="assistant-message-actions">
-                <Tooltip title={copiedMessageId === message.id ? "已复制" : "复制回复"}>
-                  <Button
-                    aria-label="复制回复"
-                    icon={<CopyOutlined />}
-                    onClick={() => void handleCopyMessage(message)}
-                  />
-                </Tooltip>
-                {message.id === lastAssistantMessage?.id ? (
-                  <Tooltip title="重新生成这条回复">
-                    <Button
-                      aria-label="重新生成这条回复"
-                      icon={<RedoOutlined />}
-                      disabled={!canRegenerate}
-                      onClick={() => {
-                        handleRegenerateMessage(message.id);
-                      }}
-                    />
-                  </Tooltip>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        ))}
-        {status === "submitted" ? (
-          <div className="assistant-message assistant-message-assistant">
-            <Spin size="small" /> <Text>正在选择项目工具...</Text>
-          </div>
-        ) : null}
-        {error ? (
-          <Alert
-            className="assistant-error"
-            type="error"
-            showIcon
-            title="AI 助手暂时无法完成回复"
-            description={sessionError ? "登录状态已失效，请重新登录后继续使用 AI 项目助手。" : error.message}
-            action={sessionError ? (
-              <Button size="small" danger onClick={redirectToLogin}>
-                重新登录
-              </Button>
-            ) : undefined}
-          />
-        ) : null}
-      </div>
+            </Tooltip>
+          ) : null}
+        </div>
+      ) : null,
+      header: (
+        <div className="assistant-message-meta">
+          <span>{message.role === "user" ? "你" : "AI 项目助手"}</span>
+          <span>{getCachedMessageTime(message.id)}</span>
+        </div>
+      ),
+      key: message.id,
+      role: message.role === "user" ? "user" : "assistant",
+      streaming: isAssistant && isLastAssistant && generating
+    };
+  });
 
-      <div className="assistant-chatbox">
-        {!isWorkspace ? (
+  if (status === "submitted") {
+    bubbleItems.push({
+      content: "正在选择项目工具...",
+      header: (
+        <div className="assistant-message-meta">
+          <span>AI 项目助手</span>
+        </div>
+      ),
+      key: "assistant-loading",
+      loading: true,
+      role: "assistant"
+    });
+  }
+
+  return (
+    <XProvider>
+      <section className={`assistant-chat-box assistant-chat-box--${variant}`}>
+        <AssistantChatBoxHeader
+          generating={generating}
+          hasUserMessages={hasUserMessages}
+          isWorkspace={isWorkspace}
+          onClearConversation={handleClearConversation}
+          onExportConversation={handleExportConversation}
+          onNewSession={handleNewSession}
+        />
+
+        {isWorkspace && !hasUserMessages ? (
           <AssistantSuggestions
+            className="assistant-suggestions assistant-suggestions--top"
             disabled={generating}
             onSelectSuggestion={handleSuggestionClick}
           />
         ) : null}
-        <Input.TextArea
-          ref={inputRef}
-          value={input}
-          rows={isWorkspace && !isMobile ? 4 : 3}
-          placeholder="例如：帮我分析当前最大风险"
-          maxLength={300}
+
+        <AssistantSessionBar
+          activeSessionId={sessionState.activeSessionId}
           disabled={generating}
-          onChange={(event) => setInput(event.target.value)}
-          onPressEnter={(event) => {
-            if (!event.shiftKey) {
-              event.preventDefault();
-              void handleSend();
-            }
-          }}
+          sessions={sessionState.sessions}
+          onCreateSession={handleNewSession}
+          onDeleteSession={handleDeleteSession}
+          onSelectSession={handleSessionChange}
         />
-        <div className="assistant-chatbox-footer">
-          <Text type="secondary">{statusText}</Text>
-          <div className="assistant-actions">
-            <Tooltip title="重新生成上一条回复">
-              <Button
-                icon={<RedoOutlined />}
-                disabled={!canRegenerate}
-                onClick={() => {
-                  handleRegenerateMessage(lastAssistantMessage?.id);
-                }}
-              />
-            </Tooltip>
-            {generating ? (
-              <Button icon={<StopOutlined />} onClick={handleStopGeneration}>
-                停止
-              </Button>
-            ) : null}
-            <Button
-              className="assistant-send"
-              type="primary"
-              icon={<SendOutlined />}
-              disabled={!input.trim()}
-              loading={generating}
-              onClick={() => void handleSend()}
-            >
-              发送
-            </Button>
-          </div>
+
+        <div className="assistant-messages" ref={messagesRef}>
+          {isWorkspace && onlyWelcomeMessage ? (
+            <AssistantEmptyState />
+          ) : (
+            <Bubble.List
+              autoScroll
+              className="assistant-bubble-list"
+              items={bubbleItems}
+              // Ant Design X 只负责消息视图角色和视觉语义；消息内容仍来自 AI SDK UIMessage，
+              // 避免为了换样式重新封装对话结构，导致多轮上下文和 tool 调用链路分叉。
+              role={{
+                assistant: {
+                  className: "assistant-x-bubble assistant-x-bubble-assistant",
+                  placement: "start",
+                  variant: isWorkspace ? "borderless" : "outlined"
+                },
+                user: {
+                  className: "assistant-x-bubble assistant-x-bubble-user",
+                  placement: "end",
+                  shape: isWorkspace ? "round" : "default",
+                  variant: "filled"
+                }
+              }}
+            />
+          )}
+          {error ? (
+            <Alert
+              className="assistant-error"
+              type="error"
+              showIcon
+              title="AI 助手暂时无法完成回复"
+              description={sessionError ? "登录状态已失效，请重新登录后继续使用 AI 项目助手。" : error.message}
+              action={sessionError ? (
+                <Button size="small" danger onClick={redirectToLogin}>
+                  重新登录
+                </Button>
+              ) : undefined}
+            />
+          ) : null}
         </div>
-      </div>
-    </section>
+
+        <div className="assistant-chatbox">
+          {!isWorkspace ? (
+            <AssistantSuggestions
+              disabled={generating}
+              onSelectSuggestion={handleSuggestionClick}
+            />
+          ) : null}
+          <Sender
+            ref={inputRef}
+            autoSize={{
+              maxRows: isWorkspace && !isMobile ? 6 : 4,
+              minRows: isWorkspace && !isMobile ? 4 : 3
+            }}
+            className="assistant-sender"
+            disabled={generating}
+            loading={generating}
+            placeholder="例如：帮我分析当前最大风险"
+            submitType="enter"
+            value={input}
+            footer={(
+              <div className="assistant-chatbox-footer">
+                <Text type="secondary">{statusText}</Text>
+                <div className="assistant-actions">
+                  <Text type="secondary">{input.length}/300</Text>
+                  <Tooltip title="重新生成上一条回复">
+                    <Button
+                      icon={<RedoOutlined />}
+                      disabled={!canRegenerate}
+                      onClick={() => {
+                        handleRegenerateMessage(lastAssistantMessage?.id);
+                      }}
+                    />
+                  </Tooltip>
+                </div>
+              </div>
+            )}
+            onCancel={handleStopGeneration}
+            onChange={(value) => setInput(value.slice(0, 300))}
+            onSubmit={(message) => void handleSend(message)}
+          />
+        </div>
+      </section>
+    </XProvider>
   );
 }
