@@ -601,7 +601,10 @@ export function createAssistantTools(
               "执行 AI PM 平台内部业务动作；当用户明确要求你帮他创建、更新、关闭、删除、保存、发起、配置或修改时使用。",
               "只能调用当前站点同源 /api/* JSON 业务接口，不要调用认证或助手自身接口。",
               "常见动作：更新记录使用 PATCH /api/records，body 为 { type, id, workspaceId, values }；关闭 Bug 时 type=bug，values.status=已关闭。",
-              "创建记录使用 POST /api/records；删除记录使用 DELETE /api/records；成员管理使用 /api/members；创建工作区使用 /api/workspaces；创建 AI 修复任务使用 /api/bug-fix-jobs。",
+              "创建记录使用 POST /api/records，body 必须为 { type, workspaceId, values }，不要把字段直接平铺到 body 顶层。",
+              "创建版本模板：{ type:'requirementVersion', values:{ name, project:'跨项目', status:'规划中', startDate:'YYYY-MM-DD', releaseDate:'YYYY-MM-DD', goal, productOwner, productOwnerMemberId } }。",
+              "创建需求模板：{ type:'requirement', values:{ title, priority:'P1', status:'待评审', project, versionId, versionName, owner, ownerMemberId, acceptance } }。",
+              "删除记录使用 DELETE /api/records；成员管理使用 /api/members；创建工作区使用 /api/workspaces；创建 AI 修复任务使用 /api/bug-fix-jobs。",
               "调用前必须先用读取类能力确认目标记录和权限；调用后只基于业务结果回答，不要暴露接口路径、请求参数或技术过程。"
             ].join("\n"),
             inputSchema: z.object({
