@@ -31,6 +31,8 @@ import { AssistantSessionBar } from "@/components/project-management-platform/dr
 
 const { Text } = Typography;
 
+const ASSISTANT_CHAT_REQUEST_TIMEOUT_MS = 8 * 60 * 1000;
+
 type AssistantChatBoxVariant = "drawer" | "workspace";
 
 type AssistantChatBoxProps = {
@@ -54,6 +56,8 @@ export function AssistantChatBox({
   const [input, setInput] = useState("");
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [hasPendingResponse, setHasPendingResponse] = useState(false);
+  const [userStopped, setUserStopped] = useState(false);
   const [focusRequestId, setFocusRequestId] = useState(0);
   const activeSession = sessionState.sessions.find((session) => session.id === sessionState.activeSessionId);
   const sessionStateRef = useRef(sessionState);
@@ -82,10 +86,37 @@ export function AssistantChatBox({
 
     commitSessionState(updateSessionMessages(sessionStateRef.current, activeSessionId, nextMessages));
   }, [commitSessionState]);
-  const assistantFetch = useCallback((input: RequestInfo | URL, init?: RequestInit) =>
-    fetchWithAuthRedirect(input, init, {
-      redirectOnUnauthorized: false
-    }), []);
+  const assistantFetch = useCallback(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const timeoutController = new AbortController();
+    const timeoutId = window.setTimeout(() => {
+      timeoutController.abort(new Error("AI 助手请求超过 8 分钟仍未完成，请稍后重试。"));
+    }, ASSISTANT_CHAT_REQUEST_TIMEOUT_MS);
+
+    // AI SDK 会把“停止生成”的 abort signal 放在 init.signal 里；这里再叠加本地超时，
+    // 既能保留用户主动停止，也能避免网络或模型流异常时让输入框永久卡在生成态。
+    if (init?.signal) {
+      if (init.signal.aborted) {
+        timeoutController.abort(init.signal.reason);
+      } else {
+        init.signal.addEventListener(
+          "abort",
+          () => timeoutController.abort(init.signal?.reason),
+          { once: true }
+        );
+      }
+    }
+
+    try {
+      return await fetchWithAuthRedirect(input, {
+        ...init,
+        signal: timeoutController.signal
+      }, {
+        redirectOnUnauthorized: false
+      });
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+  }, []);
   const transport = useMemo(() => new DefaultChatTransport({
     api: assistantApiPath,
     body: {
@@ -96,16 +127,30 @@ export function AssistantChatBox({
     // ChatBox 走 AI SDK transport，不能复用普通 JSON 请求封装的 response 解析；
     // 但鉴权语义必须和工作台一致：始终携带同源 Cookie，401 时回登录页并给出可读错误。
     fetch: assistantFetch,
-    prepareSendMessagesRequest: ({ body, headers, id, messageId, messages, trigger }) => ({
-      body: {
-        ...body,
-        id,
-        messageId,
-        messages,
-        trigger
-      },
-      headers
-    })
+    prepareSendMessagesRequest: ({ body, headers, id, messageId, messages, trigger }) => {
+      let outgoingMessages = messages;
+
+      // 参考 ai-interview 的 ChatBox：重新生成时必须把被替换的 assistant 消息裁掉，
+      // 否则 SDK 本地看似删除了旧回复，服务端仍可能收到包含旧回复的上下文，导致回答重复或历史恢复后出现孤儿消息。
+      if (trigger === "regenerate-message" && messageId) {
+        const cutoffIndex = messages.findIndex((message) => message.id === messageId);
+
+        if (cutoffIndex !== -1) {
+          outgoingMessages = messages.slice(0, cutoffIndex);
+        }
+      }
+
+      return {
+        body: {
+          ...body,
+          id,
+          messageId,
+          messages: outgoingMessages,
+          trigger
+        },
+        headers
+      };
+    }
   }), [assistantApiPath, assistantFetch, currentWorkspaceId, sessionState.activeSessionId]);
   const {
     clearError,
@@ -121,6 +166,8 @@ export function AssistantChatBox({
     id: `ai-pm-assistant-${currentWorkspaceId}-${sessionState.activeSessionId}`,
     messages: activeSession?.messages ?? initialAssistantMessages,
     onError: (chatError) => {
+      setHasPendingResponse(false);
+      setUserStopped(false);
       if (isSessionExpiredError(chatError)) {
         setSessionExpired(true);
       }
@@ -128,11 +175,14 @@ export function AssistantChatBox({
       persistActiveSessionMessages(latestMessagesRef.current);
     },
     onFinish: ({ messages: finishedMessages }) => {
+      setHasPendingResponse(false);
+      setUserStopped(false);
       persistActiveSessionMessages(finishedMessages);
     },
     transport
   });
-  const generating = status === "submitted" || status === "streaming";
+  const chatInFlight = (status === "submitted" || status === "streaming") && !userStopped;
+  const generating = !userStopped && (chatInFlight || hasPendingResponse);
   const lastAssistantMessage = [...messages].reverse().find((message) => message.role === "assistant");
   const canRegenerate = Boolean(lastAssistantMessage) && !generating && messages.length > 1;
   const hasUserMessages = messages.some((message) => message.role === "user");
@@ -224,6 +274,8 @@ export function AssistantChatBox({
       submitDebounceRef.current = null;
     }, 300);
     clearError();
+    setHasPendingResponse(true);
+    setUserStopped(false);
     setInput("");
     persistActiveSessionMessages([
       ...latestMessagesRef.current,
@@ -253,6 +305,8 @@ export function AssistantChatBox({
     latestMessagesRef.current = session.messages;
     setMessages(session.messages);
     clearError();
+    setHasPendingResponse(false);
+    setUserStopped(false);
     setInput("");
     requestInputFocus();
   }
@@ -323,6 +377,8 @@ export function AssistantChatBox({
       sessions: nextSessions
     });
     clearError();
+    setHasPendingResponse(false);
+    setUserStopped(false);
     setMessages(initialAssistantMessages);
     latestMessagesRef.current = initialAssistantMessages;
     setInput("");
@@ -343,6 +399,21 @@ export function AssistantChatBox({
     await navigator.clipboard.writeText(text);
     setCopiedMessageId(message.id);
     window.setTimeout(() => setCopiedMessageId(null), 1400);
+  }
+
+  function handleStopGeneration() {
+    stop();
+    setHasPendingResponse(false);
+    setUserStopped(true);
+  }
+
+  function handleRegenerateMessage(messageId?: string) {
+    clearError();
+    setHasPendingResponse(true);
+    setUserStopped(false);
+    void regenerate({
+      messageId
+    });
   }
 
   return (
@@ -405,10 +476,7 @@ export function AssistantChatBox({
                       icon={<RedoOutlined />}
                       disabled={!canRegenerate}
                       onClick={() => {
-                        clearError();
-                        void regenerate({
-                          messageId: message.id
-                        });
+                        handleRegenerateMessage(message.id);
                       }}
                     />
                   </Tooltip>
@@ -468,15 +536,12 @@ export function AssistantChatBox({
                 icon={<RedoOutlined />}
                 disabled={!canRegenerate}
                 onClick={() => {
-                  clearError();
-                  void regenerate({
-                    messageId: lastAssistantMessage?.id
-                  });
+                  handleRegenerateMessage(lastAssistantMessage?.id);
                 }}
               />
             </Tooltip>
             {generating ? (
-              <Button icon={<StopOutlined />} onClick={stop}>
+              <Button icon={<StopOutlined />} onClick={handleStopGeneration}>
                 停止
               </Button>
             ) : null}
