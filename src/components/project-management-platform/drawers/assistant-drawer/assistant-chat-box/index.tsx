@@ -1,7 +1,7 @@
 "use client";
 
 import "./index.less";
-import { Alert, Button, Tooltip, Typography } from "antd";
+import { Alert, Button, Select, Tooltip, Typography } from "antd";
 import { Bubble, Sender, XProvider, type BubbleItemType } from "@ant-design/x";
 import { CopyOutlined, RedoOutlined } from "@ant-design/icons";
 import { useChat } from "@ai-sdk/react";
@@ -34,6 +34,7 @@ import { sanitizeAssistantErrorMessage } from "@/lib/ai/assistant-error-message"
 const { Text } = Typography;
 
 const ASSISTANT_CHAT_REQUEST_TIMEOUT_MS = 8 * 60 * 1000;
+const ASSISTANT_MODEL_STORAGE_PREFIX = "ai-pm-assistant-model";
 
 type AssistantChatBoxVariant = "drawer" | "workspace";
 
@@ -43,6 +44,12 @@ type AssistantChatBoxProps = {
   isMobile?: boolean;
   onInteractionSettled?: () => void | Promise<void>;
   variant?: AssistantChatBoxVariant;
+};
+
+type AssistantModelsResponse = {
+  defaultModel?: string;
+  error?: string;
+  models?: string[];
 };
 
 // 这是 AI 助手唯一的前端对话编排入口：AI SDK transport、会话持久化、消息渲染和输入控制都集中在这里。
@@ -63,6 +70,9 @@ export function AssistantChatBox({
   const [hasPendingResponse, setHasPendingResponse] = useState(false);
   const [userStopped, setUserStopped] = useState(false);
   const [focusRequestId, setFocusRequestId] = useState(0);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [selectedModel, setSelectedModel] = useState("");
+  const [modelLoading, setModelLoading] = useState(true);
   const activeSession = sessionState.sessions.find((session) => session.id === sessionState.activeSessionId);
   const sessionStateRef = useRef(sessionState);
   const activeSessionIdRef = useRef(sessionState.activeSessionId);
@@ -71,6 +81,7 @@ export function AssistantChatBox({
   const inputRef = useRef<SenderRef>(null);
   const submitDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isWorkspace = variant === "workspace";
+  const modelStorageKey = `${ASSISTANT_MODEL_STORAGE_PREFIX}:${currentWorkspaceId}`;
   const commitSessionState = useCallback((nextState: AssistantSessionState) => {
     const normalizedState = normalizeAssistantSessionState(nextState, initialAssistantMessages);
 
@@ -125,6 +136,7 @@ export function AssistantChatBox({
     api: assistantApiPath,
     body: {
       chatSessionId: sessionState.activeSessionId,
+      model: selectedModel || undefined,
       workspaceId: currentWorkspaceId
     },
     credentials: "same-origin",
@@ -155,7 +167,7 @@ export function AssistantChatBox({
         headers
       };
     }
-  }), [assistantApiPath, assistantFetch, currentWorkspaceId, sessionState.activeSessionId]);
+  }), [assistantApiPath, assistantFetch, currentWorkspaceId, selectedModel, sessionState.activeSessionId]);
   const {
     clearError,
     error,
@@ -219,6 +231,63 @@ export function AssistantChatBox({
   }, [clearError, commitSessionState, currentWorkspaceId, setMessages]);
 
   useEffect(() => {
+    let ignore = false;
+
+    async function loadModels() {
+      setModelLoading(true);
+
+      try {
+        const response = await fetchWithAuthRedirect("/api/assistant/models", undefined, {
+          redirectOnUnauthorized: false
+        });
+        const payload = (await response.json()) as AssistantModelsResponse;
+
+        if (!response.ok) {
+          throw new Error(payload.error || "读取模型列表失败");
+        }
+
+        const nextModels = Array.isArray(payload.models)
+          ? payload.models.filter((model): model is string => typeof model === "string" && model.length > 0)
+          : [];
+        const storedModel = window.localStorage.getItem(modelStorageKey);
+        const nextModel = storedModel && nextModels.includes(storedModel)
+          ? storedModel
+          : nextModels.includes(payload.defaultModel ?? "")
+            ? payload.defaultModel ?? ""
+            : nextModels[0] ?? "";
+
+        if (!ignore) {
+          setAvailableModels(nextModels);
+          setSelectedModel(nextModel);
+
+          if (nextModel) {
+            window.localStorage.setItem(modelStorageKey, nextModel);
+          }
+        }
+      } catch (modelError) {
+        if (!ignore) {
+          if (isSessionExpiredError(modelError)) {
+            setSessionExpired(true);
+          }
+
+          setAvailableModels([]);
+          setSelectedModel("");
+        }
+      } finally {
+        if (!ignore) {
+          setModelLoading(false);
+        }
+      }
+    }
+
+    void loadModels();
+
+    return () => {
+      ignore = true;
+    };
+  }, [modelStorageKey]);
+
+  useEffect(() => {
     if (sessionExpired || isSessionExpiredError(error)) {
       redirectToLogin();
     }
@@ -271,6 +340,15 @@ export function AssistantChatBox({
 
     setInput((current) => current.trim() ? `${current.trim()}\n${suggestion}` : suggestion);
     requestInputFocus();
+  }
+
+  function handleModelChange(model: string) {
+    if (generating) {
+      return;
+    }
+
+    setSelectedModel(model);
+    window.localStorage.setItem(modelStorageKey, model);
   }
 
   async function handleSend(submittedInput = input) {
@@ -586,6 +664,22 @@ export function AssistantChatBox({
               <div className="assistant-chatbox-footer">
                 <Text type="secondary">{statusText}</Text>
                 <div className="assistant-actions">
+                  <Select
+                    aria-label="切换 AI 模型"
+                    className="assistant-model-select"
+                    disabled={generating || modelLoading || availableModels.length === 0}
+                    loading={modelLoading}
+                    optionFilterProp="label"
+                    options={availableModels.map((model) => ({
+                      label: model,
+                      value: model
+                    }))}
+                    popupMatchSelectWidth={false}
+                    showSearch
+                    size="small"
+                    value={selectedModel || undefined}
+                    onChange={handleModelChange}
+                  />
                   <Text type="secondary">{input.length}/300</Text>
                   <Tooltip title="重新生成上一条回复">
                     <Button

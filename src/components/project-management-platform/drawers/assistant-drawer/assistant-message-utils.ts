@@ -1,6 +1,9 @@
 import type { UIMessage } from "ai";
 
 const messageTimeCache = new Map<string, string>();
+const weeklyReportTitlePattern = /^#\s+(.{0,80}?(?:周报|weekly report).*)$/im;
+const weeklyReportSectionPattern = /^##\s+(?:\d+\.|[一二三四五六七八九十]+[、.])\s*/m;
+const fileNameUnsafePattern = /[\\/:*?"<>|\u0000-\u001f]/g;
 
 function formatMessageTime() {
   return new Intl.DateTimeFormat("zh-CN", {
@@ -31,6 +34,10 @@ export function getMessagePlainText(message: UIMessage) {
         return part.text;
       }
 
+      if (part.type === "reasoning") {
+        return part.text ? `思考过程：\n${part.text}` : "";
+      }
+
       if (part.type.startsWith("tool-")) {
         return "[正在处理项目数据]";
       }
@@ -40,6 +47,43 @@ export function getMessagePlainText(message: UIMessage) {
     .filter(Boolean)
     .join("\n\n")
     .trim();
+}
+
+function sanitizeFileName(input: string) {
+  return input
+    .replace(fileNameUnsafePattern, "")
+    .replace(/\s+/g, "-")
+    .slice(0, 48)
+    .replace(/-+$/g, "") || "AI项目周报";
+}
+
+function formatDownloadDate() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+
+  return `${year}${month}${day}`;
+}
+
+export function getWeeklyReportDownload(content: string) {
+  const markdown = content.trim();
+  const titleMatch = markdown.match(weeklyReportTitlePattern);
+  const hasWeeklyReportTitle = Boolean(titleMatch);
+  const hasReportStructure = weeklyReportSectionPattern.test(markdown) || markdown.includes("| 指标 |") || markdown.includes("| 项目 |");
+
+  if (!hasWeeklyReportTitle || !hasReportStructure) {
+    return null;
+  }
+
+  const title = sanitizeFileName(titleMatch?.[1] ?? "AI项目周报");
+  const byteLength = new TextEncoder().encode(markdown).byteLength;
+
+  return {
+    byteLength,
+    content: markdown,
+    fileName: `${title}-${formatDownloadDate()}.md`
+  };
 }
 
 // 对话导出使用 Markdown，保留用户和助手文本，便于项目经理将结论贴到周报或复盘文档。

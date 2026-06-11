@@ -13,6 +13,7 @@ export const maxDuration = 120;
 
 type AssistantRequestBody = {
   messages?: UIMessage[];
+  model?: string;
   workspaceId?: string;
 };
 
@@ -65,6 +66,7 @@ export async function POST(request: NextRequest) {
         workspaceId: data.meta?.currentWorkspace?.id
       },
       data,
+      model: body?.model,
       messages
     });
 

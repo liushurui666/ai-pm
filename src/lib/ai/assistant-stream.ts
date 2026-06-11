@@ -4,32 +4,34 @@ import type { DashboardData } from "@/types/dashboard";
 import { createAssistantSystemPrompt } from "@/lib/ai/assistant-prompt";
 import type { AssistantInternalActionRuntime } from "@/lib/ai/assistant-internal-actions";
 import { createAssistantTools } from "@/lib/ai/assistant-tools";
-import { getAiApiKey, getAiBaseUrl, getAiModel } from "@/lib/ai/settings";
+import { getAiApiKey, getAiBaseUrl, resolveAiModel } from "@/lib/ai/settings";
 
-function createAiModel() {
+function createAiModel(model?: string) {
   const provider = createOpenAICompatible({
     name: "ai-pm-openai-compatible",
     baseURL: getAiBaseUrl(),
     apiKey: getAiApiKey()
   });
 
-  return provider(getAiModel());
+  return provider(resolveAiModel(model));
 }
 
 // 这里仅装配 AI SDK 流式运行时：模型、系统约束、历史消息和 tools；项目判断仍完全由模型基于工具结果完成。
 export async function createAssistantStreamResult({
   actionRuntime,
   data,
+  model,
   messages
 }: {
   actionRuntime?: AssistantInternalActionRuntime;
   data: DashboardData;
+  model?: string;
   messages: UIMessage[];
 }) {
   const tools = createAssistantTools(data, messages, actionRuntime);
 
   return streamText({
-    model: createAiModel(),
+    model: createAiModel(model),
     system: createAssistantSystemPrompt(),
     messages: await convertToModelMessages(messages, {
       tools,
