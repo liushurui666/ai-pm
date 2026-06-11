@@ -2,7 +2,7 @@
 
 ## 目标范围
 
-本用例覆盖 AI 项目助手从抽屉 UI 到 `/api/assistant` 流式接口的核心链路，重点验证多轮对话、AI SDK tools/skills 约束、Markdown 输出规范、会话历史、登录工作区上下文、错误恢复和部署前稳定性。
+本用例覆盖 AI 项目助手从一级菜单全屏 ChatBox（兼容历史抽屉外壳）到 `/api/assistant` 流式接口的核心链路，重点验证多轮对话、AI SDK tools/skills 约束、Markdown 输出规范、会话历史、登录工作区上下文、错误恢复和部署前稳定性。
 
 ## 架构层用例
 
@@ -36,6 +36,7 @@
 | AIC-026 | 控制台稳定性 | 完成 10 轮对话后检查浏览器 console | 无 React 最大更新深度、hydration、未捕获异常 | 通过 |
 | AIC-027 | 服务端构建 | 执行 `pnpm lint` 和 `pnpm build` | lint/build 全部通过 | 通过 |
 | AIC-028 | 部署触发 | 验证通过后经 deploy-gateway 触发 `ai-pm` 构建 | 仅给操作者本人发送部署消息，Jenkins 构建被触发 | 待执行 |
+| AIC-029 | 一级菜单全屏入口 | 访问 `/workbench?view=assistant` 或点击侧边栏 AI 助手 | 主内容区展示全屏 ChatBox，不打开右侧 Drawer；快捷提问、会话栏、消息区和底部输入框均在页面内可见 | 待回归 |
 
 ## 十轮对话稳定性脚本
 
@@ -74,3 +75,10 @@
 - 输出净化：工具事实进入模型前会业务化处理 URL、API 路径和路径参数，避免模型把 `/video/{id}/access`、`versions?...` 或内部异常原文写进可见回复。
 - 十轮最终验证：使用 Codex 内置浏览器完成 10 轮输入与流式回复，最终统计为 10 条用户消息、10 条助手回复，全部包含“结论/依据/建议行动/需要确认”，空回复 0，技术泄露 0，console error/warning 0。
 - 验证噪声：真实数据库验证曾出现一次 MySQL 连接池超时 500；该问题来自外部数据库连接抖动，最终 ChatBox 稳定性验证使用临时静态数据验证路由隔离外部依赖，验证后临时文件已删除。
+
+### 2026-06-11 全屏菜单改造
+
+- 改造项：`assistant` 一级菜单不再打开右侧抽屉，而是在主内容区渲染全屏 `AssistantView`；AI SDK 多轮会话逻辑抽到共享 `AssistantChatBox`，历史 `AssistantDrawer` 仅保留兼容外壳。
+- 验证命令：`pnpm lint` 通过；`pnpm build` 通过。
+- 浏览器验证：Codex 内置浏览器访问 `/workbench?view=assistant` 时因无登录 cookie 被统一认证拦截到 `/login`，登录回跳仍保留 `view=assistant`。
+- 阻塞项：当前 Codex 内置浏览器没有可复用登录态，无法进入真实工作台完成全屏 UI 截图和 10 轮真实对话回归；待使用已登录浏览器或可控测试会话补齐 AIC-029 与十轮对话验证。

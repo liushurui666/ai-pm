@@ -56,7 +56,6 @@ import { getAntdThemeConfig, ThemeToggleButton, useThemePreference } from "@/com
 import { fetchDashboardFromApi, type PeopleResponse } from "@/components/project-management-platform/api";
 import { createRequirementColumns } from "@/components/project-management-platform/columns/requirement-columns";
 import { validViews } from "@/components/project-management-platform/constants";
-import { AssistantDrawer } from "@/components/project-management-platform/drawers/assistant-drawer";
 import { ScheduleDrawer } from "@/components/project-management-platform/drawers/schedule-drawer";
 import { createSearchResults, SearchDrawer } from "@/components/project-management-platform/drawers/search-drawer";
 import { WorkspaceDrawer } from "@/components/project-management-platform/drawers/workspace-drawer";
@@ -96,6 +95,7 @@ import type {
   SearchResult
 } from "@/components/project-management-platform/types";
 import { formatRequirementVersionOptionLabel } from "@/components/project-management-platform/requirements/version-utils";
+import { AssistantView } from "@/components/project-management-platform/views/assistant-view";
 import { BugRouteEditView } from "@/components/project-management-platform/views/bug-route-edit-view";
 import { BugsView } from "@/components/project-management-platform/views/bugs-view";
 import { MembersView } from "@/components/project-management-platform/views/members-view";
@@ -146,7 +146,6 @@ export function ProjectManagementPlatform({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [collapsed, setCollapsed] = useState(false);
-  const [assistantOpen, setAssistantOpen] = useState(initialView === "assistant");
   const [createType, setCreateType] = useState<DashboardEntityType | null>(null);
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -199,7 +198,7 @@ export function ProjectManagementPlatform({
   const currentWorkspace = data?.meta?.currentWorkspace;
   const currentWorkspaceId = currentWorkspace?.id ?? activeWorkspaceId;
   const navigationView = activeView === "bugEdit" ? "bugs" : activeView;
-  const contentView = activeView === "assistant" ? "overview" : activeView;
+  const contentView = activeView;
   const routeBug = initialBugId ? data?.bugs.find((bug) => bug.id === initialBugId) ?? null : null;
 
   // 静默刷新用于校准乐观更新结果，失败时保留当前 UI 避免打断用户操作。
@@ -1449,12 +1448,6 @@ export function ProjectManagementPlatform({
       return;
     }
 
-    // AI 助手作为一级菜单承担“进入助手”的导航语义；主体仍复用抽屉式 ChatBox，
-    // 这样不会复制一套对话状态，也能让 /workbench?view=assistant 直接恢复助手入口。
-    if (view === "assistant") {
-      setAssistantOpen(true);
-    }
-
     setActiveView(view);
 
     if (typeof window !== "undefined") {
@@ -1470,14 +1463,6 @@ export function ProjectManagementPlatform({
         url.searchParams.set("workspaceId", currentWorkspaceId);
       }
       window.history.replaceState(null, "", url.toString());
-    }
-  }
-
-  function closeAssistantDrawer() {
-    setAssistantOpen(false);
-
-    if (activeView === "assistant") {
-      switchView("overview");
     }
   }
 
@@ -1903,6 +1888,12 @@ export function ProjectManagementPlatform({
                       onUpdateMember={handleUpdateMember}
                     />
                   ) : null}
+                  {contentView === "assistant" ? (
+                    <AssistantView
+                      currentWorkspaceId={currentWorkspaceId}
+                      isMobile={isMobile}
+                    />
+                  ) : null}
                 </>
               )}
             </Content>
@@ -1914,13 +1905,6 @@ export function ProjectManagementPlatform({
             submitting={workspaceSubmitting}
             onClose={() => setWorkspaceDrawerOpen(false)}
             onSubmit={handleCreateWorkspace}
-          />
-
-          <AssistantDrawer
-            currentWorkspaceId={currentWorkspaceId}
-            isMobile={isMobile}
-            open={assistantOpen}
-            onClose={closeAssistantDrawer}
           />
 
           <CreateRecordDrawer

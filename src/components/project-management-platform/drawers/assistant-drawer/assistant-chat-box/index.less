@@ -1,0 +1,314 @@
+.assistant-chat-box {
+  display: flex;
+  min-height: calc(100vh - 124px);
+  flex-direction: column;
+  gap: 14px;
+}
+
+.assistant-chat-box-header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.assistant-chat-box-title {
+  min-width: 0;
+}
+
+.assistant-chat-box-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--brand) 34%, var(--border));
+  border-radius: 8px;
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.assistant-messages {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  overflow: auto;
+}
+
+.assistant-session-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.assistant-session-bar .ant-btn {
+  width: 32px;
+  height: 32px;
+}
+
+.assistant-session-select {
+  min-width: 0;
+  flex: 1;
+}
+
+.assistant-message {
+  max-width: 92%;
+  padding: 10px 12px 12px;
+  border-radius: 8px;
+}
+
+.assistant-message-assistant {
+  align-self: flex-start;
+  width: min(96%, 720px);
+  max-width: 96%;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  background: var(--surface-subtle);
+}
+
+.assistant-message-user {
+  align-self: flex-end;
+  background: var(--brand);
+}
+
+.assistant-message-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.assistant-message-user .assistant-message-meta {
+  color: rgb(255 255 255 / 75%);
+}
+
+.assistant-message-user .ant-typography {
+  color: #ffffff;
+}
+
+.assistant-message-text {
+  margin-bottom: 0 !important;
+  white-space: pre-wrap;
+}
+
+.assistant-tool-tag {
+  margin: 2px 0;
+}
+
+.assistant-message-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.assistant-message-actions .ant-btn {
+  width: 28px;
+  height: 28px;
+  border-color: var(--border);
+  color: var(--muted);
+  background: transparent;
+}
+
+.assistant-error {
+  max-width: 100%;
+}
+
+.assistant-chatbox {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.assistant-history-tools {
+  flex-wrap: nowrap;
+}
+
+.assistant-history-tools .ant-btn {
+  width: 30px;
+  height: 30px;
+}
+
+.assistant-suggestions {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.assistant-suggestion {
+  flex: 0 0 auto;
+  height: 30px;
+  border-color: var(--border);
+  color: var(--text-secondary);
+  background: var(--surface-subtle);
+  font-size: 12px;
+}
+
+.assistant-chatbox-footer {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 34px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.assistant-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.assistant-send {
+  min-width: 96px;
+}
+
+.assistant-empty-state {
+  display: grid;
+  width: min(100%, 920px);
+  min-height: 220px;
+  place-items: center;
+  align-self: center;
+  margin: auto 0;
+  padding: 42px;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand) 6%, transparent), transparent 58%),
+    var(--surface-subtle);
+  text-align: center;
+}
+
+.assistant-empty-icon {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  margin-bottom: 12px;
+  border: 1px solid color-mix(in srgb, var(--brand) 36%, var(--border));
+  border-radius: 8px;
+  color: var(--brand);
+  font-size: 28px;
+}
+
+.assistant-empty-state .ant-typography-secondary {
+  max-width: 620px;
+  margin-top: 6px;
+}
+
+.assistant-chat-box--workspace {
+  min-height: calc(100dvh - 148px);
+  gap: 16px;
+}
+
+.assistant-chat-box--workspace .assistant-chat-box-header,
+.assistant-chat-box--workspace .assistant-session-bar,
+.assistant-chat-box--workspace .assistant-suggestions--top,
+.assistant-chat-box--workspace .assistant-chatbox,
+.assistant-chat-box--workspace .assistant-messages {
+  width: min(100%, 1080px);
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.assistant-chat-box--workspace .assistant-chat-box-header {
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-elevated) 88%, transparent);
+}
+
+.assistant-chat-box--workspace .assistant-suggestions--top {
+  padding: 0 2px 2px;
+}
+
+.assistant-chat-box--workspace .assistant-suggestion {
+  height: 36px;
+  padding-inline: 18px;
+  border-radius: 999px;
+}
+
+.assistant-chat-box--workspace .assistant-messages {
+  min-height: 0;
+  padding: 8px 2px 12px;
+}
+
+.assistant-chat-box--workspace .assistant-message-assistant {
+  width: min(92%, 820px);
+}
+
+.assistant-chat-box--workspace .assistant-chatbox {
+  position: sticky;
+  bottom: 0;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-elevated) 94%, transparent);
+  box-shadow: 0 -18px 36px color-mix(in srgb, var(--background) 86%, transparent);
+  backdrop-filter: blur(16px);
+}
+
+.assistant-chat-box--workspace .assistant-chatbox textarea.ant-input {
+  min-height: 108px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  font-size: 15px;
+}
+
+.assistant-chat-box--workspace .assistant-chatbox textarea.ant-input:focus {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.assistant-chat-box--drawer .assistant-chat-box-header {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .assistant-chat-box--workspace {
+    min-height: calc(100dvh - 172px);
+  }
+
+  .assistant-chat-box--workspace .assistant-chat-box-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .assistant-chatbox-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .assistant-actions {
+    justify-content: space-between;
+  }
+
+  .assistant-send {
+    flex: 1;
+  }
+}
+
+@media (max-width: 520px) {
+  .assistant-session-bar {
+    padding: 6px;
+  }
+
+  .assistant-session-bar .ant-btn {
+    width: 30px;
+    height: 30px;
+  }
+
+  .assistant-empty-state {
+    padding: 30px 20px;
+  }
+}
