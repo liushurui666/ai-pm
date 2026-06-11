@@ -43,6 +43,23 @@ function normalizeText(value?: string) {
   return value?.trim().toLowerCase() ?? "";
 }
 
+function sanitizeAssistantFactText(value: unknown) {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  const text = typeof value === "string" ? value : String(value);
+
+  // tools 返回的是模型可见的项目事实，不能把后端路由、query 或路径参数原样交给模型复述。
+  // 这里仅把技术路径业务化，不改变任务、风险、Bug 等记录本身，让最终优先级判断仍由模型完成。
+  return text
+    .replace(/\b(?:GET|POST|PUT|PATCH|DELETE)\s+\/[A-Za-z0-9_./:{}?=&%-]+/g, "相关业务能力")
+    .replace(/https?:\/\/[^\s，。；、)）]+/g, "相关业务链接")
+    .replace(/\/[A-Za-z0-9_./:{}?=&%-]+/g, "相关业务能力")
+    .replace(/\b[A-Za-z][A-Za-z0-9_-]*\?[A-Za-z0-9_=&%-]+/g, "相关业务查询")
+    .replace(/相关业务能力\s*接口/g, "相关业务能力");
+}
+
 function getMessageText(message: UIMessage) {
   return message.parts
     .filter((part): part is Extract<UIMessage["parts"][number], { type: "text" }> => part.type === "text")
@@ -183,27 +200,27 @@ function matchesVersion(version: RequirementVersion, query?: { versionId?: strin
 function compactTask(task: Task) {
   return {
     id: task.id,
-    标题: task.title,
+    标题: sanitizeAssistantFactText(task.title),
     阶段: task.stage,
     负责人: task.owner || "未分配",
-    项目: task.project,
-    版本: task.versionName || "未关联版本",
+    项目: sanitizeAssistantFactText(task.project),
+    版本: sanitizeAssistantFactText(task.versionName) || "未关联版本",
     优先级: task.priority,
     开始日期: task.startDate,
     截止日期: task.dueDate,
     是否逾期: task.stage !== "已完成" && isBeforeToday(task.dueDate),
-    AI提示: task.aiHint
+    AI提示: sanitizeAssistantFactText(task.aiHint)
   };
 }
 
 function compactBug(bug: BugReport) {
   return {
     id: bug.id,
-    标题: bug.title,
+    标题: sanitizeAssistantFactText(bug.title),
     严重程度: bug.severity,
     状态: bug.status,
-    项目: bug.project,
-    版本: bug.versionName || "未关联版本",
+    项目: sanitizeAssistantFactText(bug.project),
+    版本: sanitizeAssistantFactText(bug.versionName) || "未关联版本",
     负责人: bug.owner || "未分配",
     提交人: bug.reporter,
     创建时间: bug.createdAt
@@ -213,48 +230,63 @@ function compactBug(bug: BugReport) {
 function compactRisk(risk: Risk) {
   return {
     id: risk.id,
-    标题: risk.title,
+    标题: sanitizeAssistantFactText(risk.title),
     等级: risk.level,
     负责人: risk.owner || "未分配",
-    项目: risk.project,
-    应对措施: risk.mitigation
+    项目: sanitizeAssistantFactText(risk.project),
+    应对措施: sanitizeAssistantFactText(risk.mitigation)
   };
 }
 
 function compactRequirement(requirement: Requirement) {
   return {
     id: requirement.id,
-    标题: requirement.title,
+    标题: sanitizeAssistantFactText(requirement.title),
     优先级: requirement.priority,
     状态: requirement.status,
-    项目: requirement.project,
-    版本: requirement.versionName || "未关联版本",
+    项目: sanitizeAssistantFactText(requirement.project),
+    版本: sanitizeAssistantFactText(requirement.versionName) || "未关联版本",
     负责人: requirement.owner || "未分配",
-    验收标准: requirement.acceptance,
-    AI摘要: requirement.aiSummary,
-    AI风险: requirement.aiRisks
+    验收标准: sanitizeAssistantFactText(requirement.acceptance),
+    AI摘要: sanitizeAssistantFactText(requirement.aiSummary),
+    AI风险: sanitizeAssistantFactText(requirement.aiRisks)
   };
 }
 
 function compactVersion(version: RequirementVersion) {
   return {
     id: version.id,
-    名称: version.name,
-    项目: version.project,
+    名称: sanitizeAssistantFactText(version.name),
+    项目: sanitizeAssistantFactText(version.project),
     状态: version.status,
     开始日期: version.startDate,
     发布日期: version.releaseDate,
-    目标: version.goal,
+    目标: sanitizeAssistantFactText(version.goal),
     产品负责人: version.productOwner || "未分配",
     UI负责人: version.uiOwner || "未分配",
     开发负责人: version.devOwner || "未分配",
     里程碑: version.milestones.map((milestone) => ({
-      标题: milestone.title,
+      标题: sanitizeAssistantFactText(milestone.title),
       状态: milestone.status,
       截止日期: milestone.dueDate,
       负责人: milestone.owner || "未分配",
-      备注: milestone.note
+      备注: sanitizeAssistantFactText(milestone.note)
     }))
+  };
+}
+
+function compactProject(project: DashboardData["projects"][number]) {
+  return {
+    id: project.id,
+    名称: sanitizeAssistantFactText(project.name),
+    负责人: project.owner || "未分配",
+    状态: project.status,
+    进度: project.progress,
+    健康度: project.health,
+    截止日期: project.dueDate,
+    团队人数: project.team,
+    风险数: project.riskCount,
+    摘要: sanitizeAssistantFactText(project.summary)
   };
 }
 
@@ -355,18 +387,7 @@ export function createAssistantTools(data: DashboardData, messages: UIMessage[] 
           })
           .sort((left, right) => (right.riskCount * 10 + (100 - right.health)) - (left.riskCount * 10 + (100 - left.health)))
           .slice(0, rowLimit)
-          .map((project) => ({
-            id: project.id,
-            名称: project.name,
-            负责人: project.owner || "未分配",
-            状态: project.status,
-            进度: project.progress,
-            健康度: project.health,
-            截止日期: project.dueDate,
-            团队人数: project.team,
-            风险数: project.riskCount,
-            摘要: project.summary
-          }));
+          .map(compactProject);
 
         return {
           工作区: data.meta?.currentWorkspace?.name || "默认工作区",
@@ -377,7 +398,7 @@ export function createAssistantTools(data: DashboardData, messages: UIMessage[] 
           未完成任务数: data.tasks.filter((task) => task.stage !== "已完成").length,
           未关闭Bug数: data.bugs.filter((bug) => bug.status !== "已关闭").length,
           高风险数: data.risks.filter((risk) => risk.level === "高").length,
-          周洞察: data.weeklyInsight.slice(0, 6)
+          周洞察: data.weeklyInsight.slice(0, 6).map((item) => sanitizeAssistantFactText(item))
         };
       }
     },
@@ -555,30 +576,13 @@ export function createAssistantTools(data: DashboardData, messages: UIMessage[] 
           项目: [...data.projects]
             .sort((left, right) => (right.riskCount * 10 + (100 - right.health)) - (left.riskCount * 10 + (100 - left.health)))
             .slice(0, rowLimit)
-            .map((project) => ({
-              名称: project.name,
-              负责人: project.owner || "未分配",
-              状态: project.status,
-              进度: project.progress,
-              健康度: project.health,
-              风险数: project.riskCount,
-              截止日期: project.dueDate,
-              摘要: project.summary
-            })),
+            .map(compactProject),
           活跃版本: activeVersions.slice(0, rowLimit).map(compactVersion),
           未完成任务: [...openTasks].sort((left, right) => taskWeight(right) - taskWeight(left)).slice(0, rowLimit).map(compactTask),
           未关闭Bug: [...openBugs].sort((left, right) => bugWeight(right) - bugWeight(left)).slice(0, rowLimit).map(compactBug),
           风险: [...data.risks].sort((left, right) => riskWeight(right) - riskWeight(left)).slice(0, rowLimit).map(compactRisk),
-          需求: data.requirements.slice(0, rowLimit).map((requirement) => ({
-            标题: requirement.title,
-            优先级: requirement.priority,
-            状态: requirement.status,
-            项目: requirement.project,
-            版本: requirement.versionName || "未关联版本",
-            负责人: requirement.owner || "未分配",
-            验收标准: requirement.acceptance
-          })),
-          周洞察: data.weeklyInsight
+          需求: data.requirements.slice(0, rowLimit).map(compactRequirement),
+          周洞察: data.weeklyInsight.map((item) => sanitizeAssistantFactText(item))
         };
       }
     }

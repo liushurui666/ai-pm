@@ -15,6 +15,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TextAreaRef } from "antd/es/input/TextArea";
+import { fetchWithAuthRedirect, isSessionExpiredError, redirectToLogin } from "@/components/project-management-platform/api";
 import { initialAssistantMessages, assistantQuickSuggestions } from "@/components/project-management-platform/drawers/assistant-drawer/assistant-constants";
 import { AssistantMessagePart } from "@/components/project-management-platform/drawers/assistant-drawer/assistant-message-part";
 import {
@@ -56,6 +57,7 @@ export function AssistantDrawer({
   );
   const [input, setInput] = useState("");
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const activeSession = sessionState.sessions.find((session) => session.id === sessionState.activeSessionId);
   const sessionStateRef = useRef(sessionState);
   const activeSessionIdRef = useRef(sessionState.activeSessionId);
@@ -82,6 +84,10 @@ export function AssistantDrawer({
 
     commitSessionState(updateSessionMessages(sessionStateRef.current, activeSessionId, nextMessages));
   }, [commitSessionState]);
+  const assistantFetch = useCallback((input: RequestInfo | URL, init?: RequestInit) =>
+    fetchWithAuthRedirect(input, init, {
+      redirectOnUnauthorized: false
+    }), []);
   const transport = useMemo(() => new DefaultChatTransport({
     api: assistantApiPath,
     body: {
@@ -89,6 +95,9 @@ export function AssistantDrawer({
       workspaceId: currentWorkspaceId
     },
     credentials: "same-origin",
+    // ChatBox 走 AI SDK transport，不能复用普通 JSON 请求封装的 response 解析；
+    // 但鉴权语义必须和工作台一致：始终携带同源 Cookie，401 时回登录页并给出可读错误。
+    fetch: assistantFetch,
     prepareSendMessagesRequest: ({ body, headers, id, messageId, messages, trigger }) => ({
       body: {
         ...body,
@@ -99,7 +108,7 @@ export function AssistantDrawer({
       },
       headers
     })
-  }), [assistantApiPath, currentWorkspaceId, sessionState.activeSessionId]);
+  }), [assistantApiPath, assistantFetch, currentWorkspaceId, sessionState.activeSessionId]);
   const {
     clearError,
     error,
@@ -113,7 +122,11 @@ export function AssistantDrawer({
     experimental_throttle: 80,
     id: `ai-pm-assistant-${currentWorkspaceId}-${sessionState.activeSessionId}`,
     messages: activeSession?.messages ?? initialAssistantMessages,
-    onError: () => {
+    onError: (chatError) => {
+      if (isSessionExpiredError(chatError)) {
+        setSessionExpired(true);
+      }
+
       persistActiveSessionMessages(latestMessagesRef.current);
     },
     onFinish: ({ messages: finishedMessages }) => {
@@ -125,6 +138,7 @@ export function AssistantDrawer({
   const lastAssistantMessage = [...messages].reverse().find((message) => message.role === "assistant");
   const canRegenerate = Boolean(lastAssistantMessage) && !generating && messages.length > 1;
   const hasUserMessages = messages.some((message) => message.role === "user");
+  const sessionError = isSessionExpiredError(error);
   const statusText = generating
     ? "正在读取项目数据并生成结构化回复..."
     : "支持多轮上下文，Enter 发送，Shift+Enter 换行";
@@ -144,6 +158,12 @@ export function AssistantDrawer({
 
     return () => clearTimeout(timer);
   }, [clearError, commitSessionState, currentWorkspaceId, setMessages]);
+
+  useEffect(() => {
+    if (sessionExpired || isSessionExpiredError(error)) {
+      redirectToLogin();
+    }
+  }, [error, sessionExpired]);
 
   useEffect(() => {
     latestMessagesRef.current = messages;
@@ -409,7 +429,12 @@ export function AssistantDrawer({
               type="error"
               showIcon
               title="AI 助手暂时无法完成回复"
-              description={error.message}
+              description={sessionError ? "登录状态已失效，请重新登录后继续使用 AI 项目助手。" : error.message}
+              action={sessionError ? (
+                <Button size="small" danger onClick={redirectToLogin}>
+                  重新登录
+                </Button>
+              ) : undefined}
             />
           ) : null}
         </div>
