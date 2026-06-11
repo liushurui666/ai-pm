@@ -1,6 +1,6 @@
 const DEFAULT_AI_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1";
 const DEFAULT_AI_MODEL = "qwen3.7-max";
-const DEFAULT_AI_MODEL_OPTIONS = [DEFAULT_AI_MODEL];
+const DEFAULT_AI_MODEL_OPTIONS = [DEFAULT_AI_MODEL, "qwen-plus"];
 const AI_MODEL_NAME_PATTERN = /^[\w./:-]{1,120}$/;
 
 function parseModelList(value?: string) {

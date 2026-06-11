@@ -63,6 +63,11 @@ type WeeklyReportResponse = {
 
 type PendingResponseSource = "sdk" | "weekly";
 
+type AssistantDisplayMessage = UIMessage & {
+  regenerateMessageId?: string;
+  sourceMessageIds: string[];
+};
+
 function createLocalTextMessage(role: UIMessage["role"], text: string, prefix: string): UIMessage {
   return {
     id: `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -86,6 +91,58 @@ function hasCompletedMutationTool(messages: UIMessage[]) {
   ));
 }
 
+function resolveEffectiveModel(rawModel: string, models: string[], defaultModel: string) {
+  const normalizedModel = rawModel.trim();
+
+  // 和 ai-interview 保持同一个取舍：模型列表未加载时不抢跑用户选择；
+  // 列表到达后，展示、localStorage 和请求体都走同一套兜底，避免“看见 A，发出 B”。
+  if (models.length === 0) {
+    return normalizedModel || defaultModel;
+  }
+
+  if (normalizedModel && models.includes(normalizedModel)) {
+    return normalizedModel;
+  }
+
+  if (defaultModel && models.includes(defaultModel)) {
+    return defaultModel;
+  }
+
+  return models[0] ?? normalizedModel;
+}
+
+function createDisplayMessages(messages: UIMessage[]): AssistantDisplayMessage[] {
+  return messages.reduce<AssistantDisplayMessage[]>((displayMessages, message) => {
+    const previous = displayMessages.at(-1);
+    const shouldMergeAssistantMessage = (
+      message.role === "assistant" &&
+      message.id !== "assistant-welcome" &&
+      previous?.role === "assistant" &&
+      !previous.sourceMessageIds.includes("assistant-welcome")
+    );
+
+    if (shouldMergeAssistantMessage && previous) {
+      displayMessages[displayMessages.length - 1] = {
+        ...previous,
+        parts: [...previous.parts, ...message.parts],
+        regenerateMessageId: message.id,
+        sourceMessageIds: [...previous.sourceMessageIds, message.id]
+      };
+
+      return displayMessages;
+    }
+
+    displayMessages.push({
+      ...message,
+      parts: [...message.parts],
+      regenerateMessageId: message.role === "assistant" ? message.id : undefined,
+      sourceMessageIds: [message.id]
+    });
+
+    return displayMessages;
+  }, []);
+}
+
 // 这是 AI 助手唯一的前端对话编排入口：AI SDK transport、会话持久化、消息渲染和输入控制都集中在这里。
 // 抽屉和一级菜单全屏页只切换外层布局，避免复制两套 ChatBox 状态导致多轮上下文或本地 session 不一致。
 export function AssistantChatBox({
@@ -105,10 +162,13 @@ export function AssistantChatBox({
   const [userStopped, setUserStopped] = useState(false);
   const [focusRequestId, setFocusRequestId] = useState(0);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [defaultModel, setDefaultModel] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
   const [modelLoading, setModelLoading] = useState(true);
   const activeSession = sessionState.sessions.find((session) => session.id === sessionState.activeSessionId);
   const selectedModelRef = useRef(selectedModel);
+  const availableModelsRef = useRef<string[]>(availableModels);
+  const defaultModelRef = useRef(defaultModel);
   const sessionStateRef = useRef(sessionState);
   const activeSessionIdRef = useRef(sessionState.activeSessionId);
   const latestMessagesRef = useRef<UIMessage[]>(activeSession?.messages ?? initialAssistantMessages);
@@ -170,7 +230,6 @@ export function AssistantChatBox({
   const transport = useMemo(() => new DefaultChatTransport({
     api: assistantApiPath,
     body: {
-      chatSessionId: sessionState.activeSessionId,
       workspaceId: currentWorkspaceId
     },
     credentials: "same-origin",
@@ -201,7 +260,7 @@ export function AssistantChatBox({
         headers
       };
     }
-  }), [assistantApiPath, assistantFetch, currentWorkspaceId, sessionState.activeSessionId]);
+  }), [assistantApiPath, assistantFetch, currentWorkspaceId]);
   const {
     clearError,
     error,
@@ -240,6 +299,7 @@ export function AssistantChatBox({
   const lastAssistantMessage = [...messages].reverse().find((message) => message.role === "assistant");
   const canRegenerate = Boolean(lastAssistantMessage) && !generating && messages.length > 1;
   const hasUserMessages = messages.some((message) => message.role === "user");
+  const displayMessages = useMemo(() => createDisplayMessages(messages), [messages]);
   const sessionError = isSessionExpiredError(error);
   const visibleErrorMessage = sessionError
     ? "登录状态已失效，请重新登录后继续使用 AI 项目助手。"
@@ -248,7 +308,8 @@ export function AssistantChatBox({
     ? "正在读取项目数据并生成回复..."
     : "支持多轮上下文，Enter 发送，Shift+Enter 换行";
   const onlyWelcomeMessage = messages.length === 1 && messages[0]?.id === "assistant-welcome";
-  const modelSwitchDisabled = generating || modelLoading || availableModels.length <= 1;
+  const effectiveSelectedModel = resolveEffectiveModel(selectedModel, availableModels, defaultModel);
+  const modelSwitchDisabled = generating || modelLoading || availableModels.length === 0;
   const modelSwitchTooltip = modelLoading
     ? "正在校验可用模型"
     : availableModels.length <= 1
@@ -299,6 +360,9 @@ export function AssistantChatBox({
 
         if (!ignore) {
           setAvailableModels(nextModels);
+          availableModelsRef.current = nextModels;
+          defaultModelRef.current = payload.defaultModel ?? "";
+          setDefaultModel(payload.defaultModel ?? "");
           selectedModelRef.current = nextModel;
           setSelectedModel(nextModel);
 
@@ -313,7 +377,11 @@ export function AssistantChatBox({
           }
 
           setAvailableModels([]);
+          availableModelsRef.current = [];
+          setDefaultModel("");
+          defaultModelRef.current = "";
           setSelectedModel("");
+          selectedModelRef.current = "";
         }
       } finally {
         if (!ignore) {
@@ -342,6 +410,14 @@ export function AssistantChatBox({
   useEffect(() => {
     selectedModelRef.current = selectedModel;
   }, [selectedModel]);
+
+  useEffect(() => {
+    availableModelsRef.current = availableModels;
+  }, [availableModels]);
+
+  useEffect(() => {
+    defaultModelRef.current = defaultModel;
+  }, [defaultModel]);
 
   useEffect(() => {
     messagesRef.current?.scrollTo({
@@ -393,15 +469,24 @@ export function AssistantChatBox({
       return;
     }
 
-    selectedModelRef.current = model;
-    setSelectedModel(model);
-    window.localStorage.setItem(modelStorageKey, model);
+    const nextModel = resolveEffectiveModel(model, availableModelsRef.current, defaultModelRef.current);
+
+    selectedModelRef.current = nextModel;
+    setSelectedModel(nextModel);
+    window.localStorage.setItem(modelStorageKey, nextModel);
+    requestInputFocus();
   }
 
   function createAssistantRequestBody() {
+    const model = resolveEffectiveModel(
+      selectedModelRef.current,
+      availableModelsRef.current,
+      defaultModelRef.current
+    );
+
     return {
       chatSessionId: activeSessionIdRef.current,
-      model: selectedModelRef.current || undefined,
+      model: model || undefined,
       workspaceId: currentWorkspaceId
     };
   }
@@ -630,10 +715,10 @@ export function AssistantChatBox({
     });
   }
 
-  const bubbleItems: BubbleItemType[] = messages.map((message) => {
+  const bubbleItems: BubbleItemType[] = displayMessages.map((message) => {
     const isAssistant = message.role === "assistant";
-    const isLastAssistant = message.id === lastAssistantMessage?.id;
-    const shouldShowActions = isAssistant && message.id !== "assistant-welcome" && (!generating || !isLastAssistant);
+    const isLastAssistant = Boolean(lastAssistantMessage && message.sourceMessageIds.includes(lastAssistantMessage.id));
+    const shouldShowActions = isAssistant && !message.sourceMessageIds.includes("assistant-welcome") && (!generating || !isLastAssistant);
 
     return {
       content: (
@@ -655,7 +740,7 @@ export function AssistantChatBox({
                 icon={<RedoOutlined />}
                 disabled={!canRegenerate}
                 onClick={() => {
-                  handleRegenerateMessage(message.id);
+                  handleRegenerateMessage(message.regenerateMessageId);
                 }}
               />
             </Tooltip>
@@ -779,10 +864,14 @@ export function AssistantChatBox({
             value={input}
             footer={(
               <div className="assistant-chatbox-footer">
-                <Text type="secondary">{statusText}</Text>
-                <div className="assistant-actions">
+                <div className="assistant-composer-tools">
                   <Tooltip title={modelSwitchTooltip}>
-                    <span className="assistant-model-select-wrap">
+                    <span
+                      className="assistant-model-select-wrap"
+                      onClick={(event) => event.stopPropagation()}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onPointerDown={(event) => event.stopPropagation()}
+                    >
                       <Select
                         aria-label="切换 AI 模型"
                         className="assistant-model-select"
@@ -796,14 +885,18 @@ export function AssistantChatBox({
                         popupMatchSelectWidth={false}
                         showSearch
                         size="small"
-                        value={selectedModel || undefined}
+                        value={effectiveSelectedModel || undefined}
                         onChange={handleModelChange}
                       />
                     </span>
                   </Tooltip>
+                  <Text className="assistant-status-text" type="secondary">{statusText}</Text>
+                </div>
+                <div className="assistant-actions">
                   <Text type="secondary">{input.length}/300</Text>
                   <Tooltip title="重新生成上一条回复">
                     <Button
+                      aria-label="重新生成上一条回复"
                       icon={<RedoOutlined />}
                       disabled={!canRegenerate}
                       onClick={() => {
