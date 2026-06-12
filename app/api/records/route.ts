@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createDashboardRecord, deleteDashboardRecord, getDashboardData, updateDashboardRecord } from "@/data/local-dashboard";
 import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 import { canPerformAction, getPermissionDeniedReason } from "@/lib/access/permissions";
+import { safelyEnqueueRecordIndexJob } from "@/lib/ai/knowledge/record-indexing";
 import { getSession } from "@/lib/auth/session";
 import type { BugReport } from "@/types/dashboard";
 import type { DashboardEntityType } from "@/types/records";
@@ -103,7 +104,12 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    return NextResponse.json(await createDashboardRecord(body.type, body.values, body.workspaceId, session?.user));
+    const result = await createDashboardRecord(body.type, body.values, body.workspaceId, session?.user);
+
+    // RAG 索引只在业务数据保存成功后入队；失败不影响创建响应，避免用户看到后台索引状态。
+    await safelyEnqueueRecordIndexJob(result, "created");
+
+    return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(
       {
@@ -200,7 +206,12 @@ export async function PATCH(request: NextRequest) {
   }
 
   try {
-    return NextResponse.json(await updateDashboardRecord(body.type, body.id, updateValues, session?.user));
+    const result = await updateDashboardRecord(body.type, body.id, updateValues, session?.user);
+
+    // 更新记录后只投递轻量 index job，worker 再异步做 chunk、embedding 和 Qdrant 写入。
+    await safelyEnqueueRecordIndexJob(result, "updated");
+
+    return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(
       {

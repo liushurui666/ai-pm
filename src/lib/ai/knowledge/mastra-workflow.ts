@@ -1,4 +1,5 @@
 import type { ClaimedIndexJob, IndexQueuePort, WorkflowPort } from "@/lib/ai/knowledge/ports";
+import { getPrismaClient } from "@/lib/database/prisma";
 
 type WorkflowHandlers = {
   indexEntity?: (job: ClaimedIndexJob) => Promise<void>;
@@ -42,19 +43,35 @@ export function createMastraKnowledgeWorkflow(queue: IndexQueuePort, handlers: W
     },
 
     async runWorkspaceRebuild({ workspaceId }) {
-      const jobs = [
-        await queue.enqueue({
+      const prisma = getPrismaClient();
+      const sources = await prisma.aiIndexSource.findMany({
+        where: {
           workspaceId,
-          entityType: "version",
-          entityId: workspaceId,
+          status: {
+            not: "disabled"
+          }
+        },
+        select: {
+          id: true,
+          entityType: true,
+          entityId: true
+        }
+      });
+      const jobs = await Promise.all(
+        sources.map((source) => queue.enqueue({
+          workspaceId,
+          sourceId: source.id,
+          entityType: source.entityType,
+          entityId: source.entityId,
           jobType: "rebuild_source",
-          dedupeKey: `${workspaceId}:workspace:rebuild`,
+          dedupeKey: `${workspaceId}:${source.id}:rebuild_source`,
           priority: 10,
           payload: {
-            scope: "workspace"
+            scope: "workspace",
+            sourceId: source.id
           }
-        })
-      ];
+        }))
+      );
 
       return {
         enqueued: jobs.length
