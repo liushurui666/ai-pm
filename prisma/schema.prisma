@@ -25,23 +25,26 @@ model Workspace {
   weeklyInsights      WeeklyInsight[]
   repositories        ProjectRepository[]
   bugFixJobs          BugFixJob[]
+  aiIndexSources      AiIndexSource[]
+  aiIndexChunks       AiIndexChunk[]
+  aiIndexJobs         AiIndexJob[]
 
   @@map("workspaces")
 }
 
 model DashboardMember {
-  id           String  @id
-  workspaceId  String
-  name         String
-  email        String?
-  avatarUrl    String? @db.VarChar(1024)
-  registrationChannel String @default("email")
-  role         String
-  status       String
-  identities   Json
-  notification Json
-  createdAt    String
-  updatedAt    String
+  id                  String  @id
+  workspaceId         String
+  name                String
+  email               String?
+  avatarUrl           String? @db.VarChar(1024)
+  registrationChannel String  @default("email")
+  role                String
+  status              String
+  identities          Json
+  notification        Json
+  createdAt           String
+  updatedAt           String
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
@@ -392,6 +395,97 @@ model BugFixJobCheck {
   @@map("bug_fix_job_checks")
 }
 
+model AiIndexSource {
+  id                String                @id @default(cuid())
+  workspaceId       String
+  projectId         String?
+  versionId         String?
+  entityType        AiIndexEntityType
+  entityId          String
+  sourceProvider    AiIndexSourceProvider
+  sourceType        AiIndexSourceType
+  title             String
+  sourceUrl         String?               @db.Text
+  sourceToken       String?               @db.VarChar(512)
+  contentHash       String                @db.VarChar(64)
+  status            AiIndexSourceStatus   @default(pending)
+  error             String?               @db.Text
+  lastIndexedAt     DateTime?
+  createdByMemberId String?
+  metadata          Json                  @default("{}")
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  chunks    AiIndexChunk[]
+  jobs      AiIndexJob[]
+
+  @@unique([workspaceId, entityType, entityId, sourceType])
+  @@index([workspaceId, status])
+  @@index([workspaceId, sourceProvider, sourceType])
+  @@index([workspaceId, versionId])
+  @@map("ai_index_sources")
+}
+
+model AiIndexChunk {
+  id                  String             @id @default(cuid())
+  workspaceId         String
+  sourceId            String
+  chunkIndex          Int
+  title               String
+  heading             String?
+  content             String             @db.Text
+  sparseText          String             @db.Text
+  contentHash         String             @db.VarChar(64)
+  embeddingModel      String?
+  embeddingDimensions Int?
+  embeddingVectorRef  String?
+  sourceLocator       Json?
+  metadata            Json               @default("{}")
+  status              AiIndexChunkStatus @default(pending)
+  error               String?            @db.Text
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  source    AiIndexSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceId, chunkIndex])
+  @@index([workspaceId, status])
+  @@index([workspaceId, embeddingVectorRef])
+  @@index([sourceId, contentHash])
+  @@map("ai_index_chunks")
+}
+
+model AiIndexJob {
+  id          String            @id @default(cuid())
+  workspaceId String
+  sourceId    String?
+  entityType  AiIndexEntityType
+  entityId    String
+  jobType     AiIndexJobType
+  dedupeKey   String?           @unique @db.VarChar(191)
+  payload     Json              @default("{}")
+  status      AiIndexJobStatus  @default(pending)
+  priority    Int               @default(0)
+  retryCount  Int               @default(0)
+  maxRetries  Int               @default(5)
+  nextRunAt   DateTime?
+  lockedAt    DateTime?
+  lockedBy    String?
+  error       String?           @db.Text
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  source    AiIndexSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status, nextRunAt])
+  @@index([status, priority, createdAt])
+  @@index([sourceId])
+  @@map("ai_index_jobs")
+}
+
 enum GitProvider {
   github
   gitlab
@@ -424,4 +518,54 @@ enum CheckStatus {
   passed
   failed
   skipped
+}
+
+enum AiIndexEntityType {
+  version
+  requirement
+  bug
+  task
+  feishu_doc
+  feishu_wiki
+}
+
+enum AiIndexSourceProvider {
+  internal
+  feishu
+}
+
+enum AiIndexSourceType {
+  record
+  feishu_doc
+  feishu_wiki
+}
+
+enum AiIndexSourceStatus {
+  pending
+  indexing
+  ready
+  failed
+  disabled
+}
+
+enum AiIndexChunkStatus {
+  pending
+  ready
+  failed
+  skipped
+}
+
+enum AiIndexJobType {
+  index_entity
+  sync_feishu
+  embed_chunks
+  rebuild_source
+  cleanup_source
+}
+
+enum AiIndexJobStatus {
+  pending
+  running
+  success
+  failed
 }
