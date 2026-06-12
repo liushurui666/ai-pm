@@ -566,7 +566,7 @@ V1 三方库选择：
 - AI SDK：继续负责 ChatBox 流式输出、tools、模型调用和模型切换。
 - Mastra：V1 强绑定为 workflow/agent 编排层，用于组织索引流水线、RAG 检索编排、管理员重建索引流程和后续可复用 agent workflow；但业务页面不直接调用 Mastra API，只通过 `WorkflowPort` 和 tools 间接使用。
 - BullMQ + Redis：作为正式异步队列方案，负责 job 入队、重试、并发、延迟执行和 worker 消费；如果 V1 部署不允许新增 Redis，则通过同一个 `IndexQueuePort` 临时落到 MySQL 队列表，不能让业务层感知差异。
-- Qdrant 官方 JS/TS client：负责 dense/sparse vector point 写入、payload 过滤和 hybrid search。
+- Qdrant 官方 JS/TS client：负责 dense vector point 写入、payload 过滤和语义 search；当前代码落地为 `@qdrant/js-client-rest`，Sparse 分数先在 adapter 内做轻量融合，后续再扩展 Qdrant sparse vector。
 - LlamaIndex.TS：优先评估用于飞书 docx/wiki 文本切分、节点结构、RAG pipeline 辅助能力；只通过 adapter 接入，不让业务代码直接依赖其对象模型。
 - Langfuse JS/TS SDK：负责 trace、dataset/eval 结果、score 上报和后续可观测性。
 
@@ -670,6 +670,7 @@ Langfuse 或等价 trace 平台也纳入 V1 评估范围；如果部署条件暂
 
 - 复用模块：`src/lib/ai/knowledge/eval.ts`
 - 命令入口：`pnpm ai-index:eval`
+- 基础设施自检：`pnpm ai-index:doctor --strict`
 - 必要环境变量：`AI_INDEX_EVAL_WORKSPACE_ID`
 - 默认从当前工作区 `ready` source 自动抽样，把 source 标题作为 query，检查正确 source 是否被召回到 TopK。
 - 输出 `recallAtK`、`mrr`、每条 case 的命中排名和返回 sourceIds。
@@ -751,7 +752,7 @@ ChatBox 不需要单独“知识库模式”，但可以识别用户问题自动
 - ChatBox 业务入口继续优先使用 assistant skills + AI SDK tools，`knowledge` 只是新增可复用 tool，不新增独立知识库对话入口。
 - 正式异步队列：任务去重、原子抢占、锁超时释放、退避重试、失败封存、补偿扫描。
 - 队列优先使用 BullMQ + Redis，通过 `IndexQueuePort` 封装；如部署暂不允许 Redis，MySQL 队列只能作为 adapter 兜底。
-- Mastra workflow 作为 V1 强绑定编排层，承载索引流水线、RAG 检索流程、管理员重建索引流程。
+- Mastra workflow 作为 V1 强绑定编排层，承载索引流水线、RAG 检索流程、管理员重建索引流程；部署验收必须通过 `pnpm ai-index:doctor --strict` 证明 Mastra SDK 可解析，不能把手写 `WorkflowPort` adapter 误判为 Mastra 已真实接入。
 - 知识检索能力按 Port/Adapter 拆分，形成可复用 `knowledge` 模块，禁止业务页面直接调用三方 SDK。
 - 独立 worker 进程：消费 `ai_index_jobs`，执行标准文本生成、飞书同步、chunking、embedding、Qdrant 写入和旧索引清理。
 - 版本、需求、Bug、任务写入后创建索引任务。

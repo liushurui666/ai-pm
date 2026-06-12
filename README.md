@@ -236,6 +236,14 @@ cd /srv/ai-pm/source
 AI_PM_ENV_FILE=/etc/ai-pm/ai-pm.env docker compose -f deploy/docker/docker-compose.example.yml up -d --build
 ```
 
+部署后建议先跑 AI 索引自检：
+
+```bash
+pnpm ai-index:doctor --strict
+```
+
+它会检查 Qdrant 官方 JS client、Mastra SDK、百炼模型配置、Redis/BullMQ 和 Qdrant 可达性。`--strict` 会把缺失的 V1 必需项作为失败退出；普通本地排查可去掉 `--strict` 只看报告。
+
 ### 脚本部署
 
 脚本部署适合不使用 Docker 的服务器：

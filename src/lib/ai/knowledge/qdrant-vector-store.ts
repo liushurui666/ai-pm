@@ -1,12 +1,6 @@
+import { QdrantClient } from "@qdrant/js-client-rest";
 import { getKnowledgeSettings } from "@/lib/ai/knowledge/settings";
 import type { KnowledgeChunkCandidate, VectorSearchInput, VectorSearchMatch, VectorStorePort } from "@/lib/ai/knowledge/ports";
-
-function createHeaders(apiKey: string) {
-  return {
-    ...(apiKey ? { "api-key": apiKey } : {}),
-    "Content-Type": "application/json"
-  };
-}
 
 function assertConfigured(url: string) {
   if (!url) {
@@ -41,12 +35,25 @@ function calculateSparseScore(candidate: KnowledgeChunkCandidate, sparseQuery?: 
   return tokens.reduce((score, token) => score + (haystack.includes(token) ? 1 : 0), 0) / tokens.length;
 }
 
-// Qdrant adapter 先使用稳定 HTTP API，避免 SDK 安装不稳定时阻塞 V1 骨架。
-// 外部仍然只依赖 VectorStorePort；后续切换为官方 JS client 时，不影响调用方。
+type QdrantPayload = Partial<KnowledgeChunkCandidate>;
+
+function isQdrantPayload(payload: unknown): payload is QdrantPayload {
+  return typeof payload === "object" && payload !== null;
+}
+
+// Qdrant adapter 现在直接使用官方 JS client。业务层仍只依赖 VectorStorePort，
+// 因此后续如果要切换云向量库或增加 sparse vector，也只改这个 adapter，不牵动 ChatBox/tool/worker。
 export function createQdrantVectorStore(): VectorStorePort {
   const settings = getKnowledgeSettings();
   const baseUrl = settings.qdrantUrl.replace(/\/+$/, "");
   const collection = settings.qdrantCollection;
+  const client = new QdrantClient({
+    url: baseUrl || undefined,
+    apiKey: settings.qdrantApiKey || undefined,
+    // worker 和 ChatBox 的检索请求本身已经有业务级错误处理；关闭启动即探活，
+    // 避免模块初始化时因为 Qdrant 暂未就绪导致 Next 构建或普通页面加载失败。
+    checkCompatibility: false
+  });
   let collectionReady: Promise<void> | undefined;
 
   async function ensureCollection() {
@@ -54,34 +61,18 @@ export function createQdrantVectorStore(): VectorStorePort {
 
     if (!collectionReady) {
       collectionReady = (async () => {
-        const getResponse = await fetch(`${baseUrl}/collections/${collection}`, {
-          method: "GET",
-          headers: createHeaders(settings.qdrantApiKey),
-          cache: "no-store"
-        });
+        const exists = await client.collectionExists(collection);
 
-        if (getResponse.ok) {
+        if (exists.exists) {
           return;
         }
 
-        if (getResponse.status !== 404) {
-          throw new Error(`Qdrant collection 检查失败（${getResponse.status}）`);
-        }
-
-        const createResponse = await fetch(`${baseUrl}/collections/${collection}`, {
-          method: "PUT",
-          headers: createHeaders(settings.qdrantApiKey),
-          body: JSON.stringify({
-            vectors: {
-              size: settings.embeddingDimensions,
-              distance: "Cosine"
-            }
-          })
+        await client.createCollection(collection, {
+          vectors: {
+            size: settings.embeddingDimensions,
+            distance: "Cosine"
+          }
         });
-
-        if (!createResponse.ok && createResponse.status !== 409) {
-          throw new Error(`Qdrant collection 创建失败（${createResponse.status}）`);
-        }
       })();
     }
 
@@ -96,101 +87,72 @@ export function createQdrantVectorStore(): VectorStorePort {
 
       await ensureCollection();
 
-      const response = await fetch(`${baseUrl}/collections/${collection}/points?wait=true`, {
-        method: "PUT",
-        headers: createHeaders(settings.qdrantApiKey),
-        body: JSON.stringify({
-          points: chunks.map((chunk) => ({
-            id: chunk.id,
-            vector: chunk.vector,
-            payload: {
-              workspaceId: chunk.workspaceId,
-              sourceId: chunk.sourceId,
-              title: chunk.title,
-              heading: chunk.heading,
-              content: chunk.content,
-              sparseText: chunk.sparseText,
-              metadata: chunk.metadata ?? {}
-            }
-          }))
-        })
+      await client.upsert(collection, {
+        wait: true,
+        points: chunks.map((chunk) => ({
+          id: chunk.id,
+          vector: chunk.vector,
+          payload: {
+            workspaceId: chunk.workspaceId,
+            sourceId: chunk.sourceId,
+            title: chunk.title,
+            heading: chunk.heading,
+            content: chunk.content,
+            sparseText: chunk.sparseText,
+            metadata: chunk.metadata ?? {}
+          }
+        }))
       });
-
-      if (!response.ok) {
-        throw new Error(`Qdrant 写入失败（${response.status}）`);
-      }
     },
 
     async deleteSource(sourceId) {
       await ensureCollection();
 
-      const response = await fetch(`${baseUrl}/collections/${collection}/points/delete?wait=true`, {
-        method: "POST",
-        headers: createHeaders(settings.qdrantApiKey),
-        body: JSON.stringify({
-          filter: {
-            must: [
-              {
-                key: "sourceId",
-                match: {
-                  value: sourceId
-                }
+      await client.delete(collection, {
+        wait: true,
+        filter: {
+          must: [
+            {
+              key: "sourceId",
+              match: {
+                value: sourceId
               }
-            ]
-          }
-        })
+            }
+          ]
+        }
       });
-
-      if (!response.ok) {
-        throw new Error(`Qdrant 删除 source 向量失败（${response.status}）`);
-      }
     },
 
     async hybridSearch(input: VectorSearchInput): Promise<VectorSearchMatch[]> {
       await ensureCollection();
 
-      const response = await fetch(`${baseUrl}/collections/${collection}/points/search`, {
-        method: "POST",
-        headers: createHeaders(settings.qdrantApiKey),
-        body: JSON.stringify({
-          vector: input.queryVector,
-          limit: input.limit,
-          with_payload: true,
-          filter: {
-            must: [
-              {
-                key: "workspaceId",
-                match: {
-                  value: input.workspaceId
-                }
+      const result = await client.search(collection, {
+        vector: input.queryVector,
+        limit: input.limit,
+        with_payload: true,
+        filter: {
+          must: [
+            {
+              key: "workspaceId",
+              match: {
+                value: input.workspaceId
               }
-            ]
-          }
-        })
+            }
+          ]
+        }
       });
 
-      if (!response.ok) {
-        throw new Error(`Qdrant 检索失败（${response.status}）`);
-      }
-
-      const payload = await response.json().catch(() => null) as {
-        result?: Array<{
-          id: string;
-          score: number;
-          payload?: Partial<KnowledgeChunkCandidate>;
-        }>;
-      } | null;
-
-      return (payload?.result?.map((item) => {
+      return result.map((item) => {
+        const payload = isQdrantPayload(item.payload) ? item.payload : {};
         const candidate: VectorSearchMatch = {
           id: String(item.id),
-          sourceId: String(item.payload?.sourceId ?? ""),
+          sourceId: String(payload.sourceId ?? ""),
           workspaceId: input.workspaceId,
-          title: String(item.payload?.title ?? "未命名资料"),
-          heading: typeof item.payload?.heading === "string" ? item.payload.heading : undefined,
-          content: String(item.payload?.content ?? ""),
-          sparseText: String(item.payload?.sparseText ?? ""),
-          metadata: typeof item.payload?.metadata === "object" && item.payload.metadata ? item.payload.metadata : {},
+          title: String(payload.title ?? "未命名资料"),
+          heading: typeof payload.heading === "string" ? payload.heading : undefined,
+          content: String(payload.content ?? ""),
+          sparseText: String(payload.sparseText ?? ""),
+          metadata: typeof payload.metadata === "object" && payload.metadata ? payload.metadata : {},
           vectorScore: item.score,
           score: item.score
         };
@@ -200,7 +162,7 @@ export function createQdrantVectorStore(): VectorStorePort {
           ...candidate,
           score: candidate.vectorScore * 0.8 + sparseScore * 0.2
         };
-      }) ?? []).sort((left, right) => (right.score ?? 0) - (left.score ?? 0));
+      }).sort((left, right) => (right.score ?? 0) - (left.score ?? 0));
     }
   };
 }
