@@ -1,5 +1,7 @@
 import type { ClaimedIndexJob, IndexQueuePort, WorkflowPort } from "@/lib/ai/knowledge/ports";
 import { getPrismaClient } from "@/lib/database/prisma";
+import { embedPendingChunks } from "@/lib/ai/knowledge/embedding-workflow";
+import { indexBusinessEntity, rebuildBusinessSource } from "@/lib/ai/knowledge/source-builders";
 
 type WorkflowHandlers = {
   indexEntity?: (job: ClaimedIndexJob) => Promise<void>;
@@ -16,19 +18,25 @@ export function createMastraKnowledgeWorkflow(queue: IndexQueuePort, handlers: W
   async function runIndexJob(job: ClaimedIndexJob) {
     switch (job.jobType) {
       case "index_entity":
-        await handlers.indexEntity?.(job);
+        await (handlers.indexEntity ?? ((nextJob) => indexBusinessEntity(nextJob, queue)))(job);
         break;
       case "sync_feishu":
-        await handlers.syncFeishu?.(job);
+        if (!handlers.syncFeishu) {
+          throw new Error("飞书同步 workflow 尚未接入处理器");
+        }
+        await handlers.syncFeishu(job);
         break;
       case "embed_chunks":
-        await handlers.embedChunks?.(job);
+        await (handlers.embedChunks ?? embedPendingChunks)(job);
         break;
       case "rebuild_source":
-        await handlers.rebuildSource?.(job);
+        await (handlers.rebuildSource ?? ((nextJob) => rebuildBusinessSource(nextJob, queue)))(job);
         break;
       case "cleanup_source":
-        await handlers.cleanupSource?.(job);
+        if (!handlers.cleanupSource) {
+          throw new Error("索引清理 workflow 尚未接入处理器");
+        }
+        await handlers.cleanupSource(job);
         break;
       default:
         throw new Error(`未知 AI 索引任务类型：${job.jobType}`);
@@ -37,8 +45,8 @@ export function createMastraKnowledgeWorkflow(queue: IndexQueuePort, handlers: W
 
   return {
     async runIndexJob(job) {
-      // 目前没有绑定具体 source builder 前，workflow 只负责把任务路由到可插拔 handler；
-      // 如果 handler 还没实现，任务会被视为成功的 no-op，避免 V1 骨架部署后反复失败刷库。
+      // workflow 只负责编排和路由；未接入的步骤必须显式失败进入队列重试/封存，
+      // 不能假装成功，否则后台索引会出现“任务成功但 chunk 仍未 embedding”的隐性数据缺口。
       await runIndexJob(job);
     },
 
