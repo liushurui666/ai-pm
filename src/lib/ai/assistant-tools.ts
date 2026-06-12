@@ -4,6 +4,13 @@ import {
   executeAssistantInternalAction,
   type AssistantInternalActionRuntime
 } from "@/lib/ai/assistant-internal-actions";
+import {
+  createDashScopeEmbedding,
+  createFallbackReranker,
+  createKnowledgeRetriever,
+  createNoopTraceEval,
+  createQdrantVectorStore
+} from "@/lib/ai/knowledge";
 import type { BugReport, DashboardData, DashboardMember, Requirement, RequirementVersion, Risk, Task } from "@/types/dashboard";
 
 const today = () => new Date();
@@ -62,6 +69,20 @@ function sanitizeAssistantFactText(value: unknown) {
     .replace(/\/[A-Za-z0-9_./:{}?=&%-]+/g, "相关业务能力")
     .replace(/\b[A-Za-z][A-Za-z0-9_-]*\?[A-Za-z0-9_=&%-]+/g, "相关业务查询")
     .replace(/相关业务能力\s*接口/g, "相关业务能力");
+}
+
+function sanitizeUnknownError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+
+  if (!message.trim()) {
+    return "知识索引暂不可用，需要稍后复核。";
+  }
+
+  if (/qdrant|embedding|api[_-]?key|dashscope|fetch|network|timeout|http|https|\/collections|\/embeddings/i.test(message)) {
+    return "知识索引暂不可用，需要稍后复核。";
+  }
+
+  return sanitizeAssistantFactText(message);
 }
 
 function getMessageText(message: UIMessage) {
@@ -294,6 +315,62 @@ function compactProject(project: DashboardData["projects"][number]) {
   };
 }
 
+function createKnowledgeSearchTool(data: DashboardData) {
+  return {
+    description: [
+      "检索当前工作区已自动索引的版本、需求、Bug、任务和飞书文档片段。",
+      "当用户询问历史背景、文档内容、跨对象关联、上下文证据、模糊问题、之前记录里怎么说，或当前结构化列表不足以回答时使用。",
+      "该能力只返回候选知识片段；最终结论必须结合片段内容和其他业务 tools 自主判断。"
+    ].join("\n"),
+    inputSchema: z.object({
+      query: z.string().min(2).max(300).describe("用于检索知识索引的自然语言问题或关键词"),
+      limit: z.number().int().min(1).max(10).default(6).describe("返回知识片段数量上限")
+    }),
+    execute: async ({ query, limit }: { query: string; limit: number }) => {
+      const workspaceId = data.meta?.currentWorkspace?.id;
+
+      if (!workspaceId) {
+        return {
+          知识索引状态: "当前工作区未识别，无法检索知识索引。",
+          片段: []
+        };
+      }
+
+      try {
+        const retriever = createKnowledgeRetriever({
+          embedding: createDashScopeEmbedding(),
+          vectorStore: createQdrantVectorStore(),
+          reranker: createFallbackReranker(),
+          traceEval: createNoopTraceEval()
+        });
+        const matches = await retriever.search({
+          workspaceId,
+          query,
+          limit: clampLimit(limit)
+        });
+
+        return {
+          知识索引状态: matches.length ? "已返回匹配片段" : "当前知识索引没有匹配片段",
+          片段: matches.map((match, index) => ({
+            序号: index + 1,
+            标题: sanitizeAssistantFactText(match.title),
+            小节: sanitizeAssistantFactText(match.heading),
+            内容: sanitizeAssistantFactText(match.content),
+            相关度: typeof match.score === "number" ? Number(match.score.toFixed(4)) : undefined,
+            来源类型: sanitizeAssistantFactText(match.metadata?.sourceType ?? match.metadata?.entityType),
+            元数据: sanitizeAssistantFactText(JSON.stringify(match.metadata ?? {}))
+          }))
+        };
+      } catch (error) {
+        return {
+          知识索引状态: sanitizeUnknownError(error),
+          片段: []
+        };
+      }
+    }
+  };
+}
+
 // 这些工具是 ChatBox 读取对话事实和项目事实的唯一入口；工具只返回结构化数据，不直接拼最终回复，确保判断由模型基于 tools 自主完成。
 export function createAssistantTools(
   data: DashboardData,
@@ -308,6 +385,7 @@ export function createAssistantTools(
       inputSchema: z.object({}),
       execute: () => createConversationContext(messages)
     },
+    knowledge: createKnowledgeSearchTool(data),
     account: {
       description: "读取当前登录用户、工作区成员、角色和身份匹配依据；当用户问“我是谁”“当前账号”“我的权限/身份”时必须使用。",
       inputSchema: z.object({}),
