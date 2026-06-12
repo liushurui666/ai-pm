@@ -15,6 +15,7 @@
     "deploy:remote": "bash scripts/deploy.sh",
     "deploy:ops": "bash scripts/deploy.ops.sh",
     "ai-index:worker": "tsx scripts/ai-index-worker.ts",
+    "ai-index:eval": "tsx scripts/ai-index-eval.ts",
     "bug-fix:worker": "tsx scripts/bug-fix-worker.ts"
   },
   "dependencies": {

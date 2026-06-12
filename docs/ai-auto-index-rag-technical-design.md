@@ -658,6 +658,14 @@ V1 必须做基础 Eval 和 Trace，不等到后期再补。第一版先做轻�
 
 Langfuse 或等价 trace 平台也纳入 V1 评估范围；如果部署条件暂时不满足，至少保留统一 trace 结构，后续无侵入接入。
 
+当前代码已提供第一版轻量检索评测：
+
+- 复用模块：`src/lib/ai/knowledge/eval.ts`
+- 命令入口：`pnpm ai-index:eval`
+- 必要环境变量：`AI_INDEX_EVAL_WORKSPACE_ID`
+- 默认从当前工作区 `ready` source 自动抽样，把 source 标题作为 query，检查正确 source 是否被召回到 TopK。
+- 输出 `recallAtK`、`mrr`、每条 case 的命中排名和返回 sourceIds。
+
 Trace 记录：
 
 - trace 每次 RAG 调用。
