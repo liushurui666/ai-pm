@@ -26,7 +26,7 @@ AI PM 当前的 AI 助手已经能读取工作区内的结构化项目数据，�
 
 - 建立统一 AI 索引源模型，兼容 version、requirement、bug、task、feishu_doc 等来源。
 - 支持关键词检索 Sparse Retrieval 和语义检索 Vector Retrieval 的组合。
-- 预留 Reranker、Eval、外部向量库、独立 embedding 服务的升级路径。
+- V1 即完成 Embedding、Qdrant、Hybrid Retrieval 和 Reranker 的完整检索闭环，预留 Eval、外部 AI 基座化和独立 embedding 服务的升级路径。
 - 继续使用当前 AI SDK ChatBox 主链路，不重写对话层。
 - 保持 workspace 级权限隔离，未来支持 project/version 范围过滤。
 
@@ -456,7 +456,7 @@ knowledge
 4. Reranker 重排。
 5. 返回 TopK。
 
-V1 必须实现 Hybrid Retrieval：Sparse Retrieval 负责精确词召回，Qdrant Vector Retrieval 负责语义召回。Reranker 可以后置，但检索编排接口从第一版开始就按混合检索设计，避免后续再改 ChatBox tool 协议。
+V1 必须实现 Hybrid Retrieval + Reranker：Sparse Retrieval 负责精确词召回，Qdrant Vector Retrieval 负责语义召回，Reranker 负责把候选片段精排成最终 TopK。检索编排接口从第一版开始就按“召回 + 精排 + 引用”设计，避免后续再改 ChatBox tool 协议。
 
 ### 10.3 引用展示
 
@@ -499,6 +499,7 @@ src/lib/ai/knowledge/
 - embedding.ts
 - qdrant-index.ts
 - sparse-retrieval.ts
+- reranker.ts
 - rag-orchestrator.ts
 - citations.ts
 ```
@@ -538,18 +539,26 @@ src/lib/ai/knowledge/embedding.ts
 
 ### 11.5 Reranker
 
-第一版预留接口：
+V1 必须接入 Reranker。原因是 Qdrant 和 Sparse Retrieval 负责“尽可能多地找候选”，但候选片段里会混入字面相关、语义相近但不能直接回答问题的内容。Reranker 负责把候选片段重新排序，降低无关引用进入模型上下文的概率。
+
+第一版接口：
 
 ```txt
 rerank(query, candidates): rankedCandidates
 ```
 
-第二版接入模型：
+V1 模型可选：
 
 - DashScope / 百炼 rerank 模型。
 - Jina Reranker。
 - BGE Reranker。
 - Cohere Rerank。
+
+推荐策略：
+
+- V1 先把 Sparse + Qdrant 合并后的前 30-50 条候选交给 Reranker。
+- Reranker 输出前 5-8 条给 ChatBox knowledge tool。
+- 如果 Reranker 服务临时失败，可以降级为 hybrid score 排序，但 source 状态和 trace 里必须记录降级原因。
 
 ### 11.6 Eval 和 Trace
 
@@ -644,9 +653,9 @@ ChatBox 不需要单独“知识库模式”，但可以识别用户问题自动
 
 ## 14. 分期计划
 
-### 14.1 V1：自动索引 + Qdrant 语义检索闭环
+### 14.1 V1：自动索引 + Qdrant + Reranker 闭环
 
-目标：业务对象自动进入 AI 可检索范围，并且第一版就具备语义检索能力。
+目标：业务对象自动进入 AI 可检索范围，并且第一版就具备语义召回和候选精排能力。
 
 范围：
 
@@ -658,13 +667,13 @@ ChatBox 不需要单独“知识库模式”，但可以识别用户问题自动
 - Qdrant 向量索引。
 - Sparse Retrieval 关键词检索。
 - Hybrid Retrieval 合并关键词召回和 Qdrant 语义召回。
+- Reranker 精排候选片段。
 - ChatBox 新增 `knowledge` tool。
 - 回答展示来源。
 - 业务详情展示轻量同步状态。
 
 不做：
 
-- Reranker。
 - 飞书 block 精准定位。
 - 完整 Eval 平台。
 
@@ -694,13 +703,12 @@ ChatBox 不需要单独“知识库模式”，但可以识别用户问题自动
 - contentHash embedding 缓存增强。
 - 索引重建脚本。
 
-### 14.4 V4：Rerank 与 Eval
+### 14.4 V4：Eval 与可观测性
 
 目标：提升回答准确率并建立质量闭环。
 
 范围：
 
-- Reranker 接入。
 - Langfuse trace。
 - 固定评测集。
 - 引用正确率评估。
@@ -830,7 +838,7 @@ knowledge: tool({
 
 - Prompt 要求没有依据就说明未找到。
 - 回答必须附来源。
-- V4 引入 Eval 和 Reranker。
+- V4 引入 Eval，对 Reranker 排序效果和引用正确率做持续评测。
 
 ### 18.4 保存接口变慢
 
@@ -857,10 +865,10 @@ knowledge: tool({
 推荐按以下路线落地：
 
 ```txt
-V1：业务对象自动索引 + Embedding + Qdrant + Hybrid Retrieval + ChatBox knowledge tool + 来源引用
+V1：业务对象自动索引 + Embedding + Qdrant + Hybrid Retrieval + Reranker + ChatBox knowledge tool + 来源引用
 V2：飞书链接自动同步
 V3：检索质量增强 + 索引重建 + 性能调优
-V4：Reranker + Langfuse Eval
+V4：Langfuse Eval + 检索质量评测
 ```
 
-这样第一版就具备真正的 RAG 语义检索能力，同时仍然不新增独立知识库管理页。用户继续使用版本、需求、Bug、任务等现有业务入口，AI PM 在后台自动沉淀 AI 索引，ChatBox 自然获得“查项目知识”的能力。
+这样第一版就具备真正的 RAG 语义检索和精排能力，同时仍然不新增独立知识库管理页。用户继续使用版本、需求、Bug、任务等现有业务入口，AI PM 在后台自动沉淀 AI 索引，ChatBox 自然获得“查项目知识”的能力。
