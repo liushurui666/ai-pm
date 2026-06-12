@@ -14,20 +14,87 @@ function assertConfigured(url: string) {
   }
 }
 
+function tokenize(text?: string) {
+  return Array.from(new Set(
+    (text ?? "")
+      .toLowerCase()
+      .split(/[\s,，。；;:：、/\\()[\]{}"'`~!！?？<>《》|+-]+/)
+      .map((item) => item.trim())
+      .filter((item) => item.length >= 2)
+  ));
+}
+
+function calculateSparseScore(candidate: KnowledgeChunkCandidate, sparseQuery?: string) {
+  const tokens = tokenize(sparseQuery);
+
+  if (!tokens.length) {
+    return 0;
+  }
+
+  const haystack = [
+    candidate.title,
+    candidate.heading,
+    candidate.sparseText,
+    candidate.content
+  ].filter(Boolean).join("\n").toLowerCase();
+
+  return tokens.reduce((score, token) => score + (haystack.includes(token) ? 1 : 0), 0) / tokens.length;
+}
+
 // Qdrant adapter 先使用稳定 HTTP API，避免 SDK 安装不稳定时阻塞 V1 骨架。
 // 外部仍然只依赖 VectorStorePort；后续切换为官方 JS client 时，不影响调用方。
 export function createQdrantVectorStore(): VectorStorePort {
   const settings = getKnowledgeSettings();
   const baseUrl = settings.qdrantUrl.replace(/\/+$/, "");
   const collection = settings.qdrantCollection;
+  let collectionReady: Promise<void> | undefined;
+
+  async function ensureCollection() {
+    assertConfigured(baseUrl);
+
+    if (!collectionReady) {
+      collectionReady = (async () => {
+        const getResponse = await fetch(`${baseUrl}/collections/${collection}`, {
+          method: "GET",
+          headers: createHeaders(settings.qdrantApiKey),
+          cache: "no-store"
+        });
+
+        if (getResponse.ok) {
+          return;
+        }
+
+        if (getResponse.status !== 404) {
+          throw new Error(`Qdrant collection 检查失败（${getResponse.status}）`);
+        }
+
+        const createResponse = await fetch(`${baseUrl}/collections/${collection}`, {
+          method: "PUT",
+          headers: createHeaders(settings.qdrantApiKey),
+          body: JSON.stringify({
+            vectors: {
+              size: settings.embeddingDimensions,
+              distance: "Cosine"
+            }
+          })
+        });
+
+        if (!createResponse.ok && createResponse.status !== 409) {
+          throw new Error(`Qdrant collection 创建失败（${createResponse.status}）`);
+        }
+      })();
+    }
+
+    await collectionReady;
+  }
 
   return {
     async upsertChunks(chunks) {
-      assertConfigured(baseUrl);
-
       if (chunks.length === 0) {
         return;
       }
+
+      await ensureCollection();
 
       const response = await fetch(`${baseUrl}/collections/${collection}/points?wait=true`, {
         method: "PUT",
@@ -55,7 +122,7 @@ export function createQdrantVectorStore(): VectorStorePort {
     },
 
     async deleteSource(sourceId) {
-      assertConfigured(baseUrl);
+      await ensureCollection();
 
       const response = await fetch(`${baseUrl}/collections/${collection}/points/delete?wait=true`, {
         method: "POST",
@@ -80,7 +147,7 @@ export function createQdrantVectorStore(): VectorStorePort {
     },
 
     async hybridSearch(input: VectorSearchInput): Promise<VectorSearchMatch[]> {
-      assertConfigured(baseUrl);
+      await ensureCollection();
 
       const response = await fetch(`${baseUrl}/collections/${collection}/points/search`, {
         method: "POST",
@@ -114,18 +181,26 @@ export function createQdrantVectorStore(): VectorStorePort {
         }>;
       } | null;
 
-      return payload?.result?.map((item) => ({
-        id: String(item.id),
-        sourceId: String(item.payload?.sourceId ?? ""),
-        workspaceId: input.workspaceId,
-        title: String(item.payload?.title ?? "未命名资料"),
-        heading: typeof item.payload?.heading === "string" ? item.payload.heading : undefined,
-        content: String(item.payload?.content ?? ""),
-        sparseText: String(item.payload?.sparseText ?? ""),
-        metadata: typeof item.payload?.metadata === "object" && item.payload.metadata ? item.payload.metadata : {},
-        vectorScore: item.score,
-        score: item.score
-      })) ?? [];
+      return (payload?.result?.map((item) => {
+        const candidate: VectorSearchMatch = {
+          id: String(item.id),
+          sourceId: String(item.payload?.sourceId ?? ""),
+          workspaceId: input.workspaceId,
+          title: String(item.payload?.title ?? "未命名资料"),
+          heading: typeof item.payload?.heading === "string" ? item.payload.heading : undefined,
+          content: String(item.payload?.content ?? ""),
+          sparseText: String(item.payload?.sparseText ?? ""),
+          metadata: typeof item.payload?.metadata === "object" && item.payload.metadata ? item.payload.metadata : {},
+          vectorScore: item.score,
+          score: item.score
+        };
+        const sparseScore = calculateSparseScore(candidate, input.sparseQuery);
+
+        return {
+          ...candidate,
+          score: candidate.vectorScore * 0.8 + sparseScore * 0.2
+        };
+      }) ?? []).sort((left, right) => (right.score ?? 0) - (left.score ?? 0));
     }
   };
 }
