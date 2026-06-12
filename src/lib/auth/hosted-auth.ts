@@ -91,6 +91,54 @@ function createHostedAuthForRequest(request: Request) {
   });
 }
 
+function createAuthRouteLogContext(request: Request) {
+  const url = new URL(request.url);
+
+  return {
+    hasCookie: Boolean(request.headers.get("cookie")),
+    hasRedirectURI: url.searchParams.has("redirect_uri"),
+    pathname: url.pathname,
+    provider: url.searchParams.get("provider") ?? undefined
+  };
+}
+
+function logHostedAuthResult(method: string, request: Request, response: Response, startedAt: number) {
+  const durationMs = Date.now() - startedAt;
+  const location = response.headers.get("location");
+
+  // Hosted Auth 是黑盒 SDK 的入口，登录首跳、OAuth callback 和 context 读取都经过这里。
+  // 线上只记录路径、状态、耗时和是否带关键参数，不记录 code/token/cookie，方便排查“第一次登录失败、第二次成功”的时序问题。
+  console.info("[auth-route] handled", {
+    ...createAuthRouteLogContext(request),
+    durationMs,
+    hasLocation: Boolean(location),
+    method,
+    status: response.status
+  });
+}
+
+async function handleHostedAuthRequest(method: "GET" | "POST", request: Request) {
+  const startedAt = Date.now();
+
+  try {
+    const handlers = createHostedAuthForRequest(request);
+    const response = method === "GET" ? await handlers.GET(request) : await handlers.POST(request);
+
+    logHostedAuthResult(method, request, response, startedAt);
+
+    return response;
+  } catch (error) {
+    console.error("[auth-route] failed", {
+      ...createAuthRouteLogContext(request),
+      durationMs: Date.now() - startedAt,
+      error,
+      method
+    });
+
+    throw error;
+  }
+}
+
 /**
  * AI PM 内嵌统一认证路由。
  *
@@ -101,9 +149,9 @@ function createHostedAuthForRequest(request: Request) {
  * Drizzle schema 写入独立 PostgreSQL 认证库。
  */
 export async function GET(request: Request) {
-  return createHostedAuthForRequest(request).GET(request);
+  return handleHostedAuthRequest("GET", request);
 }
 
 export async function POST(request: Request) {
-  return createHostedAuthForRequest(request).POST(request);
+  return handleHostedAuthRequest("POST", request);
 }
