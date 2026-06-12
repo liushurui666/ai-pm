@@ -1,7 +1,7 @@
 import { getPrismaClient } from "@/lib/database/prisma";
 import { createDashScopeEmbedding } from "@/lib/ai/knowledge/dashscope-embedding";
 import { createDashScopeReranker } from "@/lib/ai/knowledge/dashscope-reranker";
-import { createNoopTraceEval } from "@/lib/ai/knowledge/langfuse-trace";
+import { createPrismaTraceEval } from "@/lib/ai/knowledge/langfuse-trace";
 import { createQdrantVectorStore } from "@/lib/ai/knowledge/qdrant-vector-store";
 import { createKnowledgeRetriever } from "@/lib/ai/knowledge/retriever";
 
@@ -71,7 +71,7 @@ export async function runKnowledgeRetrievalEval(input: {
     embedding: createDashScopeEmbedding(),
     vectorStore: createQdrantVectorStore(),
     reranker: createDashScopeReranker(),
-    traceEval: createNoopTraceEval()
+    traceEval: createPrismaTraceEval()
   });
   const results: KnowledgeEvalResult["cases"] = [];
   let hits = 0;

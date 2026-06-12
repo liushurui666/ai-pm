@@ -677,6 +677,7 @@ Trace 记录：
 - trace 每次 RAG 调用。
 - 记录 prompt、retrieval、rerank、answer。
 - 记录引用正确率、检索召回率、Reranker 排序效果和延迟成本。
+- 当前 V1 已落 MySQL `ai_index_traces`，由 `TraceEvalPort` 写入结构化 input/output/scores；Langfuse 后续通过同一 Port 替换或双写。
 
 ## 12. 权限与安全
 

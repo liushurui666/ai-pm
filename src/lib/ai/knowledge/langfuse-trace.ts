@@ -1,12 +1,34 @@
 import type { TraceEvalEvent, TraceEvalPort } from "@/lib/ai/knowledge/ports";
+import { toJsonValue } from "@/lib/database/json";
+import { getPrismaClient } from "@/lib/database/prisma";
 
-// Trace/Eval 的第一批实现先落统一入口；Langfuse SDK 依赖稳定后只需要替换这里的内部实现。
-// 当前 no-op 不会阻断主链路，避免观测平台临时不可用时影响用户提问和后台索引。
-export function createNoopTraceEval(): TraceEvalPort {
+// V1 先把 RAG 检索 trace 落到 MySQL，保证没有 Langfuse 时也能评估召回量、返回量和后续评分。
+// 记录失败只写服务端日志，不阻断 ChatBox 回答或后台索引；后续接 Langfuse 时继续复用 TraceEvalPort。
+export function createPrismaTraceEval(): TraceEvalPort {
+  const prisma = getPrismaClient();
+
   return {
     async record(event: TraceEvalEvent) {
-      void event;
-      return;
+      try {
+        await prisma.aiIndexTrace.create({
+          data: {
+            workspaceId: event.workspaceId,
+            traceId: event.traceId,
+            name: event.name,
+            input: toJsonValue(event.input ?? {}),
+            output: toJsonValue(event.output ?? {}),
+            scores: toJsonValue(event.scores ?? {})
+          }
+        });
+      } catch (error) {
+        console.error("[knowledge-trace] record failed", {
+          error,
+          workspaceId: event.workspaceId,
+          name: event.name
+        });
+      }
     }
   };
 }
+
+export const createNoopTraceEval = createPrismaTraceEval;

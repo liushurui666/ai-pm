@@ -8,7 +8,7 @@ import {
   createDashScopeEmbedding,
   createDashScopeReranker,
   createKnowledgeRetriever,
-  createNoopTraceEval,
+  createPrismaTraceEval,
   createQdrantVectorStore
 } from "@/lib/ai/knowledge";
 import type { BugReport, DashboardData, DashboardMember, Requirement, RequirementVersion, Risk, Task } from "@/types/dashboard";
@@ -341,7 +341,7 @@ function createKnowledgeSearchTool(data: DashboardData) {
           embedding: createDashScopeEmbedding(),
           vectorStore: createQdrantVectorStore(),
           reranker: createDashScopeReranker(),
-          traceEval: createNoopTraceEval()
+          traceEval: createPrismaTraceEval()
         });
         const matches = await retriever.search({
           workspaceId,

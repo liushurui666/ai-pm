@@ -28,6 +28,7 @@ model Workspace {
   aiIndexSources      AiIndexSource[]
   aiIndexChunks       AiIndexChunk[]
   aiIndexJobs         AiIndexJob[]
+  aiIndexTraces       AiIndexTrace[]
 
   @@map("workspaces")
 }
@@ -484,6 +485,24 @@ model AiIndexJob {
   @@index([status, priority, createdAt])
   @@index([sourceId])
   @@map("ai_index_jobs")
+}
+
+model AiIndexTrace {
+  id          String   @id @default(cuid())
+  workspaceId String
+  traceId     String?  @db.VarChar(191)
+  name        String
+  input       Json     @default("{}")
+  output      Json     @default("{}")
+  scores      Json     @default("{}")
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, name])
+  @@index([traceId])
+  @@map("ai_index_traces")
 }
 
 enum GitProvider {
