@@ -3,6 +3,7 @@ const DEFAULT_EMBEDDING_DIMENSIONS = 1024;
 const DEFAULT_RERANK_MODEL = "qwen3-rerank";
 const DEFAULT_RERANK_URL = "https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank";
 const DEFAULT_QDRANT_COLLECTION = "ai_pm_knowledge_chunks";
+const DEFAULT_INDEX_QUEUE_NAME = "ai-pm-index";
 const DEFAULT_INDEX_JOB_LOCK_MS = 10 * 60 * 1000;
 
 function readNumberEnv(name: string, fallback: number) {
@@ -23,6 +24,7 @@ export function getKnowledgeSettings() {
     qdrantApiKey: process.env.QDRANT_API_KEY?.trim() || "",
     qdrantCollection: process.env.QDRANT_COLLECTION?.trim() || DEFAULT_QDRANT_COLLECTION,
     redisUrl: process.env.REDIS_URL?.trim() || "",
+    indexQueueName: process.env.AI_INDEX_QUEUE_NAME?.trim() || DEFAULT_INDEX_QUEUE_NAME,
     indexJobLockMs: readNumberEnv("AI_INDEX_JOB_LOCK_MS", DEFAULT_INDEX_JOB_LOCK_MS),
     indexWorkerPollMs: readNumberEnv("AI_INDEX_WORKER_POLL_MS", 5_000)
   };

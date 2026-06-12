@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDashboardData } from "@/data/local-dashboard";
 import { canPerformAction, getPermissionDeniedReason } from "@/lib/access/permissions";
-import { createMastraKnowledgeWorkflow, createMySqlIndexQueue } from "@/lib/ai/knowledge";
+import { createIndexQueue, createMastraKnowledgeWorkflow } from "@/lib/ai/knowledge";
 import { getSession } from "@/lib/auth/session";
 import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
   }
 
   // 管理员重建只做批量入队，不同步重建 chunk/embedding/Qdrant；普通业务页面也不会展示同步状态。
-  const queue = createMySqlIndexQueue();
+  const queue = createIndexQueue();
   const workflow = createMastraKnowledgeWorkflow(queue);
   const result = await workflow.runWorkspaceRebuild({
     workspaceId,

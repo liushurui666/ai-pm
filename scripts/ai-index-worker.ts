@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
-import { createMastraKnowledgeWorkflow, createMySqlIndexQueue } from "@/lib/ai/knowledge";
+import {
+  createBullMqIndexQueue,
+  createMastraKnowledgeWorkflow,
+  createMySqlIndexQueue,
+  isBullMqIndexQueueEnabled,
+  runBullMqIndexWorker
+} from "@/lib/ai/knowledge";
 import { getKnowledgeSettings } from "@/lib/ai/knowledge/settings";
 
 const workerId = `ai-index-${process.pid}-${randomUUID().slice(0, 8)}`;
@@ -30,6 +36,17 @@ async function runOnce() {
 async function main() {
   const settings = getKnowledgeSettings();
   console.log(`[ai-index-worker] started: ${workerId}`);
+
+  if (isBullMqIndexQueueEnabled()) {
+    const queue = createBullMqIndexQueue();
+    const workflow = createMastraKnowledgeWorkflow(queue);
+
+    await runBullMqIndexWorker({
+      workerId,
+      onJob: (job) => workflow.runIndexJob(job)
+    });
+    return;
+  }
 
   while (true) {
     const handled = await runOnce();

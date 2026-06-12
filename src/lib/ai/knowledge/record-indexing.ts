@@ -1,5 +1,5 @@
 import type { DashboardEntityType, CreateRecordResult } from "@/types/records";
-import { createMySqlIndexQueue } from "@/lib/ai/knowledge/mysql-index-queue";
+import { createIndexQueue } from "@/lib/ai/knowledge/index-queue";
 import type { KnowledgeEntityType } from "@/lib/ai/knowledge/ports";
 import type { Requirement } from "@/types/dashboard";
 
@@ -24,7 +24,7 @@ export async function enqueueRecordIndexJob(result: CreateRecordResult, reason: 
     return;
   }
 
-  const queue = createMySqlIndexQueue();
+  const queue = createIndexQueue();
 
   await queue.enqueue({
     workspaceId,
