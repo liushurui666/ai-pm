@@ -16,5 +16,55 @@ services:
       PORT: ${AI_PM_CONTAINER_PORT:-3003}
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-1}
       RUN_AUTH_MIGRATIONS: ${RUN_AUTH_MIGRATIONS:-0}
+      # Web 进程只负责把业务变更投递到队列；这里强制使用 compose 内部服务名，
+      # 避免运维误把示例 env 里的 localhost 带到容器内导致入队或检索失败。
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
     ports:
       - "${AI_PM_HOST_PORT:-3003}:${AI_PM_CONTAINER_PORT:-3003}"
+    depends_on:
+      - redis
+      - qdrant
+
+  ai-index-worker:
+    # RAG V1 的索引链路必须是独立后台进程：Web 只入队，worker 异步消费 BullMQ，
+    # 执行飞书 doc/wiki 解析、chunk、Embedding、Qdrant 写入和重试补偿。
+    image: ${AI_PM_IMAGE:-ai-pm:latest}
+    container_name: ${AI_PM_WORKER_CONTAINER_NAME:-ai-pm-index-worker}
+    restart: unless-stopped
+    env_file:
+      - ${AI_PM_ENV_FILE:-../../.env}
+    environment:
+      NODE_ENV: production
+      RUN_MIGRATIONS: 0
+      RUN_AUTH_MIGRATIONS: 0
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+    command: ["pnpm", "ai-index:worker"]
+    depends_on:
+      - ai-pm
+      - redis
+      - qdrant
+
+  redis:
+    # BullMQ 的正式队列依赖 Redis；没有 Redis 时代码会退回 MySQL 轮询，
+    # 但 V1 生产部署必须默认带上 Redis，保证去重、延迟重试和并发消费能力。
+    image: ${REDIS_IMAGE:-redis:7-alpine}
+    container_name: ${REDIS_CONTAINER_NAME:-ai-pm-redis}
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+
+  qdrant:
+    # Qdrant 是 V1 的向量索引存储。只暴露给 compose 内部网络，
+    # 避免在单机部署时默认把向量库管理接口公开到公网。
+    image: ${QDRANT_IMAGE:-qdrant/qdrant:latest}
+    container_name: ${QDRANT_CONTAINER_NAME:-ai-pm-qdrant}
+    restart: unless-stopped
+    volumes:
+      - qdrant-data:/qdrant/storage
+
+volumes:
+  redis-data:
+  qdrant-data:

@@ -15,8 +15,13 @@ set -Eeuo pipefail
 : "${AI_PM_ENV_FILE:=/etc/ai-pm/ai-pm.env}"
 : "${AI_PM_IMAGE:=ai-pm:latest}"
 : "${AI_PM_CONTAINER_NAME:=ai-pm}"
+: "${AI_PM_WORKER_CONTAINER_NAME:=ai-pm-index-worker}"
 : "${AI_PM_HOST_PORT:=3003}"
 : "${AI_PM_CONTAINER_PORT:=3003}"
+: "${REDIS_IMAGE:=redis:7-alpine}"
+: "${REDIS_CONTAINER_NAME:=ai-pm-redis}"
+: "${QDRANT_IMAGE:=qdrant/qdrant:latest}"
+: "${QDRANT_CONTAINER_NAME:=ai-pm-qdrant}"
 : "${RUN_MIGRATIONS:=1}"
 : "${RUN_AUTH_MIGRATIONS:=0}"
 : "${COMPOSE_PROJECT_NAME:=ai-pm}"
@@ -124,8 +129,13 @@ deploy_with_compose() {
   export AI_PM_ENV_FILE
   export AI_PM_IMAGE
   export AI_PM_CONTAINER_NAME
+  export AI_PM_WORKER_CONTAINER_NAME
   export AI_PM_HOST_PORT
   export AI_PM_CONTAINER_PORT
+  export REDIS_IMAGE
+  export REDIS_CONTAINER_NAME
+  export QDRANT_IMAGE
+  export QDRANT_CONTAINER_NAME
   export RUN_MIGRATIONS
   export RUN_AUTH_MIGRATIONS
   export COMPOSE_PROJECT_NAME

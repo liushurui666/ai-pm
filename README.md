@@ -157,6 +157,13 @@ AI_MODELS=qwen3.6-plus,qwen3.6-max-preview,qwen3.6-flash,deepseek-v4-pro,deepsee
 
 服务器只需要准备 Docker、Compose 和运行时密钥文件。现在推荐使用 `scripts/deploy.docker.sh`，脚本会自动拉取公开仓库、构建镜像、执行容器启动迁移并等待健康检查。
 
+Docker Compose 会同时启动四类服务：
+
+- `ai-pm`：Next.js Web 服务，只负责业务读写、ChatBox 请求和 AI 索引任务入队。
+- `ai-index-worker`：AI 索引后台进程，异步消费 BullMQ 队列，执行飞书 doc/wiki 读取、chunk、Embedding、Qdrant 写入、删除清理和失败重试。
+- `redis`：BullMQ 队列依赖，用于任务去重、延迟重试和并发消费。
+- `qdrant`：RAG V1 的向量索引库，默认只在 Compose 内部网络访问，不向公网暴露端口。
+
 ```bash
 sudo mkdir -p /etc/ai-pm
 sudo cp scripts/runtime.env.example /etc/ai-pm/ai-pm.env
@@ -197,6 +204,8 @@ curl -fsSL https://raw.githubusercontent.com/liushurui666/ai-pm/main/scripts/dep
 - 运行时 env：`/etc/ai-pm/ai-pm.env`
 - 宿主机端口：`3003`
 - 容器端口：`3003`
+- Redis：`redis:7-alpine`，数据卷 `redis-data`
+- Qdrant：`qdrant/qdrant:latest`，数据卷 `qdrant-data`
 
 换环境时直接覆盖同名变量：
 
@@ -207,6 +216,18 @@ AI_PM_ENV_FILE=/etc/ai-pm/test.env AI_PM_HOST_PORT=3004 AI_PM_CONTAINER_NAME=ai-
 容器启动时会检查 `APP_URL`、`DATABASE_URL`、`AUTH_DATABASE_URL` 和 `BETTER_AUTH_SECRET`，并默认只执行 `pnpm db:migrate` 迁移 AI PM 业务 MySQL。如果业务数据库迁移由外部发布系统统一控制，可设置 `RUN_MIGRATIONS=0`；只有认证平台 schema 也要随本次发布升级时，才设置 `RUN_AUTH_MIGRATIONS=1` 执行 `unified-auth db migrate/doctor`。
 
 Docker 构建阶段不会注入真实 `AUTH_DATABASE_URL`，镜像里只使用占位连接串让 Next 完成认证路由静态收集；真实认证库连接只在容器运行时通过 `AI_PM_ENV_FILE` 注入。
+
+RAG 相关环境变量建议使用 `scripts/runtime.env.example` 中的默认容器内地址：
+
+```txt
+REDIS_URL=redis://redis:6379
+QDRANT_URL=http://qdrant:6333
+QDRANT_COLLECTION=ai_pm_knowledge_chunks
+AI_EMBEDDING_MODEL=text-embedding-v4
+AI_RERANK_MODEL=qwen3-rerank
+```
+
+如果手工把 `REDIS_URL` 或 `QDRANT_URL` 写成 `localhost`，容器内部会指向自己而不是 Redis/Qdrant 服务。Compose 已在 Web 和 worker 服务里用内部服务名兜底覆盖，生产 env 仍建议保持上面的写法。
 
 手动调试 Compose 时仍可直接执行：
 

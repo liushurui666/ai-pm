@@ -407,13 +407,15 @@ pnpm ai-index:worker
 部署方式：
 
 - Docker 内独立 worker 进程。
+- Compose 同时启动 `ai-pm`、`ai-index-worker`、`redis`、`qdrant`，生产默认走 BullMQ + Redis，不依赖 Web 进程同步处理索引。
 - cron/定时任务只做补偿扫描，不作为主处理链路。
 
 队列运行策略：
 
-- 默认读取 `REDIS_URL`，存在时启用 BullMQ + Redis 正式队列。
+- 默认读取 `REDIS_URL=redis://redis:6379`，存在时启用 BullMQ + Redis 正式队列。
 - BullMQ 负责 job 去重、延迟执行、并发消费、指数退避重试、完成/失败保留。
 - 如果没有配置 `REDIS_URL`，worker 降级为 MySQL `ai_index_jobs` 轮询，供本地或临时部署兜底。
+- 默认读取 `QDRANT_URL=http://qdrant:6333` 写入向量索引；Qdrant 在单机 Compose 里只开放内部网络，不默认暴露公网端口。
 
 MySQL 兜底主循环：
 
