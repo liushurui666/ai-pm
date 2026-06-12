@@ -27,7 +27,7 @@ AI PM 当前的 AI 助手已经能读取工作区内的结构化项目数据，�
 - 建立统一 AI 索引源模型，兼容 version、requirement、bug、task、feishu_doc 等来源。
 - V1 建成正式异步队列和 worker，业务写入只入队，不同步执行索引、embedding、飞书解析或 Qdrant 写入。
 - 支持关键词检索 Sparse Retrieval 和语义检索 Vector Retrieval 的组合。
-- V1 即完成 Embedding、Qdrant、Hybrid Retrieval 和 Reranker 的完整检索闭环，预留 Eval、外部 AI 基座化和独立 embedding 服务的升级路径。
+- V1 即完成 Embedding、Qdrant、Hybrid Retrieval、Reranker 和基础 Eval 的完整检索闭环，预留外部 AI 基座化和独立 embedding 服务的升级路径。
 - 继续使用当前 AI SDK ChatBox 主链路，不重写对话层。
 - 保持 workspace 级权限隔离，未来支持 project/version 范围过滤。
 
@@ -137,7 +137,7 @@ ai_index_sources
 - entityType: version | requirement | bug | task | feishu_doc
 - entityId
 - sourceProvider: internal | feishu
-- sourceType: record | feishu_doc | feishu_wiki | feishu_sheet
+- sourceType: record | feishu_doc | feishu_wiki
 - title
 - sourceUrl nullable
 - sourceToken nullable
@@ -317,7 +317,6 @@ Bug 标题：
 ```txt
 https://xxx.feishu.cn/docx/...
 https://xxx.feishu.cn/wiki/...
-https://xxx.feishu.cn/sheets/...
 ```
 
 解析出：
@@ -592,7 +591,7 @@ V1 模型可选：
 
 ### 11.6 Eval 和 Trace
 
-第一版记录基础日志：
+V1 必须做基础 Eval 和 Trace，不等到后期再补。第一版先做轻量评测闭环：
 
 - query
 - 命中的 source/chunk
@@ -600,12 +599,25 @@ V1 模型可选：
 - latency
 - model
 - workspaceId
+- rerank 前后 TopK
+- 是否命中标准答案来源
+- 是否出现无来源回答
 
-第二版接入 Langfuse：
+固定评测集第一版即可建立，先覆盖 20-50 条高频问题：
+
+- 版本范围类问题。
+- Bug 归因类问题。
+- 需求文档引用类问题。
+- 项目风险类问题。
+- 找不到答案的负例问题。
+
+Langfuse 或等价 trace 平台也纳入 V1 评估范围；如果部署条件暂时不满足，至少保留统一 trace 结构，后续无侵入接入。
+
+Trace 记录：
 
 - trace 每次 RAG 调用。
 - 记录 prompt、retrieval、rerank、answer。
-- 建立固定评测集。
+- 记录引用正确率、检索召回率、Reranker 排序效果和延迟成本。
 
 ## 12. 权限与安全
 
@@ -684,6 +696,7 @@ ChatBox 不需要单独“知识库模式”，但可以识别用户问题自动
 - Sparse Retrieval 关键词检索。
 - Hybrid Retrieval 合并关键词召回和 Qdrant 语义召回。
 - Reranker 精排候选片段。
+- 基础 Eval：固定评测集、RAG trace、引用正确率、检索召回率、Reranker 排序效果。
 - ChatBox 新增 `knowledge` tool。
 - 回答展示来源。
 
@@ -691,7 +704,8 @@ ChatBox 不需要单独“知识库模式”，但可以识别用户问题自动
 
 - 普通业务页面展示同步状态。
 - 飞书 block 精准定位。
-- 完整 Eval 平台。
+- 完整 Eval 平台化报表。
+- 飞书 sheets 同步。
 
 ### 14.2 V2：飞书自动同步
 
@@ -700,10 +714,11 @@ ChatBox 不需要单独“知识库模式”，但可以识别用户问题自动
 范围：
 
 - 飞书链接识别。
-- 飞书 doc/wiki/sheet 基础同步。
+- 飞书 docx/wiki 基础同步。
 - 飞书正文清洗。
 - 飞书 source/chunk 入索引。
 - 飞书限流和权限失败进入队列退避重试。
+- 不先支持 sheets；等 docx/wiki 链路稳定后再评估。
 
 ### 14.3 V3：检索质量增强
 
@@ -718,16 +733,17 @@ ChatBox 不需要单独“知识库模式”，但可以识别用户问题自动
 - contentHash embedding 缓存增强。
 - 索引重建脚本。
 
-### 14.4 V4：Eval 与可观测性
+### 14.4 V4：Eval 平台化与可观测性增强
 
-目标：提升回答准确率并建立质量闭环。
+目标：在 V1 基础 Eval 之上，把评测和可观测性平台化，形成持续质量闭环。
 
 范围：
 
-- Langfuse trace。
-- 固定评测集。
-- 引用正确率评估。
-- 检索召回率评估。
+- Langfuse trace 深度分析。
+- 固定评测集扩容和自动回归。
+- 引用正确率趋势评估。
+- 检索召回率趋势评估。
+- Reranker 排序效果趋势评估。
 - 延迟和成本报表。
 
 ## 15. 关键接口草案
@@ -801,6 +817,30 @@ knowledge: tool({
 - 定时任务扫描失败或长时间 pending 的 job。
 - source 内容 hash 未变化时跳过重复索引。
 
+### 16.1 管理员重建索引是什么意思
+
+“重建当前工作区 AI 索引”不是普通用户功能，也不是同步状态展示。它是管理员或运维在后台触发的一次批量重新入队：
+
+```txt
+选择 workspace
+  ↓
+扫描该 workspace 下 version / requirement / bug / task / feishu_doc / feishu_wiki
+  ↓
+为每个 source 创建 rebuild_source 或 embed_chunks job
+  ↓
+worker 异步重新生成 chunk、embedding 和 Qdrant 向量
+```
+
+典型使用场景：
+
+- embedding 模型从旧模型切到百炼 `text-embedding-v4`。
+- chunk 策略调整，需要重新切片。
+- Qdrant collection 参数调整或索引损坏，需要重建向量。
+- Reranker/Eval 发现某个工作区召回质量异常，需要批量刷新索引。
+- 飞书机器人权限修复后，需要重新拉取之前失败的 docx/wiki。
+
+这个入口建议放在管理员或运维观测页，不进入普通版本、需求、Bug、任务详情页。
+
 ## 17. 监控指标
 
 基础指标：
@@ -853,7 +893,7 @@ knowledge: tool({
 
 - Prompt 要求没有依据就说明未找到。
 - 回答必须附来源。
-- V4 引入 Eval，对 Reranker 排序效果和引用正确率做持续评测。
+- V1 起引入基础 Eval，对 Reranker 排序效果和引用正确率做持续评测；V4 再做平台化趋势分析。
 
 ### 18.4 保存接口变慢
 
@@ -869,19 +909,17 @@ knowledge: tool({
 
 1. V1 是否只索引 version/requirement/bug，暂缓 task。
 2. V1 Qdrant 部署方式：Docker compose 内置、独立云服务，还是公司公共向量库。
-3. 飞书文档同步优先支持 docx/wiki，还是同时支持 sheets。
-4. 是否需要手动“重建当前工作区 AI 索引”的管理员入口。
-5. Eval 第一版是否只做日志，还是直接接 Langfuse。
+3. 是否需要手动“重建当前工作区 AI 索引”的管理员入口；该入口仅面向管理员或运维，用于模型、chunk、Qdrant 或权限修复后的批量重新入队。
 
 ## 20. 推荐结论
 
 推荐按以下路线落地：
 
 ```txt
-V1：正式异步队列 + 业务对象自动索引 + Embedding + Qdrant + Hybrid Retrieval + Reranker + ChatBox knowledge tool + 来源引用
-V2：飞书链接自动同步
+V1：正式异步队列 + 业务对象自动索引 + Embedding + Qdrant + Hybrid Retrieval + Reranker + 基础 Eval + ChatBox knowledge tool + 来源引用
+V2：飞书 docx/wiki 链接自动同步
 V3：检索质量增强 + 索引重建 + 性能调优
-V4：Langfuse Eval + 检索质量评测
+V4：Eval 平台化 + Langfuse 深度可观测性
 ```
 
 这样第一版就具备真正的 RAG 语义检索和精排能力，同时仍然不新增独立知识库管理页。用户继续使用版本、需求、Bug、任务等现有业务入口，AI PM 在后台自动沉淀 AI 索引，ChatBox 自然获得“查项目知识”的能力。
