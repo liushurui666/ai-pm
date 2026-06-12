@@ -5,6 +5,7 @@ import { Alert, App, Button, Card, Progress, Space, Tag, Tooltip, Typography } f
 import type { FormInstance } from "antd";
 import { RobotOutlined } from "@ant-design/icons";
 import { useState } from "react";
+import { fetchWithAuthRedirect } from "@/components/project-management-platform/api";
 import type { RequirementAnalyzeResult } from "@/types/records";
 
 const { Text, Paragraph } = Typography;
@@ -47,7 +48,7 @@ export function RequirementAiLinkAnalyzer({ form }: { form: FormInstance<Record<
         return;
       }
 
-      const response = await fetch("/api/requirements/analyze-link", {
+      const response = await fetchWithAuthRedirect("/api/requirements/analyze-link", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -59,12 +60,6 @@ export function RequirementAiLinkAnalyzer({ form }: { form: FormInstance<Record<
         })
       });
       const payload = (await response.json()) as RequirementAnalyzeResult | { error?: string };
-
-      if (response.status === 401) {
-        window.location.assign("/login");
-
-        return;
-      }
 
       if (!response.ok || "error" in payload) {
         throw new Error("error" in payload ? payload.error || "分析飞书需求文档失败" : "分析飞书需求文档失败");

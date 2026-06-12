@@ -2,6 +2,7 @@
 
 import { Alert, Button, Descriptions, Drawer, Form, Input, Select, Space, Typography } from "antd";
 import { useEffect, useMemo, useState } from "react";
+import { fetchWithAuthRedirect } from "@/components/project-management-platform/api";
 import type { BugReport, Project, ProjectRepository } from "@/types/dashboard";
 import "./index.less";
 
@@ -90,18 +91,12 @@ export function BugAiFixDrawer({
         }
 
         // 仓库配置直接决定 Worker clone 和 push 的目标，打开抽屉时实时读取，避免使用过期的前端缓存。
-        const response = await fetch(url.toString(), {
+        const response = await fetchWithAuthRedirect(url.toString(), {
           cache: "no-store",
           credentials: "same-origin",
           signal: controller.signal
         });
         const payload = (await response.json()) as ProjectRepositoriesResponse;
-
-        if (response.status === 401) {
-          window.location.assign("/login");
-
-          return;
-        }
 
         if (!response.ok || payload.error) {
           throw new Error(payload.error || "读取项目仓库失败");

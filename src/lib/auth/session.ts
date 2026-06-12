@@ -4,10 +4,18 @@ import type { AppSession } from "@/types/auth";
 import { authPgPool } from "@/lib/auth/database";
 import { unifiedAuthConfig } from "@/lib/auth/config";
 import { getRequestOriginFromHeaders, resolveTrustedRequestOrigin } from "@/lib/auth/request-origin";
-import { createAiPmAuthServiceClient, createEmptyAuthContext, mapAuthUserToFeishuUser } from "@/lib/auth/unified-auth";
+import { createAiPmAuthServiceClient, mapAuthUserToFeishuUser } from "@/lib/auth/unified-auth";
 
 const supportedAuthProviders = new Set(["feishu", "google", "github", "email"]);
 const defaultAuthOrigin = unifiedAuthConfig.auth?.origin ?? unifiedAuthConfig.app?.origin ?? "http://localhost:3004";
+
+export class AuthServiceUnavailableError extends Error {
+  constructor(cause?: unknown) {
+    super("统一认证服务暂时不可用，请稍后重试。");
+    this.name = "AuthServiceUnavailableError";
+    this.cause = cause;
+  }
+}
 
 function serializeCookieHeader(cookieStore: Awaited<ReturnType<typeof cookies>>) {
   return cookieStore
@@ -19,8 +27,9 @@ function serializeCookieHeader(cookieStore: Awaited<ReturnType<typeof cookies>>)
 /**
  * 从黑盒 Auth Service 获取认证上下文。
  *
- * AI PM 只转发浏览器带来的统一认证 Cookie，不解析、不签发、不刷新用户会话；
- * 如果 Auth Service 不可用，返回空上下文，让页面和接口按未登录处理。
+ * AI PM 只转发浏览器带来的统一认证 Cookie，不解析、不签发、不刷新用户会话。
+ * 如果 Auth Service 查询失败，必须把它视为临时服务故障而不是“未登录”；否则任意一次认证库抖动
+ * 都会让业务 API 返回 401，前端再把用户踢回登录页，造成“输着输着自己掉线”的体验。
  */
 export async function getAuthContext(): Promise<AuthContext> {
   const cookieHeader = serializeCookieHeader(await cookies());
@@ -45,8 +54,9 @@ export async function getAuthContext(): Promise<AuthContext> {
 
   try {
     return await authClient.getAuthContext();
-  } catch {
-    return createEmptyAuthContext();
+  } catch (error) {
+    console.error("[auth] failed to load auth context", error);
+    throw new AuthServiceUnavailableError(error);
   }
 }
 

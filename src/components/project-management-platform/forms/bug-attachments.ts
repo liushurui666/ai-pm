@@ -1,6 +1,7 @@
 import { Upload } from "antd";
 import type { ComponentProps } from "react";
 import type { UploadFile } from "antd/es/upload/interface";
+import { fetchWithAuthRedirect } from "@/components/project-management-platform/api";
 import type { BugAttachment } from "@/types/dashboard";
 
 export type BugAttachmentUploadFile = UploadFile & Partial<BugAttachment> & {
@@ -97,7 +98,7 @@ export async function uploadBugAttachment(options: UploadCustomRequestOptions) {
 
     formData.append("file", file);
 
-    const response = await fetch("/api/bug-attachments", {
+    const response = await fetchWithAuthRedirect("/api/bug-attachments", {
       method: "POST",
       body: formData
     });

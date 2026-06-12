@@ -15,6 +15,7 @@ import type {
   MemberRole,
   MemberStatus
 } from "@/types/dashboard";
+import { fetchWithAuthRedirect } from "@/components/project-management-platform/api";
 import { TableView } from "@/components/project-management-platform/shared/page-shell";
 
 const { Text } = Typography;
@@ -415,7 +416,7 @@ export function MembersView({
 
     try {
       // 管理员入口只提交后台重建任务，不轮询或展示同步状态，避免普通页面感知索引流水线细节。
-      const response = await fetch("/api/ai-index/rebuild", {
+      const response = await fetchWithAuthRedirect("/api/ai-index/rebuild", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"

@@ -55,6 +55,7 @@ import type { CreateRecordResult, DashboardEntityType, DeleteRecordResult, Docum
 import { getAntdThemeConfig, ThemeToggleButton, useThemePreference } from "@/components/theme-mode";
 import {
   fetchDashboardFromApi,
+  fetchWithAuthRedirect,
   isSessionExpiredError,
   redirectToLogin,
   type PeopleResponse
@@ -258,14 +259,8 @@ export function ProjectManagementPlatform({
       setPeopleLoading(true);
 
       try {
-        const response = await fetch("/api/feishu/users");
+        const response = await fetchWithAuthRedirect("/api/feishu/users");
         const payload = (await response.json()) as PeopleResponse;
-
-        if (response.status === 401) {
-          redirectToLogin();
-
-          return;
-        }
 
         if (!response.ok) {
           throw new Error(payload.error || "读取飞书通讯录失败");
@@ -342,7 +337,7 @@ export function ProjectManagementPlatform({
     setWeeklyReportExporting(true);
 
     try {
-      const response = await fetch("/api/assistant/weekly-report", {
+      const response = await fetchWithAuthRedirect("/api/assistant/weekly-report", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -353,13 +348,6 @@ export function ProjectManagementPlatform({
         })
       });
       const payload = (await response.json()) as { error?: string; reply?: string; warning?: string };
-
-      if (response.status === 401) {
-        window.location.assign("/login");
-
-        return;
-      }
-
       if (!response.ok || !payload.reply) {
         throw new Error(payload.error || "周报生成失败");
       }
@@ -473,7 +461,7 @@ export function ProjectManagementPlatform({
     setCreateSubmitting(true);
 
     try {
-      const response = await fetch("/api/records", {
+      const response = await fetchWithAuthRedirect("/api/records", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -485,13 +473,6 @@ export function ProjectManagementPlatform({
         })
       });
       const payload = (await response.json()) as CreateRecordResult | { error?: string };
-
-      if (response.status === 401) {
-        window.location.assign("/login");
-
-        return;
-      }
-
       if (!response.ok) {
         throw new Error("error" in payload ? payload.error || "创建失败" : "创建失败");
       }
@@ -535,7 +516,7 @@ export function ProjectManagementPlatform({
         ...values,
         milestones: Array.isArray(values.milestones) ? values.milestones : editingProject.milestones
       };
-      const response = await fetch("/api/records", {
+      const response = await fetchWithAuthRedirect("/api/records", {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json"
@@ -548,13 +529,6 @@ export function ProjectManagementPlatform({
         })
       });
       const payload = (await response.json()) as CreateRecordResult | { error?: string };
-
-      if (response.status === 401) {
-        window.location.assign("/login");
-
-        return;
-      }
-
       if (!response.ok) {
         throw new Error("error" in payload ? payload.error || "更新项目失败" : "更新项目失败");
       }
@@ -585,7 +559,7 @@ export function ProjectManagementPlatform({
     setEditSubmitting(true);
 
     try {
-      const response = await fetch("/api/records", {
+      const response = await fetchWithAuthRedirect("/api/records", {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json"
@@ -598,13 +572,6 @@ export function ProjectManagementPlatform({
         })
       });
       const payload = (await response.json()) as CreateRecordResult | { error?: string };
-
-      if (response.status === 401) {
-        window.location.assign("/login");
-
-        return;
-      }
-
       if (!response.ok) {
         throw new Error("error" in payload ? payload.error || "更新任务失败" : "更新任务失败");
       }
@@ -659,7 +626,7 @@ export function ProjectManagementPlatform({
 
     try {
       // 阶段拖拽只改任务流转状态，其余字段沿用原任务，避免 PATCH 时丢失版本、负责人和日期。
-      const response = await fetch("/api/records", {
+      const response = await fetchWithAuthRedirect("/api/records", {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json"
@@ -674,13 +641,6 @@ export function ProjectManagementPlatform({
         })
       });
       const payload = (await response.json()) as CreateRecordResult | { error?: string };
-
-      if (response.status === 401) {
-        window.location.assign("/login");
-
-        return false;
-      }
-
       if (!response.ok) {
         throw new Error("error" in payload ? payload.error || "更新任务阶段失败" : "更新任务阶段失败");
       }
@@ -750,7 +710,7 @@ export function ProjectManagementPlatform({
 
     try {
       // 负责人拖拽必须同步成员 ID、头像、邮箱和飞书身份字段；只改 owner 字符串会导致后续通知和成员匹配继续指向旧人。
-      const response = await fetch("/api/records", {
+      const response = await fetchWithAuthRedirect("/api/records", {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json"
@@ -763,13 +723,6 @@ export function ProjectManagementPlatform({
         })
       });
       const payload = (await response.json()) as CreateRecordResult | { error?: string };
-
-      if (response.status === 401) {
-        window.location.assign("/login");
-
-        return false;
-      }
-
       if (!response.ok) {
         throw new Error("error" in payload ? payload.error || "更新任务负责人失败" : "更新任务负责人失败");
       }
@@ -835,7 +788,7 @@ export function ProjectManagementPlatform({
         dueDate: change.endDate,
         startDate: change.startDate
       };
-      const response = await fetch("/api/records", {
+      const response = await fetchWithAuthRedirect("/api/records", {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json"
@@ -848,13 +801,6 @@ export function ProjectManagementPlatform({
         })
       });
       const payload = (await response.json()) as CreateRecordResult | { error?: string };
-
-      if (response.status === 401) {
-        window.location.assign("/login");
-
-        return false;
-      }
-
       if (!response.ok) {
         throw new Error("error" in payload ? payload.error || "拖拽更新任务排期失败" : "拖拽更新任务排期失败");
       }
@@ -892,7 +838,7 @@ export function ProjectManagementPlatform({
     setBugEditSubmitting(true);
 
     try {
-      const response = await fetch("/api/records", {
+      const response = await fetchWithAuthRedirect("/api/records", {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json"
@@ -905,13 +851,6 @@ export function ProjectManagementPlatform({
         })
       });
       const payload = (await response.json()) as CreateRecordResult | { error?: string };
-
-      if (response.status === 401) {
-        window.location.assign("/login");
-
-        return;
-      }
-
       if (!response.ok) {
         throw new Error("error" in payload ? payload.error || "更新 Bug 失败" : "更新 Bug 失败");
       }
@@ -938,7 +877,7 @@ export function ProjectManagementPlatform({
 
   async function handleCreateBugFixJob(bug: BugReport, values: BugAiFixFormValues) {
     try {
-      const response = await fetch("/api/bug-fix-jobs", {
+      const response = await fetchWithAuthRedirect("/api/bug-fix-jobs", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -952,13 +891,6 @@ export function ProjectManagementPlatform({
         })
       });
       const payload = (await response.json()) as { error?: string; message?: string };
-
-      if (response.status === 401) {
-        window.location.assign("/login");
-
-        return;
-      }
-
       if (!response.ok || payload.error) {
         throw new Error(payload.error || "创建 AI 修复任务失败");
       }
@@ -979,7 +911,7 @@ export function ProjectManagementPlatform({
     setRequirementEditSubmitting(true);
 
     try {
-      const response = await fetch("/api/records", {
+      const response = await fetchWithAuthRedirect("/api/records", {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json"
@@ -992,13 +924,6 @@ export function ProjectManagementPlatform({
         })
       });
       const payload = (await response.json()) as CreateRecordResult | { error?: string };
-
-      if (response.status === 401) {
-        window.location.assign("/login");
-
-        return;
-      }
-
       if (!response.ok) {
         throw new Error("error" in payload ? payload.error || "更新需求失败" : "更新需求失败");
       }
@@ -1029,7 +954,7 @@ export function ProjectManagementPlatform({
     setRequirementVersionEditSubmitting(true);
 
     try {
-      const response = await fetch("/api/records", {
+      const response = await fetchWithAuthRedirect("/api/records", {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json"
@@ -1042,13 +967,6 @@ export function ProjectManagementPlatform({
         })
       });
       const payload = (await response.json()) as CreateRecordResult | { error?: string };
-
-      if (response.status === 401) {
-        window.location.assign("/login");
-
-        return;
-      }
-
       if (!response.ok) {
         throw new Error("error" in payload ? payload.error || "更新版本失败" : "更新版本失败");
       }
@@ -1086,7 +1004,7 @@ export function ProjectManagementPlatform({
     }
 
     try {
-      const response = await fetch("/api/records", {
+      const response = await fetchWithAuthRedirect("/api/records", {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json"
@@ -1098,13 +1016,6 @@ export function ProjectManagementPlatform({
         })
       });
       const payload = (await response.json()) as DeleteRecordResult | { error?: string };
-
-      if (response.status === 401) {
-        window.location.assign("/login");
-
-        return false;
-      }
-
       if (!response.ok) {
         throw new Error("error" in payload ? payload.error || "删除失败" : "删除失败");
       }
@@ -1135,7 +1046,7 @@ export function ProjectManagementPlatform({
     setMemberSubmitting(true);
 
     try {
-      const response = await fetch("/api/members", {
+      const response = await fetchWithAuthRedirect("/api/members", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -1146,13 +1057,6 @@ export function ProjectManagementPlatform({
         })
       });
       const payload = (await response.json()) as { member?: DashboardMember; message?: string; error?: string };
-
-      if (response.status === 401) {
-        window.location.assign("/login");
-
-        return;
-      }
-
       if (!response.ok || payload.error || !payload.member) {
         throw new Error(payload.error || "创建成员失败");
       }
@@ -1171,7 +1075,7 @@ export function ProjectManagementPlatform({
     setMemberSubmitting(true);
 
     try {
-      const response = await fetch("/api/members", {
+      const response = await fetchWithAuthRedirect("/api/members", {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json"
@@ -1186,13 +1090,6 @@ export function ProjectManagementPlatform({
         })
       });
       const payload = (await response.json()) as { member?: DashboardMember; message?: string; error?: string };
-
-      if (response.status === 401) {
-        window.location.assign("/login");
-
-        return;
-      }
-
       if (!response.ok || payload.error || !payload.member) {
         throw new Error(payload.error || "更新成员失败");
       }
@@ -1211,7 +1108,7 @@ export function ProjectManagementPlatform({
     setWorkspaceSubmitting(true);
 
     try {
-      const response = await fetch("/api/workspaces", {
+      const response = await fetchWithAuthRedirect("/api/workspaces", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -1227,13 +1124,6 @@ export function ProjectManagementPlatform({
         message?: string;
         error?: string;
       };
-
-      if (response.status === 401) {
-        window.location.assign("/login");
-
-        return false;
-      }
-
       if (!response.ok || payload.error || !payload.workspace) {
         throw new Error(payload.error || "创建工作区失败");
       }
@@ -1287,18 +1177,11 @@ export function ProjectManagementPlatform({
         }
       }
 
-      const response = await fetch("/api/documents/analyze", {
+      const response = await fetchWithAuthRedirect("/api/documents/analyze", {
         method: "POST",
         body: formData
       });
       const payload = (await response.json()) as DocumentAnalyzeResult & { error?: string };
-
-      if (response.status === 401) {
-        window.location.assign("/login");
-
-        return;
-      }
-
       if (!response.ok || payload.error) {
         throw new Error(payload.error || "文档拆解失败");
       }
