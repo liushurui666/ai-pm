@@ -528,6 +528,7 @@ src/lib/ai/knowledge/
 - adapters/
   - qdrant-vector-store.ts
   - bullmq-index-queue.ts
+  - mastra-workflow.ts
   - dashscope-embedding.ts
   - dashscope-reranker.ts
   - langfuse-trace.ts
@@ -546,20 +547,21 @@ V1 优先库选择：
 - AI SDK：继续负责 ChatBox 流式输出、tools、模型调用和模型切换。
 - Qdrant 官方 JS/TS client：负责 dense/sparse vector point 写入、payload 过滤和 hybrid search。
 - BullMQ + Redis：作为正式异步队列优先方案，负责 job 入队、重试、并发、延迟执行和 worker 消费；如果 V1 部署不允许新增 Redis，则通过同一个 `IndexQueuePort` 临时落到 MySQL 队列表，不能让业务层感知差异。
+- Mastra：V1 强绑定为 workflow/agent 编排层，用于组织索引流水线、RAG 检索编排、管理员重建索引流程和后续可复用 agent workflow；业务层仍然只通过 adapter/port 使用，避免页面代码直接绑定 Mastra API。
 - LlamaIndex.TS：优先评估用于飞书 docx/wiki 文本切分、节点结构、RAG pipeline 辅助能力；只通过 adapter 接入，不让业务代码直接依赖其对象模型。
 - Langfuse JS/TS SDK：负责 trace、dataset/eval 结果、score 上报和后续可观测性。
-- Mastra：作为后续 workflow/agent 编排候选；V1 先不强依赖，避免把后台索引流水线和 agent 框架绑定过死。
 
 可复用接口要求：
 
 - `IndexQueuePort`：统一入队、重试、重建、失败封存。
+- `WorkflowPort`：统一封装 Mastra workflow 启动、步骤状态、失败恢复和上下文传递。
 - `VectorStorePort`：统一 upsert、delete、hybridSearch、payloadFilter。
 - `EmbeddingPort`：统一文档 embedding、query embedding、模型维度记录。
 - `RerankerPort`：统一 rerank 输入输出和降级策略。
 - `KnowledgeRetrieverPort`：统一给 ChatBox、周报、Bug 分析等业务使用。
 - `TraceEvalPort`：统一记录 trace、score、dataset run。
 
-业务模块禁止直接调用 Qdrant、BullMQ、Langfuse、LlamaIndex.TS 等三方 SDK，只能调用上述 Port。这样可以保证：
+业务模块禁止直接调用 Mastra、Qdrant、BullMQ、Langfuse、LlamaIndex.TS 等三方 SDK，只能调用上述 Port。这样可以保证：
 
 - 第一次实现能借助成熟库快速上线。
 - 后续替换模型、向量库、队列、Eval 平台时不改业务层。
@@ -706,7 +708,7 @@ ChatBox 不需要单独“知识库模式”，但可以识别用户问题自动
 
 ## 14. 分期计划
 
-### 14.1 V1：正式异步队列 + 自动索引 + Qdrant + Reranker 闭环
+### 14.1 V1：Mastra 编排 + 正式异步队列 + 自动索引 + Qdrant + Reranker 闭环
 
 目标：业务对象自动进入 AI 可检索范围，并且第一版就具备语义召回和候选精排能力。
 
@@ -715,6 +717,7 @@ ChatBox 不需要单独“知识库模式”，但可以识别用户问题自动
 - 新增 `ai_index_sources`、`ai_index_chunks`、`ai_index_jobs`。
 - 正式异步队列：任务去重、原子抢占、锁超时释放、退避重试、失败封存、补偿扫描。
 - 队列优先使用 BullMQ + Redis，通过 `IndexQueuePort` 封装；如部署暂不允许 Redis，MySQL 队列只能作为 adapter 兜底。
+- Mastra workflow 作为 V1 强绑定编排层，承载索引流水线、RAG 检索流程、管理员重建索引流程。
 - 知识检索能力按 Port/Adapter 拆分，形成可复用 `knowledge` 模块，禁止业务页面直接调用三方 SDK。
 - 独立 worker 进程：消费 `ai_index_jobs`，执行标准文本生成、飞书同步、chunking、embedding、Qdrant 写入和旧索引清理。
 - 版本、需求、Bug、任务写入后创建索引任务。
@@ -946,7 +949,7 @@ worker 异步重新生成 chunk、embedding 和 Qdrant 向量
 推荐按以下路线落地：
 
 ```txt
-V1：正式异步队列 + 业务对象自动索引 + Embedding + Qdrant + Hybrid Retrieval + Reranker + 基础 Eval + 管理员重建索引入口 + ChatBox knowledge tool + 来源引用
+V1：Mastra workflow 编排 + 正式异步队列 + 业务对象自动索引 + Embedding + Qdrant + Hybrid Retrieval + Reranker + 基础 Eval + 管理员重建索引入口 + ChatBox knowledge tool + 来源引用
 V2：飞书 docx/wiki 链接自动同步
 V3：检索质量增强 + 大规模重建性能调优
 V4：Eval 平台化 + Langfuse 深度可观测性
