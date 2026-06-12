@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { QdrantClient } from "@qdrant/js-client-rest";
 import { getKnowledgeSettings } from "@/lib/ai/knowledge/settings";
 import type { KnowledgeChunkCandidate, VectorSearchInput, VectorSearchMatch, VectorStorePort } from "@/lib/ai/knowledge/ports";
@@ -35,10 +36,29 @@ function calculateSparseScore(candidate: KnowledgeChunkCandidate, sparseQuery?: 
   return tokens.reduce((score, token) => score + (haystack.includes(token) ? 1 : 0), 0) / tokens.length;
 }
 
-type QdrantPayload = Partial<KnowledgeChunkCandidate>;
+type QdrantPayload = Partial<KnowledgeChunkCandidate> & {
+  chunkId?: string;
+};
 
 function isQdrantPayload(payload: unknown): payload is QdrantPayload {
   return typeof payload === "object" && payload !== null;
+}
+
+function toQdrantPointId(chunkId: string) {
+  const chars = createHash("sha256").update(chunkId).digest("hex").slice(0, 32).split("");
+
+  // Qdrant REST API 只接受无符号整数或 UUID 作为 point id；Prisma cuid 不能直接写入。
+  // 这里用 chunk id 生成稳定 UUID，同时把原始 chunk id 保留到 payload，保证重复索引覆盖同一点且检索仍返回业务 id。
+  chars[12] = "5";
+  chars[16] = ((Number.parseInt(chars[16] ?? "0", 16) & 0x3) | 0x8).toString(16);
+
+  return [
+    chars.slice(0, 8).join(""),
+    chars.slice(8, 12).join(""),
+    chars.slice(12, 16).join(""),
+    chars.slice(16, 20).join(""),
+    chars.slice(20, 32).join("")
+  ].join("-");
 }
 
 // Qdrant adapter 现在直接使用官方 JS client。业务层仍只依赖 VectorStorePort，
@@ -90,9 +110,10 @@ export function createQdrantVectorStore(): VectorStorePort {
       await client.upsert(collection, {
         wait: true,
         points: chunks.map((chunk) => ({
-          id: chunk.id,
+          id: toQdrantPointId(chunk.id),
           vector: chunk.vector,
           payload: {
+            chunkId: chunk.id,
             workspaceId: chunk.workspaceId,
             sourceId: chunk.sourceId,
             title: chunk.title,
@@ -145,7 +166,7 @@ export function createQdrantVectorStore(): VectorStorePort {
       return result.map((item) => {
         const payload = isQdrantPayload(item.payload) ? item.payload : {};
         const candidate: VectorSearchMatch = {
-          id: String(item.id),
+          id: String(payload.chunkId ?? item.id),
           sourceId: String(payload.sourceId ?? ""),
           workspaceId: input.workspaceId,
           title: String(payload.title ?? "未命名资料"),

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
+import { config as loadEnv } from "dotenv";
 import {
   createBullMqIndexQueue,
   createMastraKnowledgeWorkflow,
@@ -8,6 +9,11 @@ import {
   runBullMqIndexWorker
 } from "@/lib/ai/knowledge";
 import { getKnowledgeSettings } from "@/lib/ai/knowledge/settings";
+
+// worker 通常由 `pnpm ai-index:worker` 直接启动，不经过 Next.js 的 env 加载器。
+// 本地测试和运维手工排查要与 Web/doctor 读取同一份配置，否则会误连默认 localhost MySQL。
+loadEnv({ path: ".env.local", quiet: true });
+loadEnv({ path: ".env", quiet: true });
 
 const workerId = `ai-index-${process.pid}-${randomUUID().slice(0, 8)}`;
 

@@ -81,7 +81,7 @@ export function createMastraKnowledgeWorkflow(queue: IndexQueuePort, handlers: W
 
   async function enqueueWorkspaceRebuild(workspaceId: string) {
     const prisma = getPrismaClient();
-    const [sources, linkedRequirements] = await Promise.all([
+    const [sources, versions, requirements, bugs, tasks, linkedRequirements] = await Promise.all([
       prisma.aiIndexSource.findMany({
         where: {
           workspaceId,
@@ -92,7 +92,40 @@ export function createMastraKnowledgeWorkflow(queue: IndexQueuePort, handlers: W
         select: {
           id: true,
           entityType: true,
-          entityId: true
+          entityId: true,
+          sourceType: true
+        }
+      }),
+      prisma.requirementVersion.findMany({
+        where: {
+          workspaceId
+        },
+        select: {
+          id: true
+        }
+      }),
+      prisma.requirement.findMany({
+        where: {
+          workspaceId
+        },
+        select: {
+          id: true
+        }
+      }),
+      prisma.bugReport.findMany({
+        where: {
+          workspaceId
+        },
+        select: {
+          id: true
+        }
+      }),
+      prisma.projectTask.findMany({
+        where: {
+          workspaceId
+        },
+        select: {
+          id: true
         }
       }),
       prisma.requirement.findMany({
@@ -112,19 +145,52 @@ export function createMastraKnowledgeWorkflow(queue: IndexQueuePort, handlers: W
         }
       })
     ]);
-    const rebuildJobs = sources.map((source) => queue.enqueue({
+
+    // 重建入口必须覆盖“从未进入过 AI 索引的历史业务数据”。如果只扫描 ai_index_sources，
+    // 新上线工作区会因为没有 source 而返回 0，导致用户以为已重建但 ChatBox 实际检索不到任何业务事实。
+    const recordJobs = [
+      ...versions.map((version) => ({
+        entityType: "version" as const,
+        entityId: version.id
+      })),
+      ...requirements.map((requirement) => ({
+        entityType: "requirement" as const,
+        entityId: requirement.id
+      })),
+      ...bugs.map((bug) => ({
+        entityType: "bug" as const,
+        entityId: bug.id
+      })),
+      ...tasks.map((task) => ({
+        entityType: "task" as const,
+        entityId: task.id
+      }))
+    ].map((record) => queue.enqueue({
       workspaceId,
-      sourceId: source.id,
-      entityType: source.entityType,
-      entityId: source.entityId,
-      jobType: "rebuild_source",
-      dedupeKey: `${workspaceId}:${source.id}:rebuild_source`,
+      entityType: record.entityType,
+      entityId: record.entityId,
+      jobType: "index_entity" as const,
+      dedupeKey: `${workspaceId}:${record.entityType}:${record.entityId}:index_entity`,
       priority: 10,
       payload: {
-        scope: "workspace",
-        sourceId: source.id
+        scope: "workspace_rebuild"
       }
     }));
+    const feishuSourceRebuildJobs = sources
+      .filter((source) => source.sourceType === "feishu_doc" || source.sourceType === "feishu_wiki")
+      .map((source) => queue.enqueue({
+        workspaceId,
+        sourceId: source.id,
+        entityType: source.entityType,
+        entityId: source.entityId,
+        jobType: "rebuild_source",
+        dedupeKey: `${workspaceId}:${source.id}:rebuild_source`,
+        priority: 9,
+        payload: {
+          scope: "workspace_rebuild",
+          sourceId: source.id
+        }
+      }));
     const feishuJobs = linkedRequirements
       .filter((requirement) => requirement.documentLink?.trim())
       .map((requirement) => queue.enqueue({
@@ -144,7 +210,7 @@ export function createMastraKnowledgeWorkflow(queue: IndexQueuePort, handlers: W
           documentLink: requirement.documentLink
         }
       }));
-    const jobs = await Promise.all([...rebuildJobs, ...feishuJobs]);
+    const jobs = await Promise.all([...recordJobs, ...feishuSourceRebuildJobs, ...feishuJobs]);
 
     return {
       enqueued: jobs.length
