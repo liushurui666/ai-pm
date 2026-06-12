@@ -20,11 +20,12 @@ AI PM 当前的 AI 助手已经能读取工作区内的结构化项目数据，�
 - 创建或更新版本、需求、Bug、任务后，相关内容自动进入 AI 可检索范围。
 - 业务对象中出现飞书文档链接时，系统自动识别并同步飞书正文。
 - ChatBox 能回答跨业务对象和飞书文档的问题，并附带来源。
-- 用户不用手动维护知识库，只在业务对象页面看到轻量的“AI 已同步 / 同步失败 / 重试”状态。
+- 用户不用手动维护知识库，也不需要看到“AI 同步中 / 同步失败 / 已同步”等索引状态。
 
 ### 2.2 技术目标
 
 - 建立统一 AI 索引源模型，兼容 version、requirement、bug、task、feishu_doc 等来源。
+- V1 建成正式异步队列和 worker，业务写入只入队，不同步执行索引、embedding、飞书解析或 Qdrant 写入。
 - 支持关键词检索 Sparse Retrieval 和语义检索 Vector Retrieval 的组合。
 - V1 即完成 Embedding、Qdrant、Hybrid Retrieval 和 Reranker 的完整检索闭环，预留 Eval、外部 AI 基座化和独立 embedding 服务的升级路径。
 - 继续使用当前 AI SDK ChatBox 主链路，不重写对话层。
@@ -192,7 +193,7 @@ ai_index_chunks
 
 ### 6.3 `ai_index_jobs`
 
-记录异步索引任务。
+记录异步索引任务。V1 必须把队列能力做成正式基础设施，而不是简单的“保存后触发一次脚本”。
 
 ```txt
 ai_index_jobs
@@ -214,8 +215,13 @@ ai_index_jobs
 说明：
 
 - 业务保存接口只创建 job，不同步执行耗时工作。
-- worker 消费 job，并使用 `lockedAt / lockedBy` 避免并发重复处理。
-- 定时补偿任务会扫描 failed、pending、过期 source。
+- `dedupeKey` 建议放在 payload 或单独唯一字段中，采用 `workspaceId:entityType:entityId:jobType`，同一对象短时间多次保存只保留最后一次待处理任务。
+- worker 通过 `pending -> running` 原子抢占任务，并使用 `lockedAt / lockedBy` 避免多实例重复处理。
+- running 超过超时时间的任务自动释放为 pending，并递增 `retryCount`。
+- 失败按退避策略重试，超过上限后进入 failed，只写后台日志和管理观测，不在普通业务页面展示同步状态。
+- `nextRunAt` 用于延迟重试、飞书限流退避和批量重建错峰。
+- 支持按 `workspaceId` 控制并发，避免单个工作区大量文档拖垮全局索引。
+- 定时补偿任务会扫描 failed、pending、running 超时和过期 source。
 
 ## 7. 自动入库触发点
 
@@ -330,11 +336,11 @@ https://xxx.feishu.cn/sheets/...
 
 ### 8.3 同步策略
 
-第一版采用手动和事件触发，不做高频自动轮询：
+第一版采用事件入队 + worker 异步执行，不做高频前台轮询：
 
 - 业务对象保存时识别到新飞书链接，自动创建同步任务。
-- 如果同步失败，在对应业务详情处展示“AI 同步失败，可重试”。
-- 定时补偿任务每天扫描失败或过期 source。
+- 如果同步失败，只记录 job/source 错误和后台观测日志，不在业务详情页展示同步状态。
+- 定时补偿任务扫描 failed、pending、running 超时和过期 source。
 
 ### 8.4 文档正文处理
 
@@ -356,6 +362,8 @@ https://xxx.feishu.cn/sheets/...
 upsert ai_index_sources
   ↓
 insert ai_index_jobs
+  ↓
+worker 异步抢占 job
   ↓
 worker 生成标准文本或同步飞书
   ↓
@@ -384,7 +392,7 @@ source.status = ready
 
 ### 9.3 异步处理
 
-推荐 worker 形式：
+V1 必须交付正式异步队列和 worker。推荐 worker 形式：
 
 ```txt
 scripts/ai-index-worker.ts
@@ -399,7 +407,29 @@ pnpm tsx scripts/ai-index-worker.ts
 部署方式：
 
 - Docker 内独立 worker 进程。
-- 或先用 cron/定时任务轮询 `ai_index_jobs`。
+- cron/定时任务只做补偿扫描，不作为主处理链路。
+
+worker 主循环：
+
+```txt
+1. 按 nextRunAt、priority、createdAt 拉取 pending job。
+2. 用原子更新把 job 从 pending 抢占为 running。
+3. 根据 jobType 执行业务对象标准化、飞书同步、chunking、embedding、Qdrant 写入。
+4. 成功后写 success，并更新 source/chunk 索引元数据。
+5. 失败后写 error，按 retryCount 计算下一次 nextRunAt。
+6. 超过 retry 上限后写 failed，只进入后台观测，不打扰普通用户页面。
+```
+
+任务拆分建议：
+
+```txt
+index_entity
+  -> sync_feishu，可选
+  -> embed_chunks
+  -> cleanup_source
+```
+
+其中 `index_entity` 负责从业务对象生成标准文本；`sync_feishu` 负责拉取飞书正文；`embed_chunks` 负责调用百炼 `text-embedding-v4` 并写 Qdrant；`cleanup_source` 负责清理旧 chunk 和失效向量。
 
 ## 10. 检索链路
 
@@ -619,31 +649,15 @@ enabled != false
 
 ## 13. 用户体验设计
 
-不做知识库管理页，但在业务页面提供轻量状态。
+不做知识库管理页，也不在普通业务页面展示索引同步状态。索引是后台能力，用户只感知 ChatBox 能否基于已有资料回答。
 
 ### 13.1 版本详情
 
-显示：
-
-```txt
-AI 索引：已同步
-飞书文档：同步失败，点击重试
-```
+版本详情只保留业务字段、飞书链接和正常业务操作，不展示索引进度、成功状态、失败状态或重试入口。
 
 ### 13.2 Bug / 需求详情
 
-显示：
-
-```txt
-AI 可检索：已更新
-```
-
-失败时：
-
-```txt
-AI 同步失败：飞书文档无读取权限
-重试
-```
+Bug / 需求详情只负责维护业务事实，不展示可检索状态、索引失败原因或重试入口。索引失败进入后台 job 日志和管理观测，不打扰普通用户。
 
 ### 13.3 ChatBox
 
@@ -653,13 +667,15 @@ ChatBox 不需要单独“知识库模式”，但可以识别用户问题自动
 
 ## 14. 分期计划
 
-### 14.1 V1：自动索引 + Qdrant + Reranker 闭环
+### 14.1 V1：正式异步队列 + 自动索引 + Qdrant + Reranker 闭环
 
 目标：业务对象自动进入 AI 可检索范围，并且第一版就具备语义召回和候选精排能力。
 
 范围：
 
 - 新增 `ai_index_sources`、`ai_index_chunks`、`ai_index_jobs`。
+- 正式异步队列：任务去重、原子抢占、锁超时释放、退避重试、失败封存、补偿扫描。
+- 独立 worker 进程：消费 `ai_index_jobs`，执行标准文本生成、飞书同步、chunking、embedding、Qdrant 写入和旧索引清理。
 - 版本、需求、Bug、任务写入后创建索引任务。
 - 生成业务对象标准文本。
 - 文本 chunking。
@@ -670,10 +686,10 @@ ChatBox 不需要单独“知识库模式”，但可以识别用户问题自动
 - Reranker 精排候选片段。
 - ChatBox 新增 `knowledge` tool。
 - 回答展示来源。
-- 业务详情展示轻量同步状态。
 
 不做：
 
+- 普通业务页面展示同步状态。
 - 飞书 block 精准定位。
 - 完整 Eval 平台。
 
@@ -687,8 +703,7 @@ ChatBox 不需要单独“知识库模式”，但可以识别用户问题自动
 - 飞书 doc/wiki/sheet 基础同步。
 - 飞书正文清洗。
 - 飞书 source/chunk 入索引。
-- 失败重试。
-- 同步状态提示。
+- 飞书限流和权限失败进入队列退避重试。
 
 ### 14.3 V3：检索质量增强
 
@@ -782,7 +797,7 @@ knowledge: tool({
 
 - job 失败后记录 `retryCount` 和 `nextRunAt`。
 - 指数退避重试。
-- 业务详情允许手动重试。
+- 管理员观测入口允许按 workspace/source/job 维度重放任务，普通业务详情不展示重试入口。
 - 定时任务扫描失败或长时间 pending 的 job。
 - source 内容 hash 未变化时跳过重复索引。
 
@@ -826,9 +841,9 @@ knowledge: tool({
 
 应对：
 
-- 显示明确失败原因。
+- 后台日志和管理员观测显示明确失败原因。
 - 不绕过权限。
-- 支持用户把机器人加入文档权限后重试。
+- 用户把机器人加入文档权限后，由队列补偿扫描或管理员重放任务恢复索引。
 
 ### 18.3 回答引用错误
 
@@ -848,24 +863,22 @@ knowledge: tool({
 
 - 保存接口只入队。
 - worker 异步处理。
-- 前端显示“AI 索引同步中”。
+- 前端不展示索引状态，ChatBox 只消费已经完成的索引。
 
 ## 19. 待决策点
 
 1. V1 是否只索引 version/requirement/bug，暂缓 task。
 2. V1 Qdrant 部署方式：Docker compose 内置、独立云服务，还是公司公共向量库。
 3. 飞书文档同步优先支持 docx/wiki，还是同时支持 sheets。
-4. 是否在业务详情页展示“AI 同步状态”。
-5. 是否需要手动“重建当前工作区 AI 索引”的管理员入口。
-6. embedding 模型优先使用 DashScope 还是独立供应商。
-7. Eval 第一版是否只做日志，还是直接接 Langfuse。
+4. 是否需要手动“重建当前工作区 AI 索引”的管理员入口。
+5. Eval 第一版是否只做日志，还是直接接 Langfuse。
 
 ## 20. 推荐结论
 
 推荐按以下路线落地：
 
 ```txt
-V1：业务对象自动索引 + Embedding + Qdrant + Hybrid Retrieval + Reranker + ChatBox knowledge tool + 来源引用
+V1：正式异步队列 + 业务对象自动索引 + Embedding + Qdrant + Hybrid Retrieval + Reranker + ChatBox knowledge tool + 来源引用
 V2：飞书链接自动同步
 V3：检索质量增强 + 索引重建 + 性能调优
 V4：Langfuse Eval + 检索质量评测
