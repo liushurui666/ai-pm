@@ -224,7 +224,7 @@
 
 .assistant-chatbox-footer {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: center;
   justify-content: space-between;
   min-height: 34px;
@@ -237,7 +237,7 @@
   min-width: 0;
   flex: 1 1 auto;
   align-items: center;
-  gap: 10px;
+  gap: 4px;
 }
 
 .assistant-status-text {
@@ -254,9 +254,28 @@
   align-items: center;
 }
 
+.assistant-character-count {
+  min-width: 44px;
+  text-align: right;
+}
+
+.assistant-composer-tool-button.ant-btn {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--muted);
+}
+
+.assistant-composer-tool-button.ant-btn:not(:disabled):hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--surface-muted) 76%, transparent);
+}
+
 .assistant-model-select-wrap {
   display: inline-flex;
-  width: clamp(180px, 18vw, 260px);
+  width: clamp(220px, 20vw, 300px);
   flex: 0 0 auto;
 }
 
@@ -592,12 +611,48 @@
 }
 
 .assistant-chat-box--workspace .assistant-sender {
+  position: relative;
   overflow: hidden;
   border-color: color-mix(in srgb, var(--border) 82%, transparent);
   border-radius: 20px;
   background: color-mix(in srgb, var(--surface-elevated) 90%, transparent);
   box-shadow: 0 14px 42px color-mix(in srgb, #000 22%, transparent);
   backdrop-filter: blur(16px);
+}
+
+.assistant-chat-box--workspace .assistant-sender--generating {
+  cursor: progress;
+}
+
+.assistant-chat-box--workspace .assistant-sender--generating::after {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  animation: assistant-sender-glow 1.8s linear infinite;
+  background: conic-gradient(
+    from var(--assistant-glow-angle, 0deg),
+    transparent 0deg,
+    color-mix(in srgb, var(--brand) 18%, transparent) 90deg,
+    color-mix(in srgb, #71d6ff 70%, var(--brand)) 150deg,
+    color-mix(in srgb, var(--brand) 18%, transparent) 220deg,
+    transparent 360deg
+  );
+  content: "";
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0.86;
+  padding: 1px;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+}
+
+.assistant-chat-box--workspace .assistant-sender--generating .ant-sender-input {
+  opacity: 0.56;
 }
 
 .assistant-chat-box--workspace .assistant-sender .ant-sender-input {
@@ -609,6 +664,8 @@
 }
 
 .assistant-chat-box--workspace .assistant-chatbox-footer {
+  position: relative;
+  z-index: 1;
   padding: 0 12px 10px 14px;
 }
 
@@ -619,7 +676,12 @@
 }
 
 .assistant-chat-box--workspace .assistant-model-select-wrap {
-  width: clamp(240px, 22vw, 320px);
+  width: clamp(260px, 24vw, 360px);
+  margin-left: 6px;
+}
+
+.assistant-chat-box--workspace .assistant-model-select .ant-select-selection-item {
+  font-size: 13px;
 }
 
 .assistant-chat-box--workspace .assistant-model-select:hover .ant-select-selector,
@@ -629,6 +691,18 @@
 
 .assistant-chat-box--workspace .assistant-sender .ant-sender-input::placeholder {
   color: var(--muted);
+}
+
+@property --assistant-glow-angle {
+  inherits: false;
+  initial-value: 0deg;
+  syntax: "<angle>";
+}
+
+@keyframes assistant-sender-glow {
+  to {
+    --assistant-glow-angle: 360deg;
+  }
 }
 
 .assistant-chat-box--drawer .assistant-chat-box-header {
@@ -670,9 +744,9 @@
   }
 
   .assistant-composer-tools {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
   }
 
   .assistant-actions {
@@ -680,7 +754,7 @@
   }
 
   .assistant-model-select-wrap {
-    width: min(100%, 260px);
+    width: min(100%, 320px);
   }
 
   .assistant-send {
@@ -707,7 +781,7 @@
   }
 
   .assistant-model-select-wrap {
-    width: min(100%, 260px);
+    width: min(100%, 320px);
     flex: 0 0 auto;
   }
 }

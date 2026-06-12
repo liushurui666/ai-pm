@@ -73,6 +73,23 @@ async function checkModelAvailability(model: string, timeoutMs: number): Promise
           }
         ],
         model,
+        // AI 项目助手每轮都可能携带 AI SDK tools；只做普通聊天探活会误把“不支持 tools”的模型放进下拉框，
+        // 用户切过去后才在正式流式请求里失败。这里给一个不会被调用的空工具，验证模型/网关至少接受 tools 参数。
+        tool_choice: "none",
+        tools: [
+          {
+            function: {
+              description: "仅用于验证当前模型是否接受工具调用参数，不会在探活阶段执行。",
+              name: "healthcheck_noop",
+              parameters: {
+                additionalProperties: false,
+                properties: {},
+                type: "object"
+              }
+            },
+            type: "function"
+          }
+        ],
         temperature: 0
       }),
       cache: "no-store",

@@ -53,7 +53,12 @@ import type {
 } from "@/types/dashboard";
 import type { CreateRecordResult, DashboardEntityType, DeleteRecordResult, DocumentAnalyzeResult } from "@/types/records";
 import { getAntdThemeConfig, ThemeToggleButton, useThemePreference } from "@/components/theme-mode";
-import { fetchDashboardFromApi, type PeopleResponse } from "@/components/project-management-platform/api";
+import {
+  fetchDashboardFromApi,
+  isSessionExpiredError,
+  redirectToLogin,
+  type PeopleResponse
+} from "@/components/project-management-platform/api";
 import { createRequirementColumns } from "@/components/project-management-platform/columns/requirement-columns";
 import { validViews } from "@/components/project-management-platform/constants";
 import { ScheduleDrawer } from "@/components/project-management-platform/drawers/schedule-drawer";
@@ -257,7 +262,7 @@ export function ProjectManagementPlatform({
         const payload = (await response.json()) as PeopleResponse;
 
         if (response.status === 401) {
-          window.location.assign("/login");
+          redirectToLogin();
 
           return;
         }
@@ -1467,13 +1472,26 @@ export function ProjectManagementPlatform({
   }
 
   // 工作区切换需要重置版本选择，再重新拉取该工作区的完整项目数据。
+  // 这里不能在选择值变更后直接把任何 401 都交给全局重定向：账号切换、Cookie 刷新和多接口并发时，
+  // 一次短暂失败会被多个请求放大成重复登录。切换失败时先恢复旧工作区，只有确认是会话失效才触发一次登录闸门。
   async function switchWorkspace(workspaceId: string) {
+    if (!workspaceId || workspaceId === currentWorkspaceId) {
+      setWorkspaceSelectOpen(false);
+
+      return;
+    }
+
+    const previousWorkspaceId = currentWorkspaceId;
+
     setActiveWorkspaceId(workspaceId);
     setSelectedRequirementVersionId(null);
     setProjectCalendarVersionId(allProjectCalendarVersionsValue);
+    setWorkspaceSelectOpen(false);
 
     try {
-      const nextData = await fetchDashboardFromApi(workspaceId);
+      const nextData = await fetchDashboardFromApi(workspaceId, {
+        redirectOnUnauthorized: false
+      });
 
       if (nextData) {
         setData(nextData);
@@ -1487,6 +1505,14 @@ export function ProjectManagementPlatform({
         }
       }
     } catch (error) {
+      setActiveWorkspaceId(previousWorkspaceId);
+      if (isSessionExpiredError(error)) {
+        messageApi.error("登录状态已失效，请重新登录后再切换工作区。");
+        redirectToLogin();
+
+        return;
+      }
+
       messageApi.error(error instanceof Error ? error.message : "切换工作区失败");
     }
   }

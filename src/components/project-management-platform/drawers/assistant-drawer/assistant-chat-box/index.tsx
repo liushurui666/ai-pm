@@ -3,7 +3,13 @@
 import "./index.less";
 import { Alert, Button, Select, Tooltip, Typography } from "antd";
 import { Bubble, Sender, XProvider, type BubbleItemType } from "@ant-design/x";
-import { CopyOutlined, RedoOutlined } from "@ant-design/icons";
+import {
+  CopyOutlined,
+  DownloadOutlined,
+  PlusOutlined,
+  RedoOutlined,
+  SettingOutlined
+} from "@ant-design/icons";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -856,7 +862,7 @@ export function AssistantChatBox({
               maxRows: isWorkspace && !isMobile ? 6 : 4,
               minRows: isWorkspace && !isMobile ? 4 : 3
             }}
-            className="assistant-sender"
+            className={`assistant-sender${generating ? " assistant-sender--generating" : ""}`}
             disabled={generating}
             loading={generating}
             placeholder="例如：帮我分析当前最大风险"
@@ -865,6 +871,36 @@ export function AssistantChatBox({
             footer={(
               <div className="assistant-chatbox-footer">
                 <div className="assistant-composer-tools">
+                  <Tooltip title="新建对话">
+                    <Button
+                      aria-label="新建对话"
+                      className="assistant-composer-tool-button"
+                      disabled={generating}
+                      icon={<PlusOutlined />}
+                      type="text"
+                      onClick={handleNewSession}
+                    />
+                  </Tooltip>
+                  <Tooltip title="清空当前对话">
+                    <Button
+                      aria-label="清空当前对话"
+                      className="assistant-composer-tool-button"
+                      disabled={generating || onlyWelcomeMessage}
+                      icon={<SettingOutlined />}
+                      type="text"
+                      onClick={handleClearConversation}
+                    />
+                  </Tooltip>
+                  <Tooltip title="导出聊天记录">
+                    <Button
+                      aria-label="导出聊天记录"
+                      className="assistant-composer-tool-button"
+                      disabled={!hasUserMessages}
+                      icon={<DownloadOutlined />}
+                      type="text"
+                      onClick={handleExportConversation}
+                    />
+                  </Tooltip>
                   <Tooltip title={modelSwitchTooltip}>
                     <span
                       className="assistant-model-select-wrap"
@@ -890,15 +926,17 @@ export function AssistantChatBox({
                       />
                     </span>
                   </Tooltip>
-                  <Text className="assistant-status-text" type="secondary">{statusText}</Text>
                 </div>
                 <div className="assistant-actions">
-                  <Text type="secondary">{input.length}/300</Text>
+                  <Text className="assistant-status-text" type="secondary">{statusText}</Text>
+                  <Text className="assistant-character-count" type="secondary">{input.length}/300</Text>
                   <Tooltip title="重新生成上一条回复">
                     <Button
                       aria-label="重新生成上一条回复"
-                      icon={<RedoOutlined />}
+                      className="assistant-composer-tool-button"
                       disabled={!canRegenerate}
+                      icon={<RedoOutlined />}
+                      type="text"
                       onClick={() => {
                         handleRegenerateMessage(lastAssistantMessage?.id);
                       }}
