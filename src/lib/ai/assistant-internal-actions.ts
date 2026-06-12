@@ -1,5 +1,6 @@
 const allowedMethods = new Set(["GET", "POST", "PATCH", "DELETE"]);
 const blockedApiPrefixes = ["/api/assistant", "/api/auth"];
+const internalActionTimeoutMs = 20_000;
 const maxPayloadDepth = 4;
 const maxArrayItems = 8;
 
@@ -111,6 +112,18 @@ async function parseActionResponse(response: Response) {
   }
 }
 
+function createTimeoutSignal(timeoutMs: number) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => {
+    controller.abort(new Error("内部业务动作执行超时"));
+  }, timeoutMs);
+
+  return {
+    signal: controller.signal,
+    clear: () => clearTimeout(timeout)
+  };
+}
+
 export async function executeAssistantInternalAction(
   input: AssistantInternalActionInput,
   runtime: AssistantInternalActionRuntime
@@ -132,24 +145,33 @@ export async function executeAssistantInternalAction(
     }
 
     const body = method === "GET" ? undefined : createActionBody(input.body, runtime.workspaceId);
-    const response = await fetch(url, {
-      method,
-      cache: "no-store",
-      headers: {
-        accept: "application/json",
-        ...(body ? { "content-type": "application/json" } : {}),
-        ...(runtime.cookieHeader ? { cookie: runtime.cookieHeader } : {})
-      },
-      body: body ? JSON.stringify(body) : undefined
-    });
-    const payload = sanitizeActionPayload(await parseActionResponse(response));
+    const timeout = createTimeoutSignal(internalActionTimeoutMs);
 
-    return {
-      已执行: response.ok,
-      状态: response.ok ? "成功" : "失败",
-      状态码: response.status,
-      业务结果: payload
-    };
+    try {
+      // 动作 tool 由模型触发，如果内部业务接口或数据库卡住，整条 AI 流会表现为“输入后一直不动”。
+      // 这里给站内动作加服务端超时，把长时间挂起转成可继续推理的失败结果，而不是让 ChatBox 永久生成态。
+      const response = await fetch(url, {
+        method,
+        cache: "no-store",
+        headers: {
+          accept: "application/json",
+          ...(body ? { "content-type": "application/json" } : {}),
+          ...(runtime.cookieHeader ? { cookie: runtime.cookieHeader } : {})
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: timeout.signal
+      });
+      const payload = sanitizeActionPayload(await parseActionResponse(response));
+
+      return {
+        已执行: response.ok,
+        状态: response.ok ? "成功" : "失败",
+        状态码: response.status,
+        业务结果: payload
+      };
+    } finally {
+      timeout.clear();
+    }
   } catch (error) {
     return {
       已执行: false,

@@ -74,6 +74,17 @@ type AssistantDisplayMessage = UIMessage & {
   sourceMessageIds: string[];
 };
 
+async function createAssistantResponseError(response: Response) {
+  const payload = await response.clone().json().catch(() => null) as { error?: string } | null;
+  const fallbackMessage = response.status >= 500
+    ? "AI 助手服务暂时不可用，请稍后重试。"
+    : "AI 助手请求失败，请稍后重试。";
+
+  // AI SDK transport 对非 2xx 流式响应会倾向抛成泛化 network error；这里提前解析服务端 JSON，
+  // 让认证、模型网关、服务端异常都能显示成可读中文，并确保 pending 状态能正常释放。
+  return new Error(payload?.error || fallbackMessage);
+}
+
 function createLocalTextMessage(role: UIMessage["role"], text: string, prefix: string): UIMessage {
   return {
     id: `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -223,12 +234,18 @@ export function AssistantChatBox({
     }
 
     try {
-      return await fetchWithAuthRedirect(input, {
+      const response = await fetchWithAuthRedirect(input, {
         ...init,
         signal: timeoutController.signal
       }, {
         redirectOnUnauthorized: false
       });
+
+      if (!response.ok) {
+        throw await createAssistantResponseError(response);
+      }
+
+      return response;
     } finally {
       window.clearTimeout(timeoutId);
     }

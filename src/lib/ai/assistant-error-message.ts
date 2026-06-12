@@ -1,5 +1,6 @@
 const genericAssistantErrorMessage = "AI 助手暂时无法完成回复，请稍后重试。";
 const gatewayAssistantErrorMessage = "AI 助手的模型服务暂时不可用，请稍后重试。";
+const networkAssistantErrorMessage = "AI 助手连接中断，请稍后重试。";
 const timeoutAssistantErrorMessage = "AI 助手响应超时，请稍后重试。";
 
 function getRawErrorMessage(error: unknown) {
@@ -34,6 +35,10 @@ export function sanitizeAssistantErrorMessage(error: unknown) {
     || normalized.includes("timed out")
     || normalized.includes("aborterror")
     || rawMessage.includes("超过");
+  const isNetworkError = normalized.includes("network error")
+    || normalized.includes("fetch failed")
+    || normalized.includes("econnreset")
+    || normalized.includes("socket hang up");
 
   if (looksLikeHtml || isGatewayError) {
     return gatewayAssistantErrorMessage;
@@ -41,6 +46,10 @@ export function sanitizeAssistantErrorMessage(error: unknown) {
 
   if (isTimeout) {
     return timeoutAssistantErrorMessage;
+  }
+
+  if (isNetworkError) {
+    return networkAssistantErrorMessage;
   }
 
   if (normalized.includes("未登录") || normalized.includes("session")) {

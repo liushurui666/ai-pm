@@ -8,6 +8,7 @@ import { createAiPmAuthServiceClient, mapAuthUserToFeishuUser } from "@/lib/auth
 
 const supportedAuthProviders = new Set(["feishu", "google", "github", "email"]);
 const defaultAuthOrigin = unifiedAuthConfig.auth?.origin ?? unifiedAuthConfig.app?.origin ?? "http://localhost:3004";
+const authContextRetryDelaysMs = [120, 360];
 
 export class AuthServiceUnavailableError extends Error {
   constructor(cause?: unknown) {
@@ -22,6 +23,10 @@ function serializeCookieHeader(cookieStore: Awaited<ReturnType<typeof cookies>>)
     .getAll()
     .map((item) => `${item.name}=${item.value}`)
     .join("; ");
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -52,12 +57,29 @@ export async function getAuthContext(): Promise<AuthContext> {
     }
   });
 
-  try {
-    return await authClient.getAuthContext();
-  } catch (error) {
-    console.error("[auth] failed to load auth context", error);
-    throw new AuthServiceUnavailableError(error);
+  for (let attempt = 0; attempt <= authContextRetryDelaysMs.length; attempt += 1) {
+    try {
+      return await authClient.getAuthContext();
+    } catch (error) {
+      const retryDelay = authContextRetryDelaysMs[attempt];
+
+      // OAuth 刚回跳、Auth Service 或认证库短暂抖动时，第一次 context 查询可能失败。
+      // 这里只对“请求失败”做极短重试，不把失败伪装成未登录，避免第一次登录失败或工作台误跳登录页。
+      if (retryDelay !== undefined) {
+        console.warn("[auth] retry auth context after transient failure", {
+          attempt: attempt + 1,
+          retryDelay
+        });
+        await wait(retryDelay);
+        continue;
+      }
+
+      console.error("[auth] failed to load auth context", error);
+      throw new AuthServiceUnavailableError(error);
+    }
   }
+
+  throw new AuthServiceUnavailableError();
 }
 
 /**
