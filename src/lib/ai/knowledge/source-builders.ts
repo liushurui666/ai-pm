@@ -3,6 +3,7 @@ import { toJsonValue } from "@/lib/database/json";
 import { getPrismaClient } from "@/lib/database/prisma";
 import { chunkKnowledgeText, createContentHash } from "@/lib/ai/knowledge/chunking";
 import type { ClaimedIndexJob, IndexQueuePort, KnowledgeEntityType, KnowledgeMetadata } from "@/lib/ai/knowledge/ports";
+import { parseFeishuDocumentLink, readFeishuDocumentFromLink } from "@/lib/requirements/feishu-document";
 
 type BuiltKnowledgeSource = {
   workspaceId: string;
@@ -207,6 +208,30 @@ async function buildKnowledgeSource(job: ClaimedIndexJob) {
   return undefined;
 }
 
+function getPayloadText(payload: KnowledgeMetadata, key: string) {
+  const value = payload[key];
+
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function getFeishuSourceType(link: string) {
+  const parsed = parseFeishuDocumentLink(link);
+
+  if (parsed.type === "wiki") {
+    return {
+      entityType: "feishu_wiki" as const,
+      sourceType: "feishu_wiki" as const,
+      sourceToken: parsed.token
+    };
+  }
+
+  return {
+    entityType: "feishu_doc" as const,
+    sourceType: "feishu_doc" as const,
+    sourceToken: parsed.token
+  };
+}
+
 // index_entity 的真实落库处理：读取业务事实、生成统一 source、切 chunk、写入 MySQL 元数据。
 // 这里仍然不做 embedding/Qdrant 写入，而是继续投递 embed_chunks，保证保存和文本标准化不会被模型服务拖慢。
 export async function indexBusinessEntity(job: ClaimedIndexJob, queue: IndexQueuePort) {
@@ -303,6 +328,136 @@ export async function indexBusinessEntity(job: ClaimedIndexJob, queue: IndexQueu
   });
 }
 
+export async function syncFeishuDocument(job: ClaimedIndexJob, queue: IndexQueuePort) {
+  const prisma = getPrismaClient();
+  const documentLink = getPayloadText(job.payload, "documentLink");
+  const requirementId = getPayloadText(job.payload, "requirementId") ?? job.entityId;
+
+  if (!documentLink) {
+    throw new Error("飞书同步任务缺少 documentLink");
+  }
+
+  const feishuSource = getFeishuSourceType(documentLink);
+  const document = await readFeishuDocumentFromLink(documentLink);
+  const requirement = await prisma.requirement.findFirst({
+    where: {
+      id: requirementId,
+      workspaceId: job.workspaceId
+    }
+  });
+  const title = requirement?.title ? `${requirement.title} - ${document.title}` : document.title;
+  const sourceMetadata = {
+    requirementId,
+    requirementTitle: requirement?.title ?? getPayloadText(job.payload, "requirementTitle"),
+    project: requirement?.project ?? getPayloadText(job.payload, "project"),
+    versionName: requirement?.versionName ?? getPayloadText(job.payload, "versionName"),
+    documentTitle: document.title,
+    documentToken: document.documentToken,
+    sourceType: feishuSource.sourceType
+  };
+  const content = compactLines([
+    `飞书文档：${document.title}`,
+    sourceMetadata.requirementTitle ? `关联需求：${sourceMetadata.requirementTitle}` : undefined,
+    sourceMetadata.project ? `项目：${sourceMetadata.project}` : undefined,
+    sourceMetadata.versionName ? `版本：${sourceMetadata.versionName}` : undefined,
+    document.content
+  ]);
+  const contentHash = createContentHash(content);
+  const chunks = chunkKnowledgeText({
+    content,
+    heading: title,
+    sparsePrefix: [
+      title,
+      document.title,
+      sourceMetadata.requirementTitle,
+      sourceMetadata.project,
+      sourceMetadata.versionName,
+      feishuSource.entityType
+    ].filter(Boolean).join(" ")
+  });
+
+  if (!chunks.length) {
+    throw new Error("飞书文档没有可索引文本");
+  }
+
+  const savedSource = await prisma.$transaction(async (tx) => {
+    const nextSource = await tx.aiIndexSource.upsert({
+      where: {
+        workspaceId_entityType_entityId_sourceType: {
+          workspaceId: job.workspaceId,
+          entityType: feishuSource.entityType,
+          entityId: requirementId,
+          sourceType: feishuSource.sourceType
+        }
+      },
+      create: {
+        workspaceId: job.workspaceId,
+        projectId: sourceMetadata.project,
+        versionId: requirement?.versionId ?? getPayloadText(job.payload, "versionId"),
+        entityType: feishuSource.entityType,
+        entityId: requirementId,
+        sourceProvider: "feishu",
+        sourceType: feishuSource.sourceType,
+        title,
+        sourceUrl: documentLink,
+        sourceToken: feishuSource.sourceToken,
+        contentHash,
+        status: "indexing",
+        metadata: asInputJson(sourceMetadata)
+      },
+      update: {
+        projectId: sourceMetadata.project,
+        versionId: requirement?.versionId ?? getPayloadText(job.payload, "versionId"),
+        title,
+        sourceUrl: documentLink,
+        sourceToken: feishuSource.sourceToken,
+        contentHash,
+        status: "indexing",
+        error: null,
+        metadata: asInputJson(sourceMetadata)
+      }
+    });
+
+    await tx.aiIndexChunk.deleteMany({
+      where: {
+        sourceId: nextSource.id
+      }
+    });
+
+    await tx.aiIndexChunk.createMany({
+      data: chunks.map((chunk) => ({
+        workspaceId: job.workspaceId,
+        sourceId: nextSource.id,
+        chunkIndex: chunk.chunkIndex,
+        title,
+        heading: chunk.heading,
+        content: chunk.content,
+        sparseText: chunk.sparseText,
+        contentHash: chunk.contentHash,
+        metadata: asInputJson(sourceMetadata),
+        status: "pending" as const
+      }))
+    });
+
+    return nextSource;
+  });
+
+  await queue.enqueue({
+    workspaceId: job.workspaceId,
+    sourceId: savedSource.id,
+    entityType: feishuSource.entityType,
+    entityId: requirementId,
+    jobType: "embed_chunks",
+    dedupeKey: `${job.workspaceId}:${savedSource.id}:embed_chunks:${contentHash}`,
+    payload: {
+      sourceId: savedSource.id,
+      contentHash,
+      chunkCount: chunks.length,
+      sourceType: feishuSource.sourceType
+    }
+  });
+}
+
 // 管理员重建入口最终会落到 rebuild_source job；这里把它转回 index_entity 的同一条标准化链路，
 // 保证重建和普通业务更新使用完全一致的 source/chunk 生成规则。
 export async function rebuildBusinessSource(job: ClaimedIndexJob, queue: IndexQueuePort) {
@@ -320,12 +475,45 @@ export async function rebuildBusinessSource(job: ClaimedIndexJob, queue: IndexQu
     },
     select: {
       entityType: true,
-      entityId: true
+      entityId: true,
+      sourceType: true,
+      sourceUrl: true,
+      projectId: true,
+      versionId: true,
+      title: true,
+      metadata: true
     }
   });
 
   if (!source) {
     throw new Error(`未找到需要重建的索引源：${sourceId}`);
+  }
+
+  if (source.sourceType === "feishu_doc" || source.sourceType === "feishu_wiki") {
+    if (!source.sourceUrl) {
+      throw new Error(`飞书索引源缺少 sourceUrl：${sourceId}`);
+    }
+
+    const metadata = source.metadata && typeof source.metadata === "object" && !Array.isArray(source.metadata)
+      ? source.metadata as KnowledgeMetadata
+      : {};
+
+    await syncFeishuDocument({
+      ...job,
+      sourceId,
+      entityType: source.entityType,
+      entityId: source.entityId,
+      jobType: "sync_feishu",
+      payload: {
+        ...metadata,
+        documentLink: source.sourceUrl,
+        requirementId: source.entityId,
+        requirementTitle: typeof metadata.requirementTitle === "string" ? metadata.requirementTitle : source.title,
+        versionId: source.versionId,
+        project: source.projectId
+      }
+    }, queue);
+    return;
   }
 
   await indexBusinessEntity({

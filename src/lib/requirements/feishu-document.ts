@@ -8,7 +8,7 @@ type FeishuApiPayload<T> = {
   data?: T;
 };
 
-type ParsedFeishuLink = {
+export type ParsedFeishuLink = {
   type: "docx" | "wiki" | "doc";
   token: string;
 };
@@ -25,7 +25,7 @@ type DocxRawContentData = {
   content?: string;
 };
 
-function parseFeishuDocumentLink(link: string): ParsedFeishuLink {
+export function parseFeishuDocumentLink(link: string): ParsedFeishuLink {
   let url: URL;
 
   try {
@@ -121,12 +121,18 @@ export async function readFeishuDocumentFromLink(link: string) {
 
     return {
       title: node.title,
+      type: parsed.type,
+      token: parsed.token,
+      documentToken: node.token,
       content: await readDocxRawContent(node.token)
     };
   }
 
   return {
     title: "飞书需求文档",
+    type: parsed.type,
+    token: parsed.token,
+    documentToken: parsed.token,
     content: await readDocxRawContent(parsed.token)
   };
 }

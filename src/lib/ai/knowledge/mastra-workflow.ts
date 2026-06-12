@@ -1,7 +1,7 @@
 import type { ClaimedIndexJob, IndexQueuePort, WorkflowPort } from "@/lib/ai/knowledge/ports";
 import { getPrismaClient } from "@/lib/database/prisma";
 import { embedPendingChunks } from "@/lib/ai/knowledge/embedding-workflow";
-import { indexBusinessEntity, rebuildBusinessSource } from "@/lib/ai/knowledge/source-builders";
+import { indexBusinessEntity, rebuildBusinessSource, syncFeishuDocument } from "@/lib/ai/knowledge/source-builders";
 
 type WorkflowHandlers = {
   indexEntity?: (job: ClaimedIndexJob) => Promise<void>;
@@ -21,10 +21,7 @@ export function createMastraKnowledgeWorkflow(queue: IndexQueuePort, handlers: W
         await (handlers.indexEntity ?? ((nextJob) => indexBusinessEntity(nextJob, queue)))(job);
         break;
       case "sync_feishu":
-        if (!handlers.syncFeishu) {
-          throw new Error("飞书同步 workflow 尚未接入处理器");
-        }
-        await handlers.syncFeishu(job);
+        await (handlers.syncFeishu ?? ((nextJob) => syncFeishuDocument(nextJob, queue)))(job);
         break;
       case "embed_chunks":
         await (handlers.embedChunks ?? embedPendingChunks)(job);

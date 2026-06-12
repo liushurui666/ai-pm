@@ -1,6 +1,7 @@
 import type { DashboardEntityType, CreateRecordResult } from "@/types/records";
 import { createMySqlIndexQueue } from "@/lib/ai/knowledge/mysql-index-queue";
 import type { KnowledgeEntityType } from "@/lib/ai/knowledge/ports";
+import type { Requirement } from "@/types/dashboard";
 
 const indexableEntityTypes: Partial<Record<DashboardEntityType, KnowledgeEntityType>> = {
   task: "task",
@@ -36,6 +37,30 @@ export async function enqueueRecordIndexJob(result: CreateRecordResult, reason: 
       dashboardType: result.type
     }
   });
+
+  if (result.type === "requirement") {
+    const requirement = result.record as Requirement;
+    const documentLink = requirement.documentLink?.trim();
+
+    if (documentLink) {
+      await queue.enqueue({
+        workspaceId,
+        entityType: "feishu_doc",
+        entityId: requirement.id,
+        jobType: "sync_feishu",
+        dedupeKey: `${workspaceId}:requirement:${requirement.id}:sync_feishu`,
+        payload: {
+          reason,
+          requirementId: requirement.id,
+          requirementTitle: requirement.title,
+          versionId: requirement.versionId,
+          versionName: requirement.versionName,
+          project: requirement.project,
+          documentLink
+        }
+      });
+    }
+  }
 }
 
 export async function safelyEnqueueRecordIndexJob(result: CreateRecordResult, reason: "created" | "updated") {
