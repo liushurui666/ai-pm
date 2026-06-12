@@ -697,6 +697,7 @@ ChatBox 不需要单独“知识库模式”，但可以识别用户问题自动
 - Hybrid Retrieval 合并关键词召回和 Qdrant 语义召回。
 - Reranker 精排候选片段。
 - 基础 Eval：固定评测集、RAG trace、引用正确率、检索召回率、Reranker 排序效果。
+- 管理员重建当前工作区 AI 索引入口：按 workspace 批量创建 `rebuild_source` / `embed_chunks` job，由 worker 异步重建。
 - ChatBox 新增 `knowledge` tool。
 - 回答展示来源。
 
@@ -731,7 +732,7 @@ ChatBox 不需要单独“知识库模式”，但可以识别用户问题自动
 - 更精细的 chunk 策略。
 - embedding 批处理吞吐优化。
 - contentHash embedding 缓存增强。
-- 索引重建脚本。
+- 大规模索引重建性能调优。
 
 ### 14.4 V4：Eval 平台化与可观测性增强
 
@@ -909,16 +910,15 @@ worker 异步重新生成 chunk、embedding 和 Qdrant 向量
 
 1. V1 是否只索引 version/requirement/bug，暂缓 task。
 2. V1 Qdrant 部署方式：Docker compose 内置、独立云服务，还是公司公共向量库。
-3. 是否需要手动“重建当前工作区 AI 索引”的管理员入口；该入口仅面向管理员或运维，用于模型、chunk、Qdrant 或权限修复后的批量重新入队。
 
 ## 20. 推荐结论
 
 推荐按以下路线落地：
 
 ```txt
-V1：正式异步队列 + 业务对象自动索引 + Embedding + Qdrant + Hybrid Retrieval + Reranker + 基础 Eval + ChatBox knowledge tool + 来源引用
+V1：正式异步队列 + 业务对象自动索引 + Embedding + Qdrant + Hybrid Retrieval + Reranker + 基础 Eval + 管理员重建索引入口 + ChatBox knowledge tool + 来源引用
 V2：飞书 docx/wiki 链接自动同步
-V3：检索质量增强 + 索引重建 + 性能调优
+V3：检索质量增强 + 大规模重建性能调优
 V4：Eval 平台化 + Langfuse 深度可观测性
 ```
 
