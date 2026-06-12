@@ -1,7 +1,7 @@
 import type { ClaimedIndexJob, IndexQueuePort, WorkflowPort } from "@/lib/ai/knowledge/ports";
 import { getPrismaClient } from "@/lib/database/prisma";
 import { embedPendingChunks } from "@/lib/ai/knowledge/embedding-workflow";
-import { indexBusinessEntity, rebuildBusinessSource, syncFeishuDocument } from "@/lib/ai/knowledge/source-builders";
+import { cleanupKnowledgeSource, indexBusinessEntity, rebuildBusinessSource, syncFeishuDocument } from "@/lib/ai/knowledge/source-builders";
 
 type WorkflowHandlers = {
   indexEntity?: (job: ClaimedIndexJob) => Promise<void>;
@@ -30,10 +30,7 @@ export function createMastraKnowledgeWorkflow(queue: IndexQueuePort, handlers: W
         await (handlers.rebuildSource ?? ((nextJob) => rebuildBusinessSource(nextJob, queue)))(job);
         break;
       case "cleanup_source":
-        if (!handlers.cleanupSource) {
-          throw new Error("索引清理 workflow 尚未接入处理器");
-        }
-        await handlers.cleanupSource(job);
+        await (handlers.cleanupSource ?? cleanupKnowledgeSource)(job);
         break;
       default:
         throw new Error(`未知 AI 索引任务类型：${job.jobType}`);

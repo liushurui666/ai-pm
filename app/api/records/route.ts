@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createDashboardRecord, deleteDashboardRecord, getDashboardData, updateDashboardRecord } from "@/data/local-dashboard";
 import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 import { canPerformAction, getPermissionDeniedReason } from "@/lib/access/permissions";
-import { safelyEnqueueRecordIndexJob } from "@/lib/ai/knowledge/record-indexing";
+import { safelyEnqueueRecordCleanupJob, safelyEnqueueRecordIndexJob } from "@/lib/ai/knowledge/record-indexing";
 import { getSession } from "@/lib/auth/session";
 import type { BugReport } from "@/types/dashboard";
 import type { DashboardEntityType } from "@/types/records";
@@ -271,7 +271,16 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
-    return NextResponse.json(await deleteDashboardRecord(body.type, body.id));
+    const result = await deleteDashboardRecord(body.type, body.id);
+
+    // 删除业务记录后同样只投递后台清理任务；Qdrant point 和 source/chunk 清理由 worker 异步完成。
+    await safelyEnqueueRecordCleanupJob({
+      workspaceId: data.meta?.currentWorkspace?.id ?? body.workspaceId,
+      type: body.type,
+      id: body.id
+    });
+
+    return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(
       {

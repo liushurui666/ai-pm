@@ -4,6 +4,7 @@ import { getPrismaClient } from "@/lib/database/prisma";
 import { chunkKnowledgeText, createContentHash } from "@/lib/ai/knowledge/chunking";
 import type { ClaimedIndexJob, IndexQueuePort, KnowledgeEntityType, KnowledgeMetadata } from "@/lib/ai/knowledge/ports";
 import { parseFeishuDocumentLink, readFeishuDocumentFromLink } from "@/lib/requirements/feishu-document";
+import { createQdrantVectorStore } from "@/lib/ai/knowledge/qdrant-vector-store";
 
 type BuiltKnowledgeSource = {
   workspaceId: string;
@@ -456,6 +457,36 @@ export async function syncFeishuDocument(job: ClaimedIndexJob, queue: IndexQueue
       sourceType: feishuSource.sourceType
     }
   });
+}
+
+export async function cleanupKnowledgeSource(job: ClaimedIndexJob) {
+  const prisma = getPrismaClient();
+  const vectorStore = createQdrantVectorStore();
+  const entityTypes: KnowledgeEntityType[] = job.entityType === "requirement"
+    ? ["requirement", "feishu_doc", "feishu_wiki"]
+    : [job.entityType];
+  const sources = await prisma.aiIndexSource.findMany({
+    where: {
+      workspaceId: job.workspaceId,
+      entityId: job.entityId,
+      entityType: {
+        in: entityTypes
+      }
+    },
+    select: {
+      id: true
+    }
+  });
+
+  for (const source of sources) {
+    // 先删 Qdrant，再删 MySQL 元数据；如果向量库删除失败，job 会重试，避免数据库先删导致向量残留不可追踪。
+    await vectorStore.deleteSource(source.id);
+    await prisma.aiIndexSource.delete({
+      where: {
+        id: source.id
+      }
+    });
+  }
 }
 
 // 管理员重建入口最终会落到 rebuild_source job；这里把它转回 index_entity 的同一条标准化链路，

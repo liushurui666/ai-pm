@@ -75,3 +75,44 @@ export async function safelyEnqueueRecordIndexJob(result: CreateRecordResult, re
     });
   }
 }
+
+export async function enqueueRecordCleanupJob(input: {
+  workspaceId?: string;
+  type: DashboardEntityType;
+  id: string;
+}) {
+  const entityType = indexableEntityTypes[input.type];
+
+  if (!entityType || !input.workspaceId) {
+    return;
+  }
+
+  const queue = createIndexQueue();
+
+  await queue.enqueue({
+    workspaceId: input.workspaceId,
+    entityType,
+    entityId: input.id,
+    jobType: "cleanup_source",
+    dedupeKey: `${input.workspaceId}:${entityType}:${input.id}:cleanup_source`,
+    payload: {
+      dashboardType: input.type
+    }
+  });
+}
+
+export async function safelyEnqueueRecordCleanupJob(input: {
+  workspaceId?: string;
+  type: DashboardEntityType;
+  id: string;
+}) {
+  try {
+    await enqueueRecordCleanupJob(input);
+  } catch (error) {
+    console.error("[knowledge-index] cleanup enqueue failed", {
+      error,
+      type: input.type,
+      id: input.id
+    });
+  }
+}
