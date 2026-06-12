@@ -1910,6 +1910,7 @@ export function ProjectManagementPlatform({
                         deniedReason: permissionDeniedReason
                       }}
                       submitting={memberSubmitting}
+                      workspaceId={currentWorkspaceId}
                       onCreateMember={handleCreateMember}
                       onUpdateMember={handleUpdateMember}
                     />

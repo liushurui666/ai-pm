@@ -2,7 +2,7 @@
 
 import "./index.less";
 import { Alert, Avatar, Button, Drawer, Empty, Form, Input, Modal, Select, Space, Switch, Table, Tag, Tooltip, Typography } from "antd";
-import { BellOutlined, DeleteOutlined, PlusOutlined, SettingOutlined, TeamOutlined } from "@ant-design/icons";
+import { BellOutlined, DeleteOutlined, DatabaseOutlined, PlusOutlined, SettingOutlined, TeamOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import type { ColumnsType } from "antd/es/table";
 import type {
@@ -384,6 +384,7 @@ export function MembersView({
   peopleLoading,
   permissions,
   submitting,
+  workspaceId,
   onCreateMember,
   onUpdateMember
 }: {
@@ -393,15 +394,59 @@ export function MembersView({
   peopleLoading: boolean;
   permissions: DashboardPermissions;
   submitting: boolean;
+  workspaceId: string;
   onCreateMember: (values: Record<string, unknown>) => void;
   onUpdateMember: (member: DashboardMember, values: Record<string, unknown>) => void;
 }) {
   const [form] = Form.useForm<Record<string, unknown>>();
   const [notificationForm] = Form.useForm<Record<string, unknown>>();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [rebuildSubmitting, setRebuildSubmitting] = useState(false);
   const [notificationMember, setNotificationMember] = useState<DashboardMember | null>(null);
   const canManageMembers = permissions.canManageMembers;
   const deniedReason = permissions.deniedReason ?? "只有所有者或管理员可以管理成员。";
+
+  async function handleRebuildAiIndex() {
+    if (!workspaceId || rebuildSubmitting) {
+      return;
+    }
+
+    setRebuildSubmitting(true);
+
+    try {
+      // 管理员入口只提交后台重建任务，不轮询或展示同步状态，避免普通页面感知索引流水线细节。
+      const response = await fetch("/api/ai-index/rebuild", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          workspaceId
+        })
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        enqueued?: number;
+        message?: string;
+        error?: string;
+      } | null;
+
+      if (!response.ok || payload?.error) {
+        throw new Error(payload?.error || "提交 AI 索引重建失败");
+      }
+
+      Modal.success({
+        title: "已提交 AI 索引重建",
+        content: payload?.message || `已提交 ${payload?.enqueued ?? 0} 个后台任务。`
+      });
+    } catch (error) {
+      Modal.error({
+        title: "AI 索引重建提交失败",
+        content: error instanceof Error ? error.message : "请稍后重试。"
+      });
+    } finally {
+      setRebuildSubmitting(false);
+    }
+  }
 
   const columns: ColumnsType<DashboardMember> = [
     {
@@ -515,24 +560,29 @@ export function MembersView({
       icon={<TeamOutlined />}
       extra={
         canManageMembers ? (
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => {
-              form.resetFields();
-              form.setFieldsValue({
-                role: "productMember",
-                status: "active",
-                feishuEnabled: false,
-                taskAssigned: true,
-                requirementChanged: true,
-                channels: []
-              });
-              setDrawerOpen(true);
-            }}
-          >
-            添加成员
-          </Button>
+          <Space>
+            <Button icon={<DatabaseOutlined />} loading={rebuildSubmitting} onClick={handleRebuildAiIndex}>
+              重建 AI 索引
+            </Button>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => {
+                form.resetFields();
+                form.setFieldsValue({
+                  role: "productMember",
+                  status: "active",
+                  feishuEnabled: false,
+                  taskAssigned: true,
+                  requirementChanged: true,
+                  channels: []
+                });
+                setDrawerOpen(true);
+              }}
+            >
+              添加成员
+            </Button>
+          </Space>
         ) : (
           <Tooltip title={deniedReason}>
             <span>
