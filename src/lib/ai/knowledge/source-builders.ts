@@ -244,6 +244,41 @@ export async function indexBusinessEntity(job: ClaimedIndexJob, queue: IndexQueu
   }
 
   const contentHash = createContentHash(source.content);
+  const existingSource = await prisma.aiIndexSource.findUnique({
+    where: {
+      workspaceId_entityType_entityId_sourceType: {
+        workspaceId: source.workspaceId,
+        entityType: source.entityType,
+        entityId: source.entityId,
+        sourceType: "record"
+      }
+    },
+    select: {
+      id: true,
+      contentHash: true,
+      status: true
+    }
+  });
+
+  if (existingSource?.status === "ready" && existingSource.contentHash === contentHash) {
+    // 内容没有变化时不重复切 chunk、调 embedding 或写 Qdrant；只刷新标题、关联字段和元数据。
+    // 这样业务保存可以频繁触发 index job，但不会把模型服务和向量库成本放大。
+    await prisma.aiIndexSource.update({
+      where: {
+        id: existingSource.id
+      },
+      data: {
+        projectId: source.projectId,
+        versionId: source.versionId,
+        title: source.title,
+        error: null,
+        lastIndexedAt: new Date(),
+        metadata: asInputJson(source.metadata)
+      }
+    });
+    return;
+  }
+
   const chunks = chunkKnowledgeText({
     content: source.content,
     heading: source.title,
@@ -364,6 +399,42 @@ export async function syncFeishuDocument(job: ClaimedIndexJob, queue: IndexQueue
     document.content
   ]);
   const contentHash = createContentHash(content);
+  const existingSource = await prisma.aiIndexSource.findUnique({
+    where: {
+      workspaceId_entityType_entityId_sourceType: {
+        workspaceId: job.workspaceId,
+        entityType: feishuSource.entityType,
+        entityId: requirementId,
+        sourceType: feishuSource.sourceType
+      }
+    },
+    select: {
+      id: true,
+      contentHash: true,
+      status: true
+    }
+  });
+
+  if (existingSource?.status === "ready" && existingSource.contentHash === contentHash) {
+    // 飞书正文未变化时只刷新需求/版本关联和文档标题，避免管理员重建或重复保存时反复拉高 embedding 成本。
+    await prisma.aiIndexSource.update({
+      where: {
+        id: existingSource.id
+      },
+      data: {
+        projectId: sourceMetadata.project,
+        versionId: requirement?.versionId ?? getPayloadText(job.payload, "versionId"),
+        title,
+        sourceUrl: documentLink,
+        sourceToken: feishuSource.sourceToken,
+        error: null,
+        lastIndexedAt: new Date(),
+        metadata: asInputJson(sourceMetadata)
+      }
+    });
+    return;
+  }
+
   const chunks = chunkKnowledgeText({
     content,
     heading: title,
