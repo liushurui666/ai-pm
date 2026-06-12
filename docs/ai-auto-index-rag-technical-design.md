@@ -187,7 +187,7 @@ ai_index_chunks
 
 - `content` 是原始片段文本。
 - `sparseText` 是给关键词检索用的增强文本，可以额外拼入标题、编号、负责人、状态等字段。
-- `embeddingVectorRef` 指向外部向量库中的向量 id。如果第一版不用外部向量库，可以为空。
+- `embeddingVectorRef` 指向 Qdrant 中的向量 point id。V1 已要求接入 Qdrant，因此 ready chunk 必须具备可追踪的向量索引引用；只有索引失败或被明确跳过时才允许为空。
 - `sourceLocator` 用于未来定位飞书 block、段落、表格行或内部业务详情页锚点。
 
 ### 6.3 `ai_index_jobs`
@@ -456,7 +456,7 @@ knowledge
 4. Reranker 重排。
 5. 返回 TopK。
 
-第一版可以只实现 Sparse Retrieval，接口保持不变。第二版接入 embedding 和向量库时，不需要改 ChatBox tool 协议。
+V1 必须实现 Hybrid Retrieval：Sparse Retrieval 负责精确词召回，Qdrant Vector Retrieval 负责语义召回。Reranker 可以后置，但检索编排接口从第一版开始就按混合检索设计，避免后续再改 ChatBox tool 协议。
 
 ### 10.3 引用展示
 
@@ -490,12 +490,14 @@ knowledge
 
 ### 11.2 RAG 编排
 
-第一版建议自研轻量编排模块：
+第一版建议自研轻量编排模块，并把 Qdrant 检索作为 V1 默认路径：
 
 ```txt
 src/lib/ai/knowledge/
 - source-builders.ts
 - chunking.ts
+- embedding.ts
+- qdrant-index.ts
 - sparse-retrieval.ts
 - rag-orchestrator.ts
 - citations.ts
@@ -508,16 +510,33 @@ src/lib/ai/knowledge/
 
 ### 11.3 Vector DB
 
-推荐第二版接入 Qdrant：
+V1 必须接入 Qdrant：
 
 - 支持向量检索。
 - 支持 hybrid 查询能力。
 - HTTP API 易于从 Node/Next.js 调用。
 - 作为独立索引服务，不影响当前 MySQL 业务库。
 
-第一版不强制引入 Qdrant，可以先用 MySQL 元数据 + 关键词检索跑通闭环。
+MySQL 继续保存 source、chunk、job 等业务元数据；Qdrant 只保存向量 point、payload 和索引。两者通过 `chunkId` / `embeddingVectorRef` 关联。V1 不能只做 MySQL 关键词检索，否则后续语义召回、飞书长文档问答和“用户问法不精确”的能力会明显不足。
 
-### 11.4 Reranker
+### 11.4 Embedding 服务
+
+V1 同步接入 embedding 服务：
+
+- 文档或业务对象 chunk 生成后，批量调用 embedding 模型。
+- 使用 `contentHash` 避免重复 embedding。
+- 记录 `embeddingModel`，后续更换模型时可以识别需要重建的索引。
+- embedding 失败时 source 保持 failed 或 partial 状态，不允许静默降级成“已同步但不可语义检索”。
+
+第一版实现可以放在 AI PM 内部：
+
+```txt
+src/lib/ai/knowledge/embedding.ts
+```
+
+后续多个业务系统复用时，再抽成独立 embedding 服务。
+
+### 11.5 Reranker
 
 第一版预留接口：
 
@@ -532,7 +551,7 @@ rerank(query, candidates): rankedCandidates
 - BGE Reranker。
 - Cohere Rerank。
 
-### 11.5 Eval 和 Trace
+### 11.6 Eval 和 Trace
 
 第一版记录基础日志：
 
@@ -625,9 +644,9 @@ ChatBox 不需要单独“知识库模式”，但可以识别用户问题自动
 
 ## 14. 分期计划
 
-### 14.1 V1：自动索引闭环
+### 14.1 V1：自动索引 + Qdrant 语义检索闭环
 
-目标：业务对象自动进入 AI 可检索范围。
+目标：业务对象自动进入 AI 可检索范围，并且第一版就具备语义检索能力。
 
 范围：
 
@@ -635,17 +654,19 @@ ChatBox 不需要单独“知识库模式”，但可以识别用户问题自动
 - 版本、需求、Bug、任务写入后创建索引任务。
 - 生成业务对象标准文本。
 - 文本 chunking。
-- MySQL 关键词检索。
+- Embedding 服务。
+- Qdrant 向量索引。
+- Sparse Retrieval 关键词检索。
+- Hybrid Retrieval 合并关键词召回和 Qdrant 语义召回。
 - ChatBox 新增 `knowledge` tool。
 - 回答展示来源。
 - 业务详情展示轻量同步状态。
 
 不做：
 
-- embedding。
-- Qdrant。
 - Reranker。
 - 飞书 block 精准定位。
+- 完整 Eval 平台。
 
 ### 14.2 V2：飞书自动同步
 
@@ -660,16 +681,17 @@ ChatBox 不需要单独“知识库模式”，但可以识别用户问题自动
 - 失败重试。
 - 同步状态提示。
 
-### 14.3 V3：语义检索升级
+### 14.3 V3：检索质量增强
 
-目标：提升非精确问法下的召回率。
+目标：在 V1 Qdrant 语义检索基础上提升召回质量、索引稳定性和可运维性。
 
 范围：
 
-- Embedding 服务。
-- Qdrant 向量索引。
-- Hybrid Retrieval。
-- contentHash embedding 缓存。
+- Qdrant collection 参数调优。
+- 多路召回权重调优。
+- 更精细的 chunk 策略。
+- embedding 批处理吞吐优化。
+- contentHash embedding 缓存增强。
 - 索引重建脚本。
 
 ### 14.4 V4：Rerank 与 Eval
@@ -823,7 +845,7 @@ knowledge: tool({
 ## 19. 待决策点
 
 1. V1 是否只索引 version/requirement/bug，暂缓 task。
-2. V1 是否先做 MySQL 关键词检索，V3 再引入 Qdrant。
+2. V1 Qdrant 部署方式：Docker compose 内置、独立云服务，还是公司公共向量库。
 3. 飞书文档同步优先支持 docx/wiki，还是同时支持 sheets。
 4. 是否在业务详情页展示“AI 同步状态”。
 5. 是否需要手动“重建当前工作区 AI 索引”的管理员入口。
@@ -835,10 +857,10 @@ knowledge: tool({
 推荐按以下路线落地：
 
 ```txt
-V1：业务对象自动索引 + 关键词检索 + ChatBox knowledge tool + 来源引用
+V1：业务对象自动索引 + Embedding + Qdrant + Hybrid Retrieval + ChatBox knowledge tool + 来源引用
 V2：飞书链接自动同步
-V3：Embedding + Qdrant + Hybrid Retrieval
+V3：检索质量增强 + 索引重建 + 性能调优
 V4：Reranker + Langfuse Eval
 ```
 
-这样既不会把第一版拖成 AI 中台项目，也不会做成一次性功能。用户继续使用版本、需求、Bug、任务等现有业务入口，AI PM 在后台自动沉淀 AI 索引，ChatBox 自然获得“查项目知识”的能力。
+这样第一版就具备真正的 RAG 语义检索能力，同时仍然不新增独立知识库管理页。用户继续使用版本、需求、Bug、任务等现有业务入口，AI PM 在后台自动沉淀 AI 索引，ChatBox 自然获得“查项目知识”的能力。
