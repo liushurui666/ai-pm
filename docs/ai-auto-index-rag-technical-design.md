@@ -617,9 +617,12 @@ V1 必须接入 Reranker。原因是 Qdrant 和 Sparse Retrieval 负责“尽可
 rerank(query, candidates): rankedCandidates
 ```
 
-V1 模型可选：
+V1 默认模型：
 
-- DashScope / 百炼 rerank 模型。
+- DashScope / 百炼 `qwen3-rerank`。
+
+备选模型：
+
 - Jina Reranker。
 - BGE Reranker。
 - Cohere Rerank。
@@ -629,6 +632,7 @@ V1 模型可选：
 - V1 先把 Sparse + Qdrant 合并后的前 30-50 条候选交给 Reranker。
 - Reranker 输出前 5-8 条给 ChatBox knowledge tool。
 - 如果 Reranker 服务临时失败，可以降级为 hybrid score 排序，但 source 状态和 trace 里必须记录降级原因。
+- 当前代码落地为 `src/lib/ai/knowledge/dashscope-reranker.ts`，通过 `RerankerPort` 对业务层隐藏百炼 native endpoint。
 
 ### 11.6 Eval 和 Trace
 

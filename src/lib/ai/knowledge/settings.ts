@@ -1,5 +1,7 @@
 const DEFAULT_EMBEDDING_MODEL = "text-embedding-v4";
 const DEFAULT_EMBEDDING_DIMENSIONS = 1024;
+const DEFAULT_RERANK_MODEL = "qwen3-rerank";
+const DEFAULT_RERANK_URL = "https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank";
 const DEFAULT_QDRANT_COLLECTION = "ai_pm_knowledge_chunks";
 const DEFAULT_INDEX_JOB_LOCK_MS = 10 * 60 * 1000;
 
@@ -15,6 +17,8 @@ export function getKnowledgeSettings() {
   return {
     embeddingModel: process.env.AI_EMBEDDING_MODEL?.trim() || DEFAULT_EMBEDDING_MODEL,
     embeddingDimensions: readNumberEnv("AI_EMBEDDING_DIMENSIONS", DEFAULT_EMBEDDING_DIMENSIONS),
+    rerankModel: process.env.AI_RERANK_MODEL?.trim() || DEFAULT_RERANK_MODEL,
+    rerankUrl: process.env.AI_RERANK_URL?.trim() || DEFAULT_RERANK_URL,
     qdrantUrl: process.env.QDRANT_URL?.trim() || "",
     qdrantApiKey: process.env.QDRANT_API_KEY?.trim() || "",
     qdrantCollection: process.env.QDRANT_COLLECTION?.trim() || DEFAULT_QDRANT_COLLECTION,

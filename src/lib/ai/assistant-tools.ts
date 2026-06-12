@@ -6,7 +6,7 @@ import {
 } from "@/lib/ai/assistant-internal-actions";
 import {
   createDashScopeEmbedding,
-  createFallbackReranker,
+  createDashScopeReranker,
   createKnowledgeRetriever,
   createNoopTraceEval,
   createQdrantVectorStore
@@ -340,7 +340,7 @@ function createKnowledgeSearchTool(data: DashboardData) {
         const retriever = createKnowledgeRetriever({
           embedding: createDashScopeEmbedding(),
           vectorStore: createQdrantVectorStore(),
-          reranker: createFallbackReranker(),
+          reranker: createDashScopeReranker(),
           traceEval: createNoopTraceEval()
         });
         const matches = await retriever.search({
