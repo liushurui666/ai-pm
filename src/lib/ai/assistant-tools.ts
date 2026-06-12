@@ -353,12 +353,11 @@ function createKnowledgeSearchTool(data: DashboardData) {
           知识索引状态: matches.length ? "已返回匹配片段" : "当前知识索引没有匹配片段",
           片段: matches.map((match, index) => ({
             序号: index + 1,
-            标题: sanitizeAssistantFactText(match.title),
+            来源标题: sanitizeAssistantFactText(match.title),
             小节: sanitizeAssistantFactText(match.heading),
             内容: sanitizeAssistantFactText(match.content),
             相关度: typeof match.score === "number" ? Number(match.score.toFixed(4)) : undefined,
-            来源类型: sanitizeAssistantFactText(match.metadata?.sourceType ?? match.metadata?.entityType),
-            元数据: sanitizeAssistantFactText(JSON.stringify(match.metadata ?? {}))
+            来源类型: sanitizeAssistantFactText(match.metadata?.sourceType ?? match.metadata?.entityType)
           }))
         };
       } catch (error) {
