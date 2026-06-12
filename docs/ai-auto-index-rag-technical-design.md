@@ -28,6 +28,7 @@ AI PM 当前的 AI 助手已经能读取工作区内的结构化项目数据，�
 - V1 建成正式异步队列和 worker，业务写入只入队，不同步执行索引、embedding、飞书解析或 Qdrant 写入。
 - 支持关键词检索 Sparse Retrieval 和语义检索 Vector Retrieval 的组合。
 - V1 即完成 Embedding、Qdrant、Hybrid Retrieval、Reranker 和基础 Eval 的完整检索闭环，预留外部 AI 基座化和独立 embedding 服务的升级路径。
+- 优先采用先进、成熟、TypeScript 友好且用法简单的三方库；业务代码只保留薄封装和 Port/Adapter，确保整套 RAG 能力可被 ChatBox、周报、Bug 分析、版本问答等多个业务复用。
 - 继续使用当前 AI SDK ChatBox 主链路，不重写对话层。
 - 保持 workspace 级权限隔离，未来支持 project/version 范围过滤。
 
@@ -519,10 +520,17 @@ V1 必须实现 Hybrid Retrieval + Reranker：Sparse Retrieval 负责精确词�
 
 ### 11.2 RAG 编排
 
-第一版建议自研轻量编排模块，并把 Qdrant 检索作为 V1 默认路径：
+第一版不做大段手写 RAG 框架，而是采用“成熟三方库 + 本项目薄封装”的方式。业务侧只能依赖 `src/lib/ai/knowledge/ports.ts` 暴露的稳定接口，具体实现放在 adapters 中，后续可以替换库或抽成独立 AI 基座。
 
 ```txt
 src/lib/ai/knowledge/
+- ports.ts
+- adapters/
+  - qdrant-vector-store.ts
+  - bullmq-index-queue.ts
+  - dashscope-embedding.ts
+  - dashscope-reranker.ts
+  - langfuse-trace.ts
 - source-builders.ts
 - chunking.ts
 - embedding.ts
@@ -533,10 +541,29 @@ src/lib/ai/knowledge/
 - citations.ts
 ```
 
-第二版评估接入：
+V1 优先库选择：
 
-- Mastra：TypeScript 原生，适合 workflow/agent。
-- LlamaIndex.TS：适合文档索引和 RAG。
+- AI SDK：继续负责 ChatBox 流式输出、tools、模型调用和模型切换。
+- Qdrant 官方 JS/TS client：负责 dense/sparse vector point 写入、payload 过滤和 hybrid search。
+- BullMQ + Redis：作为正式异步队列优先方案，负责 job 入队、重试、并发、延迟执行和 worker 消费；如果 V1 部署不允许新增 Redis，则通过同一个 `IndexQueuePort` 临时落到 MySQL 队列表，不能让业务层感知差异。
+- LlamaIndex.TS：优先评估用于飞书 docx/wiki 文本切分、节点结构、RAG pipeline 辅助能力；只通过 adapter 接入，不让业务代码直接依赖其对象模型。
+- Langfuse JS/TS SDK：负责 trace、dataset/eval 结果、score 上报和后续可观测性。
+- Mastra：作为后续 workflow/agent 编排候选；V1 先不强依赖，避免把后台索引流水线和 agent 框架绑定过死。
+
+可复用接口要求：
+
+- `IndexQueuePort`：统一入队、重试、重建、失败封存。
+- `VectorStorePort`：统一 upsert、delete、hybridSearch、payloadFilter。
+- `EmbeddingPort`：统一文档 embedding、query embedding、模型维度记录。
+- `RerankerPort`：统一 rerank 输入输出和降级策略。
+- `KnowledgeRetrieverPort`：统一给 ChatBox、周报、Bug 分析等业务使用。
+- `TraceEvalPort`：统一记录 trace、score、dataset run。
+
+业务模块禁止直接调用 Qdrant、BullMQ、Langfuse、LlamaIndex.TS 等三方 SDK，只能调用上述 Port。这样可以保证：
+
+- 第一次实现能借助成熟库快速上线。
+- 后续替换模型、向量库、队列、Eval 平台时不改业务层。
+- 多个业务场景共享同一套索引、检索、精排、引用和评测能力。
 
 ### 11.3 Vector DB
 
@@ -687,6 +714,8 @@ ChatBox 不需要单独“知识库模式”，但可以识别用户问题自动
 
 - 新增 `ai_index_sources`、`ai_index_chunks`、`ai_index_jobs`。
 - 正式异步队列：任务去重、原子抢占、锁超时释放、退避重试、失败封存、补偿扫描。
+- 队列优先使用 BullMQ + Redis，通过 `IndexQueuePort` 封装；如部署暂不允许 Redis，MySQL 队列只能作为 adapter 兜底。
+- 知识检索能力按 Port/Adapter 拆分，形成可复用 `knowledge` 模块，禁止业务页面直接调用三方 SDK。
 - 独立 worker 进程：消费 `ai_index_jobs`，执行标准文本生成、飞书同步、chunking、embedding、Qdrant 写入和旧索引清理。
 - 版本、需求、Bug、任务写入后创建索引任务。
 - 生成业务对象标准文本。
@@ -696,6 +725,7 @@ ChatBox 不需要单独“知识库模式”，但可以识别用户问题自动
 - Sparse Retrieval 关键词检索。
 - Hybrid Retrieval 合并关键词召回和 Qdrant 语义召回。
 - Reranker 精排候选片段。
+- Langfuse 或兼容 Trace/Eval adapter。
 - 基础 Eval：固定评测集、RAG trace、引用正确率、检索召回率、Reranker 排序效果。
 - 管理员重建当前工作区 AI 索引入口：按 workspace 批量创建 `rebuild_source` / `embed_chunks` job，由 worker 异步重建。
 - ChatBox 新增 `knowledge` tool。
