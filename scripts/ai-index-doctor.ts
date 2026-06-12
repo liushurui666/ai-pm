@@ -2,6 +2,8 @@ import { createRequire } from "node:module";
 import { Socket } from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
 import { config as loadEnv } from "dotenv";
+import { z } from "zod";
+import { createStep, createWorkflow } from "@mastra/core/workflows";
 import { QdrantClient } from "@qdrant/js-client-rest";
 import { getAiApiKey, getAiBaseUrl } from "@/lib/ai/settings";
 import { getKnowledgeSettings } from "@/lib/ai/knowledge/settings";
@@ -155,6 +157,39 @@ function checkPackage(packageName: string, label: string, required: boolean): Ch
   );
 }
 
+async function checkMastraWorkflow(): Promise<CheckResult> {
+  try {
+    const step = createStep({
+      id: "doctor-step",
+      inputSchema: z.object({ ping: z.string() }),
+      outputSchema: z.object({ pong: z.string() }),
+      async execute({ inputData }) {
+        return { pong: inputData.ping };
+      }
+    });
+    const workflow = createWorkflow({
+      id: "ai-index-doctor-workflow",
+      inputSchema: z.object({ ping: z.string() }),
+      outputSchema: z.object({ pong: z.string() })
+    }).then(step).commit();
+    const run = await workflow.createRun();
+    const output = await run.start({ inputData: { ping: "ok" } }) as {
+      status?: string;
+      result?: {
+        pong?: string;
+      };
+    };
+
+    if (output.status === "success" && output.result?.pong === "ok") {
+      return result("Mastra workflow", "pass", "createWorkflow/createStep 可真实启动并返回结果。");
+    }
+
+    return result("Mastra workflow", "fail", `workflow 返回异常：${JSON.stringify(output)}`);
+  } catch (error) {
+    return result("Mastra workflow", "fail", error instanceof Error ? error.message : String(error));
+  }
+}
+
 function printResults(results: CheckResult[]) {
   const iconByStatus: Record<CheckStatus, string> = {
     pass: "PASS",
@@ -174,6 +209,7 @@ async function main() {
     // Mastra 是用户确认的 V1 强绑定项；doctor 默认报告，不直接阻塞本地开发。
     // 上线前可用 `pnpm ai-index:doctor --strict` 把缺失 Mastra SDK 变成硬失败。
     checkPackage("@mastra/core", "Mastra SDK", true),
+    await checkMastraWorkflow(),
     ...await checkAiModels(settings),
     await checkRedis(settings.redisUrl),
     await checkQdrant(settings)
