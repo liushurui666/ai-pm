@@ -1,0 +1,844 @@
+# AI PM 自动索引 RAG 技术方案
+
+## 1. 背景
+
+AI PM 当前的 AI 助手已经能读取工作区内的结构化项目数据，例如项目、任务、Bug、风险、需求、版本、成员负载和周报上下文。用户现在希望进一步让 AI 助手能够理解更多业务资料，但不希望新增一个独立的“知识库管理”产品入口。
+
+当前产品设计更适合把知识库做成后台能力：
+
+- 用户仍然正常创建版本、需求、Bug、任务，或在业务对象里绑定飞书文档链接。
+- 系统在后台自动把这些业务对象和飞书资料同步成 AI 可检索索引。
+- ChatBox 提问时自动检索这些索引，并把结果作为 AI SDK tool 的上下文交给模型。
+- 用户不需要理解 embedding、chunk、向量库、知识库管理等概念。
+
+因此，本方案的核心不是“新增知识库页面”，而是建设 **业务对象自动 AI 索引层**。
+
+## 2. 目标
+
+### 2.1 产品目标
+
+- 创建或更新版本、需求、Bug、任务后，相关内容自动进入 AI 可检索范围。
+- 业务对象中出现飞书文档链接时，系统自动识别并同步飞书正文。
+- ChatBox 能回答跨业务对象和飞书文档的问题，并附带来源。
+- 用户不用手动维护知识库，只在业务对象页面看到轻量的“AI 已同步 / 同步失败 / 重试”状态。
+
+### 2.2 技术目标
+
+- 建立统一 AI 索引源模型，兼容 version、requirement、bug、task、feishu_doc 等来源。
+- 支持关键词检索 Sparse Retrieval 和语义检索 Vector Retrieval 的组合。
+- 预留 Reranker、Eval、外部向量库、独立 embedding 服务的升级路径。
+- 继续使用当前 AI SDK ChatBox 主链路，不重写对话层。
+- 保持 workspace 级权限隔离，未来支持 project/version 范围过滤。
+
+## 3. 非目标
+
+第一阶段不做以下内容：
+
+- 不新增独立“知识库管理”一级菜单。
+- 不做文件上传型知识库。
+- 不强制引入独立 AI 中台服务。
+- 不在业务写接口里同步执行 embedding 或飞书全文解析，避免保存动作变慢。
+- 不把模型最终回答改成手写拼接；仍然通过 AI SDK tools 返回事实，由模型生成自然语言回答。
+
+## 4. 总体架构
+
+```mermaid
+flowchart TD
+  A["业务写入<br/>版本 / 需求 / Bug / 任务"] --> B["索引任务入队"]
+  C["飞书链接识别"] --> D["飞书文档同步任务"]
+  D --> E["正文抽取与清洗"]
+  B --> F["业务对象标准文本生成"]
+  E --> G["Chunk 切片"]
+  F --> G
+  G --> H["Sparse Index<br/>关键词索引"]
+  G --> I["Embedding 服务"]
+  I --> J["Vector DB / Index"]
+  K["ChatBox 用户提问"] --> L["AI SDK knowledge tool"]
+  L --> M["RAG 编排"]
+  M --> H
+  M --> J
+  H --> N["候选片段合并"]
+  J --> N
+  N --> O["Reranker 精排"]
+  O --> P["TopK 片段 + 引用"]
+  P --> Q["AI SDK streamText"]
+  Q --> R["ChatBox 回答 + 来源"]
+  Q --> S["Eval / Trace 记录"]
+```
+
+## 5. 核心概念
+
+### 5.1 AI 索引源
+
+AI 索引源是“可以被 AI 检索的一份资料来源”。它不等于上传文件，也不等于独立知识库文档。
+
+来源可以是：
+
+- 一个版本。
+- 一个需求。
+- 一个 Bug。
+- 一个任务。
+- 一个飞书文档链接。
+- 后续也可以是会议纪要、复盘链接、接口文档、测试方案等。
+
+### 5.2 Chunk
+
+Chunk 是把一份资料切成的小片段。AI 检索时不会把整个版本或整篇飞书文档都塞给模型，而是只取最相关的几个 chunk。
+
+### 5.3 Sparse Retrieval
+
+Sparse Retrieval 是关键词检索，适合命中：
+
+- Bug 编号。
+- 版本号。
+- 接口字段。
+- 错误码。
+- 人名。
+- 项目名。
+- 飞书文档标题。
+
+### 5.4 Embedding 和 Vector Retrieval
+
+Embedding 会把文本变成语义向量。Vector Retrieval 用这些向量找“意思相近”的内容，适合命中：
+
+- 同义表达。
+- 用户不精确的问法。
+- 文档里没有完全相同关键词但含义相关的片段。
+
+### 5.5 Reranker
+
+Reranker 是二次排序器。它会把关键词检索和向量检索拿到的一批候选片段重新排序，挑出最适合当前问题的前几段。
+
+### 5.6 RAG 编排
+
+RAG 编排负责把完整流程串起来：
+
+1. 判断用户问题要查哪个范围。
+2. 生成检索 query。
+3. 同时调用关键词检索和向量检索。
+4. 合并去重。
+5. Reranker 精排。
+6. 打包来源引用。
+7. 交给 AI SDK tool 返回给模型。
+
+## 6. 数据模型设计
+
+### 6.1 `ai_index_sources`
+
+记录每个 AI 索引源。
+
+```txt
+ai_index_sources
+- id
+- workspaceId
+- projectId nullable
+- versionId nullable
+- entityType: version | requirement | bug | task | feishu_doc
+- entityId
+- sourceProvider: internal | feishu
+- sourceType: record | feishu_doc | feishu_wiki | feishu_sheet
+- title
+- sourceUrl nullable
+- sourceToken nullable
+- contentHash
+- status: pending | indexing | ready | failed | disabled
+- error nullable
+- lastIndexedAt nullable
+- createdByMemberId nullable
+- createdAt
+- updatedAt
+```
+
+关键约束：
+
+- `workspaceId + entityType + entityId + sourceProvider` 应保持唯一。
+- `sourceToken` 只存飞书文档 token，不存敏感 access token。
+- 权限过滤以 `workspaceId` 为第一边界，后续叠加 project/version。
+
+### 6.2 `ai_index_chunks`
+
+记录切片后的可检索片段。
+
+```txt
+ai_index_chunks
+- id
+- sourceId
+- workspaceId
+- projectId nullable
+- versionId nullable
+- entityType
+- entityId
+- chunkIndex
+- heading nullable
+- content
+- contentHash
+- tokenCount
+- sourceUrl nullable
+- sourceLocator nullable
+- embeddingStatus: pending | ready | failed | skipped
+- embeddingModel nullable
+- embeddingVectorRef nullable
+- sparseText
+- createdAt
+- updatedAt
+```
+
+说明：
+
+- `content` 是原始片段文本。
+- `sparseText` 是给关键词检索用的增强文本，可以额外拼入标题、编号、负责人、状态等字段。
+- `embeddingVectorRef` 指向外部向量库中的向量 id。如果第一版不用外部向量库，可以为空。
+- `sourceLocator` 用于未来定位飞书 block、段落、表格行或内部业务详情页锚点。
+
+### 6.3 `ai_index_jobs`
+
+记录异步索引任务。
+
+```txt
+ai_index_jobs
+- id
+- workspaceId
+- sourceId nullable
+- jobType: index_entity | sync_feishu | embed_chunks | rebuild_source | cleanup_source
+- payload
+- status: pending | running | success | failed
+- retryCount
+- nextRunAt nullable
+- lockedAt nullable
+- lockedBy nullable
+- error nullable
+- createdAt
+- updatedAt
+```
+
+说明：
+
+- 业务保存接口只创建 job，不同步执行耗时工作。
+- worker 消费 job，并使用 `lockedAt / lockedBy` 避免并发重复处理。
+- 定时补偿任务会扫描 failed、pending、过期 source。
+
+## 7. 自动入库触发点
+
+### 7.1 版本
+
+触发时机：
+
+- 创建版本。
+- 编辑版本。
+- 绑定或修改飞书 PRD 链接。
+- 状态、范围、时间计划、负责人发生变化。
+
+索引文本建议：
+
+```txt
+类型：版本
+版本名称：
+所属工作区：
+所属项目：
+父版本：
+目标：
+范围：
+开始时间：
+结束时间：
+状态：
+负责人：
+关联飞书文档：
+```
+
+### 7.2 需求
+
+触发时机：
+
+- 创建需求。
+- 编辑需求。
+- 修改验收标准、优先级、状态、关联版本。
+- 绑定或修改飞书需求链接。
+
+索引文本建议：
+
+```txt
+类型：需求
+需求标题：
+需求描述：
+验收标准：
+优先级：
+状态：
+关联版本：
+负责人：
+关联飞书文档：
+```
+
+### 7.3 Bug
+
+触发时机：
+
+- 创建 Bug。
+- 编辑 Bug。
+- 修改严重程度、状态、负责人、修复结论。
+- 绑定复盘或问题文档链接。
+
+索引文本建议：
+
+```txt
+类型：Bug
+Bug 标题：
+复现步骤：
+影响范围：
+严重程度：
+状态：
+负责人：
+关联版本：
+修复结论：
+关联飞书文档：
+```
+
+### 7.4 任务
+
+触发时机：
+
+- 创建任务。
+- 编辑任务。
+- 修改阶段、负责人、截止时间、完成说明。
+
+第一版建议只索引任务标题、描述、状态、负责人、关联版本，避免任务数量过多导致索引膨胀。
+
+## 8. 飞书链接自动同步
+
+### 8.1 链接识别
+
+在版本、需求、Bug、任务等业务字段中识别飞书链接：
+
+```txt
+https://xxx.feishu.cn/docx/...
+https://xxx.feishu.cn/wiki/...
+https://xxx.feishu.cn/sheets/...
+```
+
+解析出：
+
+- `sourceType`
+- `sourceToken`
+- 原始 `sourceUrl`
+
+### 8.2 权限原则
+
+飞书同步需要明确权限来源：
+
+- 优先使用当前已有飞书应用/机器人权限。
+- 如果机器人无权限，source 状态为 failed，错误提示“飞书文档无读取权限”。
+- 不把用户个人 access token 长期存储到业务库。
+
+### 8.3 同步策略
+
+第一版采用手动和事件触发，不做高频自动轮询：
+
+- 业务对象保存时识别到新飞书链接，自动创建同步任务。
+- 如果同步失败，在对应业务详情处展示“AI 同步失败，可重试”。
+- 定时补偿任务每天扫描失败或过期 source。
+
+### 8.4 文档正文处理
+
+同步步骤：
+
+1. 拉取飞书文档标题和正文。
+2. 清洗无意义空行、样式标记、重复导航文本。
+3. 保留标题层级、表格文本、列表项。
+4. 生成 chunk。
+5. 更新 source 状态。
+
+## 9. 索引流水线
+
+### 9.1 标准流程
+
+```txt
+业务保存
+  ↓
+upsert ai_index_sources
+  ↓
+insert ai_index_jobs
+  ↓
+worker 生成标准文本或同步飞书
+  ↓
+chunking
+  ↓
+写入 ai_index_chunks
+  ↓
+建立 sparse index
+  ↓
+生成 embedding
+  ↓
+写入 Vector DB / Index
+  ↓
+source.status = ready
+```
+
+### 9.2 内容哈希
+
+每次索引前计算 `contentHash`。
+
+如果内容没有变化：
+
+- 不重复切片。
+- 不重复 embedding。
+- 只更新时间戳和关联字段。
+
+### 9.3 异步处理
+
+推荐 worker 形式：
+
+```txt
+scripts/ai-index-worker.ts
+```
+
+运行方式：
+
+```txt
+pnpm tsx scripts/ai-index-worker.ts
+```
+
+部署方式：
+
+- Docker 内独立 worker 进程。
+- 或先用 cron/定时任务轮询 `ai_index_jobs`。
+
+## 10. 检索链路
+
+### 10.1 ChatBox tool
+
+新增 AI SDK tool：
+
+```txt
+knowledge
+```
+
+职责：
+
+- 接收用户问题。
+- 读取当前 workspaceId。
+- 可选读取 projectId/versionId。
+- 调用 RAG 编排。
+- 返回最相关的资料片段和来源。
+
+返回结构示例：
+
+```json
+{
+  "query": "退款失败怎么处理？",
+  "matches": [
+    {
+      "sourceType": "bug",
+      "title": "退款失败后状态没有回滚",
+      "snippet": "第三方支付返回失败后，订单仍显示退款中...",
+      "score": 0.91,
+      "sourceUrl": "/workbench?view=bugs&bugId=...",
+      "citationId": "1"
+    },
+    {
+      "sourceType": "feishu_doc",
+      "title": "V2.3 支付改版 PRD",
+      "heading": "退款失败处理",
+      "snippet": "退款失败后进入人工审核队列，并记录第三方返回码...",
+      "score": 0.88,
+      "sourceUrl": "https://xxx.feishu.cn/docx/...",
+      "citationId": "2"
+    }
+  ]
+}
+```
+
+### 10.2 Hybrid Retrieval
+
+检索步骤：
+
+1. Sparse Retrieval 找关键词相关片段。
+2. Vector Retrieval 找语义相关片段。
+3. 合并去重。
+4. Reranker 重排。
+5. 返回 TopK。
+
+第一版可以只实现 Sparse Retrieval，接口保持不变。第二版接入 embedding 和向量库时，不需要改 ChatBox tool 协议。
+
+### 10.3 引用展示
+
+模型回答后需要带来源：
+
+```txt
+参考来源：
+[1] Bug：退款失败后状态没有回滚
+[2] 飞书文档：V2.3 支付改版 PRD / 退款失败处理
+```
+
+来源点击策略：
+
+- 内部业务对象：跳转到对应工作台视图或详情。
+- 飞书文档：打开原飞书链接。
+- 后续支持飞书 block 定位时，再拼接精准定位参数。
+
+## 11. 技术选型建议
+
+### 11.1 保留 AI SDK
+
+当前 ChatBox 已经使用 AI SDK，建议继续承担：
+
+- `useChat`
+- `streamText`
+- tools
+- 模型切换
+- 流式 UI
+
+知识检索作为 `knowledge` tool 接入，不替换对话层。
+
+### 11.2 RAG 编排
+
+第一版建议自研轻量编排模块：
+
+```txt
+src/lib/ai/knowledge/
+- source-builders.ts
+- chunking.ts
+- sparse-retrieval.ts
+- rag-orchestrator.ts
+- citations.ts
+```
+
+第二版评估接入：
+
+- Mastra：TypeScript 原生，适合 workflow/agent。
+- LlamaIndex.TS：适合文档索引和 RAG。
+
+### 11.3 Vector DB
+
+推荐第二版接入 Qdrant：
+
+- 支持向量检索。
+- 支持 hybrid 查询能力。
+- HTTP API 易于从 Node/Next.js 调用。
+- 作为独立索引服务，不影响当前 MySQL 业务库。
+
+第一版不强制引入 Qdrant，可以先用 MySQL 元数据 + 关键词检索跑通闭环。
+
+### 11.4 Reranker
+
+第一版预留接口：
+
+```txt
+rerank(query, candidates): rankedCandidates
+```
+
+第二版接入模型：
+
+- DashScope / 百炼 rerank 模型。
+- Jina Reranker。
+- BGE Reranker。
+- Cohere Rerank。
+
+### 11.5 Eval 和 Trace
+
+第一版记录基础日志：
+
+- query
+- 命中的 source/chunk
+- 最终引用
+- latency
+- model
+- workspaceId
+
+第二版接入 Langfuse：
+
+- trace 每次 RAG 调用。
+- 记录 prompt、retrieval、rerank、answer。
+- 建立固定评测集。
+
+## 12. 权限与安全
+
+### 12.1 Workspace 隔离
+
+所有 source、chunk、job 都必须带 `workspaceId`。
+
+检索条件必须包含：
+
+```txt
+workspaceId = 当前工作区
+status = ready
+enabled != false
+```
+
+### 12.2 Project / Version 范围
+
+当用户在具体项目或版本上下文提问时，检索优先级：
+
+1. 当前 versionId 绑定内容。
+2. 当前 projectId 绑定内容。
+3. 当前 workspaceId 通用内容。
+
+### 12.3 飞书权限
+
+- 不绕过飞书权限。
+- 机器人没有权限读取时，不保存正文。
+- 错误只展示业务可读信息，不泄露 token 或接口原文。
+
+### 12.4 数据脱敏
+
+进入模型前需要过滤：
+
+- 内部 API URL。
+- 系统路径。
+- 密钥。
+- token。
+- 原始异常栈。
+
+这与当前 AI 助手已有的输出净化策略保持一致。
+
+## 13. 用户体验设计
+
+不做知识库管理页，但在业务页面提供轻量状态。
+
+### 13.1 版本详情
+
+显示：
+
+```txt
+AI 索引：已同步
+飞书文档：同步失败，点击重试
+```
+
+### 13.2 Bug / 需求详情
+
+显示：
+
+```txt
+AI 可检索：已更新
+```
+
+失败时：
+
+```txt
+AI 同步失败：飞书文档无读取权限
+重试
+```
+
+### 13.3 ChatBox
+
+ChatBox 不需要单独“知识库模式”，但可以识别用户问题自动调用 `knowledge` tool。
+
+当回答引用了索引内容时，展示来源；没有命中时，不伪造来源。
+
+## 14. 分期计划
+
+### 14.1 V1：自动索引闭环
+
+目标：业务对象自动进入 AI 可检索范围。
+
+范围：
+
+- 新增 `ai_index_sources`、`ai_index_chunks`、`ai_index_jobs`。
+- 版本、需求、Bug、任务写入后创建索引任务。
+- 生成业务对象标准文本。
+- 文本 chunking。
+- MySQL 关键词检索。
+- ChatBox 新增 `knowledge` tool。
+- 回答展示来源。
+- 业务详情展示轻量同步状态。
+
+不做：
+
+- embedding。
+- Qdrant。
+- Reranker。
+- 飞书 block 精准定位。
+
+### 14.2 V2：飞书自动同步
+
+目标：业务对象绑定飞书链接后自动同步正文。
+
+范围：
+
+- 飞书链接识别。
+- 飞书 doc/wiki/sheet 基础同步。
+- 飞书正文清洗。
+- 飞书 source/chunk 入索引。
+- 失败重试。
+- 同步状态提示。
+
+### 14.3 V3：语义检索升级
+
+目标：提升非精确问法下的召回率。
+
+范围：
+
+- Embedding 服务。
+- Qdrant 向量索引。
+- Hybrid Retrieval。
+- contentHash embedding 缓存。
+- 索引重建脚本。
+
+### 14.4 V4：Rerank 与 Eval
+
+目标：提升回答准确率并建立质量闭环。
+
+范围：
+
+- Reranker 接入。
+- Langfuse trace。
+- 固定评测集。
+- 引用正确率评估。
+- 检索召回率评估。
+- 延迟和成本报表。
+
+## 15. 关键接口草案
+
+### 15.1 创建索引任务
+
+```ts
+type EnqueueIndexJobInput = {
+  workspaceId: string;
+  entityType: "version" | "requirement" | "bug" | "task";
+  entityId: string;
+  reason: "created" | "updated" | "feishu_link_changed" | "manual_retry";
+};
+```
+
+### 15.2 RAG 检索
+
+```ts
+type SearchKnowledgeInput = {
+  workspaceId: string;
+  query: string;
+  projectId?: string;
+  versionId?: string;
+  limit?: number;
+};
+
+type SearchKnowledgeMatch = {
+  sourceId: string;
+  chunkId: string;
+  entityType: string;
+  entityId: string;
+  title: string;
+  heading?: string;
+  snippet: string;
+  sourceUrl?: string;
+  score: number;
+  citationId: string;
+};
+```
+
+### 15.3 AI SDK tool
+
+```ts
+knowledge: tool({
+  description: "检索当前工作区内由版本、需求、Bug、任务和飞书文档自动沉淀的 AI 索引片段。",
+  inputSchema: z.object({
+    query: z.string().describe("用户当前问题或需要检索的业务主题"),
+    limit: z.number().int().min(1).max(10).optional()
+  }),
+  execute: async ({ query, limit }) => searchKnowledge({ workspaceId, query, limit })
+})
+```
+
+## 16. 失败与补偿
+
+常见失败：
+
+- 飞书无权限。
+- 飞书链接格式不支持。
+- 文档为空。
+- 文档同步超时。
+- embedding 失败。
+- 向量库写入失败。
+- worker 中断。
+
+补偿策略：
+
+- job 失败后记录 `retryCount` 和 `nextRunAt`。
+- 指数退避重试。
+- 业务详情允许手动重试。
+- 定时任务扫描失败或长时间 pending 的 job。
+- source 内容 hash 未变化时跳过重复索引。
+
+## 17. 监控指标
+
+基础指标：
+
+- 待处理 job 数。
+- 失败 job 数。
+- source ready 数。
+- chunk 数。
+- 平均索引耗时。
+- 平均检索耗时。
+- ChatBox knowledge tool 调用次数。
+- 命中率。
+- 无结果率。
+
+质量指标：
+
+- 引用正确率。
+- TopK 命中率。
+- 用户追问率。
+- 回答被复制/重新生成比例。
+- 模型失败率。
+
+## 18. 风险
+
+### 18.1 索引膨胀
+
+任务数据可能很多，全部索引会导致 chunk 数快速增长。
+
+应对：
+
+- V1 任务只索引核心字段。
+- 完成很久的任务可以降低检索优先级。
+- 后续按时间和版本归档。
+
+### 18.2 飞书权限不稳定
+
+机器人可能没有权限读取某些文档。
+
+应对：
+
+- 显示明确失败原因。
+- 不绕过权限。
+- 支持用户把机器人加入文档权限后重试。
+
+### 18.3 回答引用错误
+
+检索片段相关但不充分时，模型可能过度推断。
+
+应对：
+
+- Prompt 要求没有依据就说明未找到。
+- 回答必须附来源。
+- V4 引入 Eval 和 Reranker。
+
+### 18.4 保存接口变慢
+
+如果同步索引在业务保存接口内执行，会影响用户操作。
+
+应对：
+
+- 保存接口只入队。
+- worker 异步处理。
+- 前端显示“AI 索引同步中”。
+
+## 19. 待决策点
+
+1. V1 是否只索引 version/requirement/bug，暂缓 task。
+2. V1 是否先做 MySQL 关键词检索，V3 再引入 Qdrant。
+3. 飞书文档同步优先支持 docx/wiki，还是同时支持 sheets。
+4. 是否在业务详情页展示“AI 同步状态”。
+5. 是否需要手动“重建当前工作区 AI 索引”的管理员入口。
+6. embedding 模型优先使用 DashScope 还是独立供应商。
+7. Eval 第一版是否只做日志，还是直接接 Langfuse。
+
+## 20. 推荐结论
+
+推荐按以下路线落地：
+
+```txt
+V1：业务对象自动索引 + 关键词检索 + ChatBox knowledge tool + 来源引用
+V2：飞书链接自动同步
+V3：Embedding + Qdrant + Hybrid Retrieval
+V4：Reranker + Langfuse Eval
+```
+
+这样既不会把第一版拖成 AI 中台项目，也不会做成一次性功能。用户继续使用版本、需求、Bug、任务等现有业务入口，AI PM 在后台自动沉淀 AI 索引，ChatBox 自然获得“查项目知识”的能力。
