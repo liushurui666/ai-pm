@@ -46,21 +46,38 @@ export function createMastraKnowledgeWorkflow(queue: IndexQueuePort, handlers: W
 
     async runWorkspaceRebuild({ workspaceId }) {
       const prisma = getPrismaClient();
-      const sources = await prisma.aiIndexSource.findMany({
-        where: {
-          workspaceId,
-          status: {
-            not: "disabled"
+      const [sources, linkedRequirements] = await Promise.all([
+        prisma.aiIndexSource.findMany({
+          where: {
+            workspaceId,
+            status: {
+              not: "disabled"
+            }
+          },
+          select: {
+            id: true,
+            entityType: true,
+            entityId: true
           }
-        },
-        select: {
-          id: true,
-          entityType: true,
-          entityId: true
-        }
-      });
-      const jobs = await Promise.all(
-        sources.map((source) => queue.enqueue({
+        }),
+        prisma.requirement.findMany({
+          where: {
+            workspaceId,
+            documentLink: {
+              not: null
+            }
+          },
+          select: {
+            id: true,
+            title: true,
+            project: true,
+            versionId: true,
+            versionName: true,
+            documentLink: true
+          }
+        })
+      ]);
+      const rebuildJobs = sources.map((source) => queue.enqueue({
           workspaceId,
           sourceId: source.id,
           entityType: source.entityType,
@@ -72,8 +89,27 @@ export function createMastraKnowledgeWorkflow(queue: IndexQueuePort, handlers: W
             scope: "workspace",
             sourceId: source.id
           }
-        }))
-      );
+        }));
+      const feishuJobs = linkedRequirements
+        .filter((requirement) => requirement.documentLink?.trim())
+        .map((requirement) => queue.enqueue({
+          workspaceId,
+          entityType: "feishu_doc",
+          entityId: requirement.id,
+          jobType: "sync_feishu",
+          dedupeKey: `${workspaceId}:requirement:${requirement.id}:sync_feishu`,
+          priority: 8,
+          payload: {
+            scope: "workspace_rebuild",
+            requirementId: requirement.id,
+            requirementTitle: requirement.title,
+            versionId: requirement.versionId,
+            versionName: requirement.versionName,
+            project: requirement.project,
+            documentLink: requirement.documentLink
+          }
+        }));
+      const jobs = await Promise.all([...rebuildJobs, ...feishuJobs]);
 
       return {
         enqueued: jobs.length

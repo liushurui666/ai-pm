@@ -894,6 +894,8 @@ knowledge: tool({
   ↓
 为每个 source 创建 rebuild_source 或 embed_chunks job
   ↓
+扫描历史 requirement.documentLink，为未进入 source 的飞书 docx/wiki 创建 sync_feishu job
+  ↓
 worker 异步重新生成 chunk、embedding 和 Qdrant 向量
 ```
 
