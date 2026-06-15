@@ -23,7 +23,8 @@ type ReasoningPart = UIMessage["parts"][number] & {
 const toolTitleMap: Record<string, string> = {
   "tool-account": "识别当前账号",
   "tool-conversation": "读取对话上下文",
-  "tool-bulkOperations": "批量执行工作区动作",
+  "tool-bulkCloseBugs": "批量关闭 Bug",
+  "tool-bulkCompleteTasks": "批量完成任务",
   "tool-mywork": "读取我的待办",
   "tool-operations": "执行工作区动作",
   "tool-projects": "读取项目状态",

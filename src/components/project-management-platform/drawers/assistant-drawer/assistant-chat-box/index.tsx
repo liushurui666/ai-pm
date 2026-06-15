@@ -115,7 +115,7 @@ function hasCompletedMutationTool(messages: UIMessage[]) {
   // 只有动作类 tool 会写业务数据；普通分析、风险读取、周报上下文读取都只是查询。
   // 过去每条回复结束都刷新 dashboard，会让连续对话被大量数据库读请求拖慢，并增加输入框生成态交错的概率。
   return Boolean(lastAssistantMessage?.parts.some((part) =>
-    (part.type === "tool-operations" || part.type === "tool-bulkOperations") &&
+    (part.type === "tool-operations" || part.type === "tool-bulkCompleteTasks" || part.type === "tool-bulkCloseBugs") &&
       "state" in part &&
       part.state === "output-available"
   ));

@@ -408,113 +408,133 @@ function createBulkOperationsTool(
   loadData: AssistantDashboardDataLoader,
   actionRuntime: AssistantInternalActionRuntime
 ) {
-  return {
-    description: [
-      "稳定执行当前工作区批量业务动作；当用户明确要求“全部关闭/批量完成/把我的所有任务都关闭”等批量副作用操作时使用。",
-      "该能力由后端统一循环处理多条记录，模型不要再用 operations 连续生成很多次单条 PATCH。",
-      "当前支持：将任务批量标记为已完成、将 Bug 批量关闭。权限仍由内部业务接口逐条校验。"
-    ].join("\n"),
-    inputSchema: z.object({
-      entity: z.enum(["task", "bug"]).describe("批量处理的记录类型"),
-      action: z.enum(["completeTasks", "closeBugs"]).describe("completeTasks=任务标记已完成，closeBugs=Bug 标记已关闭"),
-      scope: z.enum(["mine", "all", "ids"]).default("mine").describe("mine=当前登录人负责的未完成项，all=当前工作区全部未完成项，ids=仅处理指定记录"),
-      ids: z.array(z.string().min(1)).max(100).optional().describe("scope=ids 时使用的记录 id 列表"),
-      limit: z.number().int().min(1).max(100).default(100).describe("本轮最多处理的记录数")
-    }),
-    execute: async ({
-      action,
-      entity,
-      ids,
-      limit,
-      scope
-    }: {
-      action: "completeTasks" | "closeBugs";
-      entity: "task" | "bug";
-      ids?: string[];
-      limit: number;
-      scope: "mine" | "all" | "ids";
-    }) => {
-      const data = await loadData();
-      const currentUserMatcher = createCurrentUserMatcher(data);
-      const idSet = new Set(ids ?? []);
-      const rowLimit = Math.min(Math.max(Math.trunc(limit || 100), 1), 100);
+  async function executeBulkAction({
+    action,
+    entity,
+    ids,
+    limit,
+    scope
+  }: {
+    action: "completeTasks" | "closeBugs";
+    entity: "task" | "bug";
+    ids?: string[];
+    limit: number;
+    scope: "mine" | "all" | "ids";
+  }) {
+    const data = await loadData();
+    const currentUserMatcher = createCurrentUserMatcher(data);
+    const idSet = new Set(ids ?? []);
+    const rowLimit = Math.min(Math.max(Math.trunc(limit || 100), 1), 100);
 
-      if (entity === "task" && action !== "completeTasks") {
-        return {
-          已执行: false,
-          状态: "失败",
-          业务结果: "任务批量动作只支持标记为已完成。"
-        };
-      }
-
-      if (entity === "bug" && action !== "closeBugs") {
-        return {
-          已执行: false,
-          状态: "失败",
-          业务结果: "Bug 批量动作只支持关闭。"
-        };
-      }
-
-      if (scope === "ids" && !idSet.size) {
-        return {
-          已执行: false,
-          状态: "失败",
-          业务结果: "按指定记录批量处理时必须提供记录 id。"
-        };
-      }
-
-      const candidateTasks = data.tasks
-        .filter((task) => task.stage !== "已完成")
-        .filter((task) => scope !== "mine" || currentUserMatcher.owns(task))
-        .filter((task) => scope !== "ids" || idSet.has(task.id))
-        .sort((left, right) => taskWeight(right) - taskWeight(left))
-        .slice(0, rowLimit);
-      const candidateBugs = data.bugs
-        .filter((bug) => bug.status !== "已关闭")
-        .filter((bug) => scope !== "mine" || currentUserMatcher.owns(bug))
-        .filter((bug) => scope !== "ids" || idSet.has(bug.id))
-        .sort((left, right) => bugWeight(right) - bugWeight(left))
-        .slice(0, rowLimit);
-      const selectedRecords = entity === "task" ? candidateTasks : candidateBugs;
-
-      if (!selectedRecords.length) {
-        return {
-          已执行: false,
-          状态: "无需处理",
-          总数: 0,
-          成功数: 0,
-          失败数: 0,
-          业务结果: entity === "task" ? "没有匹配到未完成任务。" : "没有匹配到未关闭 Bug。"
-        };
-      }
-
-      const result = await executeAssistantBulkInternalAction({
-        method: "PATCH",
-        path: "/api/records",
-        items: selectedRecords.map((record) => ({
-          id: record.id,
-          title: record.title,
-          body: {
-            type: entity,
-            id: record.id,
-            values: entity === "task"
-              ? {
-                  stage: "已完成"
-                }
-              : {
-                  status: "已关闭"
-                }
-          }
-        }))
-      }, actionRuntime);
-
+    if (entity === "task" && action !== "completeTasks") {
       return {
-        当前用户: currentUserMatcher.currentUser,
-        目标范围: scope === "mine" ? "当前登录人负责的记录" : scope === "all" ? "当前工作区全部匹配记录" : "指定记录",
-        目标类型: entity === "task" ? "任务" : "Bug",
-        请求处理数: selectedRecords.length,
-        ...result
+        已执行: false,
+        状态: "失败",
+        业务结果: "任务批量动作只支持标记为已完成。"
       };
+    }
+
+    if (entity === "bug" && action !== "closeBugs") {
+      return {
+        已执行: false,
+        状态: "失败",
+        业务结果: "Bug 批量动作只支持关闭。"
+      };
+    }
+
+    if (scope === "ids" && !idSet.size) {
+      return {
+        已执行: false,
+        状态: "失败",
+        业务结果: "按指定记录批量处理时必须提供记录 id。"
+      };
+    }
+
+    const candidateTasks = data.tasks
+      .filter((task) => task.stage !== "已完成")
+      .filter((task) => scope !== "mine" || currentUserMatcher.owns(task))
+      .filter((task) => scope !== "ids" || idSet.has(task.id))
+      .sort((left, right) => taskWeight(right) - taskWeight(left))
+      .slice(0, rowLimit);
+    const candidateBugs = data.bugs
+      .filter((bug) => bug.status !== "已关闭")
+      .filter((bug) => scope !== "mine" || currentUserMatcher.owns(bug))
+      .filter((bug) => scope !== "ids" || idSet.has(bug.id))
+      .sort((left, right) => bugWeight(right) - bugWeight(left))
+      .slice(0, rowLimit);
+    const selectedRecords = entity === "task" ? candidateTasks : candidateBugs;
+
+    if (!selectedRecords.length) {
+      return {
+        已执行: false,
+        状态: "无需处理",
+        总数: 0,
+        成功数: 0,
+        失败数: 0,
+        业务结果: entity === "task" ? "没有匹配到未完成任务。" : "没有匹配到未关闭 Bug。"
+      };
+    }
+
+    const result = await executeAssistantBulkInternalAction({
+      method: "PATCH",
+      path: "/api/records",
+      items: selectedRecords.map((record) => ({
+        id: record.id,
+        title: record.title,
+        body: {
+          type: entity,
+          id: record.id,
+          values: entity === "task"
+            ? {
+                stage: "已完成"
+              }
+            : {
+                status: "已关闭"
+              }
+        }
+      }))
+    }, actionRuntime);
+
+    return {
+      当前用户: currentUserMatcher.currentUser,
+      目标范围: scope === "mine" ? "当前登录人负责的记录" : scope === "all" ? "当前工作区全部匹配记录" : "指定记录",
+      目标类型: entity === "task" ? "任务" : "Bug",
+      请求处理数: selectedRecords.length,
+      ...result
+    };
+  }
+
+  const scopeInputSchema = z.object({
+    scope: z.enum(["mine", "all", "ids"]).default("mine").describe("mine=当前登录人负责的未完成项，all=当前工作区全部未完成项，ids=仅处理指定记录"),
+    ids: z.array(z.string().min(1)).max(100).optional().describe("scope=ids 时使用的记录 id 列表"),
+    limit: z.number().int().min(1).max(100).default(100).describe("本轮最多处理的记录数")
+  });
+
+  return {
+    bulkCompleteTasks: {
+      description: [
+        "批量将任务标记为已完成；当用户说“关闭/完成/处理掉/清掉我的所有任务、全部任务、批量任务”时优先使用。",
+        "关闭任务在 AI PM 中等价于把任务阶段更新为“已完成”。",
+        "该能力由后端统一循环执行并返回成功/失败统计，不要再连续调用普通 operations。"
+      ].join("\n"),
+      inputSchema: scopeInputSchema,
+      execute: (input: { ids?: string[]; limit: number; scope: "mine" | "all" | "ids" }) => executeBulkAction({
+        action: "completeTasks",
+        entity: "task",
+        ...input
+      })
+    },
+    bulkCloseBugs: {
+      description: [
+        "批量关闭 Bug；当用户说“关闭所有 Bug、批量关闭 Bug、把我的 Bug 都关闭”时优先使用。",
+        "该能力由后端统一循环执行并返回成功/失败统计，不要再连续调用普通 operations。"
+      ].join("\n"),
+      inputSchema: scopeInputSchema,
+      execute: (input: { ids?: string[]; limit: number; scope: "mine" | "all" | "ids" }) => executeBulkAction({
+        action: "closeBugs",
+        entity: "bug",
+        ...input
+      })
     }
   };
 }
@@ -834,7 +854,7 @@ export function createAssistantTools(
     },
     ...(actionRuntime
       ? {
-          bulkOperations: createBulkOperationsTool(loadData, actionRuntime),
+          ...createBulkOperationsTool(loadData, actionRuntime),
           operations: {
             description: [
               "执行 AI PM 平台内部业务动作；当用户明确要求你帮他创建、更新、关闭、删除、保存、发起、配置或修改时使用。",
