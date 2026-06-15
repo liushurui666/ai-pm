@@ -6,43 +6,45 @@
 }
 
 .pm-sider {
+  /* 左侧导航是产品的全局入口，浅色主题下也保持深色品牌侧栏；
+     文本、分组标题和历史记录统一从这些变量取值，避免 Chat/Studio 两套模式颜色漂移。 */
+  --pm-sider-bg: #07111f;
+  --pm-sider-bg-top: #10233a;
+  --pm-sider-bg-bottom: #040a13;
+  --pm-sider-panel: rgba(255, 255, 255, 0.07);
+  --pm-sider-panel-strong: rgba(255, 255, 255, 0.11);
+  --pm-sider-border-strong: rgba(208, 225, 249, 0.18);
+  --pm-sider-border-soft: rgba(208, 225, 249, 0.1);
+  --pm-sider-text: rgba(248, 251, 255, 0.96);
+  --pm-sider-text-strong: #ffffff;
+  --pm-sider-muted: rgba(203, 216, 235, 0.68);
+  --pm-sider-muted-soft: rgba(190, 205, 226, 0.5);
+  --pm-sider-accent: #8ecae6;
+  --pm-sider-accent-2: #f5c977;
   position: fixed !important;
   inset: 0 auto 0 0 !important;
   z-index: 30;
   height: 100dvh;
   min-height: 100dvh;
   overflow: auto;
-  border-right: 1px solid var(--sider-border);
+  border-right: 1px solid var(--pm-sider-border-soft);
   background:
-    linear-gradient(180deg, var(--sider-bg-2), var(--sider-bg)) !important;
-  box-shadow: 16px 0 42px rgba(0, 0, 0, 0.16);
-}
-
-.pm-sider--chat {
-  --chat-sider-bg: #08111d;
-  --chat-sider-bg-top: #102033;
-  --chat-sider-panel: rgba(255, 255, 255, 0.065);
-  --chat-sider-panel-strong: rgba(255, 255, 255, 0.1);
-  --chat-sider-border: rgba(207, 222, 245, 0.13);
-  --chat-sider-text: rgba(246, 249, 255, 0.92);
-  --chat-sider-muted: rgba(197, 210, 230, 0.54);
-  --chat-accent: #8ecae6;
-  --chat-accent-2: #f5c977;
-  background:
-    linear-gradient(180deg, var(--chat-sider-bg-top) 0, var(--chat-sider-bg) 42%, #050b14 100%) !important;
-  border-right-color: var(--chat-sider-border);
+    linear-gradient(180deg, var(--pm-sider-bg-top) 0, var(--pm-sider-bg) 48%, var(--pm-sider-bg-bottom) 100%) !important;
   box-shadow:
-    18px 0 54px rgba(7, 12, 22, 0.24),
+    18px 0 54px rgba(7, 12, 22, 0.22),
     inset -1px 0 0 rgba(255, 255, 255, 0.035);
 }
 
-.pm-sider--chat .pm-brand-title {
-  color: var(--chat-sider-text) !important;
-  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.2);
-}
-
-.pm-sider--chat .pm-brand-subtitle {
-  color: rgba(214, 226, 245, 0.62) !important;
+.pm-sider--chat {
+  --pm-sider-bg-top: #102033;
+  --pm-sider-bg: #08111d;
+  --pm-sider-bg-bottom: #050b14;
+  --pm-sider-panel: rgba(255, 255, 255, 0.065);
+  --pm-sider-panel-strong: rgba(255, 255, 255, 0.1);
+  --pm-sider-border-strong: rgba(207, 222, 245, 0.16);
+  --pm-sider-border-soft: rgba(207, 222, 245, 0.13);
+  --pm-sider-muted: rgba(197, 210, 230, 0.6);
+  --pm-sider-muted-soft: rgba(197, 210, 230, 0.5);
 }
 
 .pm-sider .ant-layout-sider-children {
@@ -76,14 +78,15 @@
 
 .pm-brand-title {
   display: block;
-  color: rgba(248, 251, 255, 0.96);
+  color: var(--pm-sider-text) !important;
   font-weight: 750;
   line-height: 1.1;
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.22);
 }
 
 .pm-brand-subtitle {
   display: block;
-  color: rgba(214, 226, 245, 0.72);
+  color: var(--pm-sider-muted) !important;
   font-size: 12px;
   margin-top: 4px;
 }
@@ -103,17 +106,16 @@
   margin: 0 0 18px;
   padding: 4px;
   border-radius: 14px;
-  background: color-mix(in srgb, #ffffff 7%, transparent);
+  border: 1px solid var(--pm-sider-border-soft);
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .pm-sider--chat .pm-mode-switch.ant-segmented {
   height: 38px;
   margin-bottom: 16px;
   padding: 3px;
-  border: 1px solid var(--chat-sider-border);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.045);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .pm-mode-switch.ant-segmented .ant-segmented-group {
@@ -123,7 +125,7 @@
 .pm-mode-switch.ant-segmented .ant-segmented-item {
   flex: 1 1 0;
   min-height: 28px;
-  color: rgba(226, 235, 249, 0.74);
+  color: var(--pm-sider-muted);
   border-radius: 11px;
   font-weight: 650;
   transition:
@@ -132,30 +134,30 @@
 }
 
 .pm-mode-switch.ant-segmented .ant-segmented-item-selected {
-  color: rgba(250, 252, 255, 0.98);
+  color: var(--pm-sider-text-strong);
 }
 
 .pm-sider--chat .pm-mode-switch.ant-segmented .ant-segmented-item {
   min-height: 30px;
-  color: var(--chat-sider-muted);
   font-size: 13px;
   font-weight: 650;
 }
 
 .pm-sider--chat .pm-mode-switch.ant-segmented .ant-segmented-item-selected {
-  color: var(--chat-sider-text);
+  color: var(--pm-sider-text-strong);
 }
 
 .pm-mode-switch.ant-segmented .ant-segmented-thumb,
 .pm-mode-switch.ant-segmented .ant-segmented-item-selected {
-  background: color-mix(in srgb, #ffffff 9%, #111827);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, #ffffff 8%, transparent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.08));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.09),
+    0 8px 18px rgba(0, 0, 0, 0.16);
 }
 
 .pm-sider--chat .pm-mode-switch.ant-segmented .ant-segmented-thumb,
 .pm-sider--chat .pm-mode-switch.ant-segmented .ant-segmented-item-selected {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.08));
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.09),
     0 8px 18px rgba(0, 0, 0, 0.18);
@@ -177,7 +179,7 @@
 
 .pm-studio-menu-title {
   padding: 0 8px;
-  color: rgba(221, 232, 248, 0.64) !important;
+  color: var(--pm-sider-muted-soft) !important;
   font-size: 12px;
   font-weight: 680;
   line-height: 22px;
@@ -199,7 +201,7 @@
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: rgba(236, 242, 251, 0.84);
+  color: var(--pm-sider-text);
   font: inherit;
   font-size: 14px;
   font-weight: 620;
@@ -212,14 +214,17 @@
 }
 
 .pm-studio-menu-item:hover {
-  background: color-mix(in srgb, #ffffff 7%, transparent);
-  color: rgba(255, 255, 255, 0.98);
+  background: var(--pm-sider-panel);
+  color: var(--pm-sider-text-strong);
 }
 
 .pm-studio-menu-item.is-active {
   background:
     linear-gradient(135deg, rgba(142, 202, 230, 0.12), rgba(255, 255, 255, 0.06));
-  color: rgba(255, 255, 255, 0.98);
+  color: var(--pm-sider-text-strong);
+  box-shadow:
+    inset 3px 0 0 color-mix(in srgb, var(--pm-sider-accent) 78%, #ffffff 4%),
+    inset 0 0 0 1px var(--pm-sider-border-soft);
 }
 
 .pm-studio-menu-icon {
@@ -251,11 +256,11 @@
 .pm-chat-new-button.ant-btn {
   justify-content: flex-start;
   height: 42px;
-  border: 1px solid color-mix(in srgb, var(--chat-accent) 36%, var(--chat-sider-border));
+  border: 1px solid color-mix(in srgb, var(--pm-sider-accent) 36%, var(--pm-sider-border-soft));
   border-radius: 14px;
   background:
     linear-gradient(135deg, rgba(142, 202, 230, 0.18), rgba(245, 201, 119, 0.08) 58%, rgba(255, 255, 255, 0.055));
-  color: var(--chat-sider-text);
+  color: var(--pm-sider-text);
   box-shadow:
     0 14px 28px rgba(0, 0, 0, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.09);
@@ -263,7 +268,7 @@
 }
 
 .pm-chat-new-button.ant-btn:not(:disabled):hover {
-  border-color: color-mix(in srgb, var(--chat-accent) 60%, #ffffff 8%);
+  border-color: color-mix(in srgb, var(--pm-sider-accent) 60%, #ffffff 8%);
   background:
     linear-gradient(135deg, rgba(142, 202, 230, 0.25), rgba(245, 201, 119, 0.12) 58%, rgba(255, 255, 255, 0.075));
   color: #ffffff;
@@ -280,7 +285,7 @@
 
 .pm-chat-history-title {
   padding: 0 8px;
-  color: rgba(214, 226, 245, 0.58) !important;
+  color: var(--pm-sider-muted-soft) !important;
   font-size: 12px;
   font-weight: 650;
   line-height: 22px;
@@ -302,20 +307,20 @@
   border: 1px solid transparent;
   border-radius: 14px;
   background: transparent;
-  color: var(--chat-sider-text);
+  color: var(--pm-sider-text);
 }
 
 .pm-chat-history-item:hover,
 .pm-chat-history-item.is-active {
-  border-color: var(--chat-sider-border);
-  background: var(--chat-sider-panel);
-  color: #ffffff;
+  border-color: var(--pm-sider-border-soft);
+  background: var(--pm-sider-panel);
+  color: var(--pm-sider-text-strong);
 }
 
 .pm-chat-history-item.is-active {
   background:
     linear-gradient(135deg, rgba(142, 202, 230, 0.13), rgba(255, 255, 255, 0.055));
-  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--chat-accent) 80%, #ffffff 4%);
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--pm-sider-accent) 80%, #ffffff 4%);
 }
 
 .pm-chat-history-main {
@@ -341,7 +346,7 @@
 
 .pm-chat-history-main .anticon {
   flex: 0 0 auto;
-  color: color-mix(in srgb, var(--chat-accent) 70%, #ffffff 10%);
+  color: color-mix(in srgb, var(--pm-sider-accent) 70%, #ffffff 10%);
   font-size: 15px;
 }
 
@@ -353,7 +358,7 @@
 
 .pm-chat-history-copy span {
   overflow: hidden;
-  color: rgba(248, 251, 255, 0.94) !important;
+  color: var(--pm-sider-text) !important;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
@@ -362,7 +367,7 @@
 }
 
 .pm-chat-history-copy em {
-  color: rgba(203, 216, 235, 0.62) !important;
+  color: var(--pm-sider-muted) !important;
   font-size: 11px;
   font-style: normal;
   line-height: 14px;
@@ -374,7 +379,7 @@
   height: 30px;
   margin-right: 4px;
   border-radius: 9px;
-  color: var(--chat-sider-muted);
+  color: var(--pm-sider-muted);
   opacity: 0;
 }
 
