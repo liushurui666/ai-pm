@@ -21,7 +21,12 @@ export class AuthServiceUnavailableError extends Error {
 function serializeCookieHeader(cookieStore: Awaited<ReturnType<typeof cookies>>) {
   return cookieStore
     .getAll()
-    .map((item) => `${item.name}=${item.value}`)
+    .map((item) => {
+      // Next 的 cookies() 会把百分号编码的 Cookie value 解码成 JS 字符串；如果浏览器里存在中文 Cookie，
+      // 再把它原样塞进 fetch 的 cookie header，Node/undici 会因为 header 必须是 ByteString 而抛错。
+      // 这里重新按 RFC 6265 可传输格式编码 value，Auth Service 的 cookie parser 会 decodeURIComponent 还原。
+      return `${item.name}=${encodeURIComponent(item.value)}`;
+    })
     .join("; ");
 }
 
