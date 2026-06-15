@@ -40,7 +40,7 @@ import { sanitizeAssistantErrorMessage } from "@/lib/ai/assistant-error-message"
 
 const { Text } = Typography;
 
-const ASSISTANT_CHAT_REQUEST_TIMEOUT_MS = 8 * 60 * 1000;
+const ASSISTANT_CHAT_REQUEST_TIMEOUT_MS = 150 * 1000;
 const ASSISTANT_MODEL_STORAGE_PREFIX = "ai-pm-assistant-model";
 
 type AssistantChatBoxVariant = "drawer" | "workspace";
@@ -160,6 +160,16 @@ function createDisplayMessages(messages: UIMessage[]): AssistantDisplayMessage[]
   }, []);
 }
 
+function hasAssistantMessageAfterLatestUser(messages: UIMessage[]) {
+  const latestUserIndex = messages.findLastIndex((message) => message.role === "user");
+
+  if (latestUserIndex === -1) {
+    return false;
+  }
+
+  return messages.slice(latestUserIndex + 1).some((message) => message.role === "assistant");
+}
+
 // 这是 AI 助手唯一的前端对话编排入口：AI SDK transport、会话持久化、消息渲染和输入控制都集中在这里。
 // 抽屉和一级菜单全屏页只切换外层布局，避免复制两套 ChatBox 状态导致多轮上下文或本地 session 不一致。
 export function AssistantChatBox({
@@ -216,11 +226,11 @@ export function AssistantChatBox({
   const assistantFetch = useCallback(async (input: RequestInfo | URL, init?: RequestInit) => {
     const timeoutController = new AbortController();
     const timeoutId = window.setTimeout(() => {
-      timeoutController.abort(new Error("AI 助手请求超过 8 分钟仍未完成，请稍后重试。"));
+      timeoutController.abort(new Error("AI 助手请求超过 150 秒仍未完成，请稍后重试。"));
     }, ASSISTANT_CHAT_REQUEST_TIMEOUT_MS);
 
     // AI SDK 会把“停止生成”的 abort signal 放在 init.signal 里；这里再叠加本地超时，
-    // 既能保留用户主动停止，也能避免网络或模型流异常时让输入框永久卡在生成态。
+    // 既能保留用户主动停止，也能和服务端 maxDuration 对齐，避免模型或站内 tool 没有返回首包时让输入框长时间卡在生成态。
     if (init?.signal) {
       if (init.signal.aborted) {
         timeoutController.abort(init.signal.reason);
@@ -782,7 +792,7 @@ export function AssistantChatBox({
     };
   });
 
-  if (status === "submitted") {
+  if (status === "submitted" && !hasAssistantMessageAfterLatestUser(messages)) {
     bubbleItems.push({
       content: "正在选择项目工具...",
       header: (
