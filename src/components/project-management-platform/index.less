@@ -25,19 +25,6 @@
   background: transparent;
 }
 
-.pm-sider .ant-menu {
-  flex: 1;
-  padding: 8px 10px 22px;
-  background: transparent !important;
-}
-
-.pm-sider .ant-menu-item {
-  height: 44px;
-  border-radius: 8px;
-  margin-inline: 0;
-  width: 100%;
-}
-
 .pm-brand {
   display: flex;
   align-items: center;
@@ -72,6 +59,165 @@
   color: rgba(255, 255, 255, 0.62);
   font-size: 12px;
   margin-top: 4px;
+}
+
+.pm-mode-sidebar {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  padding: 0 6px 18px;
+}
+
+/* 侧栏顶部是 Chat / Studio 工作模式切换，不是普通页面 Tab；
+   它需要始终停留在第一视觉层级，帮助用户区分“对话工作流”和“项目管理工作台”。 */
+.pm-mode-switch.ant-segmented {
+  width: 100%;
+  height: 36px;
+  margin: 0 0 18px;
+  padding: 4px;
+  border-radius: 14px;
+  background: color-mix(in srgb, #ffffff 7%, transparent);
+}
+
+.pm-mode-switch.ant-segmented .ant-segmented-group {
+  width: 100%;
+}
+
+.pm-mode-switch.ant-segmented .ant-segmented-item {
+  flex: 1 1 0;
+  min-height: 28px;
+  color: color-mix(in srgb, #ffffff 68%, transparent);
+  border-radius: 11px;
+  transition:
+    color 160ms ease,
+    background 160ms ease;
+}
+
+.pm-mode-switch.ant-segmented .ant-segmented-item-selected {
+  color: #ffffff;
+}
+
+.pm-mode-switch.ant-segmented .ant-segmented-thumb,
+.pm-mode-switch.ant-segmented .ant-segmented-item-selected {
+  background: color-mix(in srgb, #ffffff 9%, #111827);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #ffffff 8%, transparent);
+}
+
+.pm-studio-menu {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 18px;
+  padding: 0 4px;
+}
+
+.pm-studio-menu-section {
+  display: grid;
+  gap: 8px;
+}
+
+.pm-studio-menu-title {
+  padding: 0 8px;
+  color: color-mix(in srgb, #ffffff 54%, transparent);
+  font-size: 12px;
+  line-height: 22px;
+}
+
+.pm-studio-menu-list {
+  display: grid;
+  gap: 2px;
+}
+
+.pm-studio-menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 36px;
+  gap: 10px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: color-mix(in srgb, #ffffff 74%, transparent);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.pm-studio-menu-item:hover {
+  background: color-mix(in srgb, #ffffff 7%, transparent);
+  color: #ffffff;
+}
+
+.pm-studio-menu-item.is-active {
+  background: color-mix(in srgb, #ffffff 10%, transparent);
+  color: #ffffff;
+}
+
+.pm-studio-menu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  min-width: 16px;
+  color: currentColor;
+  font-size: 15px;
+}
+
+.pm-studio-menu-label {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-mode-sidebar {
+  align-items: center;
+  padding-inline: 8px;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-mode-switch.ant-segmented {
+  height: auto;
+  padding: 3px;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-mode-switch.ant-segmented .ant-segmented-item-label {
+  padding-inline: 4px;
+  font-size: 0;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-mode-switch.ant-segmented .ant-segmented-item-label::first-letter {
+  font-size: 12px;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-studio-menu {
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-studio-menu-section {
+  width: 100%;
+  justify-items: center;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-studio-menu-title,
+.pm-sider.ant-layout-sider-collapsed .pm-studio-menu-label {
+  display: none;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-studio-menu-item {
+  justify-content: center;
+  width: 42px;
+  min-height: 42px;
+  padding: 0;
 }
 
 .pm-main {

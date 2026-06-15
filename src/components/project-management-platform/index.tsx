@@ -11,7 +11,6 @@ import {
   Grid,
   Input,
   Layout,
-  Menu,
   Popover,
   Segmented,
   Select,
@@ -34,11 +33,10 @@ import {
   NodeIndexOutlined,
   PlusOutlined,
   ProjectOutlined,
-  RobotOutlined,
   SearchOutlined,
   TeamOutlined
 } from "@ant-design/icons";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type {
   BugReport,
   DashboardData,
@@ -123,6 +121,17 @@ export type { AppView } from "@/components/project-management-platform/types";
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
 const { useBreakpoint } = Grid;
+
+type StudioMenuItem = {
+  key: Exclude<AppView, "assistant" | "bugEdit">;
+  icon: ReactNode;
+  label: string;
+};
+
+type StudioMenuGroup = {
+  title: string;
+  items: StudioMenuItem[];
+};
 
 // 周报导出在浏览器侧完成，避免为了一个 Markdown 文件额外落库或新增下载接口。
 function downloadMarkdownFile(fileName: string, content: string) {
@@ -1207,15 +1216,36 @@ export function ProjectManagementPlatform({
     }
   }
 
-  const menuItems = [
-    { key: "overview", icon: <DashboardOutlined />, label: "工作台" },
-    { key: "projects", icon: <ProjectOutlined />, label: "项目视图" },
-    { key: "versionDashboard", icon: <FundProjectionScreenOutlined />, label: "版本大屏" },
-    { key: "tasks", icon: <CheckCircleOutlined />, label: "任务看板" },
-    { key: "bugs", icon: <BugOutlined />, label: "Bug 管理" },
-    { key: "requirements", icon: <NodeIndexOutlined />, label: "需求管理" },
-    { key: "assistant", icon: <RobotOutlined />, label: "AI 助手" },
-    { key: "members", icon: <TeamOutlined />, label: "成员管理" }
+  // 侧栏改为 Chat / Studio 两种工作模式：Chat 直接进入 AI 助手，Studio 承载项目管理模块。
+  // 这里使用真实模块分组，不照搬参考图中的招聘/题库文案，避免出现看似可用但实际不存在的产品入口。
+  const studioMenuGroups: StudioMenuGroup[] = [
+    {
+      title: "工作台",
+      items: [
+        { key: "overview", icon: <DashboardOutlined />, label: "工作台" }
+      ]
+    },
+    {
+      title: "交付管理",
+      items: [
+        { key: "projects", icon: <ProjectOutlined />, label: "项目视图" },
+        { key: "versionDashboard", icon: <FundProjectionScreenOutlined />, label: "版本大屏" },
+        { key: "tasks", icon: <CheckCircleOutlined />, label: "任务看板" }
+      ]
+    },
+    {
+      title: "质量与需求",
+      items: [
+        { key: "bugs", icon: <BugOutlined />, label: "Bug 管理" },
+        { key: "requirements", icon: <NodeIndexOutlined />, label: "需求管理" }
+      ]
+    },
+    {
+      title: "系统配置",
+      items: [
+        { key: "members", icon: <TeamOutlined />, label: "成员管理" }
+      ]
+    }
   ];
   // 顶部账号入口只能展示真实认证上下文或当前成员信息，不能硬编码个人昵称兜底；
   // OAuth 切换时数据还在加载，使用中性文案可以避免 GitHub/Google 登录看起来都变成同一个人。
@@ -1489,14 +1519,51 @@ export function ProjectManagementPlatform({
             className="pm-sider"
             trigger={null}
           >
-            <Brand collapsed={collapsed} />
-            <Menu
-              theme="dark"
-              mode="inline"
-              selectedKeys={[navigationView]}
-              items={menuItems}
-              onClick={(item) => switchView(item.key as AppView)}
-            />
+            <div className="pm-mode-sidebar">
+              <Brand collapsed={collapsed} />
+              <Segmented
+                block
+                className="pm-mode-switch"
+                value={navigationView === "assistant" ? "chat" : "studio"}
+                options={[
+                  { label: "Chat", value: "chat" },
+                  { label: "Studio", value: "studio" }
+                ]}
+                onChange={(value) => {
+                  // Chat 是独立对话模式；从 Chat 回到 Studio 时默认落在个人工作台，
+                  // 避免用户停留在助手页却看到 Studio 被选中的错位状态。
+                  if (value === "chat") {
+                    switchView("assistant");
+                    return;
+                  }
+
+                  if (navigationView === "assistant") {
+                    switchView("overview");
+                  }
+                }}
+              />
+              <nav className="pm-studio-menu" aria-label="工作台导航">
+                {studioMenuGroups.map((group) => (
+                  <section className="pm-studio-menu-section" key={group.title} aria-label={group.title}>
+                    <Text className="pm-studio-menu-title">{group.title}</Text>
+                    <div className="pm-studio-menu-list">
+                      {group.items.map((item) => (
+                        <button
+                          className={navigationView === item.key ? "pm-studio-menu-item is-active" : "pm-studio-menu-item"}
+                          key={item.key}
+                          type="button"
+                          aria-current={navigationView === item.key ? "page" : undefined}
+                          onClick={() => switchView(item.key)}
+                        >
+                          <span className="pm-studio-menu-icon">{item.icon}</span>
+                          <span className="pm-studio-menu-label">{item.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </nav>
+            </div>
           </Sider>
 
           <Layout className="pm-main">
