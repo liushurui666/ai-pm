@@ -1,9 +1,28 @@
 .assistant-view {
+  --assistant-page-bg: #edf3f8;
+  --assistant-page-panel: rgba(255, 255, 255, 0.72);
+  --assistant-page-line: rgba(179, 193, 214, 0.55);
+  position: relative;
   height: calc(100dvh - 68px);
   min-height: 0;
   margin: -24px -22px -56px;
   padding: 18px clamp(18px, 2vw, 32px) 22px;
   overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72) 0, rgba(237, 243, 248, 0.92) 38%, var(--assistant-page-bg) 100%),
+    linear-gradient(135deg, rgba(142, 202, 230, 0.18), transparent 34%),
+    linear-gradient(315deg, rgba(245, 201, 119, 0.12), transparent 30%);
+}
+
+:root[data-theme="dark"] .assistant-view,
+body[data-theme="dark"] .assistant-view {
+  --assistant-page-bg: #0b111d;
+  --assistant-page-panel: rgba(12, 19, 32, 0.78);
+  --assistant-page-line: rgba(90, 108, 135, 0.42);
+  background:
+    linear-gradient(180deg, rgba(16, 27, 44, 0.92) 0, rgba(9, 15, 26, 0.96) 46%, var(--assistant-page-bg) 100%),
+    linear-gradient(135deg, rgba(142, 202, 230, 0.09), transparent 34%),
+    linear-gradient(315deg, rgba(245, 201, 119, 0.08), transparent 30%);
 }
 
 @media (max-width: 720px) {

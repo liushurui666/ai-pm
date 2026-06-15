@@ -352,11 +352,27 @@
 }
 
 .assistant-chat-box--workspace {
+  --assistant-chat-accent: #4f8ca8;
+  --assistant-chat-accent-soft: rgba(79, 140, 168, 0.12);
+  --assistant-chat-warm: #b8893f;
+  --assistant-chat-panel: rgba(255, 255, 255, 0.64);
+  --assistant-chat-panel-strong: rgba(255, 255, 255, 0.9);
+  --assistant-chat-border: rgba(166, 181, 204, 0.5);
   height: 100%;
   min-height: 0;
   gap: 12px;
   overflow: hidden;
   padding: 0 0 6px;
+}
+
+:root[data-theme="dark"] .assistant-chat-box--workspace,
+body[data-theme="dark"] .assistant-chat-box--workspace {
+  --assistant-chat-accent: #8ecae6;
+  --assistant-chat-accent-soft: rgba(142, 202, 230, 0.11);
+  --assistant-chat-warm: #f5c977;
+  --assistant-chat-panel: rgba(13, 21, 34, 0.58);
+  --assistant-chat-panel-strong: rgba(17, 27, 43, 0.88);
+  --assistant-chat-border: rgba(113, 130, 157, 0.38);
 }
 
 .assistant-chat-box--workspace .assistant-chat-box-header,
@@ -375,11 +391,16 @@
 }
 
 .assistant-chat-box--workspace .assistant-chat-box-header {
-  padding: 4px 2px 8px;
+  padding: 14px 16px;
   border: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  border-radius: 0;
-  background: transparent;
+  border: 1px solid var(--assistant-chat-border);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, var(--assistant-chat-panel-strong), color-mix(in srgb, var(--assistant-chat-panel) 78%, transparent));
+  box-shadow:
+    0 14px 34px rgba(15, 23, 42, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(18px);
 }
 
 .assistant-chat-box--workspace .assistant-chat-box-icon {
@@ -387,9 +408,9 @@
 }
 
 .assistant-chat-box--workspace .assistant-chat-box-title .ant-typography {
-  color: var(--muted);
+  color: color-mix(in srgb, var(--text-primary) 82%, var(--assistant-chat-accent));
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 700;
 }
 
 .assistant-chat-box--workspace .assistant-chat-box-title .ant-typography-secondary {
@@ -408,9 +429,9 @@
 
 .assistant-chat-box--workspace .assistant-history-tools .ant-btn:hover,
 .assistant-chat-box--workspace .assistant-session-bar .ant-btn:hover {
-  border-color: color-mix(in srgb, var(--border) 80%, transparent);
+  border-color: var(--assistant-chat-border);
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--surface-muted) 72%, transparent);
+  background: var(--assistant-chat-accent-soft);
 }
 
 .assistant-chat-box--workspace .assistant-history-tools .ant-tag {
@@ -448,6 +469,8 @@
   min-height: 36px;
   padding-inline: 18px;
   border-radius: 999px;
+  border-color: var(--assistant-chat-border);
+  background: var(--assistant-chat-panel);
 }
 
 .assistant-chat-box--workspace .assistant-messages {
@@ -468,7 +491,7 @@
 
 .assistant-chat-box--workspace .assistant-bubble-list .ant-bubble-list-scroll-content {
   gap: 34px;
-  padding: 30px clamp(2px, 1.2vw, 18px) 36px;
+  padding: 28px clamp(6px, 1.4vw, 22px) 38px;
 }
 
 .assistant-chat-box--workspace .assistant-x-bubble-assistant {
@@ -514,7 +537,7 @@
 
 .assistant-chat-box--workspace .assistant-x-bubble-assistant .assistant-message-meta {
   padding-bottom: 12px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-bottom: 1px solid var(--assistant-chat-border);
   justify-content: flex-start;
 }
 
@@ -550,12 +573,15 @@
   align-items: center;
   justify-content: center;
   padding: 12px 15px;
-  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+  border: 1px solid color-mix(in srgb, var(--assistant-chat-accent) 28%, var(--assistant-chat-border));
   border-radius: 999px;
-  background: color-mix(in srgb, var(--surface-muted) 70%, transparent);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--assistant-chat-accent) 14%, var(--surface-muted)), color-mix(in srgb, var(--surface-muted) 86%, transparent));
   color: var(--text-primary);
   line-height: 1.5;
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 4%);
+  box-shadow:
+    0 10px 22px rgba(15, 23, 42, 0.06),
+    inset 0 1px 0 rgb(255 255 255 / 18%);
 }
 
 .assistant-chat-box--workspace .assistant-x-bubble-user .assistant-message-text {
@@ -607,39 +633,36 @@
   padding: 0;
   border: 0;
   background: transparent;
-  box-shadow: 0 -18px 36px color-mix(in srgb, var(--background) 86%, transparent);
+  box-shadow: 0 -18px 42px color-mix(in srgb, var(--assistant-page-bg, var(--background)) 76%, transparent);
 }
 
 .assistant-chat-box--workspace .assistant-sender {
   position: relative;
   overflow: hidden;
-  border-color: color-mix(in srgb, var(--border) 72%, transparent);
-  border-radius: 20px;
+  border: 1px solid var(--assistant-chat-border);
+  border-radius: 22px;
   background:
-    radial-gradient(
-      circle at 82% 18%,
-      color-mix(in srgb, #f8c682 10%, transparent) 0,
-      transparent 32%
-    ),
+    linear-gradient(135deg, color-mix(in srgb, var(--assistant-chat-accent) 8%, transparent), transparent 42%),
+    linear-gradient(315deg, color-mix(in srgb, var(--assistant-chat-warm) 8%, transparent), transparent 38%),
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--surface-elevated) 94%, #ffffff 2%),
-      color-mix(in srgb, var(--surface-elevated) 92%, #000 8%)
+      color-mix(in srgb, var(--assistant-chat-panel-strong) 96%, #ffffff 2%),
+      color-mix(in srgb, var(--assistant-chat-panel) 92%, #000 4%)
     );
   box-shadow:
-    0 14px 42px color-mix(in srgb, #000 24%, transparent),
-    inset 0 1px 0 rgb(255 255 255 / 5%);
+    0 24px 58px rgba(15, 23, 42, 0.12),
+    inset 0 1px 0 rgb(255 255 255 / 28%);
   backdrop-filter: blur(16px);
 }
 
 .assistant-chat-box--workspace .assistant-sender--generating {
-  border-color: color-mix(in srgb, var(--border) 36%, transparent);
+  border-color: color-mix(in srgb, var(--assistant-chat-accent) 48%, var(--assistant-chat-border));
   cursor: progress;
   box-shadow:
-    0 18px 48px color-mix(in srgb, #000 28%, transparent),
-    0 0 30px color-mix(in srgb, #7aa8ff 12%, transparent),
-    inset 0 1px 0 rgb(255 255 255 / 7%),
-    inset 0 -22px 46px color-mix(in srgb, #000 16%, transparent);
+    0 26px 64px rgba(15, 23, 42, 0.16),
+    0 0 34px color-mix(in srgb, var(--assistant-chat-accent) 18%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 24%),
+    inset 0 -22px 46px color-mix(in srgb, #000 8%, transparent);
 }
 
 .assistant-chat-box--workspace .assistant-sender--generating::before,
@@ -740,7 +763,7 @@
 
 .assistant-chat-box--workspace .assistant-model-select:hover .ant-select-selector,
 .assistant-chat-box--workspace .assistant-model-select.ant-select-focused .ant-select-selector {
-  background: color-mix(in srgb, var(--surface-muted) 64%, transparent) !important;
+  background: var(--assistant-chat-accent-soft) !important;
 }
 
 .assistant-chat-box--workspace .assistant-sender .ant-sender-input::placeholder {

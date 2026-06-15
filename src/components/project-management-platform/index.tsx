@@ -1587,7 +1587,7 @@ export function ProjectManagementPlatform({
             width={248}
             collapsed={collapsed}
             breakpoint="lg"
-            className="pm-sider"
+            className={navigationView === "assistant" ? "pm-sider pm-sider--chat" : "pm-sider"}
             trigger={null}
           >
             <div className="pm-mode-sidebar">
