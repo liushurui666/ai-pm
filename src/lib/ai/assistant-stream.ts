@@ -42,37 +42,34 @@ async function createAiModel(model?: string) {
 export async function createAssistantStreamResult({
   actionRuntime,
   data,
-  enableTools = true,
+  loadData,
   model,
   messages
 }: {
   actionRuntime?: AssistantInternalActionRuntime;
-  data: DashboardData;
-  enableTools?: boolean;
+  data?: DashboardData;
+  loadData?: () => Promise<DashboardData>;
   model?: string;
   messages: UIMessage[];
 }) {
-  const tools = enableTools ? createAssistantTools(data, messages, actionRuntime) : undefined;
-  const modelMessages = await convertToModelMessages(
-    messages,
-    tools
-      ? {
-          tools,
-          ignoreIncompleteToolCalls: true
-        }
-      : undefined
-  );
+  const dataSource = data ?? loadData;
+
+  if (!dataSource) {
+    throw new Error("缺少 AI 助手数据源：请提供 data 或 loadData。");
+  }
+
+  const tools = createAssistantTools(dataSource, messages, actionRuntime);
+  const modelMessages = await convertToModelMessages(messages, {
+    tools,
+    ignoreIncompleteToolCalls: true
+  });
 
   return streamText({
     model: await createAiModel(model),
     system: createAssistantSystemPrompt(),
     messages: modelMessages,
-    ...(tools
-      ? {
-          tools,
-          toolChoice: "auto" as const
-        }
-      : {}),
+    tools,
+    toolChoice: "auto",
     stopWhen: stepCountIs(8),
     temperature: 0.2,
     maxOutputTokens: 1800

@@ -315,7 +315,32 @@ function compactProject(project: DashboardData["projects"][number]) {
   };
 }
 
-function createKnowledgeSearchTool(data: DashboardData) {
+type AssistantDashboardDataLoader = () => Promise<DashboardData>;
+
+function createDashboardDataLoader(dataOrLoad: DashboardData | AssistantDashboardDataLoader) {
+  const loadDashboardData = typeof dataOrLoad === "function" ? dataOrLoad : null;
+  let cachedData: DashboardData | null = null;
+
+  if (typeof dataOrLoad !== "function") {
+    cachedData = dataOrLoad;
+  }
+
+  // tools 始终挂给模型，由模型自主判断是否调用；但 dashboard 全量数据只在某个业务 tool 真执行时读取。
+  // 这避免“你好”这类普通对话为了构造工具上下文而提前访问数据库、Qdrant 或业务聚合链路。
+  return async () => {
+    if (!cachedData) {
+      if (!loadDashboardData) {
+        throw new Error("缺少 AI 助手项目数据加载器。");
+      }
+
+      cachedData = await loadDashboardData();
+    }
+
+    return cachedData;
+  };
+}
+
+function createKnowledgeSearchTool(loadData: AssistantDashboardDataLoader) {
   return {
     description: [
       "检索当前工作区已自动索引的版本、需求、Bug、任务和飞书文档片段。",
@@ -327,6 +352,7 @@ function createKnowledgeSearchTool(data: DashboardData) {
       limit: z.number().int().min(1).max(10).default(6).describe("返回知识片段数量上限")
     }),
     execute: async ({ query, limit }: { query: string; limit: number }) => {
+      const data = await loadData();
       const workspaceId = data.meta?.currentWorkspace?.id;
 
       if (!workspaceId) {
@@ -372,11 +398,11 @@ function createKnowledgeSearchTool(data: DashboardData) {
 
 // 这些工具是 ChatBox 读取对话事实和项目事实的唯一入口；工具只返回结构化数据，不直接拼最终回复，确保判断由模型基于 tools 自主完成。
 export function createAssistantTools(
-  data: DashboardData,
+  dataOrLoad: DashboardData | AssistantDashboardDataLoader,
   messages: UIMessage[] = [],
   actionRuntime?: AssistantInternalActionRuntime
 ): ToolSet {
-  const currentUserMatcher = createCurrentUserMatcher(data);
+  const loadData = createDashboardDataLoader(dataOrLoad);
 
   return {
     conversation: {
@@ -384,25 +410,30 @@ export function createAssistantTools(
       inputSchema: z.object({}),
       execute: () => createConversationContext(messages)
     },
-    knowledge: createKnowledgeSearchTool(data),
+    knowledge: createKnowledgeSearchTool(loadData),
     account: {
       description: "读取当前登录用户、工作区成员、角色和身份匹配依据；当用户问“我是谁”“当前账号”“我的权限/身份”时必须使用。",
       inputSchema: z.object({}),
-      execute: () => ({
-        当前用户: currentUserMatcher.currentUser,
-        当前工作区: data.meta?.currentWorkspace,
-        权限: data.meta?.permissions,
-        成员总数: data.members.length,
-        可用成员: data.members
-          .filter((member: DashboardMember) => member.status === "active")
-          .map((member: DashboardMember) => ({
-            id: member.id,
-            姓名: member.name,
-            邮箱: member.email,
-            角色: member.role,
-            注册渠道: member.registrationChannel
-          }))
-      })
+      execute: async () => {
+        const data = await loadData();
+        const currentUserMatcher = createCurrentUserMatcher(data);
+
+        return {
+          当前用户: currentUserMatcher.currentUser,
+          当前工作区: data.meta?.currentWorkspace,
+          权限: data.meta?.permissions,
+          成员总数: data.members.length,
+          可用成员: data.members
+            .filter((member: DashboardMember) => member.status === "active")
+            .map((member: DashboardMember) => ({
+              id: member.id,
+              姓名: member.name,
+              邮箱: member.email,
+              角色: member.role,
+              注册渠道: member.registrationChannel
+            }))
+        };
+      }
     },
     mywork: {
       description: "按当前登录人/当前工作区成员读取“我的待办、我负责的任务、分配给我的 Bug、我的风险和我的需求”；仅当用户明确询问个人项目事项、任务、Bug、风险、需求或分配关系时使用。",
@@ -410,7 +441,9 @@ export function createAssistantTools(
         includeDone: z.boolean().default(false).describe("是否包含已完成任务、已关闭 Bug、已上线/已关闭需求"),
         limit: z.number().int().min(1).max(20).default(defaultLimit).describe("每类返回数量上限")
       }),
-      execute: ({ includeDone, limit }) => {
+      execute: async ({ includeDone, limit }) => {
+        const data = await loadData();
+        const currentUserMatcher = createCurrentUserMatcher(data);
         const rowLimit = clampLimit(limit);
         const myTasks = data.tasks.filter((task) => currentUserMatcher.owns(task));
         const myBugs = data.bugs.filter((bug) => currentUserMatcher.owns(bug));
@@ -456,7 +489,8 @@ export function createAssistantTools(
         scope: z.enum(["all", "active", "risky"]).default("active").describe("all=全部项目，active=进行中/有风险项目，risky=风险优先项目"),
         limit: z.number().int().min(1).max(20).default(defaultLimit).describe("返回项目数量上限")
       }),
-      execute: ({ scope, limit }) => {
+      execute: async ({ scope, limit }) => {
+        const data = await loadData();
         const rowLimit = clampLimit(limit);
         const projects = [...data.projects]
           .filter((project) => {
@@ -494,7 +528,8 @@ export function createAssistantTools(
         owner: z.string().optional().describe("按负责人姓名模糊筛选，可不填"),
         limit: z.number().int().min(1).max(20).default(defaultLimit).describe("每类返回数量上限")
       }),
-      execute: ({ riskLevel, owner, limit }) => {
+      execute: async ({ riskLevel, owner, limit }) => {
+        const data = await loadData();
         const rowLimit = clampLimit(limit);
         const risks = data.risks
           .filter((risk) => riskLevel === "全部" || risk.level === riskLevel)
@@ -531,7 +566,8 @@ export function createAssistantTools(
         versionName: z.string().optional().describe("版本名称关键词"),
         limit: z.number().int().min(1).max(20).default(defaultLimit).describe("每类返回数量上限")
       }),
-      execute: ({ versionId, versionName, limit }) => {
+      execute: async ({ versionId, versionName, limit }) => {
+        const data = await loadData();
         const rowLimit = clampLimit(limit);
         const matchedVersions = data.requirementVersions
           .filter((version) => matchesVersion(version, { versionId, versionName }))
@@ -575,7 +611,8 @@ export function createAssistantTools(
         owner: z.string().optional().describe("负责人姓名关键词，可不填表示统计全部成员"),
         limit: z.number().int().min(1).max(20).default(defaultLimit).describe("返回成员数量上限")
       }),
-      execute: ({ owner, limit }) => {
+      execute: async ({ owner, limit }) => {
+        const data = await loadData();
         const rowLimit = clampLimit(limit);
         const owners = new Map<string, {
           owner: string;
@@ -649,7 +686,8 @@ export function createAssistantTools(
       inputSchema: z.object({
         limit: z.number().int().min(1).max(20).default(defaultLimit).describe("每类数据返回数量上限")
       }),
-      execute: ({ limit }) => {
+      execute: async ({ limit }) => {
+        const data = await loadData();
         const rowLimit = clampLimit(limit);
         const openTasks = data.tasks.filter((task) => task.stage !== "已完成");
         const openBugs = data.bugs.filter((bug) => bug.status !== "已关闭");
