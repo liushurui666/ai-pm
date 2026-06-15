@@ -38,7 +38,9 @@ function uniqueModels(models: string[]) {
 }
 
 function isModelHealthCheckEnabled() {
-  return process.env.AI_MODEL_HEALTHCHECK?.trim() !== "false";
+  // 健康检查会并发请求整组候选模型，本地和生产首轮都可能被不可用模型拖慢数秒。
+  // ChatBox 发送链路已经只做白名单兜底，因此这里默认不探活；只有排查模型开通/兼容性时才显式打开。
+  return process.env.AI_MODEL_HEALTHCHECK?.trim() === "true";
 }
 
 function shouldDisableDashScopeThinking(model: string) {
@@ -136,8 +138,8 @@ function buildUncheckedModelResult(models: string[]): ValidatedAiModels {
   };
 }
 
-// ChatBox 和服务端流式入口共享同一份可用模型结果：前端不展示不可用模型，
-// 后端也会把过期 localStorage 或手写请求里的不可用模型兜回健康默认值。
+// 模型列表默认直接返回配置清单，不在用户打开 ChatBox 或发送消息时探活；模型健康检查只作为排障开关保留。
+// 后端发送链路仍会把过期 localStorage 或手写请求里的非法模型兜回配置默认值，避免请求到未配置模型。
 export async function getValidatedAiAvailableModels(): Promise<ValidatedAiModels> {
   const configuredModels = getAiAvailableModels();
   const cacheKey = createCacheKey(configuredModels);
