@@ -40,7 +40,7 @@ import { sanitizeAssistantErrorMessage } from "@/lib/ai/assistant-error-message"
 
 const { Text } = Typography;
 
-const ASSISTANT_CHAT_REQUEST_TIMEOUT_MS = 150 * 1000;
+const ASSISTANT_CHAT_REQUEST_TIMEOUT_MS = 110 * 1000;
 const ASSISTANT_MODEL_STORAGE_PREFIX = "ai-pm-assistant-model";
 
 type AssistantChatBoxVariant = "drawer" | "workspace";
@@ -226,11 +226,11 @@ export function AssistantChatBox({
   const assistantFetch = useCallback(async (input: RequestInfo | URL, init?: RequestInit) => {
     const timeoutController = new AbortController();
     const timeoutId = window.setTimeout(() => {
-      timeoutController.abort(new Error("AI 助手请求超过 150 秒仍未完成，请稍后重试。"));
+      timeoutController.abort(new Error("AI 助手请求超过 110 秒仍未完成，请稍后重试。"));
     }, ASSISTANT_CHAT_REQUEST_TIMEOUT_MS);
 
-    // AI SDK 会把“停止生成”的 abort signal 放在 init.signal 里；这里再叠加本地超时，
-    // 既能保留用户主动停止，也能和服务端 maxDuration 对齐，避免模型或站内 tool 没有返回首包时让输入框长时间卡在生成态。
+    // AI SDK 会把“停止生成”的 abort signal 放在 init.signal 里；这里再叠加本地超时。
+    // 超时时间必须短于服务端 maxDuration，否则平台先硬切 SSE 连接时浏览器只能得到裸 network error。
     if (init?.signal) {
       if (init.signal.aborted) {
         timeoutController.abort(init.signal.reason);
@@ -308,13 +308,26 @@ export function AssistantChatBox({
     id: `ai-pm-assistant-${currentWorkspaceId}-${sessionState.activeSessionId}`,
     messages: activeSession?.messages ?? initialAssistantMessages,
     onError: (chatError) => {
+      const sanitizedMessage = sanitizeAssistantErrorMessage(chatError);
+
       setPendingResponseSource(null);
       setUserStopped(false);
       if (isSessionExpiredError(chatError)) {
         setSessionExpired(true);
       }
 
-      persistActiveSessionMessages(latestMessagesRef.current);
+      // 流式响应中途断开时，AI SDK 会把错误挂到 error 状态；如果不落一条本地助手消息，
+      // 用户只会看到底部 Alert，历史会话里也无法保留这次失败原因。
+      if (!isSessionExpiredError(chatError) && !latestMessagesRef.current.some((message) =>
+        message.role === "assistant" && message.parts.some((part) => part.type === "text" && part.text === sanitizedMessage)
+      )) {
+        commitActiveMessages([
+          ...latestMessagesRef.current,
+          createLocalTextMessage("assistant", sanitizedMessage, "local-assistant-error")
+        ]);
+      } else {
+        persistActiveSessionMessages(latestMessagesRef.current);
+      }
     },
     onFinish: ({ messages: finishedMessages }) => {
       setPendingResponseSource(null);

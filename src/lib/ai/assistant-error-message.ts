@@ -36,7 +36,13 @@ export function sanitizeAssistantErrorMessage(error: unknown) {
     || normalized.includes("aborterror")
     || rawMessage.includes("超过");
   const isNetworkError = normalized.includes("network error")
+    || normalized.includes("networkerror")
     || normalized.includes("fetch failed")
+    || normalized.includes("failed to fetch")
+    || normalized.includes("load failed")
+    || normalized.includes("connection was lost")
+    || normalized.includes("err_http2")
+    || normalized.includes("http2")
     || normalized.includes("econnreset")
     || normalized.includes("socket hang up");
 
