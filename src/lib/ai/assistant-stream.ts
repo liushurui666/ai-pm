@@ -42,25 +42,37 @@ async function createAiModel(model?: string) {
 export async function createAssistantStreamResult({
   actionRuntime,
   data,
+  enableTools = true,
   model,
   messages
 }: {
   actionRuntime?: AssistantInternalActionRuntime;
   data: DashboardData;
+  enableTools?: boolean;
   model?: string;
   messages: UIMessage[];
 }) {
-  const tools = createAssistantTools(data, messages, actionRuntime);
+  const tools = enableTools ? createAssistantTools(data, messages, actionRuntime) : undefined;
+  const modelMessages = await convertToModelMessages(
+    messages,
+    tools
+      ? {
+          tools,
+          ignoreIncompleteToolCalls: true
+        }
+      : undefined
+  );
 
   return streamText({
     model: await createAiModel(model),
     system: createAssistantSystemPrompt(),
-    messages: await convertToModelMessages(messages, {
-      tools,
-      ignoreIncompleteToolCalls: true
-    }),
-    tools,
-    toolChoice: "auto",
+    messages: modelMessages,
+    ...(tools
+      ? {
+          tools,
+          toolChoice: "auto" as const
+        }
+      : {}),
     stopWhen: stepCountIs(8),
     temperature: 0.2,
     maxOutputTokens: 1800

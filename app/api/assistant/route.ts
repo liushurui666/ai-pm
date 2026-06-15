@@ -7,6 +7,7 @@ import { isAiAssistantConfigured } from "@/lib/ai/settings";
 import { getRequestOriginFromRequest } from "@/lib/auth/request-origin";
 import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 import { AuthServiceUnavailableError, getSession } from "@/lib/auth/session";
+import type { DashboardData } from "@/types/dashboard";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -16,6 +17,70 @@ type AssistantRequestBody = {
   model?: string;
   workspaceId?: string;
 };
+
+function getLatestUserText(messages: UIMessage[]) {
+  const latestUserMessage = [...messages].reverse().find((message) => message.role === "user");
+
+  return latestUserMessage?.parts
+    .filter((part): part is Extract<UIMessage["parts"][number], { type: "text" }> => part.type === "text")
+    .map((part) => part.text.trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim() ?? "";
+}
+
+function shouldUseLightweightChat(messages: UIMessage[]) {
+  const latestUserText = getLatestUserText(messages);
+  const normalizedText = latestUserText.replace(/\s+/g, "");
+
+  if (!normalizedText || normalizedText.length > 24) {
+    return false;
+  }
+
+  // “你好/谢谢/你是谁/能做什么”不需要读取项目全量数据，也不需要把整组 tools 挂给模型。
+  // 这些轻量对话直接走模型回复，可以把本地首轮从项目数据读取 + tools 决策的重链路中解出来。
+  if (/^(你好|您好|哈喽|hello|hi|在吗|谢谢|感谢|辛苦了|你是谁|你能做什么|有什么能力)[。！!？?，,]*$/i.test(normalizedText)) {
+    return true;
+  }
+
+  return false;
+}
+
+function createLightweightDashboardData(workspaceId: string): DashboardData {
+  const now = new Date().toISOString();
+
+  // 轻量对话不会启用 tools，但流式入口仍保持统一签名；这里提供最小 DashboardData，
+  // 避免普通寒暄为了构造 tools 而访问数据库、Qdrant 或业务聚合逻辑。
+  return {
+    bugs: [],
+    documents: [],
+    members: [],
+    meta: {
+      currentWorkspace: {
+        createdAt: now,
+        description: "轻量对话占位工作区",
+        id: workspaceId,
+        name: "当前工作区",
+        status: "active",
+        updatedAt: now
+      },
+      source: "mock"
+    },
+    metrics: {
+      activeProjects: 0,
+      aiSavedHours: 0,
+      deliveryRate: 0,
+      overdueTasks: 0
+    },
+    projects: [],
+    requirementVersions: [],
+    requirements: [],
+    risks: [],
+    tasks: [],
+    weeklyInsight: [],
+    workspaces: []
+  };
+}
 
 export async function POST(request: NextRequest) {
   const requestId = crypto.randomUUID();
@@ -62,9 +127,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const data = await getDashboardData(session?.user, body?.workspaceId);
+    const useLightweightChat = shouldUseLightweightChat(messages);
+    const data = useLightweightChat
+      ? createLightweightDashboardData(requestedWorkspaceId)
+      : await getDashboardData(session?.user, body?.workspaceId);
     console.info("[assistant] request accepted", {
       durationMs: Date.now() - startedAt,
+      lightweight: useLightweightChat,
       messageCount: messages.length,
       model: requestedModel,
       requestId,
@@ -78,6 +147,7 @@ export async function POST(request: NextRequest) {
         workspaceId: data.meta?.currentWorkspace?.id
       },
       data,
+      enableTools: !useLightweightChat,
       model: body?.model,
       messages
     });
