@@ -6,6 +6,40 @@ import type { AssistantInternalActionRuntime } from "@/lib/ai/assistant-internal
 import { createAssistantTools } from "@/lib/ai/assistant-tools";
 import { getAiApiKey, getAiBaseUrl, resolveAiModel } from "@/lib/ai/settings";
 
+const MAX_MODEL_HISTORY_MESSAGES = 16;
+
+type TextUIMessagePart = Extract<UIMessage["parts"][number], { type: "text" }>;
+
+function isTextUIMessagePart(part: UIMessage["parts"][number]): part is TextUIMessagePart {
+  return part.type === "text" && Boolean(part.text.trim());
+}
+
+function sanitizeMessagesForModel(messages: UIMessage[]) {
+  // ChatBox 会把多轮会话持久化到 localStorage；历史里如果残留旧版 tool part 或失败的 function.arguments，
+  // AI SDK 在再次 convertToModelMessages 时会把这些旧工具片段送回百炼，导致模型在本轮工具真正开始前就 400。
+  // 服务端发给模型的历史只保留用户/助手可见文本；工具事实和动作结果必须通过本轮 tools 重新读取/执行。
+  return messages
+    .map((message) => {
+      const textParts = message.parts
+        .filter(isTextUIMessagePart)
+        .map((part) => ({
+          type: "text" as const,
+          text: part.text
+        }));
+
+      if (textParts.length === 0) {
+        return null;
+      }
+
+      return {
+        ...message,
+        parts: textParts
+      } as UIMessage;
+    })
+    .filter((message): message is UIMessage => Boolean(message))
+    .slice(-MAX_MODEL_HISTORY_MESSAGES);
+}
+
 function shouldDisableDashScopeThinking(model: string) {
   const normalizedModel = model.toLowerCase();
 
@@ -120,7 +154,7 @@ export async function createAssistantStreamResult({
   }
 
   const tools = createAssistantTools(dataSource, messages, actionRuntime);
-  const modelMessages = await convertToModelMessages(messages, {
+  const modelMessages = await convertToModelMessages(sanitizeMessagesForModel(messages), {
     tools,
     ignoreIncompleteToolCalls: true
   });
