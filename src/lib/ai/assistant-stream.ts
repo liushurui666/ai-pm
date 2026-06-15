@@ -4,8 +4,7 @@ import type { DashboardData } from "@/types/dashboard";
 import { createAssistantSystemPrompt } from "@/lib/ai/assistant-prompt";
 import type { AssistantInternalActionRuntime } from "@/lib/ai/assistant-internal-actions";
 import { createAssistantTools } from "@/lib/ai/assistant-tools";
-import { resolveValidatedAiModel } from "@/lib/ai/model-availability";
-import { getAiApiKey, getAiBaseUrl } from "@/lib/ai/settings";
+import { getAiApiKey, getAiBaseUrl, resolveAiModel } from "@/lib/ai/settings";
 
 function shouldDisableDashScopeThinking(model: string) {
   const normalizedModel = model.toLowerCase();
@@ -17,7 +16,9 @@ function shouldDisableDashScopeThinking(model: string) {
 }
 
 async function createAiModel(model?: string) {
-  const resolvedModel = await resolveValidatedAiModel(model);
+  // 正式发送链路不能再等待模型健康检查：本地/冷启动时会并发探测整个模型候选清单，
+  // 一个“你好”也会被额外拖 4-5 秒。模型下拉接口已经负责健康检查，发送时只做同步白名单兜底。
+  const resolvedModel = resolveAiModel(model);
   const provider = createOpenAICompatible({
     name: "ai-pm-openai-compatible",
     baseURL: getAiBaseUrl(),
