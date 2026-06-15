@@ -15,6 +15,13 @@ import type { BugReport, DashboardData, DashboardMember, Requirement, Requiremen
 
 const today = () => new Date();
 const defaultLimit = 8;
+const jsonPrimitiveSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+const jsonValueSchema: z.ZodType<unknown> = z.lazy(() => z.union([
+  jsonPrimitiveSchema,
+  z.array(jsonValueSchema),
+  z.record(z.string(), jsonValueSchema)
+]));
+const jsonObjectSchema = z.record(z.string(), jsonValueSchema);
 
 function clampLimit(limit?: number) {
   return Math.min(Math.max(Math.trunc(limit ?? defaultLimit), 1), 20);
@@ -714,8 +721,11 @@ export function createAssistantTools(
           operations: {
             description: [
               "执行 AI PM 平台内部业务动作；当用户明确要求你帮他创建、更新、关闭、删除、保存、发起、配置或修改时使用。",
+              "每次调用只执行一个明确动作；不要把多个 PATCH/DELETE/POST 动作拼成数组，也不要在一个 arguments 里写自然语言计划。",
+              "如果用户要求一次处理很多记录，先读取候选并说明本轮最多只能执行少量明确记录；不要承诺一次性关闭十几条或几十条。",
               "只能调用当前站点同源 /api/* JSON 业务接口，不要调用认证或助手自身接口。",
               "常见动作：更新记录使用 PATCH /api/records，body 为 { type, id, workspaceId, values }；关闭 Bug 时 type=bug，values.status=已关闭。",
+              "关闭任务时使用 PATCH /api/records，body 为 { type:'task', id, workspaceId, values:{ stage:'已完成' } }。",
               "创建记录使用 POST /api/records，body 必须为 { type, workspaceId, values }，不要把字段直接平铺到 body 顶层。",
               "创建版本模板：{ type:'requirementVersion', values:{ name, project:'跨项目', status:'规划中', startDate:'YYYY-MM-DD', releaseDate:'YYYY-MM-DD', goal, productOwner, productOwnerMemberId } }。",
               "创建需求模板：{ type:'requirement', values:{ title, priority:'P1', status:'待评审', project, versionId, versionName, owner, ownerMemberId, acceptance } }。",
@@ -724,8 +734,8 @@ export function createAssistantTools(
             ].join("\n"),
             inputSchema: z.object({
               method: z.enum(["GET", "POST", "PATCH", "DELETE"]).describe("内部业务动作的 HTTP 方法"),
-              path: z.string().min(1).describe("内部业务接口相对路径，必须以 /api/ 开头，可携带 query"),
-              body: z.record(z.string(), z.unknown()).optional().describe("JSON 请求体；GET 不需要填写")
+              path: z.string().min(1).max(240).regex(/^\/api\//).describe("内部业务接口相对路径，必须以 /api/ 开头，可携带 query"),
+              body: jsonObjectSchema.optional().describe("严格 JSON 对象请求体；GET 不需要填写，不能填写数组、字符串或自然语言")
             }),
             // 动作 tool 只负责把模型决策转换为现有内部 API 调用；权限、数据校验和副作用仍由对应业务 API 承担。
             execute: (input) => executeAssistantInternalAction(input, actionRuntime)

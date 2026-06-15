@@ -45,6 +45,11 @@ export function sanitizeAssistantErrorMessage(error: unknown) {
     || normalized.includes("http2")
     || normalized.includes("econnreset")
     || normalized.includes("socket hang up");
+  const isToolArgumentError = normalized.includes("function.arguments")
+    || normalized.includes("tool call")
+    || normalized.includes("invalidtoolinput")
+    || normalized.includes("invalidparameter")
+    || normalized.includes("algo.invalidparameter");
 
   if (looksLikeHtml || isGatewayError) {
     return gatewayAssistantErrorMessage;
@@ -56,6 +61,10 @@ export function sanitizeAssistantErrorMessage(error: unknown) {
 
   if (isNetworkError) {
     return networkAssistantErrorMessage;
+  }
+
+  if (isToolArgumentError) {
+    return "AI 助手本次动作参数生成失败，请缩小要处理的记录范围后重试。";
   }
 
   if (normalized.includes("未登录") || normalized.includes("session")) {
