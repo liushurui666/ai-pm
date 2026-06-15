@@ -11,6 +11,7 @@ import {
   Grid,
   Input,
   Layout,
+  Popconfirm,
   Popover,
   Segmented,
   Select,
@@ -26,17 +27,19 @@ import {
   CalendarOutlined,
   CheckCircleOutlined,
   DashboardOutlined,
+  DeleteOutlined,
   FundProjectionScreenOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  MessageOutlined,
   NodeIndexOutlined,
   PlusOutlined,
   ProjectOutlined,
   SearchOutlined,
   TeamOutlined
 } from "@ant-design/icons";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type {
   BugReport,
   DashboardData,
@@ -100,6 +103,7 @@ import type {
 } from "@/components/project-management-platform/types";
 import { formatRequirementVersionOptionLabel } from "@/components/project-management-platform/requirements/version-utils";
 import { AssistantView } from "@/components/project-management-platform/views/assistant-view";
+import type { AssistantSessionSidebarRenderProps } from "@/components/project-management-platform/drawers/assistant-drawer/assistant-chat-box";
 import { BugRouteEditView } from "@/components/project-management-platform/views/bug-route-edit-view";
 import { BugsView } from "@/components/project-management-platform/views/bugs-view";
 import { MembersView } from "@/components/project-management-platform/views/members-view";
@@ -190,6 +194,7 @@ export function ProjectManagementPlatform({
   const [workspaceSelectOpen, setWorkspaceSelectOpen] = useState(false);
   const [weeklyReportExporting, setWeeklyReportExporting] = useState(false);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(initialWorkspaceId ?? "");
+  const [assistantSessionSidebar, setAssistantSessionSidebar] = useState<ReactNode | null>(null);
   const [createForm] = Form.useForm<Record<string, unknown>>();
   const [projectEditForm] = Form.useForm<Record<string, unknown>>();
   const [editForm] = Form.useForm<Record<string, unknown>>();
@@ -1247,6 +1252,72 @@ export function ProjectManagementPlatform({
       ]
     }
   ];
+  const renderAssistantSessionSidebar = useCallback((props: AssistantSessionSidebarRenderProps) => (
+    <div className="pm-chat-session-menu">
+      <Button
+        block
+        className="pm-chat-new-button"
+        disabled={props.disabled}
+        icon={<PlusOutlined />}
+        type="primary"
+        onClick={props.onCreateSession}
+      >
+        新建聊天
+      </Button>
+      <div className="pm-chat-history">
+        <Text className="pm-chat-history-title">历史对话</Text>
+        <div className="pm-chat-history-list">
+          {props.sessions.map((session) => {
+            const isActive = session.id === props.activeSessionId;
+            const updatedAt = session.updatedAt > 0
+              ? new Date(session.updatedAt).toLocaleDateString("zh-CN", {
+                  month: "2-digit",
+                  day: "2-digit"
+                })
+              : "刚刚";
+
+            return (
+              <div
+                className={isActive ? "pm-chat-history-item is-active" : "pm-chat-history-item"}
+                key={session.id}
+              >
+                <button
+                  className="pm-chat-history-main"
+                  disabled={props.disabled}
+                  type="button"
+                  aria-current={isActive ? "page" : undefined}
+                  onClick={() => props.onSelectSession(session.id)}
+                >
+                  <MessageOutlined />
+                  <span className="pm-chat-history-copy">
+                    <span>{session.title || "新对话"}</span>
+                    <em>{updatedAt}</em>
+                  </span>
+                </button>
+                <Popconfirm
+                  title="删除这条对话？"
+                  okText="删除"
+                  cancelText="取消"
+                  disabled={props.disabled}
+                  onConfirm={() => props.onDeleteSession(session.id)}
+                >
+                  <Tooltip title="删除对话">
+                    <Button
+                      aria-label="删除对话"
+                      className="pm-chat-history-delete"
+                      disabled={props.disabled}
+                      icon={<DeleteOutlined />}
+                      type="text"
+                    />
+                  </Tooltip>
+                </Popconfirm>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  ), []);
   // 顶部账号入口只能展示真实认证上下文或当前成员信息，不能硬编码个人昵称兜底；
   // OAuth 切换时数据还在加载，使用中性文案可以避免 GitHub/Google 登录看起来都变成同一个人。
   const currentAuthUser = data?.meta?.user;
@@ -1542,27 +1613,38 @@ export function ProjectManagementPlatform({
                   }
                 }}
               />
-              <nav className="pm-studio-menu" aria-label="工作台导航">
-                {studioMenuGroups.map((group) => (
-                  <section className="pm-studio-menu-section" key={group.title} aria-label={group.title}>
-                    <Text className="pm-studio-menu-title">{group.title}</Text>
-                    <div className="pm-studio-menu-list">
-                      {group.items.map((item) => (
-                        <button
-                          className={navigationView === item.key ? "pm-studio-menu-item is-active" : "pm-studio-menu-item"}
-                          key={item.key}
-                          type="button"
-                          aria-current={navigationView === item.key ? "page" : undefined}
-                          onClick={() => switchView(item.key)}
-                        >
-                          <span className="pm-studio-menu-icon">{item.icon}</span>
-                          <span className="pm-studio-menu-label">{item.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </section>
-                ))}
-              </nav>
+              {navigationView === "assistant" ? (
+                assistantSessionSidebar ?? (
+                  <div className="pm-chat-session-menu pm-chat-session-menu-loading">
+                    <Button block className="pm-chat-new-button" disabled icon={<PlusOutlined />}>
+                      新建聊天
+                    </Button>
+                    <Text className="pm-chat-history-title">历史对话加载中...</Text>
+                  </div>
+                )
+              ) : (
+                <nav className="pm-studio-menu" aria-label="工作台导航">
+                  {studioMenuGroups.map((group) => (
+                    <section className="pm-studio-menu-section" key={group.title} aria-label={group.title}>
+                      <Text className="pm-studio-menu-title">{group.title}</Text>
+                      <div className="pm-studio-menu-list">
+                        {group.items.map((item) => (
+                          <button
+                            className={navigationView === item.key ? "pm-studio-menu-item is-active" : "pm-studio-menu-item"}
+                            key={item.key}
+                            type="button"
+                            aria-current={navigationView === item.key ? "page" : undefined}
+                            onClick={() => switchView(item.key)}
+                          >
+                            <span className="pm-studio-menu-icon">{item.icon}</span>
+                            <span className="pm-studio-menu-label">{item.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+                </nav>
+              )}
             </div>
           </Sider>
 
@@ -1870,6 +1952,8 @@ export function ProjectManagementPlatform({
                       currentWorkspaceId={currentWorkspaceId}
                       isMobile={isMobile}
                       onInteractionSettled={refreshDashboardState}
+                      onSessionSidebarChange={setAssistantSessionSidebar}
+                      sessionSidebarRender={renderAssistantSessionSidebar}
                     />
                   ) : null}
                 </>

@@ -12,6 +12,7 @@ type AssistantChatBoxHeaderProps = {
   onClearConversation: () => void;
   onExportConversation: () => void;
   onNewSession: () => void;
+  showNewSession?: boolean;
 };
 
 // ChatBox 顶栏只承载页面身份和会话级操作；具体 AI 对话状态仍由父级共享组件统一控制。
@@ -21,7 +22,8 @@ export function AssistantChatBoxHeader({
   isWorkspace,
   onClearConversation,
   onExportConversation,
-  onNewSession
+  onNewSession,
+  showNewSession = true
 }: AssistantChatBoxHeaderProps) {
   return (
     <div className="assistant-chat-box-header">
@@ -37,14 +39,16 @@ export function AssistantChatBoxHeader({
         </Space>
       </Space>
       <Space className="assistant-history-tools" size={6}>
-        <Tooltip title="新建对话">
-          <Button
-            aria-label="新建对话"
-            icon={<PlusOutlined />}
-            disabled={generating}
-            onClick={onNewSession}
-          />
-        </Tooltip>
+        {showNewSession ? (
+          <Tooltip title="新建对话">
+            <Button
+              aria-label="新建对话"
+              icon={<PlusOutlined />}
+              disabled={generating}
+              onClick={onNewSession}
+            />
+          </Tooltip>
+        ) : null}
         <Tooltip title="导出对话记录">
           <Button
             aria-label="导出对话记录"

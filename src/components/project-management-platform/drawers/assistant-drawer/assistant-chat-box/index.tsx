@@ -12,7 +12,7 @@ import {
 } from "@ant-design/icons";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { SenderRef } from "@ant-design/x/es/sender";
 import { fetchWithAuthRedirect, isSessionExpiredError, redirectToLogin } from "@/components/project-management-platform/api";
 import { initialAssistantMessages } from "@/components/project-management-platform/drawers/assistant-drawer/assistant-constants";
@@ -50,7 +50,18 @@ type AssistantChatBoxProps = {
   currentWorkspaceId: string;
   isMobile?: boolean;
   onInteractionSettled?: () => void | Promise<void>;
+  onSessionSidebarChange?: (node: ReactNode | null) => void;
+  sessionSidebarRender?: (props: AssistantSessionSidebarRenderProps) => ReactNode;
   variant?: AssistantChatBoxVariant;
+};
+
+export type AssistantSessionSidebarRenderProps = {
+  activeSessionId: string;
+  disabled: boolean;
+  sessions: AssistantSessionState["sessions"];
+  onCreateSession: () => void;
+  onDeleteSession: (sessionId?: string) => void;
+  onSelectSession: (sessionId: string) => void;
 };
 
 type AssistantModelsResponse = {
@@ -177,6 +188,8 @@ export function AssistantChatBox({
   currentWorkspaceId,
   isMobile = false,
   onInteractionSettled,
+  onSessionSidebarChange,
+  sessionSidebarRender,
   variant = "drawer"
 }: AssistantChatBoxProps) {
   const [sessionState, setSessionState] = useState<AssistantSessionState>(() =>
@@ -201,8 +214,12 @@ export function AssistantChatBox({
   const latestMessagesRef = useRef<UIMessage[]>(activeSession?.messages ?? initialAssistantMessages);
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<SenderRef>(null);
+  const createSessionRef = useRef<() => void>(() => undefined);
+  const deleteSessionRef = useRef<(sessionId?: string) => void>(() => undefined);
+  const selectSessionRef = useRef<(sessionId: string) => void>(() => undefined);
   const submitDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isWorkspace = variant === "workspace";
+  const usesExternalSessionSidebar = isWorkspace && Boolean(sessionSidebarRender && onSessionSidebarChange);
   const modelStorageKey = `${ASSISTANT_MODEL_STORAGE_PREFIX}:${currentWorkspaceId}`;
   const commitSessionState = useCallback((nextState: AssistantSessionState) => {
     const normalizedState = normalizeAssistantSessionState(nextState, initialAssistantMessages);
@@ -697,21 +714,26 @@ export function AssistantChatBox({
     hydrateSessionMessages(sessionId);
   }
 
-  function handleDeleteSession() {
+  function handleDeleteSession(sessionId = sessionStateRef.current.activeSessionId) {
     if (generating) {
       return;
     }
 
     const currentState = sessionStateRef.current;
-    const remainingSessions = currentState.sessions.filter((session) => session.id !== currentState.activeSessionId);
-    const nextSession = remainingSessions[0] ?? createAssistantSession(initialAssistantMessages);
+    const remainingSessions = currentState.sessions.filter((session) => session.id !== sessionId);
+    const deletedActiveSession = sessionId === currentState.activeSessionId;
+    const nextSession = deletedActiveSession
+      ? remainingSessions[0] ?? createAssistantSession(initialAssistantMessages)
+      : currentState.sessions.find((session) => session.id === currentState.activeSessionId) ?? remainingSessions[0] ?? createAssistantSession(initialAssistantMessages);
 
     const nextState = commitSessionState({
       activeSessionId: nextSession.id,
       sessions: remainingSessions.length > 0 ? remainingSessions : [nextSession]
     });
 
-    hydrateSessionMessages(nextState.activeSessionId);
+    if (deletedActiveSession) {
+      hydrateSessionMessages(nextState.activeSessionId);
+    }
   }
 
   function handleClearConversation() {
@@ -777,6 +799,56 @@ export function AssistantChatBox({
       messageId
     });
   }
+
+  useEffect(() => {
+    createSessionRef.current = handleNewSession;
+    deleteSessionRef.current = handleDeleteSession;
+    selectSessionRef.current = handleSessionChange;
+  });
+
+  const handleExternalCreateSession = useCallback(() => {
+    createSessionRef.current();
+  }, []);
+
+  const handleExternalDeleteSession = useCallback((sessionId?: string) => {
+    deleteSessionRef.current(sessionId);
+  }, []);
+
+  const handleExternalSelectSession = useCallback((sessionId: string) => {
+    selectSessionRef.current(sessionId);
+  }, []);
+
+  useEffect(() => {
+    if (!usesExternalSessionSidebar || !sessionSidebarRender || !onSessionSidebarChange) {
+      onSessionSidebarChange?.(null);
+      return;
+    }
+
+    // Chat 模式下历史会话需要放到应用左侧菜单，但 ChatBox 仍然是唯一会话状态源；
+    // 父级只拿到当前快照和稳定操作句柄，避免复制状态后出现历史、输入区和 AI SDK 上下文不一致。
+    onSessionSidebarChange(sessionSidebarRender({
+      activeSessionId: sessionState.activeSessionId,
+      disabled: generating,
+      sessions: sessionState.sessions,
+      onCreateSession: handleExternalCreateSession,
+      onDeleteSession: handleExternalDeleteSession,
+      onSelectSession: handleExternalSelectSession
+    }));
+  }, [
+    generating,
+    handleExternalCreateSession,
+    handleExternalDeleteSession,
+    handleExternalSelectSession,
+    onSessionSidebarChange,
+    sessionSidebarRender,
+    sessionState.activeSessionId,
+    sessionState.sessions,
+    usesExternalSessionSidebar
+  ]);
+
+  useEffect(() => () => {
+    onSessionSidebarChange?.(null);
+  }, [onSessionSidebarChange]);
 
   const bubbleItems: BubbleItemType[] = displayMessages.map((message) => {
     const isAssistant = message.role === "assistant";
@@ -846,6 +918,7 @@ export function AssistantChatBox({
           onClearConversation={handleClearConversation}
           onExportConversation={handleExportConversation}
           onNewSession={handleNewSession}
+          showNewSession={!usesExternalSessionSidebar}
         />
 
         {isWorkspace && !hasUserMessages ? (
@@ -856,14 +929,16 @@ export function AssistantChatBox({
           />
         ) : null}
 
-        <AssistantSessionBar
-          activeSessionId={sessionState.activeSessionId}
-          disabled={generating}
-          sessions={sessionState.sessions}
-          onCreateSession={handleNewSession}
-          onDeleteSession={handleDeleteSession}
-          onSelectSession={handleSessionChange}
-        />
+        {!usesExternalSessionSidebar ? (
+          <AssistantSessionBar
+            activeSessionId={sessionState.activeSessionId}
+            disabled={generating}
+            sessions={sessionState.sessions}
+            onCreateSession={handleNewSession}
+            onDeleteSession={handleDeleteSession}
+            onSelectSession={handleSessionChange}
+          />
+        ) : null}
 
         <div className="assistant-messages" ref={messagesRef}>
           {isWorkspace && onlyWelcomeMessage ? (
@@ -928,16 +1003,18 @@ export function AssistantChatBox({
             footer={(
               <div className="assistant-chatbox-footer">
                 <div className="assistant-composer-tools">
-                  <Tooltip title="新建对话">
-                    <Button
-                      aria-label="新建对话"
-                      className="assistant-composer-tool-button"
-                      disabled={generating}
-                      icon={<PlusOutlined />}
-                      type="text"
-                      onClick={handleNewSession}
-                    />
-                  </Tooltip>
+                  {!usesExternalSessionSidebar ? (
+                    <Tooltip title="新建对话">
+                      <Button
+                        aria-label="新建对话"
+                        className="assistant-composer-tool-button"
+                        disabled={generating}
+                        icon={<PlusOutlined />}
+                        type="text"
+                        onClick={handleNewSession}
+                      />
+                    </Tooltip>
+                  ) : null}
                   <Tooltip title="清空当前对话">
                     <Button
                       aria-label="清空当前对话"

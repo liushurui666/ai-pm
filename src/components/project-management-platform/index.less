@@ -177,6 +177,140 @@
   white-space: nowrap;
 }
 
+.pm-chat-session-menu {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
+  padding: 0 4px;
+}
+
+.pm-chat-new-button.ant-btn {
+  justify-content: flex-start;
+  height: 38px;
+  border: 0;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--brand) 78%, #ffffff 4%);
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--brand) 22%, transparent);
+  font-weight: 700;
+}
+
+.pm-chat-new-button.ant-btn:not(:disabled):hover {
+  background: color-mix(in srgb, var(--brand) 88%, #ffffff 8%);
+}
+
+.pm-chat-history {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pm-chat-history-title {
+  padding: 0 8px;
+  color: color-mix(in srgb, #ffffff 54%, transparent);
+  font-size: 12px;
+  line-height: 22px;
+}
+
+.pm-chat-history-list {
+  display: grid;
+  min-height: 0;
+  gap: 4px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.pm-chat-history-item {
+  display: flex;
+  align-items: center;
+  min-height: 42px;
+  border-radius: 12px;
+  background: transparent;
+  color: color-mix(in srgb, #ffffff 76%, transparent);
+}
+
+.pm-chat-history-item:hover,
+.pm-chat-history-item.is-active {
+  background: color-mix(in srgb, #ffffff 9%, transparent);
+  color: #ffffff;
+}
+
+.pm-chat-history-main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  height: 42px;
+  padding: 0 8px 0 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.pm-chat-history-main:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.pm-chat-history-main .anticon {
+  flex: 0 0 auto;
+  color: currentColor;
+  font-size: 15px;
+}
+
+.pm-chat-history-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.pm-chat-history-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 18px;
+}
+
+.pm-chat-history-copy em {
+  color: color-mix(in srgb, #ffffff 42%, transparent);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 14px;
+}
+
+.pm-chat-history-delete.ant-btn {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  margin-right: 4px;
+  border-radius: 9px;
+  color: color-mix(in srgb, #ffffff 46%, transparent);
+  opacity: 0;
+}
+
+.pm-chat-history-item:hover .pm-chat-history-delete.ant-btn,
+.pm-chat-history-item.is-active .pm-chat-history-delete.ant-btn {
+  opacity: 1;
+}
+
+.pm-chat-history-delete.ant-btn:not(:disabled):hover {
+  color: #ffffff;
+  background: color-mix(in srgb, var(--danger) 34%, transparent);
+}
+
+.pm-chat-session-menu-loading {
+  color: color-mix(in srgb, #ffffff 52%, transparent);
+}
+
 .pm-sider.ant-layout-sider-collapsed .pm-mode-sidebar {
   align-items: center;
   padding-inline: 8px;
@@ -217,6 +351,46 @@
   justify-content: center;
   width: 42px;
   min-height: 42px;
+  padding: 0;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-chat-session-menu {
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-chat-new-button.ant-btn {
+  justify-content: center;
+  width: 42px;
+  min-width: 42px;
+  padding: 0;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-chat-new-button.ant-btn span:not(.anticon),
+.pm-sider.ant-layout-sider-collapsed .pm-chat-history-title,
+.pm-sider.ant-layout-sider-collapsed .pm-chat-history-copy,
+.pm-sider.ant-layout-sider-collapsed .pm-chat-history-delete {
+  display: none;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-chat-history,
+.pm-sider.ant-layout-sider-collapsed .pm-chat-history-list {
+  width: 100%;
+  align-items: center;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-chat-history-item {
+  justify-content: center;
+  width: 42px;
+  min-height: 42px;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-chat-history-main {
+  justify-content: center;
+  width: 42px;
+  height: 42px;
   padding: 0;
 }
 
