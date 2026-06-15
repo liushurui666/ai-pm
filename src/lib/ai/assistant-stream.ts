@@ -7,14 +7,34 @@ import { createAssistantTools } from "@/lib/ai/assistant-tools";
 import { resolveValidatedAiModel } from "@/lib/ai/model-availability";
 import { getAiApiKey, getAiBaseUrl } from "@/lib/ai/settings";
 
+function shouldDisableDashScopeThinking(model: string) {
+  const normalizedModel = model.toLowerCase();
+
+  // 百炼 qwen3/qwen3.7 等推理模型在 OpenAI-compatible 流里会先输出大量 reasoning_content。
+  // ChatBox 的核心诉求是稳定返回业务结论；默认关闭深度思考可以避免用户在普通问答或执行指令里等待几十秒，
+  // 同时 tools / reasoning part 的前端 Think 面板仍然保留，后续如需“展开推理模式”再由显式开关控制。
+  return normalizedModel.startsWith("qwen3") || normalizedModel.includes("qwen3.");
+}
+
 async function createAiModel(model?: string) {
+  const resolvedModel = await resolveValidatedAiModel(model);
   const provider = createOpenAICompatible({
     name: "ai-pm-openai-compatible",
     baseURL: getAiBaseUrl(),
-    apiKey: getAiApiKey()
+    apiKey: getAiApiKey(),
+    transformRequestBody: (body) => {
+      if (!shouldDisableDashScopeThinking(resolvedModel)) {
+        return body;
+      }
+
+      return {
+        ...body,
+        enable_thinking: false
+      };
+    }
   });
 
-  return provider(await resolveValidatedAiModel(model));
+  return provider(resolvedModel);
 }
 
 // 这里仅装配 AI SDK 流式运行时：模型、系统约束、历史消息和 tools；项目判断仍完全由模型基于工具结果完成。

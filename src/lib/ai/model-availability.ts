@@ -41,6 +41,14 @@ function isModelHealthCheckEnabled() {
   return process.env.AI_MODEL_HEALTHCHECK?.trim() !== "false";
 }
 
+function shouldDisableDashScopeThinking(model: string) {
+  const normalizedModel = model.toLowerCase();
+
+  // 模型探活必须贴近 ChatBox 正式请求。qwen3/qwen3.7 默认会输出较长推理流，
+  // 健康检查只验证 tools 参数兼容性，不需要消耗 reasoning token，所以这里和助手流式入口保持同一策略。
+  return normalizedModel.startsWith("qwen3") || normalizedModel.includes("qwen3.");
+}
+
 function createCacheKey(models: string[]) {
   return [
     getAiBaseUrl(),
@@ -73,6 +81,7 @@ async function checkModelAvailability(model: string, timeoutMs: number): Promise
           }
         ],
         model,
+        ...(shouldDisableDashScopeThinking(model) ? { enable_thinking: false } : {}),
         // AI 项目助手每轮都可能携带 AI SDK tools；只做普通聊天探活会误把“不支持 tools”的模型放进下拉框，
         // 用户切过去后才在正式流式请求里失败。这里给一个不会被调用的空工具，验证模型/网关至少接受 tools 参数。
         tool_choice: "none",

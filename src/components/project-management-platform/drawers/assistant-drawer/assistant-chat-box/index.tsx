@@ -454,6 +454,23 @@ export function AssistantChatBox({
   }, [messages]);
 
   useEffect(() => {
+    if (pendingResponseSource !== "sdk" || status === "submitted" || status === "streaming") {
+      return;
+    }
+
+    // AI SDK 的 onFinish/onError 是首选收口，但生产里遇到过 SSE 已结束、status 已回到 ready，
+    // 本地 pendingResponseSource 仍停在 sdk 的情况；这会让 Sender 一直 loading/disabled，看起来像“模型不返回”。
+    // 因此额外用 status 做兜底释放，并同步持久化当前消息，避免会话历史丢掉最后一轮回复。
+    const timer = window.setTimeout(() => {
+      setPendingResponseSource(null);
+      setUserStopped(false);
+      persistActiveSessionMessages(messages);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [messages, pendingResponseSource, persistActiveSessionMessages, status]);
+
+  useEffect(() => {
     selectedModelRef.current = selectedModel;
   }, [selectedModel]);
 
