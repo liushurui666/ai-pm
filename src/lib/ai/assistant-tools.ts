@@ -1,10 +1,10 @@
 import type { ToolSet, UIMessage } from "ai";
 import { z } from "zod";
 import {
-  executeAssistantBulkInternalAction,
   executeAssistantInternalAction,
   type AssistantInternalActionRuntime
 } from "@/lib/ai/assistant-internal-actions";
+import { enqueueAssistantBulkActionJob } from "@/lib/ai/assistant-action-jobs";
 import {
   createDashScopeEmbedding,
   createDashScopeReranker,
@@ -425,6 +425,7 @@ function createBulkOperationsTool(
     const currentUserMatcher = createCurrentUserMatcher(data);
     const idSet = new Set(ids ?? []);
     const rowLimit = Math.min(Math.max(Math.trunc(limit || 100), 1), 100);
+    const workspaceId = data.meta?.currentWorkspace?.id ?? actionRuntime.workspaceId;
 
     if (entity === "task" && action !== "completeTasks") {
       return {
@@ -439,6 +440,22 @@ function createBulkOperationsTool(
         已执行: false,
         状态: "失败",
         业务结果: "Bug 批量动作只支持关闭。"
+      };
+    }
+
+    if (entity === "bug" && !data.meta?.permissions?.canEditBugs) {
+      return {
+        已执行: false,
+        状态: "失败",
+        业务结果: data.meta?.permissions?.deniedReason || "当前账号没有编辑 Bug 的权限。"
+      };
+    }
+
+    if (!workspaceId) {
+      return {
+        已执行: false,
+        状态: "失败",
+        业务结果: "缺少当前工作区，无法提交批量动作。"
       };
     }
 
@@ -475,32 +492,22 @@ function createBulkOperationsTool(
       };
     }
 
-    const result = await executeAssistantBulkInternalAction({
-      method: "PATCH",
-      path: "/api/records",
-      items: selectedRecords.map((record) => ({
-        id: record.id,
-        title: record.title,
-        body: {
-          type: entity,
-          id: record.id,
-          values: entity === "task"
-            ? {
-                stage: "已完成"
-              }
-            : {
-                status: "已关闭"
-              }
-        }
-      }))
-    }, actionRuntime);
+    const queued = await enqueueAssistantBulkActionJob({
+      actionType: entity === "task" ? "complete_tasks" : "close_bugs",
+      targetType: entity,
+      workspaceId,
+      scope,
+      requestedBy: currentUserMatcher.currentUser.姓名,
+      recordIds: selectedRecords.map((record) => record.id),
+      titles: Object.fromEntries(selectedRecords.map((record) => [record.id, record.title]))
+    });
 
     return {
       当前用户: currentUserMatcher.currentUser,
       目标范围: scope === "mine" ? "当前登录人负责的记录" : scope === "all" ? "当前工作区全部匹配记录" : "指定记录",
       目标类型: entity === "task" ? "任务" : "Bug",
       请求处理数: selectedRecords.length,
-      ...result
+      ...queued
     };
   }
 
@@ -515,7 +522,7 @@ function createBulkOperationsTool(
       description: [
         "批量将任务标记为已完成；当用户说“关闭/完成/处理掉/清掉我的所有任务、全部任务、批量任务”时优先使用。",
         "关闭任务在 AI PM 中等价于把任务阶段更新为“已完成”。",
-        "该能力由后端统一循环执行并返回成功/失败统计，不要再连续调用普通 operations。"
+        "该能力会提交后台动作队列，由 worker 批量更新数据库；不要再连续调用普通 operations。"
       ].join("\n"),
       inputSchema: scopeInputSchema,
       execute: (input: { ids?: string[]; limit: number; scope: "mine" | "all" | "ids" }) => executeBulkAction({
@@ -527,7 +534,7 @@ function createBulkOperationsTool(
     bulkCloseBugs: {
       description: [
         "批量关闭 Bug；当用户说“关闭所有 Bug、批量关闭 Bug、把我的 Bug 都关闭”时优先使用。",
-        "该能力由后端统一循环执行并返回成功/失败统计，不要再连续调用普通 operations。"
+        "该能力会提交后台动作队列，由 worker 批量更新数据库；不要再连续调用普通 operations。"
       ].join("\n"),
       inputSchema: scopeInputSchema,
       execute: (input: { ids?: string[]; limit: number; scope: "mine" | "all" | "ids" }) => executeBulkAction({
@@ -859,7 +866,7 @@ export function createAssistantTools(
             description: [
               "执行 AI PM 平台内部业务动作；当用户明确要求你帮他创建、更新、关闭、删除、保存、发起、配置或修改时使用。",
               "每次调用只执行一个明确动作；不要把多个 PATCH/DELETE/POST 动作拼成数组，也不要在一个 arguments 里写自然语言计划。",
-              "如果用户要求一次处理很多记录，先读取候选并说明本轮最多只能执行少量明确记录；不要承诺一次性关闭十几条或几十条。",
+              "如果用户要求一次处理很多任务或 Bug，必须优先使用批量动作工具提交后台队列，不要用 operations 连续调用多次单条接口。",
               "只能调用当前站点同源 /api/* JSON 业务接口，不要调用认证或助手自身接口。",
               "常见动作：更新记录使用 PATCH /api/records，body 为 { type, id, workspaceId, values }；关闭 Bug 时 type=bug，values.status=已关闭。",
               "关闭任务时使用 PATCH /api/records，body 为 { type:'task', id, workspaceId, values:{ stage:'已完成' } }。",

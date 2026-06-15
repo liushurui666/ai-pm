@@ -17,6 +17,7 @@
     "ai-index:worker": "tsx scripts/ai-index-worker.ts",
     "ai-index:doctor": "tsx scripts/ai-index-doctor.ts",
     "ai-index:eval": "tsx scripts/ai-index-eval.ts",
+    "assistant-action:worker": "tsx scripts/assistant-action-worker.ts",
     "bug-fix:worker": "tsx scripts/bug-fix-worker.ts"
   },
   "dependencies": {

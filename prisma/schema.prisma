@@ -29,6 +29,7 @@ model Workspace {
   aiIndexChunks       AiIndexChunk[]
   aiIndexJobs         AiIndexJob[]
   aiIndexTraces       AiIndexTrace[]
+  assistantActionJobs AssistantActionJob[]
 
   @@map("workspaces")
 }
@@ -505,6 +506,34 @@ model AiIndexTrace {
   @@map("ai_index_traces")
 }
 
+model AssistantActionJob {
+  id             String                   @id @default(cuid())
+  workspaceId    String
+  actionType     AssistantActionType
+  targetType     AssistantActionTargetType
+  scope          String
+  recordIds      Json                     @default("[]")
+  status         AssistantActionJobStatus @default(queued)
+  requestedCount Int                      @default(0)
+  successCount   Int                      @default(0)
+  failedCount    Int                      @default(0)
+  result         Json                     @default("{}")
+  error          String?                  @db.Text
+  requestedBy    String?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  lockedAt       DateTime?
+  lockedBy       String?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, status, createdAt])
+  @@index([status, createdAt])
+  @@map("assistant_action_jobs")
+}
+
 enum GitProvider {
   github
   gitlab
@@ -586,5 +615,23 @@ enum AiIndexJobStatus {
   pending
   running
   success
+  failed
+}
+
+enum AssistantActionType {
+  complete_tasks
+  close_bugs
+}
+
+enum AssistantActionTargetType {
+  task
+  bug
+}
+
+enum AssistantActionJobStatus {
+  queued
+  running
+  succeeded
+  partially_failed
   failed
 }
