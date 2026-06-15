@@ -1,6 +1,8 @@
 const allowedMethods = new Set(["GET", "POST", "PATCH", "DELETE"]);
 const blockedApiPrefixes = ["/api/assistant", "/api/auth"];
 const internalActionTimeoutMs = 20_000;
+const bulkActionTimeoutMs = 120_000;
+const maxBulkActionItems = 100;
 const maxPayloadDepth = 4;
 const maxArrayItems = 8;
 
@@ -13,6 +15,18 @@ export type AssistantInternalActionRuntime = {
 export type AssistantInternalActionInput = {
   body?: Record<string, unknown>;
   method: string;
+  path: string;
+};
+
+export type AssistantBulkInternalActionItem = {
+  body: Record<string, unknown>;
+  id: string;
+  title?: string;
+};
+
+export type AssistantBulkInternalActionInput = {
+  items: AssistantBulkInternalActionItem[];
+  method: "PATCH" | "DELETE";
   path: string;
 };
 
@@ -177,6 +191,93 @@ export async function executeAssistantInternalAction(
       已执行: false,
       状态: "失败",
       业务结果: error instanceof Error ? sanitizeActionText(error.message) : "内部业务动作执行失败"
+    };
+  }
+}
+
+export async function executeAssistantBulkInternalAction(
+  input: AssistantBulkInternalActionInput,
+  runtime: AssistantInternalActionRuntime
+) {
+  const method = input.method.trim().toUpperCase();
+
+  if (!["PATCH", "DELETE"].includes(method)) {
+    return {
+      已执行: false,
+      状态: "失败",
+      业务结果: "批量动作当前只支持更新或删除。"
+    };
+  }
+
+  const items = input.items.slice(0, maxBulkActionItems);
+
+  if (!items.length) {
+    return {
+      已执行: false,
+      状态: "失败",
+      业务结果: "没有可执行的目标记录。"
+    };
+  }
+
+  try {
+    const url = normalizeInternalApiUrl(input.path, runtime.origin);
+    const timeout = createTimeoutSignal(bulkActionTimeoutMs);
+    const results: Array<{
+      id: string;
+      title?: unknown;
+      ok: boolean;
+      status?: number;
+      message?: unknown;
+    }> = [];
+
+    try {
+      // 批量动作由后端统一循环执行，避免模型在一轮对话里连续生成几十个 tool call；
+      // 每条记录独立提交、独立记录失败原因，单条失败不会打断后续记录处理。
+      for (const item of items) {
+        const body = method === "DELETE" ? item.body : createActionBody(item.body, runtime.workspaceId);
+        const response = await fetch(url, {
+          method,
+          cache: "no-store",
+          headers: {
+            accept: "application/json",
+            ...(body ? { "content-type": "application/json" } : {}),
+            ...(runtime.cookieHeader ? { cookie: runtime.cookieHeader } : {})
+          },
+          body: body ? JSON.stringify(body) : undefined,
+          signal: timeout.signal
+        });
+        const payload = sanitizeActionPayload(await parseActionResponse(response));
+
+        results.push({
+          id: item.id,
+          title: sanitizeActionText(item.title),
+          ok: response.ok,
+          status: response.status,
+          message: payload
+        });
+      }
+
+      const succeeded = results.filter((result) => result.ok);
+      const failed = results.filter((result) => !result.ok);
+
+      return {
+        已执行: succeeded.length > 0,
+        状态: failed.length ? "部分成功" : "成功",
+        总数: results.length,
+        成功数: succeeded.length,
+        失败数: failed.length,
+        已截断: input.items.length > maxBulkActionItems,
+        成功样例: succeeded.slice(0, maxArrayItems),
+        失败明细: failed.slice(0, maxArrayItems)
+      };
+    } finally {
+      timeout.clear();
+    }
+  } catch (error) {
+    return {
+      已执行: false,
+      状态: "失败",
+      业务结果: error instanceof Error ? sanitizeActionText(error.message) : "批量内部业务动作执行失败"
     };
   }
 }
