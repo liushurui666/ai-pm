@@ -58,9 +58,12 @@ type AssistantChatBoxProps = {
 export type AssistantSessionSidebarRenderProps = {
   activeSessionId: string;
   disabled: boolean;
+  hasUserMessages: boolean;
   sessions: AssistantSessionState["sessions"];
+  onClearConversation: () => void;
   onCreateSession: () => void;
   onDeleteSession: (sessionId?: string) => void;
+  onExportConversation: () => void;
   onSelectSession: (sessionId: string) => void;
 };
 
@@ -216,8 +219,10 @@ export function AssistantChatBox({
   const latestMessagesRef = useRef<UIMessage[]>(activeSession?.messages ?? initialAssistantMessages);
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<SenderRef>(null);
+  const clearConversationRef = useRef<() => void>(() => undefined);
   const createSessionRef = useRef<() => void>(() => undefined);
   const deleteSessionRef = useRef<(sessionId?: string) => void>(() => undefined);
+  const exportConversationRef = useRef<() => void>(() => undefined);
   const selectSessionRef = useRef<(sessionId: string) => void>(() => undefined);
   const submitDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isWorkspace = variant === "workspace";
@@ -803,10 +808,16 @@ export function AssistantChatBox({
   }
 
   useEffect(() => {
+    clearConversationRef.current = handleClearConversation;
     createSessionRef.current = handleNewSession;
     deleteSessionRef.current = handleDeleteSession;
+    exportConversationRef.current = handleExportConversation;
     selectSessionRef.current = handleSessionChange;
   });
+
+  const handleExternalClearConversation = useCallback(() => {
+    clearConversationRef.current();
+  }, []);
 
   const handleExternalCreateSession = useCallback(() => {
     createSessionRef.current();
@@ -814,6 +825,10 @@ export function AssistantChatBox({
 
   const handleExternalDeleteSession = useCallback((sessionId?: string) => {
     deleteSessionRef.current(sessionId);
+  }, []);
+
+  const handleExternalExportConversation = useCallback(() => {
+    exportConversationRef.current();
   }, []);
 
   const handleExternalSelectSession = useCallback((sessionId: string) => {
@@ -831,16 +846,22 @@ export function AssistantChatBox({
     onSessionSidebarChange(sessionSidebarRender({
       activeSessionId: sessionState.activeSessionId,
       disabled: generating,
+      hasUserMessages,
       sessions: sessionState.sessions,
+      onClearConversation: handleExternalClearConversation,
       onCreateSession: handleExternalCreateSession,
       onDeleteSession: handleExternalDeleteSession,
+      onExportConversation: handleExternalExportConversation,
       onSelectSession: handleExternalSelectSession
     }));
   }, [
     generating,
+    handleExternalClearConversation,
     handleExternalCreateSession,
     handleExternalDeleteSession,
+    handleExternalExportConversation,
     handleExternalSelectSession,
+    hasUserMessages,
     onSessionSidebarChange,
     sessionSidebarRender,
     sessionState.activeSessionId,
@@ -913,15 +934,17 @@ export function AssistantChatBox({
   return (
     <XProvider>
       <section className={`assistant-chat-box assistant-chat-box--${variant}`}>
-        <AssistantChatBoxHeader
-          generating={generating}
-          hasUserMessages={hasUserMessages}
-          isWorkspace={isWorkspace}
-          onClearConversation={handleClearConversation}
-          onExportConversation={handleExportConversation}
-          onNewSession={handleNewSession}
-          showNewSession={!usesExternalSessionSidebar}
-        />
+        {!usesExternalSessionSidebar ? (
+          <AssistantChatBoxHeader
+            generating={generating}
+            hasUserMessages={hasUserMessages}
+            isWorkspace={isWorkspace}
+            onClearConversation={handleClearConversation}
+            onExportConversation={handleExportConversation}
+            onNewSession={handleNewSession}
+            showNewSession
+          />
+        ) : null}
 
         {isWorkspace && !hasUserMessages ? (
           <AssistantSuggestions

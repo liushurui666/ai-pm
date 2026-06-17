@@ -349,6 +349,32 @@
   transform: translateY(-1px);
 }
 
+.pm-chat-session-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+}
+
+.pm-chat-session-actions::before {
+  flex: 1;
+  height: 1px;
+  background: var(--pm-sider-border-soft);
+  content: "";
+}
+
+.pm-chat-session-actions .ant-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--pm-sider-muted);
+}
+
+.pm-chat-session-actions .ant-btn:not(:disabled):hover {
+  background: var(--pm-sider-panel);
+  color: var(--pm-sider-text-strong);
+}
+
 .pm-chat-history {
   display: flex;
   min-height: 0;

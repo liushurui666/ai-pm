@@ -28,6 +28,7 @@ import {
   CheckCircleOutlined,
   DashboardOutlined,
   DeleteOutlined,
+  DownloadOutlined,
   FundProjectionScreenOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
@@ -1282,6 +1283,33 @@ export function ProjectManagementPlatform({
       >
         新建聊天
       </Button>
+      <div className="pm-chat-session-actions" aria-label="当前对话操作">
+        <Tooltip title="导出当前对话">
+          <Button
+            aria-label="导出当前对话"
+            disabled={!props.hasUserMessages}
+            icon={<DownloadOutlined />}
+            type="text"
+            onClick={props.onExportConversation}
+          />
+        </Tooltip>
+        <Popconfirm
+          title="清空当前对话？"
+          okText="清空"
+          cancelText="取消"
+          disabled={props.disabled || !props.hasUserMessages}
+          onConfirm={props.onClearConversation}
+        >
+          <Tooltip title="清空当前对话">
+            <Button
+              aria-label="清空当前对话"
+              disabled={props.disabled || !props.hasUserMessages}
+              icon={<DeleteOutlined />}
+              type="text"
+            />
+          </Tooltip>
+        </Popconfirm>
+      </div>
       <div className="pm-chat-history">
         <Text className="pm-chat-history-title">历史对话</Text>
         <div className="pm-chat-history-list">
