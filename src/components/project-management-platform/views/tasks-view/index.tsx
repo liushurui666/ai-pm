@@ -248,7 +248,8 @@ export function TasksView({
       {viewMode === "stage" ? (
         <TaskStageBoard onlyMine={onlyMine} tasks={visibleTasks} onEdit={onEdit} onStageChange={onStageChange} />
       ) : viewMode === "table" ? (
-        <Card>
+        <Card className="pm-table-card">
+          {/* 表格模式沿用通用表格容器，保证任务、Bug、成员等长列表的视觉层级一致。 */}
           <Table
             rowKey="id"
             columns={taskColumns}

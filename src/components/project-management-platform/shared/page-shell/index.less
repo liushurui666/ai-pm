@@ -74,9 +74,45 @@
   background: var(--surface);
 }
 
+.pm-table-card .ant-table-container {
+  border-start-start-radius: 8px;
+  border-start-end-radius: 8px;
+}
+
 .pm-table-card .ant-table-wrapper .ant-table-thead > tr > th {
   background: color-mix(in srgb, var(--surface-subtle) 88%, var(--brand) 12%);
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
+}
+
+.pm-table-card .ant-table-wrapper .ant-table-tbody > tr > td {
+  background: var(--surface);
+}
+
+.pm-table-card .ant-table-wrapper .ant-table-tbody > tr:hover > td {
+  background: color-mix(in srgb, var(--surface-subtle) 88%, var(--brand) 7%) !important;
+}
+
+.pm-table-card .ant-pagination {
+  margin: 14px 0 0;
+}
+
+@media (max-width: 768px) {
+  .page-title {
+    padding: 16px;
+  }
+
+  .page-title::before {
+    right: 16px;
+    left: 16px;
+  }
+
+  .page-title-copy h2.ant-typography {
+    font-size: 22px;
+  }
+
+  .pm-table-card.ant-card > .ant-card-body {
+    padding: 12px;
+  }
 }

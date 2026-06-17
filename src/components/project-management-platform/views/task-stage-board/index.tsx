@@ -724,7 +724,8 @@ export function TaskStageBoard({
         ) : null}
       </DragOverlay>
       {!tasks.length ? (
-        <Card className="pm-wide">
+        <Card className="pm-wide task-board-empty-card">
+          {/* 空看板不是数据卡片，使用更轻的提示容器，避免空状态比真实任务列还抢眼。 */}
           <Text type="secondary">{onlyMine ? "暂无分配给你的任务" : "暂无任务，上传文档后会自动生成"}</Text>
         </Card>
       ) : null}

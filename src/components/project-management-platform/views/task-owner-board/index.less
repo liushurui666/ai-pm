@@ -3,6 +3,21 @@
   align-items: stretch;
 }
 
+.task-board-empty-card.ant-card {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--brand) 20%, var(--border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand) 6%, transparent), transparent 72%),
+    color-mix(in srgb, var(--surface-elevated) 92%, var(--surface-subtle) 8%);
+  box-shadow: none;
+}
+
+.task-board-empty-card.ant-card .ant-card-body {
+  display: grid;
+  min-height: 92px;
+  place-items: center;
+}
+
 .task-owner-column-shell {
   min-width: 300px;
 }

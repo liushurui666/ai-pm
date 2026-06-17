@@ -325,7 +325,8 @@ export function TaskOwnerBoard({
 
   if (!tasks.length) {
     return (
-      <Card className="pm-wide">
+      <Card className="pm-wide task-board-empty-card">
+        {/* 负责人看板空状态只承担反馈，不参与数据层级，视觉上要比真实任务列更轻。 */}
         <Alert type="info" showIcon message={emptyText} />
       </Card>
     );

@@ -363,7 +363,8 @@ export function BugsView({
         />
       </Row>
 
-      <Card>
+      <Card className="pm-table-card">
+        {/* Bug 列表和任务/成员表格保持同一容器层级，方便用户在高频列表间切换时维持视觉预期。 */}
         <Table
           rowKey="id"
           columns={bugColumns}
