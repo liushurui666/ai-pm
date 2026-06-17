@@ -1,3 +1,133 @@
 .bug-route-page {
   min-height: 100%;
 }
+
+/* Bug 独立编辑页承担缺陷处理台职责：左侧是可编辑事实，右侧是执行入口和记录。
+   这里仅统一视觉层级，不改变保存、删除、附件和 AI 修复的业务行为。 */
+.bug-route-page .page-title-extra .ant-btn {
+  border-radius: 8px;
+}
+
+.bug-edit-route-layout {
+  gap: 16px;
+}
+
+.bug-edit-form-card.ant-card,
+.bug-edit-side-card.ant-card,
+.bug-edit-missing-card.ant-card {
+  border-radius: 8px;
+  border-color: color-mix(in srgb, var(--brand) 10%, var(--border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand) 5%, transparent), transparent 58%),
+    var(--surface-elevated);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
+}
+
+.bug-edit-form-card.ant-card {
+  position: relative;
+}
+
+.bug-edit-form-card.ant-card::before {
+  position: absolute;
+  top: 16px;
+  bottom: 16px;
+  left: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--danger), var(--amber));
+  content: "";
+  opacity: 0.74;
+}
+
+.bug-edit-form-card .ant-card-head,
+.bug-edit-side-card .ant-card-head,
+.bug-ai-fix-card .ant-card-head {
+  min-height: 50px;
+  border-bottom-color: color-mix(in srgb, var(--border) 78%, transparent);
+}
+
+.bug-edit-form-card .ant-card-head-title,
+.bug-edit-side-card .ant-card-head-title,
+.bug-ai-fix-card .ant-card-head-title {
+  color: var(--foreground);
+  font-weight: 760;
+}
+
+.bug-edit-form-card .ant-card-extra .ant-btn {
+  border-radius: 8px;
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--brand) 20%, transparent);
+}
+
+.bug-edit-form-card .ant-form-item-label > label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.bug-edit-form-card .ant-input,
+.bug-edit-form-card .ant-input-affix-wrapper,
+.bug-edit-form-card .ant-select-selector,
+.bug-edit-form-card .ant-upload-drag {
+  border-radius: 8px;
+}
+
+.bug-edit-form-card .ant-upload-drag {
+  border-color: color-mix(in srgb, var(--brand) 18%, var(--border));
+  background: color-mix(in srgb, var(--surface) 88%, var(--brand) 5%);
+}
+
+.bug-edit-side {
+  gap: 14px !important;
+}
+
+.bug-edit-side-card.ant-card {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--surface-subtle) 70%, transparent), transparent 62%),
+    var(--surface-elevated);
+}
+
+.bug-attachment-list {
+  display: grid;
+  gap: 8px;
+}
+
+.bug-attachment-list .ant-btn {
+  width: 100%;
+  height: auto;
+  min-height: 38px;
+  border-radius: 8px;
+  white-space: normal;
+}
+
+.bug-empty-state {
+  display: grid;
+  min-height: 72px;
+  place-items: center;
+  border-color: color-mix(in srgb, var(--brand) 18%, var(--border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand) 6%, transparent), transparent 72%),
+    var(--surface);
+}
+
+.bug-flow-timeline {
+  margin-top: 4px;
+}
+
+.bug-flow-timeline .ant-timeline-item-content {
+  min-width: 0;
+}
+
+.bug-flow-timeline .ant-tag {
+  margin-inline-end: 0;
+}
+
+@media (max-width: 768px) {
+  .bug-edit-form-card.ant-card::before {
+    top: 0;
+    right: 16px;
+    bottom: auto;
+    left: 16px;
+    width: auto;
+    height: 3px;
+  }
+}

@@ -75,7 +75,7 @@ export function BugRouteEditView({
           subtitle="当前 Bug 不存在或已被删除。"
           extra={<Button icon={<ArrowLeftOutlined />} onClick={onBack}>返回 Bug 管理</Button>}
         />
-        <Card>
+        <Card className="bug-edit-missing-card">
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有找到这个 Bug" />
         </Card>
       </Space>
@@ -161,7 +161,7 @@ export function BugRouteEditView({
             onCreate={onCreateAiFix}
           />
 
-          <Card title="复现材料" className="bug-edit-side-card">
+          <Card title="复现材料" className="bug-edit-side-card bug-edit-attachment-card">
             {bug.attachments?.length ? (
               <div className="bug-attachment-list">
                 {bug.attachments.map((attachment) => (
@@ -182,7 +182,7 @@ export function BugRouteEditView({
             )}
           </Card>
 
-          <Card title="流转记录" className="bug-edit-side-card">
+          <Card title="流转记录" className="bug-edit-side-card bug-edit-flow-card">
             {flowRecords.length ? (
               <Timeline
                 className="bug-flow-timeline"
