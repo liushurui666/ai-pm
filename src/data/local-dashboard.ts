@@ -86,9 +86,15 @@ function createLocalId(type: DashboardEntityType | "bugFlow" | "member" | "miles
   return `${type}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-async function readDatabase() {
+async function readDatabase(workspaceId?: string, options: { scopeToWorkspace?: boolean } = {}) {
   // 项目进度、健康度和风险数本质上是任务/Bug/风险的派生值；任务拖拽现在只持久化单行任务，读取时统一重算可以保证项目视图不读到旧统计。
-  return applyProjectMetrics(await readDashboardDatabase(() => applyProjectMetrics(cloneSeedData())));
+  return applyProjectMetrics(await readDashboardDatabase(
+    () => applyProjectMetrics(cloneSeedData()),
+    {
+      scopeToWorkspace: options.scopeToWorkspace,
+      workspaceId
+    }
+  ));
 }
 
 async function readWorkspaces() {
@@ -2168,7 +2174,9 @@ function shouldNotifyOwnerUpdate(
 }
 
 export async function getDashboardData(user?: FeishuUser, workspaceId?: string): Promise<DashboardData> {
-  const baseData = await readDatabase();
+  // 工作台首屏和工作区切换只需要当前工作区业务数据；在数据库层下推 workspaceId 可以避免每次页面读取都扫全库任务、Bug、需求。
+  // 其他写入路径仍使用 readDatabase() 全量读取，确保旧的全量同步写库语义不误删其他工作区数据。
+  const baseData = await readDatabase(workspaceId, { scopeToWorkspace: true });
   const workspaceResult = resolveCurrentWorkspace(baseData, workspaceId);
   const memberResult = ensureCurrentMember(workspaceResult.data, workspaceResult.currentWorkspace.id, user);
   const data = memberResult.data;

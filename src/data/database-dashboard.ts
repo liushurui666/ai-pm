@@ -25,6 +25,10 @@ type DashboardDatabase = Omit<DashboardData, "meta"> & {
 };
 
 type DashboardPrisma = PrismaClient | Prisma.TransactionClient;
+type ReadDashboardDatabaseOptions = {
+  scopeToWorkspace?: boolean;
+  workspaceId?: string;
+};
 
 function asJson(value: unknown): Prisma.InputJsonValue {
   return toJsonValue(value);
@@ -48,6 +52,14 @@ function getWorkspaceId(value: { workspaceId?: string }) {
 
 function getDeleteWhere(ids: string[]) {
   return ids.length ? { id: { notIn: ids } } : {};
+}
+
+function resolveScopedWorkspaceId(workspaces: DashboardWorkspace[], requestedWorkspaceId?: string) {
+  return (
+    workspaces.find((workspace) => workspace.id === requestedWorkspaceId && workspace.status === "active") ??
+    workspaces.find((workspace) => workspace.status === "active") ??
+    workspaces[0]
+  )?.id;
 }
 
 // Prisma 返回的 nullable 字段需要在数据层统一转成前端类型，避免页面侧到处判断 null/undefined 差异。
@@ -131,13 +143,21 @@ async function seedDatabaseIfEmpty(prisma: PrismaClient, createSeed: () => Dashb
   await seedDashboardDatabase(createSeed(), prisma);
 }
 
-export async function readDashboardDatabase(createSeed: () => DashboardDatabase): Promise<DashboardDatabase> {
+export async function readDashboardDatabase(
+  createSeed: () => DashboardDatabase,
+  options: ReadDashboardDatabaseOptions = {}
+): Promise<DashboardDatabase> {
   const prisma = getPrismaClient();
 
   await seedDatabaseIfEmpty(prisma, createSeed);
 
+  const workspaces = (await prisma.workspace.findMany({ orderBy: { createdAt: "asc" } })).map(mapWorkspaceRecord);
+  const scopedWorkspaceId = options.scopeToWorkspace
+    ? resolveScopedWorkspaceId(workspaces, options.workspaceId)
+    : undefined;
+  const workspaceWhere = scopedWorkspaceId ? { workspaceId: scopedWorkspaceId } : undefined;
+
   const [
-    workspaces,
     members,
     projects,
     tasks,
@@ -148,12 +168,14 @@ export async function readDashboardDatabase(createSeed: () => DashboardDatabase)
     documents,
     weeklyInsights
   ] = await Promise.all([
-    prisma.workspace.findMany({ orderBy: { createdAt: "asc" } }),
-    prisma.dashboardMember.findMany({ orderBy: { createdAt: "asc" } }),
-    prisma.project.findMany({ orderBy: { name: "asc" } }),
-    prisma.projectTask.findMany({ orderBy: { dueDate: "asc" } }),
-    prisma.risk.findMany({ orderBy: { title: "asc" } }),
+    // 页面读路径会先确定真实工作区，再把 workspaceId 下推到各业务表；如果请求参数无效，
+    // 这里会回退到第一个启用工作区，避免上层拿到“默认工作区 + 空业务数据”的错配结果。
+    prisma.dashboardMember.findMany({ where: workspaceWhere, orderBy: { createdAt: "asc" } }),
+    prisma.project.findMany({ where: workspaceWhere, orderBy: { name: "asc" } }),
+    prisma.projectTask.findMany({ where: workspaceWhere, orderBy: { dueDate: "asc" } }),
+    prisma.risk.findMany({ where: workspaceWhere, orderBy: { title: "asc" } }),
     prisma.bugReport.findMany({
+      where: workspaceWhere,
       include: {
         attachments: true,
         flowRecords: {
@@ -162,10 +184,10 @@ export async function readDashboardDatabase(createSeed: () => DashboardDatabase)
       },
       orderBy: { createdAt: "desc" }
     }),
-    prisma.requirementVersion.findMany({ orderBy: { startDate: "desc" } }),
-    prisma.requirement.findMany({ orderBy: { title: "asc" } }),
-    prisma.documentItem.findMany({ orderBy: { updatedAt: "desc" } }),
-    prisma.weeklyInsight.findMany({ orderBy: { sortOrder: "asc" } })
+    prisma.requirementVersion.findMany({ where: workspaceWhere, orderBy: { startDate: "desc" } }),
+    prisma.requirement.findMany({ where: workspaceWhere, orderBy: { title: "asc" } }),
+    prisma.documentItem.findMany({ where: workspaceWhere, orderBy: { updatedAt: "desc" } }),
+    prisma.weeklyInsight.findMany({ where: workspaceWhere, orderBy: { sortOrder: "asc" } })
   ]);
 
   return {
@@ -175,7 +197,7 @@ export async function readDashboardDatabase(createSeed: () => DashboardDatabase)
       deliveryRate: 0,
       overdueTasks: 0
     },
-    workspaces: workspaces.map(mapWorkspaceRecord),
+    workspaces,
     members: members.map((member): DashboardMember => {
       const identities = fromJsonArray<DashboardMember["identities"][number]>(member.identities);
 
