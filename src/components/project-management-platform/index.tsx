@@ -154,16 +154,20 @@ function downloadMarkdownFile(fileName: string, content: string) {
 // 项目管理平台主容器只保留跨模块状态、接口编排和页面路由切换。
 export function ProjectManagementPlatform({
   initialBugId,
+  initialData,
+  initialLoadError = "",
   initialView = "overview",
   initialWorkspaceId
 }: {
   initialBugId?: string;
+  initialData?: DashboardData;
+  initialLoadError?: string;
   initialView?: AppView;
   initialWorkspaceId?: string;
 }) {
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  const [data, setData] = useState<DashboardData | null>(initialData ?? null);
+  const [loading, setLoading] = useState(!initialData && !initialLoadError);
+  const [loadError, setLoadError] = useState(initialLoadError);
   const [collapsed, setCollapsed] = useState(false);
   const [createType, setCreateType] = useState<DashboardEntityType | null>(null);
   const [createSubmitting, setCreateSubmitting] = useState(false);
@@ -186,6 +190,7 @@ export function ProjectManagementPlatform({
   const [projectCalendarVersionId, setProjectCalendarVersionId] = useState(allProjectCalendarVersionsValue);
   const [selectedRequirementVersionId, setSelectedRequirementVersionId] = useState<string | null>(null);
   const [people, setPeople] = useState<FeishuPerson[]>([]);
+  const [peopleLoaded, setPeopleLoaded] = useState(false);
   const [peopleLoading, setPeopleLoading] = useState(false);
   const [peopleError, setPeopleError] = useState("");
   const [memberSubmitting, setMemberSubmitting] = useState(false);
@@ -193,7 +198,7 @@ export function ProjectManagementPlatform({
   const [workspaceDrawerOpen, setWorkspaceDrawerOpen] = useState(false);
   const [workspaceSelectOpen, setWorkspaceSelectOpen] = useState(false);
   const [weeklyReportExporting, setWeeklyReportExporting] = useState(false);
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState(initialWorkspaceId ?? "");
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState(initialData?.meta?.currentWorkspace?.id ?? initialWorkspaceId ?? "");
   const [assistantSessionSidebar, setAssistantSessionSidebar] = useState<ReactNode | null>(null);
   const [createForm] = Form.useForm<Record<string, unknown>>();
   const [projectEditForm] = Form.useForm<Record<string, unknown>>();
@@ -237,6 +242,12 @@ export function ProjectManagementPlatform({
   }
 
   useEffect(() => {
+    // 服务端已经预取 dashboard 时，首屏不再补打一遍 `/api/dashboard`；
+    // 失败信息也直接进入应用内错误态，避免刷新时先空转 loading 再显示同一条错误。
+    if (initialData || initialLoadError) {
+      return;
+    }
+
     let mounted = true;
 
     async function loadDashboard() {
@@ -264,9 +275,15 @@ export function ProjectManagementPlatform({
     return () => {
       mounted = false;
     };
-  }, [initialWorkspaceId]);
+  }, [initialData, initialLoadError, initialWorkspaceId]);
 
   useEffect(() => {
+    // 飞书通讯录只服务于成员管理里的联系人选择；工作台、项目和任务首屏不需要它，
+    // 延迟到进入成员页后再加载可以少一次认证读取和一次外部通讯录请求。
+    if (activeView !== "members" || peopleLoaded) {
+      return;
+    }
+
     let mounted = true;
 
     async function loadPeople() {
@@ -291,6 +308,7 @@ export function ProjectManagementPlatform({
       } finally {
         if (mounted) {
           setPeopleLoading(false);
+          setPeopleLoaded(true);
         }
       }
     }
@@ -300,7 +318,7 @@ export function ProjectManagementPlatform({
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [activeView, peopleLoaded]);
 
   const filteredProjects = useMemo(() => {
     if (!data) {

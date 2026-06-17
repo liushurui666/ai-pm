@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { ProjectManagementPlatform } from "@/components/project-management-platform";
 import type { AppView } from "@/components/project-management-platform";
+import { getDashboardData } from "@/data/local-dashboard";
 import { unifiedAuthConfig } from "@/lib/auth/config";
 import { getSession } from "@/lib/auth/session";
 import { getRequestOriginFromHeaders, resolveTrustedRequestOrigin } from "@/lib/auth/request-origin";
@@ -73,6 +74,23 @@ export default async function WorkbenchPage({
   }
 
   const initialWorkspaceId = resolveSingleParam(params?.workspaceId);
+  const initialDashboardResult = await getDashboardData(session?.user, initialWorkspaceId)
+    .then((data) => ({
+      data,
+      error: ""
+    }))
+    .catch((error: unknown) => ({
+      data: null,
+      // 首屏服务端预取失败时仍交给工作台壳展示可读错误，避免数据库短暂抖动直接触发 Next 错误页。
+      error: error instanceof Error ? error.message : "读取项目数据失败"
+    }));
 
-  return <ProjectManagementPlatform initialView={resolveInitialView(params?.view)} initialWorkspaceId={initialWorkspaceId} />;
+  return (
+    <ProjectManagementPlatform
+      initialData={initialDashboardResult.data ?? undefined}
+      initialLoadError={initialDashboardResult.error}
+      initialView={resolveInitialView(params?.view)}
+      initialWorkspaceId={initialWorkspaceId}
+    />
+  );
 }
