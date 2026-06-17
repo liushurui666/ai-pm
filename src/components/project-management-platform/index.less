@@ -497,6 +497,66 @@
   color: color-mix(in srgb, #ffffff 52%, transparent);
 }
 
+.pm-account-switcher {
+  display: flex;
+  align-items: center;
+  width: calc(100% - 8px);
+  min-height: 58px;
+  gap: 10px;
+  margin: 16px 4px 0;
+  padding: 10px 10px;
+  border: 1px solid transparent;
+  border-top-color: var(--pm-sider-border-soft);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--pm-sider-text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.pm-account-switcher:hover {
+  border-color: var(--pm-sider-border-soft);
+  background: var(--pm-sider-panel);
+}
+
+.pm-account-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+
+.pm-account-copy span {
+  overflow: hidden;
+  color: var(--pm-sider-text-strong);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.pm-account-copy em {
+  overflow: hidden;
+  color: var(--pm-sider-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-style: normal;
+  line-height: 15px;
+}
+
+.pm-account-chevron {
+  flex: 0 0 auto;
+  color: var(--pm-sider-muted);
+  font-size: 11px;
+}
+
 .pm-sider.ant-layout-sider-collapsed .pm-mode-sidebar {
   align-items: center;
   padding-inline: 8px;
@@ -578,6 +638,15 @@
   width: 42px;
   height: 42px;
   padding: 0;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-account-switcher {
+  justify-content: center;
+  width: 42px;
+  min-height: 42px;
+  margin-inline: 0;
+  padding: 0;
+  border-radius: 12px;
 }
 
 .pm-main {

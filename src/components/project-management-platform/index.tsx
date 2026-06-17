@@ -28,6 +28,7 @@ import {
   CheckCircleOutlined,
   DashboardOutlined,
   DeleteOutlined,
+  DownOutlined,
   DownloadOutlined,
   FundProjectionScreenOutlined,
   LogoutOutlined,
@@ -1384,6 +1385,75 @@ export function ProjectManagementPlatform({
         })),
     [data?.workspaces]
   );
+  const accountPopoverContent = (
+    <Space className="pm-avatar-menu" orientation="vertical" size={12}>
+      <Space className="pm-avatar-profile" size={10}>
+        <Avatar className="pm-avatar" src={userAvatarUrl}>
+          {userInitial}
+        </Avatar>
+        <Space orientation="vertical" size={0}>
+          <Text strong>{userName}</Text>
+          <Text type="secondary">{currentWorkspace?.name ?? "当前工作区"}</Text>
+        </Space>
+      </Space>
+      {data?.workspaces?.length ? (
+        <div className="pm-workspace-control">
+          <Text className="pm-avatar-menu-label" type="secondary">
+            工作区
+          </Text>
+          <Select
+            aria-label="切换工作区"
+            className="pm-workspace-select"
+            getPopupContainer={(triggerNode) =>
+              (triggerNode.closest(".pm-avatar-popover") as HTMLElement | null) ??
+              triggerNode.parentElement ??
+              document.body
+            }
+            open={workspaceSelectOpen}
+            value={currentWorkspace?.id}
+            options={workspaceOptions}
+            popupMatchSelectWidth={220}
+            popupRender={(menu) => (
+              <>
+                {menu}
+                <div className="pm-workspace-popup-divider" />
+                {permissions?.canManageMembers ? (
+                  <Button
+                    block
+                    className="pm-workspace-popup-action"
+                    icon={<PlusOutlined />}
+                    type="text"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      setWorkspaceSelectOpen(false);
+                      workspaceForm.resetFields();
+                      setWorkspaceDrawerOpen(true);
+                    }}
+                  >
+                    新建工作区
+                  </Button>
+                ) : (
+                  <Tooltip title={permissionDeniedReason}>
+                    <span className="pm-workspace-popup-disabled">
+                      <PlusOutlined />
+                      新建工作区
+                    </span>
+                  </Tooltip>
+                )}
+              </>
+            )}
+            onOpenChange={setWorkspaceSelectOpen}
+            onChange={switchWorkspace}
+          />
+        </div>
+      ) : null}
+      {data?.meta?.user ? (
+        <Button block href={logoutHref} icon={<LogoutOutlined />}>
+          退出登录
+        </Button>
+      ) : null}
+    </Space>
+  );
   const requirementVersions = useMemo(() => data?.requirementVersions ?? [], [data?.requirementVersions]);
   const requirementVersionOptions = useMemo(
     () =>
@@ -1691,6 +1761,29 @@ export function ProjectManagementPlatform({
                   ))}
                 </nav>
               )}
+              {/* 桌面端把账号与工作区切换固定在左下角，和 Chat/Studio 侧栏动线保持一致；移动端侧栏隐藏，仍保留顶部头像入口。 */}
+              <Popover
+                arrow={false}
+                classNames={{ root: "pm-avatar-popover pm-account-popover" }}
+                content={accountPopoverContent}
+                placement="topLeft"
+                trigger="click"
+              >
+                <button className="pm-account-switcher" type="button" aria-label="打开账号与工作区菜单">
+                  <Avatar className="pm-avatar" src={userAvatarUrl}>
+                    {userInitial}
+                  </Avatar>
+                  {!collapsed ? (
+                    <>
+                      <span className="pm-account-copy">
+                        <span>{currentWorkspace?.name ?? "当前工作区"}</span>
+                        <em>{userName}</em>
+                      </span>
+                      <DownOutlined className="pm-account-chevron" />
+                    </>
+                  ) : null}
+                </button>
+              </Popover>
             </div>
           </Sider>
 
@@ -1745,87 +1838,21 @@ export function ProjectManagementPlatform({
                   onClick={cycleMode}
                   showLabel={!isMobile}
                 />
-                <Popover
-                  arrow={false}
-                  classNames={{ root: "pm-avatar-popover" }}
-                  content={
-                    <Space className="pm-avatar-menu" orientation="vertical" size={12}>
-                      <Space className="pm-avatar-profile" size={10}>
-                        <Avatar className="pm-avatar" src={userAvatarUrl}>
-                          {userInitial}
-                        </Avatar>
-                        <Space orientation="vertical" size={0}>
-                          <Text strong>{userName}</Text>
-                          <Text type="secondary">账户设置</Text>
-                        </Space>
-                      </Space>
-                      {data?.workspaces?.length ? (
-                        <div className="pm-workspace-control">
-                          <Text className="pm-avatar-menu-label" type="secondary">
-                            工作区
-                          </Text>
-                          <Select
-                            aria-label="切换工作区"
-                            className="pm-workspace-select"
-                            getPopupContainer={(triggerNode) =>
-                              (triggerNode.closest(".pm-avatar-popover") as HTMLElement | null) ??
-                              triggerNode.parentElement ??
-                              document.body
-                            }
-                            open={workspaceSelectOpen}
-                            value={currentWorkspace?.id}
-                            options={workspaceOptions}
-                            popupMatchSelectWidth={220}
-                            popupRender={(menu) => (
-                              <>
-                                {menu}
-                                <div className="pm-workspace-popup-divider" />
-                                {permissions?.canManageMembers ? (
-                                  <Button
-                                    block
-                                    className="pm-workspace-popup-action"
-                                    icon={<PlusOutlined />}
-                                    type="text"
-                                    onMouseDown={(event) => event.preventDefault()}
-                                    onClick={() => {
-                                      setWorkspaceSelectOpen(false);
-                                      workspaceForm.resetFields();
-                                      setWorkspaceDrawerOpen(true);
-                                    }}
-                                  >
-                                    新建工作区
-                                  </Button>
-                                ) : (
-                                  <Tooltip title={permissionDeniedReason}>
-                                    <span className="pm-workspace-popup-disabled">
-                                      <PlusOutlined />
-                                      新建工作区
-                                    </span>
-                                  </Tooltip>
-                                )}
-                              </>
-                            )}
-                            onOpenChange={setWorkspaceSelectOpen}
-                            onChange={switchWorkspace}
-                          />
-                        </div>
-                      ) : null}
-                      {data?.meta?.user ? (
-                        <Button block href={logoutHref} icon={<LogoutOutlined />}>
-                          退出登录
-                        </Button>
-                      ) : null}
-                    </Space>
-                  }
-                  placement="bottomRight"
-                  trigger={isMobile ? "click" : "hover"}
-                >
-                  <button className="pm-avatar-trigger" type="button" aria-label="打开账户菜单">
-                    <Avatar className="pm-avatar" src={data?.meta?.user?.avatarUrl}>
-                      {userInitial}
-                    </Avatar>
-                  </button>
-                </Popover>
+                {isMobile ? (
+                  <Popover
+                    arrow={false}
+                    classNames={{ root: "pm-avatar-popover" }}
+                    content={accountPopoverContent}
+                    placement="bottomRight"
+                    trigger="click"
+                  >
+                    <button className="pm-avatar-trigger" type="button" aria-label="打开账户菜单">
+                      <Avatar className="pm-avatar" src={userAvatarUrl}>
+                        {userInitial}
+                      </Avatar>
+                    </button>
+                  </Popover>
+                ) : null}
               </Space>
             </Header>
 
