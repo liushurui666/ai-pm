@@ -742,19 +742,42 @@
   max-width: 100%;
 }
 
+.pm-workspace-control .ant-select-selector {
+  min-height: 36px;
+  border-color: color-mix(in srgb, var(--border) 88%, transparent) !important;
+  border-radius: 8px !important;
+  background: color-mix(in srgb, var(--surface) 94%, var(--surface-subtle)) !important;
+  box-shadow: none !important;
+}
+
+.pm-workspace-control .ant-select-focused .ant-select-selector,
+.pm-workspace-control .ant-select-selector:hover {
+  border-color: color-mix(in srgb, var(--brand) 42%, var(--border)) !important;
+  background: var(--surface) !important;
+}
+
 .pm-workspace-select {
   width: 100%;
   min-width: 140px;
 }
 
 .pm-workspace-popup-divider {
-  margin: 4px 0;
-  border-top: 1px solid var(--border);
+  margin: 6px 8px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
 }
 
-.pm-workspace-popup-action {
+.pm-workspace-popup-action.ant-btn {
   justify-content: flex-start;
   height: 34px;
+  margin: 0 6px 4px;
+  border-radius: 8px;
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.pm-workspace-popup-action.ant-btn:not(:disabled):hover {
+  background: color-mix(in srgb, var(--brand) 9%, var(--surface-muted));
+  color: var(--brand);
 }
 
 .pm-workspace-popup-disabled {
@@ -762,7 +785,10 @@
   align-items: center;
   gap: 8px;
   height: 34px;
+  margin: 0 6px 4px;
   padding: 0 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-muted) 50%, transparent);
   color: var(--muted);
   cursor: not-allowed;
 }
@@ -796,18 +822,84 @@
   background: var(--surface-muted);
 }
 
+/* 账号弹层是侧栏底部切换入口的延伸：保持紧凑工具面板质感，避免默认 Popover 像临时提示气泡。 */
+.pm-avatar-popover .ant-popover-inner {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.pm-avatar-popover .ant-popover-inner-content {
+  padding: 12px;
+}
+
+.pm-avatar-popover .ant-select-dropdown {
+  padding: 6px 0;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.pm-avatar-popover .ant-select-item {
+  min-height: 34px;
+  margin: 0 6px;
+  border-radius: 8px;
+  color: var(--foreground);
+}
+
+.pm-avatar-popover .ant-select-item-option-selected {
+  background: color-mix(in srgb, var(--brand) 12%, var(--surface-muted)) !important;
+  color: var(--brand);
+  font-weight: 700;
+}
+
+.pm-avatar-popover .ant-select-item-option-active {
+  background: color-mix(in srgb, var(--brand) 8%, var(--surface-muted)) !important;
+}
+
 .pm-avatar-menu {
   width: min(260px, calc(100vw - 48px));
 }
 
 .pm-avatar-profile {
   width: 100%;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  border-radius: 8px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--brand) 7%, transparent), transparent 74%), var(--surface-elevated);
+}
+
+.pm-avatar-profile-copy {
+  min-width: 0;
+}
+
+.pm-avatar-profile-copy .ant-typography {
+  max-width: 178px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pm-avatar-menu-label {
   display: block;
   margin-bottom: 6px;
   font-size: 12px;
+  font-weight: 650;
+}
+
+.pm-account-logout-button.ant-btn {
+  height: 36px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.pm-account-logout-button.ant-btn:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--danger) 32%, var(--border));
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 7%, var(--surface));
 }
 
 .pm-content {

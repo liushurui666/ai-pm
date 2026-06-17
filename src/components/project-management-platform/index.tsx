@@ -1391,7 +1391,7 @@ export function ProjectManagementPlatform({
         <Avatar className="pm-avatar" src={userAvatarUrl}>
           {userInitial}
         </Avatar>
-        <Space orientation="vertical" size={0}>
+        <Space className="pm-avatar-profile-copy" orientation="vertical" size={0}>
           <Text strong>{userName}</Text>
           <Text type="secondary">{currentWorkspace?.name ?? "当前工作区"}</Text>
         </Space>
@@ -1448,7 +1448,7 @@ export function ProjectManagementPlatform({
         </div>
       ) : null}
       {data?.meta?.user ? (
-        <Button block href={logoutHref} icon={<LogoutOutlined />}>
+        <Button block className="pm-account-logout-button" href={logoutHref} icon={<LogoutOutlined />}>
           退出登录
         </Button>
       ) : null}
