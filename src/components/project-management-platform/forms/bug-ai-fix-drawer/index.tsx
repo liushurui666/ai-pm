@@ -1,8 +1,10 @@
 "use client";
 
-import { Alert, Button, Descriptions, Drawer, Form, Input, Select, Space, Typography } from "antd";
+import { Alert, Descriptions, Drawer, Form, Input, Select, Space, Typography } from "antd";
+import { BranchesOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import { fetchWithAuthRedirect } from "@/components/project-management-platform/api";
+import { DrawerFooterActions } from "@/components/project-management-platform/forms/drawer-footer-actions";
 import type { BugReport, Project, ProjectRepository } from "@/types/dashboard";
 import "./index.less";
 
@@ -153,8 +155,13 @@ export function BugAiFixDrawer({
 
   return (
     <Drawer
-      className="bug-ai-fix-drawer"
-      title="确认 AI 生成修复 MR"
+      className="pm-record-drawer pm-bug-ai-fix-drawer"
+      title={
+        <Space>
+          <BranchesOutlined />
+          <span>确认 AI 修复任务</span>
+        </Space>
+      }
       open={open}
       width={460}
       onClose={onClose}
@@ -165,22 +172,16 @@ export function BugAiFixDrawer({
         </Space>
       }
       footer={
-        <Space className="bug-ai-fix-drawer-footer">
-          <Button onClick={onClose}>
-            取消
-          </Button>
-          <Button
-            type="primary"
-            loading={loading}
-            disabled={repositoryLoading || !repositories.length}
-            onClick={() => form.submit()}
-          >
-            确认创建任务
-          </Button>
-        </Space>
+        <DrawerFooterActions
+          submitDisabled={repositoryLoading || !repositories.length}
+          submitting={loading}
+          submitText="确认创建任务"
+          onClose={onClose}
+          onSubmit={() => form.submit()}
+        />
       }
     >
-      <Form form={form} layout="vertical" onFinish={(values) => onConfirm(values)}>
+      <Form className="pm-record-form" form={form} layout="vertical" onFinish={(values) => onConfirm(values)}>
         <Form.Item label="目标 Bug">
           <Input value={bug.title} readOnly />
         </Form.Item>

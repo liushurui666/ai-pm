@@ -1,1 +1,81 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* 需求体检卡嵌在记录表单内，采用轻量工具卡层级，避免默认 Card 把表单切得过重。 */
+.requirement-ai-card {
+  margin-bottom: 14px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--teal) 22%, var(--border));
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--teal) 8%, transparent), transparent 56%),
+    var(--surface);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--teal) 8%, transparent);
+}
+
+.requirement-ai-card .ant-card-body {
+  padding: 14px;
+}
+
+.requirement-ai-card-head {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.requirement-ai-card-head .ant-typography {
+  margin-bottom: 0;
+}
+
+.requirement-ai-card-head .ant-typography-secondary {
+  max-width: 420px;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.requirement-ai-card-head .ant-btn {
+  height: 32px;
+  border-radius: 8px;
+  font-weight: 650;
+}
+
+.requirement-ai-result {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+}
+
+.requirement-ai-score {
+  display: grid;
+  gap: 6px;
+}
+
+.requirement-ai-summary-trigger {
+  margin-top: 10px;
+}
+
+.requirement-ai-summary-preview {
+  display: -webkit-box;
+  margin-bottom: 0 !important;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--foreground) 82%, var(--muted));
+  font-size: 12px;
+  line-height: 1.6;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.requirement-ai-tags {
+  margin-top: 10px;
+}
+
+.requirement-ai-tag-trigger {
+  display: inline-flex;
+  max-width: 180px;
+}
+
+.requirement-ai-tag {
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: 999px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -33,7 +33,7 @@ export function DocumentBreakdownDrawer({
 }) {
   return (
     <Drawer
-      className="pm-record-drawer"
+      className="pm-record-drawer pm-document-breakdown-drawer"
       title={
         <Space>
           <UploadOutlined />
@@ -52,7 +52,7 @@ export function DocumentBreakdownDrawer({
         />
       }
     >
-      <Form form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
+      <Form className="pm-record-form" form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
         <Alert
           className="pm-form-alert"
           type="info"

@@ -1,12 +1,52 @@
-.bug-ai-fix-drawer-footer {
-  width: 100%;
-  justify-content: flex-end;
+/* AI 修复抽屉属于高风险操作确认，视觉上强调代码分支与安全边界，但仍复用记录抽屉的紧凑表单。 */
+.pm-bug-ai-fix-drawer .ant-drawer-title .ant-space {
+  gap: 10px;
+}
+
+.pm-bug-ai-fix-drawer .ant-drawer-title .anticon {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--teal) 32%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--teal) 12%, var(--surface));
+  color: color-mix(in srgb, var(--teal) 82%, var(--brand));
+  font-size: 13px;
+}
+
+.pm-bug-ai-fix-drawer .ant-drawer-extra {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pm-bug-ai-fix-drawer .pm-record-form .ant-input[readonly] {
+  border-color: color-mix(in srgb, var(--teal) 24%, var(--border)) !important;
+  background: color-mix(in srgb, var(--teal) 7%, var(--surface)) !important;
+  color: var(--foreground);
 }
 
 .bug-ai-fix-drawer-summary {
-  margin-bottom: 12px;
+  margin-bottom: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
 }
 
 .bug-ai-fix-drawer-summary .ant-descriptions-item-label {
   width: 92px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.bug-ai-fix-drawer-summary .ant-descriptions-item-content {
+  color: color-mix(in srgb, var(--foreground) 84%, var(--muted));
+  font-size: 12px;
+}
+
+.pm-bug-ai-fix-drawer .ant-alert {
+  border-radius: 8px;
 }

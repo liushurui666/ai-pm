@@ -1,7 +1,8 @@
 "use client";
 
 import "./index.less";
-import { Button, Drawer, Form, Input, Space } from "antd";
+import { Drawer, Form, Input } from "antd";
+import { DrawerFooterActions } from "@/components/project-management-platform/forms/drawer-footer-actions";
 
 type WorkspaceDrawerProps = {
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
@@ -15,20 +16,21 @@ type WorkspaceDrawerProps = {
 export function WorkspaceDrawer({ form, onClose, onSubmit, open, submitting }: WorkspaceDrawerProps) {
   return (
     <Drawer
-      className="pm-record-drawer"
+      className="pm-record-drawer pm-workspace-drawer"
       title="新建工作区"
       open={open}
       onClose={onClose}
       footer={
-        <Space className="pm-drawer-actions" style={{ justifyContent: "flex-end" }}>
-          <Button onClick={onClose}>取消</Button>
-          <Button type="primary" loading={submitting} onClick={() => form.submit()}>
-            保存
-          </Button>
-        </Space>
+        <DrawerFooterActions
+          submitting={submitting}
+          submitText="保存"
+          onClose={onClose}
+          onSubmit={() => form.submit()}
+        />
       }
     >
       <Form
+        className="pm-record-form"
         form={form}
         layout="vertical"
         requiredMark={false}
