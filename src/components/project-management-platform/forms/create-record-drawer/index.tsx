@@ -38,7 +38,7 @@ export function CreateRecordDrawer({
 
   return (
     <Drawer
-      className="pm-record-drawer"
+      className="pm-record-drawer pm-create-record-drawer"
       title={type ? `新建${label}` : "新建"}
       open={open}
       onClose={onClose}
@@ -53,7 +53,7 @@ export function CreateRecordDrawer({
       }
     >
       {type ? (
-        <Form form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
+        <Form className="pm-record-form" form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
           {type === "project" ? (
             <ProjectFields form={form} people={people} peopleLoading={peopleLoading} peopleError={peopleError} />
           ) : null}

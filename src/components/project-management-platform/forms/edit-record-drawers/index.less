@@ -1,1 +1,17 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* 编辑抽屉保留图标提示编辑态，弱化成小号状态标识，避免和主操作按钮抢层级。 */
+.pm-edit-record-drawer .ant-drawer-title .ant-space {
+  gap: 10px;
+}
+
+.pm-edit-record-drawer .ant-drawer-title .anticon {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--brand) 28%, var(--border));
+  border-radius: 8px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 13px;
+}

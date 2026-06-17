@@ -30,7 +30,7 @@ export function ProjectEditDrawer({
 }) {
   return (
     <Drawer
-      className="pm-record-drawer"
+      className="pm-record-drawer pm-edit-record-drawer"
       title={
         <Space>
           <EditOutlined />
@@ -50,7 +50,7 @@ export function ProjectEditDrawer({
       }
     >
       {project ? (
-        <Form form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
+        <Form className="pm-record-form" form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
           <ProjectFields
             form={form}
             people={people}
@@ -90,7 +90,7 @@ export function TaskEditDrawer({
 }) {
   return (
     <Drawer
-      className="pm-record-drawer"
+      className="pm-record-drawer pm-edit-record-drawer"
       title={
         <Space>
           <EditOutlined />
@@ -110,7 +110,7 @@ export function TaskEditDrawer({
       }
     >
       {task ? (
-        <Form form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
+        <Form className="pm-record-form" form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
           <TaskFields
             form={form}
             people={people}
@@ -149,7 +149,7 @@ export function BugEditDrawer({
 }) {
   return (
     <Drawer
-      className="pm-record-drawer"
+      className="pm-record-drawer pm-edit-record-drawer"
       title={
         <Space>
           <EditOutlined />
@@ -169,7 +169,7 @@ export function BugEditDrawer({
       }
     >
       {bug ? (
-        <Form form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
+        <Form className="pm-record-form" form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
           <BugFields
             form={form}
             people={people}
@@ -207,7 +207,7 @@ export function RequirementEditDrawer({
 }) {
   return (
     <Drawer
-      className="pm-record-drawer"
+      className="pm-record-drawer pm-edit-record-drawer"
       title={
         <Space>
           <EditOutlined />
@@ -227,7 +227,7 @@ export function RequirementEditDrawer({
       }
     >
       {requirement ? (
-        <Form form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
+        <Form className="pm-record-form" form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
           <RequirementFields
             form={form}
             versionOptions={versionOptions}
@@ -265,7 +265,7 @@ export function RequirementVersionEditDrawer({
 }) {
   return (
     <Drawer
-      className="pm-record-drawer"
+      className="pm-record-drawer pm-edit-record-drawer"
       title={
         <Space>
           <EditOutlined />
@@ -285,7 +285,7 @@ export function RequirementVersionEditDrawer({
       }
     >
       {version ? (
-        <Form form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
+        <Form className="pm-record-form" form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
           <RequirementVersionFields
             form={form}
             people={people}

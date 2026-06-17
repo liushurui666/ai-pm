@@ -1,1 +1,14 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* 新建入口强调“快速录入”，标题前的短色条提供当前操作状态，但不额外制造大面积装饰感。 */
+.pm-create-record-drawer .ant-drawer-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pm-create-record-drawer .ant-drawer-title::before {
+  width: 4px;
+  height: 16px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand) 76%, var(--teal));
+  content: "";
+}

@@ -4175,21 +4175,48 @@
   margin: -4px 0 16px;
 }
 
+/* 记录类抽屉是高频编辑面板，统一做成紧凑工具壳，和页面表格/卡片的 8px 产品工具风格保持一致。 */
 .pm-record-drawer .ant-drawer-content {
   overflow: hidden;
+  background: var(--surface);
+}
+
+.pm-record-drawer .ant-drawer-header {
+  padding: 15px 20px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+  background: color-mix(in srgb, var(--surface-elevated) 88%, var(--surface-subtle));
+}
+
+.pm-record-drawer .ant-drawer-title {
+  color: var(--foreground);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.pm-record-drawer .ant-drawer-close {
+  color: var(--muted);
+}
+
+.pm-record-drawer .ant-drawer-close:hover {
+  background: var(--surface-muted);
+  color: var(--foreground);
 }
 
 .pm-record-drawer .ant-drawer-body {
-  padding-bottom: 18px;
+  padding: 18px 20px;
   overflow-x: hidden;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-subtle) 54%, transparent), transparent 120px), var(--surface);
 }
 
 .pm-record-drawer .ant-drawer-footer {
   position: sticky;
   bottom: 0;
   z-index: 2;
+  padding: 12px 20px;
   border-top: 1px solid var(--border);
   background: var(--surface-elevated);
+  box-shadow: 0 -10px 24px color-mix(in srgb, var(--foreground) 6%, transparent);
 }
 
 .pm-drawer-actions {

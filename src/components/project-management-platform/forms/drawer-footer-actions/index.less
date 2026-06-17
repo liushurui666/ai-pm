@@ -1,1 +1,17 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* 抽屉 footer 是提交前最后确认区，按钮尺寸固定，避免 loading 文案切换造成视觉跳动。 */
+.pm-drawer-actions .ant-btn {
+  min-width: 84px;
+  height: 34px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.pm-drawer-actions .ant-btn-default {
+  border-color: var(--border);
+  background: var(--surface);
+  color: color-mix(in srgb, var(--foreground) 82%, var(--muted));
+}
+
+.pm-drawer-actions .ant-btn-primary {
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--brand) 18%, transparent);
+}
