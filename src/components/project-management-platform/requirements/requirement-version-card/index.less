@@ -1,1 +1,154 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* 需求版本卡片是产品流程入口，强调版本状态和进入路径，
+   编辑/删除等维护动作降一级，避免卡片看起来像按钮堆。 */
+.requirement-version-grid {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+.requirement-version-card {
+  position: relative;
+  min-height: 292px;
+  border-color: color-mix(in srgb, var(--brand) 12%, var(--border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand) 7%, transparent), transparent 50%),
+    var(--surface-elevated);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.requirement-version-card::before {
+  position: absolute;
+  top: 16px;
+  bottom: 16px;
+  left: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--brand), var(--teal));
+  content: "";
+  opacity: 0.72;
+}
+
+.requirement-version-card:hover {
+  border-color: color-mix(in srgb, var(--brand) 26%, var(--border));
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.09);
+  transform: translateY(-1px);
+}
+
+.requirement-version-card-head {
+  min-width: 0;
+}
+
+.requirement-version-title-block {
+  min-width: 0;
+}
+
+.requirement-version-title-block .ant-typography {
+  margin-bottom: 0;
+}
+
+.requirement-version-name.ant-typography {
+  color: var(--foreground);
+  font-size: 15px;
+  line-height: 1.32;
+}
+
+.requirement-version-project.ant-typography {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.requirement-version-status-tag {
+  flex: 0 0 auto;
+  margin-inline-end: 0;
+  font-weight: 700;
+}
+
+.requirement-version-goal {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.requirement-version-progress {
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--brand) 14%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 88%, var(--brand) 5%);
+}
+
+.requirement-version-meta {
+  gap: 8px;
+}
+
+.requirement-version-meta > div {
+  padding: 9px;
+  border-color: color-mix(in srgb, var(--border) 82%, transparent);
+  background: color-mix(in srgb, var(--surface) 88%, var(--surface-subtle) 12%);
+}
+
+.requirement-version-meta > div .ant-typography-secondary {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.requirement-version-meta > div .ant-typography:last-child {
+  font-size: 16px;
+  font-weight: 750;
+}
+
+.requirement-version-children {
+  border-color: color-mix(in srgb, var(--border) 82%, transparent);
+  background: color-mix(in srgb, var(--surface) 90%, var(--surface-subtle) 10%);
+}
+
+.requirement-version-child-row {
+  border-color: transparent;
+  background: var(--surface);
+}
+
+.requirement-version-child-row:hover {
+  border-color: color-mix(in srgb, var(--brand) 22%, var(--border));
+  background: color-mix(in srgb, var(--surface) 88%, var(--brand) 6%);
+}
+
+.requirement-version-enter-button.ant-btn {
+  height: 38px;
+  border-radius: 8px;
+  font-weight: 720;
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--brand) 20%, transparent);
+}
+
+.requirement-version-actions {
+  justify-content: flex-start;
+}
+
+.requirement-version-actions .ant-btn {
+  border-radius: 8px;
+}
+
+.requirement-version-empty {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--brand) 18%, var(--border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand) 6%, transparent), transparent 72%),
+    color-mix(in srgb, var(--surface-elevated) 92%, var(--surface-subtle) 8%);
+  box-shadow: none;
+}
+
+@media (max-width: 768px) {
+  .requirement-version-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .requirement-version-card {
+    min-height: auto;
+    padding: 16px;
+  }
+}

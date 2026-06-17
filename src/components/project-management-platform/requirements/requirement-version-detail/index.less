@@ -1,1 +1,74 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* 版本详情页是需求评审与交付跟进的工作区，摘要、里程碑和需求表要形成清楚的阅读顺序。 */
+.requirement-version-summary {
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.requirement-version-summary-item {
+  min-height: 78px;
+  border-color: color-mix(in srgb, var(--brand) 10%, var(--border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand) 6%, transparent), transparent 68%),
+    var(--surface);
+}
+
+.requirement-version-summary-item .ant-typography-secondary {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.requirement-version-summary-item .ant-typography:last-child {
+  color: var(--foreground);
+  font-size: 15px;
+  font-weight: 750;
+}
+
+.requirement-version-owner-summary {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--teal) 7%, transparent), transparent 68%),
+    var(--surface);
+}
+
+.requirement-version-milestones {
+  border-color: color-mix(in srgb, var(--amber) 16%, var(--border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--amber) 7%, transparent), transparent 60%),
+    var(--surface);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.045);
+}
+
+.requirement-version-milestones-header {
+  padding-bottom: 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+}
+
+.requirement-version-milestones .ant-timeline {
+  margin-top: 14px;
+}
+
+.requirement-detail-table.ant-table-wrapper {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.requirement-detail-table .ant-table-thead > tr > th {
+  background: color-mix(in srgb, var(--surface-subtle) 88%, var(--brand) 12%);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.requirement-detail-table .ant-table-tbody > tr:hover > td {
+  background: color-mix(in srgb, var(--surface-subtle) 88%, var(--brand) 7%) !important;
+}
+
+@media (max-width: 768px) {
+  .requirement-version-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .requirement-version-owner-summary {
+    grid-column: auto;
+  }
+}

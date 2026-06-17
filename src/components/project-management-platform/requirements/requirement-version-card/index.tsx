@@ -52,13 +52,15 @@ export function RequirementVersionCard({
 
   return (
     <div className="requirement-version-card">
-      <Flex align="flex-start" justify="space-between" gap={12}>
-        <Space orientation="vertical" size={4}>
-          <Text strong>{version.name}</Text>
-          <Text type="secondary">{version.project}</Text>
+      <Flex className="requirement-version-card-head" align="flex-start" justify="space-between" gap={12}>
+        <Space className="requirement-version-title-block" orientation="vertical" size={4}>
+          <Text className="requirement-version-name" strong>{version.name}</Text>
+          <Text className="requirement-version-project" type="secondary">{version.project}</Text>
           {version.parentVersionName ? <Tag>上级：{version.parentVersionName}</Tag> : null}
         </Space>
-        <Tag color={requirementVersionColor[version.status]}>{version.status}</Tag>
+        <Tag className="requirement-version-status-tag" color={requirementVersionColor[version.status]}>
+          {version.status}
+        </Tag>
       </Flex>
       {owners.length ? (
         <Space wrap size={[6, 6]}>
@@ -102,7 +104,8 @@ export function RequirementVersionCard({
         </div>
       </div>
       <RequirementVersionChildren childVersions={childVersions} onSelectVersion={onSelectVersion} />
-      <Button block onClick={() => onSelectVersion(version.id)}>
+      {/* 进入版本是版本卡片里的主路径，视觉层级高于编辑/删除等维护操作。 */}
+      <Button block className="requirement-version-enter-button" type="primary" onClick={() => onSelectVersion(version.id)}>
         进入版本
       </Button>
       <div className="requirement-version-actions">
