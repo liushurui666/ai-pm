@@ -126,7 +126,7 @@ export function TasksView({
       fixed: "left",
       width: 300,
       render: (_, task) => (
-        <Space orientation="vertical" size={4}>
+        <Space className="task-title-cell" orientation="vertical" size={4}>
           <Text strong>{task.title}</Text>
           <Text type="secondary">{task.aiHint}</Text>
         </Space>

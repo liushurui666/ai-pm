@@ -1,3 +1,64 @@
+/* Bug 页筛选和行内操作承载故障处理高频动作，视觉上保持紧凑清晰，避免 link 按钮散在表格里显得松。 */
 .bug-title-cell {
+  min-width: 0;
   max-width: 320px;
+}
+
+.bug-title-cell .ant-typography:first-child {
+  display: block;
+  overflow: hidden;
+  color: var(--foreground);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bug-title-cell .ant-typography-secondary {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted) !important;
+  font-size: 12px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.bug-version-filter {
+  width: clamp(158px, 18vw, 226px);
+}
+
+.bug-version-filter .ant-select-selector {
+  min-height: 34px;
+  border-color: color-mix(in srgb, var(--border) 88%, transparent) !important;
+  border-radius: 8px !important;
+  background: color-mix(in srgb, var(--surface) 94%, var(--surface-subtle)) !important;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface) 68%, transparent) !important;
+}
+
+.bug-row-actions {
+  width: 100%;
+  justify-content: center;
+}
+
+.bug-row-actions .ant-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 8px;
+  color: var(--muted);
+}
+
+.bug-row-actions .ant-btn:not(:disabled):hover {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.bug-row-actions .ant-btn-dangerous:not(:disabled):hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+@media (max-width: 520px) {
+  .bug-version-filter {
+    width: 100% !important;
+  }
 }

@@ -1,1 +1,38 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* 负责人信息会出现在表格、卡片、抽屉选项和日程中，统一成紧凑人员 chip，避免各处头像文字高低不一。 */
+.owner-inline {
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+}
+
+.owner-avatar.ant-avatar {
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--brand) 18%, var(--border));
+  background: color-mix(in srgb, var(--brand) 12%, var(--surface));
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.owner-inline-copy {
+  min-width: 0;
+}
+
+.owner-inline-copy .ant-typography {
+  max-width: 150px;
+  overflow: hidden;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owner-inline-copy .ant-typography:first-child {
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.owner-inline-copy .ant-typography-secondary {
+  color: var(--muted) !important;
+  font-size: 11px;
+}

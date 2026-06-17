@@ -19,7 +19,7 @@ export function OwnerAvatar({
   size?: "small" | "default";
 }) {
   return (
-    <Avatar size={size} src={avatarUrl}>
+    <Avatar className="owner-avatar" size={size} src={avatarUrl}>
       {getOwnerInitial(name)}
     </Avatar>
   );
@@ -35,9 +35,9 @@ export function OwnerInline({
   secondary?: string;
 }) {
   return (
-    <Space>
+    <Space className="owner-inline" size={8}>
       <OwnerAvatar name={name} avatarUrl={avatarUrl} />
-      <Space orientation="vertical" size={0}>
+      <Space className="owner-inline-copy" orientation="vertical" size={0}>
         <Text>{name || "未分配"}</Text>
         {secondary ? <Text type="secondary">{secondary}</Text> : null}
       </Space>

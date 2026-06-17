@@ -1,1 +1,90 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* 任务页的视图切换、版本范围和“只看我的”是高频筛选区，统一成紧凑工具胶囊，减少标题栏的控件拼装感。 */
+.task-version-filter,
+.task-mine-filter {
+  min-height: 34px;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 94%, var(--surface-subtle));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface) 68%, transparent);
+}
+
+.task-version-filter {
+  display: flex;
+  align-items: center;
+  padding-left: 10px;
+}
+
+.task-version-filter .ant-typography,
+.task-mine-filter .ant-typography {
+  color: var(--muted) !important;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.task-version-filter > .ant-space-item:last-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.task-version-select {
+  width: clamp(172px, 18vw, 244px);
+}
+
+.task-version-filter .ant-select-selector {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.task-mine-filter {
+  padding: 0 9px 0 10px;
+}
+
+.task-mine-filter .ant-switch {
+  min-width: 36px;
+  height: 20px;
+}
+
+.task-mine-filter .ant-switch .ant-switch-handle {
+  width: 16px;
+  height: 16px;
+}
+
+.task-mine-filter .ant-switch.ant-switch-checked {
+  background: var(--brand);
+}
+
+.pm-table-card .task-title-cell {
+  max-width: 300px;
+}
+
+.pm-table-card .task-title-cell .ant-typography:first-child {
+  display: block;
+  overflow: hidden;
+  color: var(--foreground);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pm-table-card .task-title-cell .ant-typography-secondary {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted) !important;
+  font-size: 12px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+@media (max-width: 520px) {
+  .task-version-filter,
+  .task-version-select,
+  .task-mine-filter {
+    width: 100% !important;
+  }
+
+  .task-version-filter .ant-select {
+    width: 100%;
+  }
+}

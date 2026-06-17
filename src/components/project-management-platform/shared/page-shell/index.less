@@ -54,6 +54,31 @@
   border-radius: 8px;
 }
 
+.page-title-extra .ant-segmented {
+  border-color: color-mix(in srgb, var(--border) 88%, transparent);
+  background: color-mix(in srgb, var(--surface) 88%, var(--surface-subtle));
+}
+
+.page-title-extra .ant-segmented-item {
+  border-radius: 7px;
+  color: var(--muted);
+  font-weight: 650;
+}
+
+.page-title-extra .ant-segmented-item-selected {
+  color: var(--brand);
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--brand) 10%, transparent);
+}
+
+.page-title-extra .ant-btn {
+  height: 34px;
+  font-weight: 650;
+}
+
+.page-title-extra .ant-select-selector {
+  min-height: 34px;
+}
+
 /* TableView 承载长表格、版本明细和成员管理，卡片要克制但清楚，
    避免和内部表格头部形成两层很重的边框。 */
 .pm-table-card.ant-card {
