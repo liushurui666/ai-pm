@@ -152,7 +152,7 @@ function TaskOwnerColumn({
   return (
     <div ref={setNodeRef} className="task-owner-column-shell">
       <Card
-        className={`owner-kanban-column task-owner-column${isOver ? " task-owner-column-over" : ""}`}
+        className={`task-owner-column${isOver ? " task-owner-column-over" : ""}`}
         title={
           <Flex justify="space-between" align="center" gap={8}>
             <Space size={8}>
@@ -192,7 +192,7 @@ function TaskOwnerCard({
   task: Task;
 }) {
   return (
-    <div className={`task-card task-owner-card${dragging ? " task-owner-card-dragging" : ""}`}>
+    <div className={`task-owner-card${dragging ? " task-owner-card-dragging" : ""}`}>
       <Flex justify="space-between" align="start" gap={12}>
         <Space size={8} align="start" className="task-owner-card-title">
           <span
@@ -344,7 +344,7 @@ export function TaskOwnerBoard({
         setActiveTask(null);
       }}
     >
-      <div className="owner-kanban-grid task-owner-board">
+      <div className="task-owner-board">
         {ownerGroups.map((group) => (
           <TaskOwnerColumn key={group.key} group={group} dragging={Boolean(activeTask)}>
             {group.tasks.map((task) => (

@@ -1,6 +1,12 @@
 /* 负责人看板的拖拽样式单独收敛在组件目录，避免继续扩大平台全局样式。 */
 .task-owner-board {
+  display: grid;
+  grid-auto-columns: minmax(300px, 360px);
+  grid-auto-flow: column;
+  gap: 16px;
   align-items: stretch;
+  overflow-x: auto;
+  padding: 2px 2px 8px;
 }
 
 .task-board-empty-card.ant-card {
@@ -25,6 +31,21 @@
 .task-owner-column {
   height: 100%;
   min-height: 420px;
+  min-width: 300px;
+  border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--brand) 7%, transparent), transparent 220px),
+    var(--surface-subtle);
+  box-shadow: var(--shadow-card);
+}
+
+.task-owner-column .ant-card-head {
+  border-bottom-color: color-mix(in srgb, var(--border) 82%, transparent);
+  background: color-mix(in srgb, var(--surface-elevated) 86%, transparent);
+}
+
+.task-owner-column .ant-card-head-title {
+  min-width: 0;
 }
 
 .task-owner-column .ant-card-body {
@@ -78,7 +99,22 @@
 }
 
 .task-owner-card {
-  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+
+.task-owner-card > .ant-flex {
+  min-width: 0;
+}
+
+.task-owner-card .ant-btn {
+  border-radius: 8px;
 }
 
 .task-owner-card-dragging {
@@ -121,4 +157,14 @@
 
 .task-owner-card-handle:active {
   cursor: grabbing;
+}
+
+.task-meta-tags {
+  max-width: 100%;
+  margin-top: 2px;
+}
+
+.task-ai-hint.ant-alert {
+  margin-top: 2px;
+  border-radius: 8px;
 }

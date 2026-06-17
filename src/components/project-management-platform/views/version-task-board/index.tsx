@@ -98,7 +98,7 @@ export function VersionTaskBoard({
                   const taskOverdue = task.stage !== "已完成" && dayjs(task.dueDate).isBefore(dayjs().startOf("day"));
 
                   return (
-                    <div className="task-card version-task-card" key={task.id}>
+                    <div className="version-task-card" key={task.id}>
                       <Flex justify="space-between" align="start" gap={12}>
                         <Text strong>{task.title}</Text>
                         <Space size={4}>
