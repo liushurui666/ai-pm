@@ -455,9 +455,9 @@ export function MembersView({
       dataIndex: "name",
       key: "name",
       render: (_, member) => (
-        <Space>
+        <Space className="member-person-cell">
           <Avatar src={member.avatarUrl}>{getMemberInitial(member.name)}</Avatar>
-          <Space orientation="vertical" size={0}>
+          <Space className="member-person-copy" orientation="vertical" size={0}>
             <Text strong>{member.name}</Text>
             <Text type="secondary">{member.email || member.notification.feishuOpenId || "未绑定邮箱"}</Text>
           </Space>
@@ -561,7 +561,7 @@ export function MembersView({
       icon={<TeamOutlined />}
       extra={
         canManageMembers ? (
-          <Space>
+          <Space className="member-management-actions">
             <Button icon={<DatabaseOutlined />} loading={rebuildSubmitting} onClick={handleRebuildAiIndex}>
               重建 AI 索引
             </Button>
@@ -599,6 +599,7 @@ export function MembersView({
         <Alert className="pm-source-alert" type="info" showIcon title={deniedReason} />
       ) : null}
       <Table
+        className="member-management-table"
         rowKey="id"
         columns={columns}
         dataSource={members}

@@ -1,1 +1,99 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* 成员管理属于后台配置页，重点是扫读身份、权限和通知状态；
+   这里把默认表格压成更稳定的管理台样式，不改变任何权限或更新逻辑。 */
+.member-management-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.member-management-actions .ant-btn {
+  border-radius: 8px;
+}
+
+.member-management-table .ant-table-cell {
+  vertical-align: middle;
+}
+
+.member-person-cell {
+  min-width: 0;
+}
+
+.member-person-cell .ant-avatar {
+  flex: 0 0 auto;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--brand) 18%, transparent);
+}
+
+.member-person-copy {
+  min-width: 0;
+}
+
+.member-person-copy .ant-typography {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.member-role-select.ant-select {
+  width: 168px;
+}
+
+.member-role-select .ant-select-selector {
+  border-radius: 8px;
+}
+
+.member-management-table .ant-switch {
+  min-width: 58px;
+}
+
+.member-management-table .ant-tag {
+  margin-inline-end: 0;
+}
+
+.member-management-table .ant-btn {
+  border-radius: 8px;
+}
+
+.member-channel-item {
+  border-color: color-mix(in srgb, var(--brand) 12%, var(--border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand) 6%, transparent), transparent 68%),
+    var(--surface);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+}
+
+.member-channel-item-header {
+  padding-bottom: 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+}
+
+.member-channel-item-header .anticon {
+  color: var(--brand);
+}
+
+.member-channel-grid {
+  align-items: start;
+}
+
+.member-channel-item .ant-form-item {
+  margin-bottom: 12px;
+}
+
+.member-channel-item .ant-input,
+.member-channel-item .ant-select-selector {
+  border-radius: 8px;
+}
+
+@media (max-width: 768px) {
+  .member-management-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .member-management-actions .ant-btn {
+    flex: 1 1 160px;
+  }
+
+  .member-person-copy .ant-typography {
+    max-width: 200px;
+  }
+}
