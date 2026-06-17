@@ -16,6 +16,7 @@ import type {
   MemberStatus
 } from "@/types/dashboard";
 import { fetchWithAuthRedirect } from "@/components/project-management-platform/api";
+import { DrawerFooterActions } from "@/components/project-management-platform/forms/drawer-footer-actions";
 import { TableView } from "@/components/project-management-platform/shared/page-shell";
 
 const { Text } = Typography;
@@ -125,6 +126,7 @@ function getMemberNotificationFormValues(member: DashboardMember) {
   };
 }
 
+// 成员身份字段只负责把飞书通讯录身份同步到表单隐藏字段，避免通知绑定和站内登录身份在不同入口各自拼接。
 function MemberIdentityFields({
   form,
   people,
@@ -190,6 +192,7 @@ function MemberIdentityFields({
   );
 }
 
+// 添加成员抽屉保留最少身份字段，通知渠道改到保存后的配置弹窗，避免首次建成员时被多渠道配置打断。
 function MemberFields({
   form,
   people,
@@ -227,6 +230,7 @@ function MemberFields({
   );
 }
 
+// 单个通知渠道同时承载类型切换、场景选择和目标账号；类型切换时必须清空旧目标，防止邮箱/Webhook 误复用飞书 openId。
 function NotificationChannelItem({
   field,
   form,
@@ -378,6 +382,7 @@ function NotificationChannelItem({
   );
 }
 
+// 成员管理页是工作区权限和通知配置的后台入口，表格保持高密度，新增/配置动作收敛到弹层。
 export function MembersView({
   members,
   people,
@@ -608,6 +613,7 @@ export function MembersView({
         scroll={{ x: 1120 }}
       />
       <Modal
+        className="member-notification-modal"
         title={notificationMember ? `通知配置 · ${notificationMember.name}` : "通知配置"}
         open={Boolean(notificationMember)}
         onCancel={() => setNotificationMember(null)}
@@ -653,9 +659,9 @@ export function MembersView({
                     />
                   ))
                 ) : (
-                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无通知渠道" />
+                  <Empty className="member-channel-empty" image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无通知渠道" />
                 )}
-                <Space wrap>
+                <Space className="member-channel-actions" wrap>
                   <Button icon={<PlusOutlined />} onClick={() => add(createDefaultNotificationChannel("feishu"))}>
                     添加飞书渠道
                   </Button>
@@ -678,15 +684,16 @@ export function MembersView({
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         footer={
-          <Space className="pm-drawer-actions" style={{ justifyContent: "flex-end" }}>
-            <Button onClick={() => setDrawerOpen(false)}>取消</Button>
-            <Button type="primary" loading={submitting} onClick={() => form.submit()}>
-              保存
-            </Button>
-          </Space>
+          <DrawerFooterActions
+            submitting={submitting}
+            submitText="保存"
+            onClose={() => setDrawerOpen(false)}
+            onSubmit={() => form.submit()}
+          />
         }
       >
         <Form
+          className="pm-record-form"
           form={form}
           layout="vertical"
           requiredMark={false}

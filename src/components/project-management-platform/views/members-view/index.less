@@ -53,7 +53,56 @@
   border-radius: 8px;
 }
 
+.member-notification-modal .ant-modal-content {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.member-notification-modal .ant-modal-header {
+  margin: 0;
+  padding: 16px 20px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+  background: color-mix(in srgb, var(--surface-elevated) 88%, var(--surface-subtle));
+}
+
+.member-notification-modal .ant-modal-title {
+  color: var(--foreground);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.member-notification-modal .ant-modal-body {
+  padding: 18px 20px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-subtle) 54%, transparent), transparent 140px), var(--surface);
+}
+
+.member-notification-modal .ant-modal-footer {
+  margin: 0;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-elevated);
+  box-shadow: 0 -10px 24px color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+
+.member-notification-modal .ant-modal-footer .ant-btn {
+  min-width: 84px;
+  height: 34px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.member-notification-modal .ant-modal-close:hover {
+  background: var(--surface-muted);
+  color: var(--foreground);
+}
+
 .member-channel-item {
+  padding: 14px;
+  border: 1px solid;
+  border-radius: 8px;
   border-color: color-mix(in srgb, var(--brand) 12%, var(--border));
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--brand) 6%, transparent), transparent 68%),
@@ -62,6 +111,10 @@
 }
 
 .member-channel-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding-bottom: 10px;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
 }
@@ -71,7 +124,11 @@
 }
 
 .member-channel-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 12px;
   align-items: start;
+  padding-top: 12px;
 }
 
 .member-channel-item .ant-form-item {
@@ -80,6 +137,22 @@
 
 .member-channel-item .ant-input,
 .member-channel-item .ant-select-selector {
+  border-radius: 8px;
+}
+
+.member-channel-empty {
+  margin: 0;
+  padding: 30px 16px;
+  border: 1px dashed color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-subtle) 70%, transparent);
+}
+
+.member-channel-actions {
+  padding-top: 2px;
+}
+
+.member-channel-actions .ant-btn {
   border-radius: 8px;
 }
 
@@ -95,5 +168,14 @@
 
   .member-person-copy .ant-typography {
     max-width: 200px;
+  }
+
+  .member-channel-item-header {
+    align-items: flex-start;
+  }
+
+  .member-channel-grid {
+    grid-template-columns: 1fr;
+    gap: 0;
   }
 }
