@@ -1,1 +1,79 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* 项目视图是交付排期的主工作区，视觉上要像计划表而不是大屏介绍页；
+   这里压低 hero 装饰感，让筛选、统计和日历形成同一套工具层级。 */
+.project-calendar-toolbar .ant-btn,
+.project-calendar-toolbar .ant-select-selector {
+  border-radius: 8px;
+}
+
+.project-calendar-filter-field > span {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.project-calendar-hero {
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.project-calendar-hero-copy {
+  min-height: 126px;
+  padding: 18px;
+  border-color: color-mix(in srgb, var(--brand) 12%, var(--border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand) 8%, transparent), transparent 54%),
+    var(--surface-elevated);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.055);
+}
+
+.project-calendar-hero-copy .ant-tag {
+  margin-inline-end: 0;
+  font-weight: 650;
+}
+
+.project-calendar-hero-copy h3 {
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.project-calendar-hero-stats {
+  gap: 10px;
+}
+
+.project-calendar-hero-stats .ant-statistic {
+  min-height: 86px;
+  border-color: color-mix(in srgb, var(--brand) 10%, var(--border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--surface-subtle) 72%, transparent), transparent 68%),
+    var(--surface);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+}
+
+.project-calendar-hero-stats .ant-statistic-title {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.project-calendar-hero-stats .ant-statistic-content {
+  color: var(--foreground);
+  font-weight: 760;
+}
+
+.project-calendar-layout {
+  gap: 12px;
+}
+
+@media (max-width: 768px) {
+  .project-calendar-hero {
+    gap: 12px;
+  }
+
+  .project-calendar-hero-copy {
+    min-height: auto;
+    padding: 16px;
+  }
+
+  .project-calendar-hero-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+}

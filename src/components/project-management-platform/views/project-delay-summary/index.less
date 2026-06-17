@@ -1,1 +1,39 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* 延期汇总是排期页的风险提示带，正常态要轻，风险态要清楚但不抢走日历主体。 */
+.project-delay-summary {
+  margin-bottom: 14px;
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.045);
+}
+
+.project-delay-summary-stable {
+  border-color: color-mix(in srgb, var(--teal) 24%, var(--border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--teal) 7%, transparent), transparent 70%),
+    var(--surface);
+}
+
+.project-delay-summary-stable .anticon {
+  color: var(--teal);
+}
+
+.project-delay-summary-risk {
+  border-color: color-mix(in srgb, var(--danger) 28%, var(--border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--danger) 9%, transparent), transparent 58%),
+    var(--surface);
+}
+
+.project-delay-risk-tag {
+  border-color: color-mix(in srgb, var(--danger) 20%, var(--border));
+  background: color-mix(in srgb, var(--surface) 88%, var(--danger) 8%);
+}
+
+.project-delay-risk-tag .ant-tag {
+  margin-inline-end: 0;
+  font-weight: 700;
+}
+
+.project-delay-summary-more.ant-alert {
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 88%, var(--amber) 8%);
+}

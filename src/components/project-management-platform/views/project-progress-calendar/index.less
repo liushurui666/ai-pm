@@ -1,1 +1,73 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* DayPilot Scheduler 是第三方渲染树，只在组件目录做外层和关键 class 覆盖；
+   不改调度逻辑，保持拖拽、拉伸和点击行为完全由原组件负责。 */
+.project-scheduler-shell {
+  border-color: color-mix(in srgb, var(--brand) 10%, var(--border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-elevated) 94%, var(--brand) 6%), var(--surface)),
+    var(--surface);
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.07);
+}
+
+.project-scheduler-empty {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--brand) 18%, var(--border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand) 6%, transparent), transparent 72%),
+    color-mix(in srgb, var(--surface-elevated) 92%, var(--surface-subtle) 8%);
+  box-shadow: none;
+}
+
+.project-scheduler-shell .scheduler_default_main {
+  --dp-scheduler-event-box-shadow: 0 10px 22px rgb(15 23 42 / 7%);
+  --dp-scheduler-header-bg-color: color-mix(in srgb, var(--surface-subtle) 88%, var(--brand) 8%);
+}
+
+.project-scheduler-shell .scheduler_default_timeheadergroup_inner,
+.project-scheduler-shell .scheduler_default_corner_inner {
+  font-weight: 760;
+}
+
+.project-scheduler-shell .scheduler_default_event_inner {
+  border-radius: 8px;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.project-scheduler-shell .scheduler_default_event_inner:hover {
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.1);
+  transform: translateY(-1px);
+}
+
+.project-scheduler-cell-weekend .scheduler_default_cell_inner {
+  background: color-mix(in srgb, var(--surface-subtle) 84%, transparent);
+}
+
+.project-scheduler-cell-today .scheduler_default_cell_inner {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--brand) 14%, transparent), transparent 70%),
+    color-mix(in srgb, var(--surface-elevated) 92%, var(--brand) 8%);
+}
+
+.project-scheduler-resource-panel-owner,
+.project-scheduler-resource-panel-task {
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.035);
+}
+
+.project-scheduler-resource-panel-task:hover {
+  border-color: color-mix(in srgb, var(--brand) 24%, var(--border));
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--brand) 9%, transparent), transparent 72%),
+    var(--surface);
+}
+
+.project-scheduler-event-content {
+  padding-inline: 2px;
+}
+
+@media (max-width: 768px) {
+  .project-scheduler-shell {
+    border-radius: 8px;
+  }
+}
