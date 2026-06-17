@@ -1,1 +1,124 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* 概览页承担“今天先看哪里”的判断，视觉上保持指挥台密度，
+   不再使用大幅氛围图，避免首屏被装饰占用。 */
+.overview-command-main.overview-personal-main {
+  position: relative;
+  gap: 14px;
+  padding: 18px;
+  border-color: color-mix(in srgb, var(--brand) 16%, var(--border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand) 9%, transparent), transparent 44%),
+    linear-gradient(180deg, var(--surface-elevated), color-mix(in srgb, var(--surface) 94%, var(--surface-subtle) 6%));
+  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.07);
+}
+
+.overview-command-main.overview-personal-main::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: linear-gradient(90deg, var(--brand), var(--teal), var(--amber));
+  content: "";
+  opacity: 0.72;
+}
+
+.overview-personal-header {
+  margin-bottom: 0;
+  padding-bottom: 14px;
+}
+
+.overview-personal-main .ant-typography {
+  margin-bottom: 0;
+}
+
+.overview-personal-tools .ant-btn-primary {
+  border-radius: 8px;
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--brand) 22%, transparent);
+}
+
+.overview-focus-signals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+
+.overview-focus-signal {
+  --overview-signal-tone: var(--brand);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 54px;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--overview-signal-tone) 20%, var(--border));
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--overview-signal-tone) 9%, transparent), transparent 68%),
+    var(--surface);
+}
+
+.overview-focus-signal span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.overview-focus-signal strong {
+  color: var(--foreground);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.overview-focus-signal-danger {
+  --overview-signal-tone: var(--danger);
+}
+
+.overview-focus-signal-warning {
+  --overview-signal-tone: var(--amber);
+}
+
+.overview-focus-signal-brand {
+  --overview-signal-tone: var(--brand);
+}
+
+.overview-work-card.ant-card {
+  border-radius: 8px;
+  border-color: color-mix(in srgb, var(--border) 84%, transparent);
+  background: var(--surface-elevated);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
+}
+
+.overview-work-card .ant-card-head {
+  min-height: 48px;
+  border-bottom-color: color-mix(in srgb, var(--border) 76%, transparent);
+}
+
+.overview-work-card .ant-card-head-title {
+  color: var(--foreground);
+  font-weight: 750;
+}
+
+.overview-work-card .ant-card-extra .ant-btn {
+  padding-inline: 0;
+  font-weight: 650;
+}
+
+.overview-work-item {
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.overview-work-item:hover {
+  border-color: color-mix(in srgb, var(--overview-item-tone) 34%, var(--border));
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--overview-item-tone) 11%, transparent), transparent 78%),
+    var(--surface);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 768px) {
+  .overview-focus-signals {
+    grid-template-columns: 1fr;
+  }
+}

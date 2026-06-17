@@ -1,1 +1,82 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* 页面标题是工作台所有业务模块的第一视觉锚点，这里统一做成紧凑工具栏，
+   保证筛选器、主操作和标题在不同页面里有一致的密度与层级。 */
+.page-title {
+  position: relative;
+  padding: 18px 20px;
+  border: 1px solid color-mix(in srgb, var(--brand) 10%, var(--border));
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-elevated) 92%, var(--brand) 8%), var(--surface-elevated)),
+    var(--surface-elevated);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
+}
+
+.page-title::before {
+  position: absolute;
+  top: -1px;
+  right: 18px;
+  left: 18px;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--brand), var(--teal), var(--amber));
+  content: "";
+  opacity: 0.68;
+}
+
+.page-title-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.page-title-copy h2.ant-typography {
+  color: var(--foreground);
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.page-title-copy .ant-typography-secondary {
+  max-width: 720px;
+  color: var(--muted) !important;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.page-title-icon {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--brand) 18%, transparent),
+    0 10px 24px color-mix(in srgb, var(--brand) 12%, transparent);
+}
+
+.page-title-extra .ant-btn,
+.page-title-extra .ant-select-selector,
+.page-title-extra .ant-segmented {
+  border-radius: 8px;
+}
+
+/* TableView 承载长表格、版本明细和成员管理，卡片要克制但清楚，
+   避免和内部表格头部形成两层很重的边框。 */
+.pm-table-card.ant-card {
+  border-color: color-mix(in srgb, var(--border) 84%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-elevated) 94%, var(--surface-subtle) 6%);
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.07);
+}
+
+.pm-table-card.ant-card > .ant-card-body {
+  padding: 16px;
+}
+
+.pm-table-card .ant-table-wrapper {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.pm-table-card .ant-table-wrapper .ant-table-thead > tr > th {
+  background: color-mix(in srgb, var(--surface-subtle) 88%, var(--brand) 12%);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}

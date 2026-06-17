@@ -21,7 +21,7 @@ export function PageTitle({
     <div className="page-title">
       <Space align="start" size={14}>
         <div className="page-title-icon">{icon}</div>
-        <div>
+        <div className="page-title-copy">
           <Title level={2}>{title}</Title>
           <Text type="secondary">{subtitle}</Text>
         </div>
@@ -47,7 +47,8 @@ export function TableView({
   return (
     <Space orientation="vertical" size={18} className="pm-page-stack">
       <PageTitle icon={icon} title={title} subtitle={subtitle} extra={extra} />
-      <Card>{children}</Card>
+      {/* 表格页共用同一个容器层级，避免各业务页自己散落阴影、边框和内边距。 */}
+      <Card className="pm-table-card">{children}</Card>
     </Space>
   );
 }

@@ -1,7 +1,8 @@
 .pm-shell {
   min-height: 100dvh;
   background:
-    linear-gradient(180deg, var(--background-ramp), transparent 360px),
+    linear-gradient(180deg, var(--background-ramp), transparent 320px),
+    linear-gradient(90deg, color-mix(in srgb, var(--brand) 5%, transparent), transparent 28%, color-mix(in srgb, var(--teal) 4%, transparent) 72%, transparent),
     var(--background);
 }
 
@@ -646,7 +647,7 @@
   min-height: 42px;
   margin-inline: 0;
   padding: 0;
-  border-radius: 12px;
+  border-radius: 8px;
 }
 
 .pm-main {
@@ -674,11 +675,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 68px;
-  padding: 0 22px;
+  min-height: 64px;
+  padding: 0 24px;
   border-bottom: 1px solid var(--header-border);
   background: var(--header-bg);
-  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.045);
   backdrop-filter: blur(18px);
 }
 
@@ -714,7 +715,7 @@
   min-width: 40px;
   height: 40px;
   padding: 0;
-  border-radius: 12px;
+  border-radius: 8px;
   color: var(--muted);
   line-height: 1;
 }
@@ -726,13 +727,14 @@
 }
 
 .pm-search {
-  width: min(36vw, 420px);
+  width: min(34vw, 390px);
 }
 
 .pm-search.ant-input-affix-wrapper {
   height: 40px;
   align-items: center;
-  border-radius: 12px;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.035);
 }
 
 .pm-workspace-control {
@@ -784,7 +786,7 @@
   height: 40px;
   padding: 0;
   border: 0;
-  border-radius: 12px;
+  border-radius: 8px;
   background: transparent;
   line-height: 1;
   cursor: pointer;
@@ -809,8 +811,9 @@
 }
 
 .pm-content {
-  min-height: calc(100dvh - 68px);
-  padding: 24px 22px 56px;
+  /* 内容区保持工作台密度：桌面多给一点呼吸感，移动端再收紧，避免表格页看起来像营销页。 */
+  min-height: calc(100dvh - 64px);
+  padding: 26px 24px 56px;
 }
 
 .pm-content *,
@@ -831,6 +834,7 @@
 .pm-content .ant-card,
 .ant-drawer-content .ant-card {
   overflow: hidden;
+  border-radius: 8px;
 }
 
 .pm-content .ant-tag,
@@ -845,7 +849,7 @@
 
 .pm-mobile-nav {
   position: sticky;
-  top: 68px;
+  top: 64px;
   z-index: 19;
   display: none;
   padding: 12px 14px 0;
@@ -3100,8 +3104,8 @@
   display: grid;
   align-content: start;
   gap: 16px;
-  min-height: calc(100dvh - 68px);
-  margin: -24px -22px -56px;
+  min-height: calc(100dvh - 64px);
+  margin: -26px -24px -56px;
   padding: 14px 20px 28px;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--background-ramp) 84%, transparent), transparent 360px),

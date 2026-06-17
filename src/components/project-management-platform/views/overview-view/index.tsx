@@ -42,6 +42,12 @@ export function OverviewView({
   const bugList = [...unresolvedBugs].sort(sortBugsForPersonalFocus).slice(0, 6);
   const perspectiveName = currentUser ? currentUser.name : "团队";
   const focusTotal = unresolvedTasks.length + unresolvedBugs.length;
+  // 概览页首屏只放能立刻指导行动的信号，避免把数据源、系统状态等低频信息挤进第一屏。
+  const focusSignals = [
+    { label: "逾期任务", value: overdueTasks.length, tone: "danger" },
+    { label: "严重缺陷", value: severeBugs.length, tone: "warning" },
+    { label: "今日关注", value: taskList.length + bugList.length, tone: "brand" }
+  ];
 
   return (
     <Space orientation="vertical" size={18} className="pm-page-stack">
@@ -69,6 +75,14 @@ export function OverviewView({
           <Paragraph>
             优先聚焦未关闭 Bug、未完成任务和已经逾期的执行项，把今天真正需要推进的事情放在第一屏。
           </Paragraph>
+          <div className="overview-focus-signals" aria-label="个人工作台关键提醒">
+            {focusSignals.map((signal) => (
+              <div className={`overview-focus-signal overview-focus-signal-${signal.tone}`} key={signal.label}>
+                <span>{signal.label}</span>
+                <strong>{signal.value}</strong>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
