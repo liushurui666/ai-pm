@@ -2,7 +2,7 @@
 
 import "./index.less";
 import { Typography } from "antd";
-import { ThunderboltOutlined } from "@ant-design/icons";
+import { ProjectOutlined } from "@ant-design/icons";
 
 const { Text } = Typography;
 
@@ -11,7 +11,7 @@ export function Brand({ collapsed }: { collapsed: boolean }) {
   return (
     <div className="pm-brand">
       <div className="pm-brand-mark">
-        <ThunderboltOutlined />
+        <ProjectOutlined />
       </div>
       {!collapsed ? (
         <div>

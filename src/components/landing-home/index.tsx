@@ -14,10 +14,10 @@ import {
   FireOutlined,
   FundProjectionScreenOutlined,
   PartitionOutlined,
+  ProjectOutlined,
   RadarChartOutlined,
   RocketOutlined,
-  SafetyCertificateOutlined,
-  ThunderboltOutlined
+  SafetyCertificateOutlined
 } from "@ant-design/icons";
 import { ThemeToggleButton, useThemePreference } from "@/components/theme-mode";
 import Link from "next/link";
@@ -247,7 +247,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         <header className="landing-nav">
           <Link className="landing-brand" href="/">
             <span className="landing-brand__mark">
-              <ThunderboltOutlined />
+              <ProjectOutlined />
             </span>
             <span>
               <strong>AI PM</strong>
