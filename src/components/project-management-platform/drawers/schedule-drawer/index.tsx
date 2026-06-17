@@ -119,6 +119,7 @@ export function ScheduleDrawer({
 
   return (
     <Drawer
+      className="schedule-drawer"
       title={
         <Space>
           <CalendarOutlined />
@@ -145,7 +146,7 @@ export function ScheduleDrawer({
       }
     >
       {groups.length ? (
-        <Space orientation="vertical" size={16} className="pm-wide schedule-list">
+        <Space orientation="vertical" size={14} className="pm-wide schedule-list">
           {groups.map((group) => (
             <div className="schedule-day-group" key={group.date}>
               <Flex justify="space-between" align="center" className="schedule-day-header">
@@ -181,6 +182,7 @@ export function ScheduleDrawer({
         </Space>
       ) : (
         <Empty
+          className="schedule-empty"
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           description={onlyMine ? "暂无与你相关的日程" : "暂无日程"}
         />

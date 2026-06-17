@@ -1,1 +1,98 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* 全局搜索是跨模块跳转入口，结果需要像命令面板一样紧凑、可扫读。 */
+.search-drawer .ant-drawer-header {
+  border-bottom-color: color-mix(in srgb, var(--brand) 10%, var(--border)) !important;
+}
+
+.search-drawer-input.ant-input-search .ant-input-affix-wrapper,
+.search-drawer-input .ant-input-search-button {
+  border-radius: 8px;
+}
+
+.search-results-list {
+  display: grid;
+  gap: 10px;
+}
+
+.search-result-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--brand) 10%, var(--border));
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand) 5%, transparent), transparent 68%),
+    var(--surface);
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.search-result-item:hover {
+  border-color: color-mix(in srgb, var(--brand) 24%, var(--border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand) 8%, transparent), transparent 68%),
+    var(--surface);
+  transform: translateY(-1px);
+}
+
+.search-result-main {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.search-result-content {
+  min-width: 0;
+}
+
+.search-result-content .ant-space {
+  min-width: 0;
+}
+
+.search-result-content .ant-tag {
+  margin-inline-end: 0;
+  font-weight: 700;
+}
+
+.search-result-content .ant-typography-strong {
+  display: inline-block;
+  max-width: min(100%, 360px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
+.search-result-description {
+  max-width: 100%;
+}
+
+.search-result-action.ant-btn {
+  border-radius: 8px;
+  font-weight: 700;
+}
+
+.search-drawer-empty {
+  min-height: 220px;
+  padding: 28px 0;
+  border: 1px dashed color-mix(in srgb, var(--brand) 18%, var(--border));
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand) 5%, transparent), transparent 72%),
+    var(--surface);
+}
+
+@media (max-width: 520px) {
+  .search-result-item {
+    grid-template-columns: 1fr;
+  }
+
+  .search-result-action.ant-btn {
+    justify-self: flex-start;
+    padding-inline: 0;
+  }
+}

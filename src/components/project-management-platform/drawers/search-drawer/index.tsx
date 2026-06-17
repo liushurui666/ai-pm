@@ -131,6 +131,7 @@ export function SearchDrawer({
 }) {
   return (
     <Drawer
+      className="search-drawer"
       title={
         <Space>
           <SearchOutlined />
@@ -143,6 +144,7 @@ export function SearchDrawer({
     >
       <Space orientation="vertical" size={16} className="pm-wide">
         <Input.Search
+          className="search-drawer-input"
           allowClear
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
@@ -172,7 +174,7 @@ export function SearchDrawer({
             ))}
           </div>
         ) : (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={query.trim() ? "没有匹配结果" : "输入关键词开始搜索"} />
+          <Empty className="search-drawer-empty" image={Empty.PRESENTED_IMAGE_SIMPLE} description={query.trim() ? "没有匹配结果" : "输入关键词开始搜索"} />
         )}
       </Space>
     </Drawer>

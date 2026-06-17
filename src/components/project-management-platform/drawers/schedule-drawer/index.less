@@ -1,1 +1,79 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* 日程抽屉是轻量时间线，日期组比普通卡片更轻，避免和主工作台内容争层级。 */
+.schedule-drawer .ant-drawer-header {
+  border-bottom-color: color-mix(in srgb, var(--brand) 10%, var(--border)) !important;
+}
+
+.schedule-drawer .ant-drawer-extra {
+  min-width: 0;
+}
+
+.schedule-drawer .ant-segmented,
+.schedule-drawer .ant-switch {
+  border-radius: 8px;
+}
+
+.schedule-list {
+  padding-top: 0;
+}
+
+.schedule-day-group {
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--brand) 10%, var(--border));
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand) 5%, transparent), transparent 68%),
+    var(--surface);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+}
+
+.schedule-day-header {
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+}
+
+.schedule-day-header .ant-tag {
+  margin-inline-end: 0;
+  font-weight: 700;
+}
+
+.schedule-day-group .ant-timeline {
+  margin-top: 12px;
+}
+
+.schedule-day-group .ant-timeline-item-content {
+  min-width: 0;
+}
+
+.schedule-day-group .ant-tag {
+  margin-inline-end: 0;
+}
+
+.schedule-day-group .ant-typography-strong {
+  display: inline-block;
+  max-width: min(100%, 420px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
+.schedule-empty {
+  min-height: 260px;
+  padding: 34px 0;
+  border: 1px dashed color-mix(in srgb, var(--brand) 18%, var(--border));
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand) 5%, transparent), transparent 72%),
+    var(--surface);
+}
+
+@media (max-width: 768px) {
+  .schedule-drawer .ant-drawer-extra > .ant-space {
+    justify-content: flex-start;
+  }
+
+  .schedule-day-group {
+    padding: 12px;
+  }
+}
