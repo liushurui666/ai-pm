@@ -1,1 +1,90 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* 版本任务看板承接需求拆任务后的交付视图，样式放在组件内，避免再依赖全局任务卡兜底。 */
+.version-task-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.version-task-column {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-elevated) 82%, var(--surface-subtle)), var(--surface-subtle)),
+    var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.version-task-column .ant-card-head {
+  min-height: 56px;
+  border-bottom-color: color-mix(in srgb, var(--border) 82%, transparent);
+  background: color-mix(in srgb, var(--surface-elevated) 86%, transparent);
+}
+
+.version-task-column .ant-card-head-title,
+.version-task-column .ant-card-extra {
+  min-width: 0;
+}
+
+.version-task-column .ant-card-extra {
+  max-width: 48%;
+}
+
+.version-task-column .ant-card-body {
+  padding: 14px;
+}
+
+.version-task-column .ant-typography {
+  max-width: 100%;
+}
+
+.version-task-card {
+  border-color: color-mix(in srgb, var(--border) 86%, transparent);
+  background: var(--surface);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+
+.version-task-card > .ant-flex {
+  min-width: 0;
+}
+
+.version-task-card .ant-typography-strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.version-task-card .ant-btn {
+  border-radius: 8px;
+}
+
+.task-meta-tags {
+  max-width: 100%;
+  margin-top: 2px;
+}
+
+.task-ai-hint.ant-alert {
+  margin-top: 2px;
+  border-radius: 8px;
+}
+
+.version-task-empty-card.ant-card {
+  border: 1px dashed color-mix(in srgb, var(--border) 92%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-subtle) 70%, transparent);
+  box-shadow: none;
+}
+
+.version-task-empty-card .ant-alert {
+  border-radius: 8px;
+}
+
+@media (max-width: 520px) {
+  .version-task-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .version-task-column .ant-card-extra {
+    max-width: 100%;
+  }
+}

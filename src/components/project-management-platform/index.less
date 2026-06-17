@@ -1729,10 +1729,6 @@
   background: var(--surface);
 }
 
-.project-progress-panel .pm-wide {
-  width: 100%;
-}
-
 .project-scheduler-shell .scheduler_default_main {
   --dp-scheduler-border-color: var(--border);
   --dp-scheduler-border-inner-color: var(--border);
@@ -2407,42 +2403,6 @@
 
 .project-scheduler-event-danger .scheduler_default_event_inner {
   box-shadow: 0 10px 26px color-mix(in srgb, var(--danger) 18%, transparent);
-}
-
-.project-progress-panel {
-  display: grid;
-  gap: 14px;
-  min-width: 0;
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background:
-    linear-gradient(180deg, var(--surface-elevated), var(--surface));
-}
-
-.project-person-progress {
-  display: grid;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-subtle);
-}
-
-.project-person-progress .ant-space-item:last-child {
-  display: grid;
-}
-
-.project-person-projects {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.project-progress-risks {
-  display: grid;
-  gap: 12px;
-  padding-top: 4px;
 }
 
 .version-dashboard-page {
@@ -3815,21 +3775,6 @@
   background: var(--surface-elevated);
 }
 
-.version-task-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 16px;
-}
-
-.version-task-column {
-  border: 1px solid var(--border);
-  background: var(--surface-subtle);
-}
-
-.version-task-column .ant-card-head-title {
-  min-width: 0;
-}
-
 .owner-kanban-grid {
   display: grid;
   grid-auto-columns: minmax(300px, 360px);
@@ -3857,11 +3802,6 @@
 
 .task-card .ant-divider {
   margin: 12px 0;
-}
-
-.task-meta-tags {
-  max-width: 100%;
-  margin-top: 2px;
 }
 
 .task-mine-filter {
@@ -3893,10 +3833,6 @@
 
 .bug-version-filter {
   width: clamp(150px, 18vw, 220px);
-}
-
-.task-ai-hint {
-  margin-top: 2px;
 }
 
 .bug-title-cell {
@@ -4345,8 +4281,7 @@
   .project-risk-metrics,
   .project-risk-focus-grid,
   .version-dashboard-metrics,
-  .version-dashboard-card-grid,
-  .version-task-grid {
+  .version-dashboard-card-grid {
     grid-template-columns: 1fr;
   }
 

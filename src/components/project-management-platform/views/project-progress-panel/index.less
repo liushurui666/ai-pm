@@ -1,1 +1,90 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* 人员进度面板补齐排期页的“谁需要帮助”视角，保持侧栏密度，避免抢走日历主体注意力。 */
+.project-progress-panel {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-elevated) 86%, var(--surface-subtle)), var(--surface)),
+    var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.project-progress-panel .pm-wide {
+  width: 100%;
+}
+
+.project-progress-panel > .ant-flex:first-child {
+  min-width: 0;
+  padding-bottom: 2px;
+}
+
+.project-progress-panel > .ant-flex:first-child .anticon {
+  color: var(--brand);
+}
+
+.project-person-progress {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-subtle) 76%, var(--surface));
+}
+
+.project-person-progress .ant-space {
+  min-width: 0;
+}
+
+.project-person-progress .ant-avatar {
+  flex: 0 0 auto;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--brand) 18%, transparent);
+}
+
+.project-person-progress .ant-space-item:last-child {
+  display: grid;
+  min-width: 0;
+}
+
+.project-person-progress .ant-space-item:last-child span {
+  display: grid;
+  min-width: 0;
+}
+
+.project-person-progress .ant-typography {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-person-progress .ant-progress-line {
+  margin: 0;
+}
+
+.project-person-progress .ant-progress-bg {
+  background: color-mix(in srgb, var(--brand) 78%, var(--teal));
+}
+
+.project-person-projects {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-progress-risks {
+  display: grid;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.project-progress-risks > .ant-flex .anticon {
+  color: var(--danger);
+}
+
+.project-progress-risks .ant-alert {
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 90%, var(--surface-subtle));
+}
