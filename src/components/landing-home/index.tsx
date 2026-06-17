@@ -14,7 +14,6 @@ import {
   FireOutlined,
   FundProjectionScreenOutlined,
   PartitionOutlined,
-  ProjectOutlined,
   RadarChartOutlined,
   RocketOutlined,
   SafetyCertificateOutlined
@@ -246,8 +245,13 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         </div>
         <header className="landing-nav">
           <Link className="landing-brand" href="/">
-            <span className="landing-brand__mark">
-              <ProjectOutlined />
+            <span className="landing-brand__mark" aria-hidden="true">
+              <span className="landing-brand-board">
+                <span className="landing-brand-board__card landing-brand-board__card--one" />
+                <span className="landing-brand-board__card landing-brand-board__card--two" />
+                <span className="landing-brand-board__card landing-brand-board__card--three" />
+                <span className="landing-brand-board__node" />
+              </span>
             </span>
             <span>
               <strong>AI PM</strong>

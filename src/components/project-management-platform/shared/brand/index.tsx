@@ -2,7 +2,6 @@
 
 import "./index.less";
 import { Typography } from "antd";
-import { ProjectOutlined } from "@ant-design/icons";
 
 const { Text } = Typography;
 
@@ -10,8 +9,13 @@ const { Text } = Typography;
 export function Brand({ collapsed }: { collapsed: boolean }) {
   return (
     <div className="pm-brand">
-      <div className="pm-brand-mark">
-        <ProjectOutlined />
+      <div className="pm-brand-mark" aria-hidden="true">
+        <span className="pm-brand-board">
+          <span className="pm-brand-board-card pm-brand-board-card--one" />
+          <span className="pm-brand-board-card pm-brand-board-card--two" />
+          <span className="pm-brand-board-card pm-brand-board-card--three" />
+          <span className="pm-brand-board-node" />
+        </span>
       </div>
       {!collapsed ? (
         <div>
