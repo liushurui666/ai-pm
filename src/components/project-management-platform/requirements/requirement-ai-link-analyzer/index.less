@@ -2,6 +2,7 @@
 .requirement-ai-card {
   margin-bottom: 14px;
   overflow: hidden;
+  max-width: 100%;
   border: 1px solid color-mix(in srgb, var(--teal) 22%, var(--border));
   border-radius: 8px;
   background:
@@ -32,12 +33,17 @@
 }
 
 .requirement-ai-card-head .ant-btn {
+  flex: 0 0 auto;
   height: 32px;
   border-radius: 8px;
   font-weight: 650;
 }
 
 .requirement-ai-result {
+  display: grid;
+  max-width: 100%;
+  overflow: hidden;
+  gap: 10px;
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
@@ -49,6 +55,8 @@
 }
 
 .requirement-ai-summary-trigger {
+  max-width: 100%;
+  overflow: hidden;
   margin-top: 10px;
 }
 
@@ -64,12 +72,21 @@
 }
 
 .requirement-ai-tags {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
   margin-top: 10px;
+}
+
+.requirement-ai-tags .ant-space-item {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .requirement-ai-tag-trigger {
   display: inline-flex;
-  max-width: 180px;
+  max-width: min(100%, 180px);
+  overflow: hidden;
 }
 
 .requirement-ai-tag {

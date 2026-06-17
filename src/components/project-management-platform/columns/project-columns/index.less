@@ -1,1 +1,37 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* 项目列在排期页和表格页复用，标题与摘要保持单行截断，避免长项目说明压缩进度列。 */
+.project-title-cell {
+  min-width: 0;
+  max-width: 360px;
+}
+
+.project-title-primary,
+.project-title-summary {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-title-primary {
+  color: var(--foreground);
+  font-size: 13px;
+}
+
+.project-title-summary {
+  color: var(--muted) !important;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.project-row-action.ant-btn {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-weight: 650;
+}
+
+.project-row-action.ant-btn:not(:disabled):hover {
+  background: var(--brand-soft);
+  color: var(--brand);
+}

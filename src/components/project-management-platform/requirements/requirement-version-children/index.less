@@ -1,1 +1,74 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* 子版本列表是版本详情里的层级导航，不做重卡片，只用轻量列表提示可进入下级版本。 */
+.requirement-version-children {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-subtle) 80%, var(--surface));
+}
+
+.requirement-version-children-header {
+  color: var(--muted);
+}
+
+.requirement-version-children-header .anticon {
+  color: var(--brand);
+}
+
+.requirement-version-children-header .ant-tag {
+  margin-inline-end: 0;
+  border-radius: 999px;
+  font-weight: 650;
+}
+
+.requirement-version-children-list {
+  width: 100%;
+}
+
+.requirement-version-child-row {
+  display: flex;
+  width: 100%;
+  min-height: 46px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 8px;
+  background: var(--surface);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.requirement-version-child-row:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--brand) 28%, var(--border));
+  background: color-mix(in srgb, var(--brand) 6%, var(--surface));
+}
+
+.requirement-version-child-row > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.requirement-version-child-row .ant-typography {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.requirement-version-child-row .ant-typography-secondary {
+  color: var(--muted) !important;
+  font-size: 12px;
+}
+
+.requirement-version-children-empty {
+  padding: 16px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-subtle) 82%, transparent);
+}

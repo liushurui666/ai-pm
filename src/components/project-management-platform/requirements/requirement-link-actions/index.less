@@ -1,1 +1,28 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* 需求资料链接是表格里的高频小动作，做成轻量 chip，避免 link 按钮把表格操作区拉得很散。 */
+.requirement-link-actions {
+  max-width: 100%;
+}
+
+.requirement-link-actions .ant-btn {
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--brand) 20%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand) 7%, var(--surface));
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.requirement-link-actions .ant-btn:hover {
+  border-color: color-mix(in srgb, var(--brand) 42%, var(--border));
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.requirement-link-actions .ant-tag {
+  margin-inline-end: 0;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+}

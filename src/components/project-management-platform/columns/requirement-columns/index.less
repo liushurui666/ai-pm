@@ -1,1 +1,76 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* 需求表格承载标题、AI 摘要、验收和资料完整度，列内文本必须稳定截断，避免长需求把表格撑开。 */
+.requirement-title-cell {
+  min-width: 0;
+  max-width: 250px;
+}
+
+.requirement-title-tooltip-trigger {
+  display: block;
+  min-width: 0;
+}
+
+.requirement-title-primary,
+.requirement-title-summary,
+.requirement-title-acceptance {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.requirement-title-primary {
+  color: var(--foreground);
+  font-size: 13px;
+}
+
+.requirement-title-summary,
+.requirement-title-acceptance {
+  color: var(--muted) !important;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.requirement-quality-cell {
+  min-width: 0;
+}
+
+.requirement-quality-cell .ant-progress-line {
+  margin-bottom: 0;
+}
+
+.requirement-quality-cell .ant-progress-text {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.requirement-quality-cell .ant-typography {
+  display: block;
+  overflow: hidden;
+  max-width: 138px;
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.requirement-row-actions {
+  justify-content: center;
+}
+
+.requirement-row-actions .ant-btn {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-weight: 650;
+}
+
+.requirement-row-actions .ant-btn:not(:disabled):hover {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.requirement-row-actions .ant-btn-dangerous:not(:disabled):hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}

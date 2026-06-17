@@ -18,9 +18,9 @@ export function createProjectColumns({ onEdit }: { onEdit: (project: Project) =>
       dataIndex: "name",
       key: "name",
       render: (_, project) => (
-        <Space orientation="vertical" size={2}>
-          <Text strong>{project.name}</Text>
-          <Text type="secondary">{project.summary}</Text>
+        <Space className="project-title-cell" orientation="vertical" size={2}>
+          <Text className="project-title-primary" strong>{project.name}</Text>
+          <Text className="project-title-summary" type="secondary">{project.summary}</Text>
         </Space>
       )
     },
@@ -79,7 +79,7 @@ export function createProjectColumns({ onEdit }: { onEdit: (project: Project) =>
       fixed: "right",
       width: 90,
       render: (_, project) => (
-        <Button type="link" icon={<EditOutlined />} onClick={() => onEdit(project)}>
+        <Button className="project-row-action" type="link" icon={<EditOutlined />} onClick={() => onEdit(project)}>
           编辑
         </Button>
       )
