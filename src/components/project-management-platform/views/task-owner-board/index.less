@@ -3,7 +3,7 @@
   display: grid;
   grid-auto-columns: minmax(300px, 360px);
   grid-auto-flow: column;
-  gap: 16px;
+  gap: 12px;
   align-items: stretch;
   overflow-x: auto;
   padding: 2px 2px 8px;
@@ -12,9 +12,7 @@
 .task-board-empty-card.ant-card {
   border-style: dashed;
   border-color: color-mix(in srgb, var(--brand) 20%, var(--border));
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--brand) 6%, transparent), transparent 72%),
-    color-mix(in srgb, var(--surface-elevated) 92%, var(--surface-subtle) 8%);
+  background: color-mix(in srgb, var(--surface-elevated) 92%, var(--surface-subtle) 8%);
   box-shadow: none;
 }
 
@@ -33,10 +31,8 @@
   min-height: 420px;
   min-width: 300px;
   border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--brand) 7%, transparent), transparent 220px),
-    var(--surface-subtle);
-  box-shadow: var(--shadow-card);
+  background: color-mix(in srgb, var(--surface-subtle) 92%, var(--brand) 3%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface) 68%, transparent);
 }
 
 .task-owner-column .ant-card-head {
@@ -54,9 +50,7 @@
 
 .task-owner-column-over {
   border-color: color-mix(in srgb, var(--brand) 48%, var(--border));
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--brand) 10%, transparent), transparent 220px),
-    var(--surface);
+  background: color-mix(in srgb, var(--surface) 86%, var(--brand) 8%);
 }
 
 .task-owner-list {
@@ -106,7 +100,7 @@
   border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
   border-radius: 8px;
   background: var(--surface);
-  box-shadow: 0 10px 24px color-mix(in srgb, var(--foreground) 5%, transparent);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.045);
 }
 
 .task-owner-card > .ant-flex {
@@ -119,7 +113,7 @@
 
 .task-owner-card-dragging {
   border-color: color-mix(in srgb, var(--brand) 48%, var(--border));
-  box-shadow: 0 18px 34px color-mix(in srgb, var(--brand) 16%, transparent);
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--brand) 14%, transparent);
 }
 
 .task-owner-card-title {
