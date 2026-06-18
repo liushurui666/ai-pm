@@ -12,6 +12,36 @@
   border-radius: 8px;
 }
 
+.schedule-drawer .task-mine-filter {
+  min-height: 34px;
+  padding: 0 9px 0 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 94%, var(--surface-subtle));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface) 68%, transparent);
+}
+
+.schedule-drawer .task-mine-filter .ant-typography {
+  color: var(--muted) !important;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.schedule-drawer .task-mine-filter .ant-switch {
+  min-width: 36px;
+  height: 20px;
+}
+
+.schedule-drawer .task-mine-filter .ant-switch .ant-switch-handle {
+  width: 16px;
+  height: 16px;
+}
+
+.schedule-drawer .task-mine-filter .ant-switch.ant-switch-checked {
+  background: var(--brand);
+}
+
 .schedule-list {
   padding-top: 0;
 }

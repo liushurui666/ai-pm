@@ -1,5 +1,6 @@
 .bug-route-page {
   min-height: 100%;
+  max-width: 1480px;
 }
 
 /* Bug 独立编辑页承担缺陷处理台职责：左侧是可编辑事实，右侧是执行入口和记录。
@@ -9,7 +10,15 @@
 }
 
 .bug-edit-route-layout {
+  display: grid;
+  align-items: start;
   gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+}
+
+.bug-edit-form-card,
+.bug-edit-side {
+  min-width: 0;
 }
 
 .bug-edit-form-card.ant-card,
@@ -78,12 +87,18 @@
 
 .bug-edit-side {
   gap: 14px !important;
+  width: 100%;
 }
 
 .bug-edit-side-card.ant-card {
+  align-self: start;
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--surface-subtle) 70%, transparent), transparent 62%),
     var(--surface-elevated);
+}
+
+.bug-edit-side-card .ant-typography {
+  margin: 0;
 }
 
 .bug-attachment-list {
@@ -113,6 +128,10 @@
   margin-top: 4px;
 }
 
+.bug-flow-timeline .ant-timeline-item-last {
+  padding-bottom: 0;
+}
+
 .bug-flow-timeline .ant-timeline-item-content {
   min-width: 0;
 }
@@ -122,6 +141,10 @@
 }
 
 @media (max-width: 768px) {
+  .bug-edit-route-layout {
+    grid-template-columns: 1fr;
+  }
+
   .bug-edit-form-card.ant-card::before {
     top: 0;
     right: 16px;

@@ -34,6 +34,36 @@
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface) 68%, transparent) !important;
 }
 
+.task-mine-filter {
+  min-height: 34px;
+  padding: 0 9px 0 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 94%, var(--surface-subtle));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface) 68%, transparent);
+}
+
+.task-mine-filter .ant-typography {
+  color: var(--muted) !important;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.task-mine-filter .ant-switch {
+  min-width: 36px;
+  height: 20px;
+}
+
+.task-mine-filter .ant-switch .ant-switch-handle {
+  width: 16px;
+  height: 16px;
+}
+
+.task-mine-filter .ant-switch.ant-switch-checked {
+  background: var(--brand);
+}
+
 .bug-row-actions {
   width: 100%;
   justify-content: center;
