@@ -1248,46 +1248,6 @@
   margin-bottom: 16px;
 }
 
-.page-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-.page-title > .ant-space {
-  min-width: 240px;
-  flex: 1 1 300px;
-}
-
-.page-title h2 {
-  margin: 0 0 4px;
-}
-
-.page-title-icon {
-  display: grid;
-  width: 44px;
-  height: 44px;
-  place-items: center;
-  border-radius: 8px;
-  background: var(--brand-soft);
-  color: var(--brand);
-  font-size: 20px;
-}
-
-.page-title-extra {
-  min-width: 0;
-  flex: 1 1 360px;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.page-title-extra > .ant-space {
-  max-width: 100%;
-  justify-content: flex-end;
-}
-
 .project-risk-metrics,
 .project-risk-focus-grid {
   display: grid;
@@ -3938,17 +3898,6 @@
     grid-template-columns: 1fr;
   }
 
-  .page-title {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .page-title > .ant-space,
-  .page-title-extra {
-    flex: none;
-    width: 100%;
-  }
-
   .project-calendar-hero,
   .project-calendar-layout,
   .version-dashboard-hero,
@@ -4030,11 +3979,6 @@
 
   .project-calendar-filter-field {
     grid-template-columns: 1fr;
-  }
-
-  .page-title-extra > .ant-space,
-  .page-title-extra > .ant-space > .ant-space-item {
-    width: 100%;
   }
 
   .task-version-filter,
