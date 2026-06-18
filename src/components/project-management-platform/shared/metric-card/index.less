@@ -2,13 +2,23 @@
    色彩只作为状态线索，不把整张卡染成单一强色。 */
 .metric-card.ant-card {
   --metric-tone: var(--brand);
-  min-height: 116px;
+  min-height: 122px;
   border-radius: 8px;
   border-color: color-mix(in srgb, var(--metric-tone) 16%, var(--border));
   background:
-    linear-gradient(135deg, color-mix(in srgb, var(--metric-tone) 8%, transparent), transparent 62%),
+    linear-gradient(135deg, color-mix(in srgb, var(--metric-tone) 7%, transparent), transparent 58%),
     var(--surface-elevated);
   box-shadow: 0 14px 32px rgba(15, 23, 42, 0.06);
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.metric-card.ant-card:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--metric-tone) 24%, var(--border-strong));
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.08);
 }
 
 .metric-card.ant-card .ant-card-body {
@@ -36,6 +46,7 @@
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
+  line-height: 1.35;
 }
 
 .metric-card .ant-statistic-content {
@@ -49,14 +60,17 @@
 }
 
 .metric-description {
+  display: block;
+  max-width: 220px;
   font-size: 12px;
   line-height: 1.4;
 }
 
 .metric-icon {
   display: grid;
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--metric-tone) 26%, transparent);
   border-radius: 8px;
