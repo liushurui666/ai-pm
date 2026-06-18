@@ -1,5 +1,26 @@
 /* 概览页承担“今天先看哪里”的判断，视觉上保持指挥台密度，
    不再使用大幅氛围图，避免首屏被装饰占用。 */
+.overview-command {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.overview-command-main {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  justify-content: flex-start;
+  overflow: hidden;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(18px);
+}
+
 .overview-command-main.overview-personal-main {
   position: relative;
   gap: 14px;
@@ -21,17 +42,101 @@
 }
 
 .overview-personal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
   margin-bottom: 0;
   padding-bottom: 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--brand) 16%, var(--border));
+}
+
+.overview-personal-heading {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+
+.overview-personal-kicker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.overview-personal-kicker span {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, var(--brand) 28%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand) 10%, transparent);
+}
+
+.overview-personal-kicker em {
+  overflow: hidden;
+  color: var(--muted);
+  font-style: normal;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .overview-personal-main .ant-typography {
+  max-width: 720px;
   margin-bottom: 0;
+  color: var(--muted);
+}
+
+.overview-personal-main h2.ant-typography {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.overview-personal-tools {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  gap: 10px;
 }
 
 .overview-personal-tools .ant-btn-primary {
   border-radius: 8px;
   box-shadow: 0 10px 22px color-mix(in srgb, var(--brand) 22%, transparent);
+}
+
+.overview-focus-total {
+  display: grid;
+  min-width: 112px;
+  justify-items: end;
+  gap: 2px;
+  padding: 8px 11px;
+  border: 1px solid color-mix(in srgb, var(--brand) 22%, var(--border));
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand) 10%, transparent), transparent 70%),
+    var(--surface);
+}
+
+.overview-focus-total strong {
+  color: var(--foreground);
+  font-size: 30px;
+  line-height: 1;
+}
+
+.overview-focus-total span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.2;
 }
 
 .overview-focus-signals {
@@ -80,6 +185,11 @@
   --overview-signal-tone: var(--brand);
 }
 
+.overview-work-list {
+  display: grid;
+  gap: 10px;
+}
+
 .overview-work-card.ant-card {
   border-radius: 8px;
   border-color: color-mix(in srgb, var(--border) 84%, transparent);
@@ -102,7 +212,22 @@
   font-weight: 650;
 }
 
+.overview-work-card .ant-card-body {
+  min-height: 360px;
+}
+
 .overview-work-item {
+  --overview-item-tone: var(--brand);
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  padding: 11px;
+  border: 1px solid color-mix(in srgb, var(--overview-item-tone) 18%, var(--border));
+  border-left: 4px solid color-mix(in srgb, var(--overview-item-tone) 72%, var(--border));
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--overview-item-tone) 7%, transparent), transparent 78%),
+    var(--surface);
   transition:
     border-color 160ms ease,
     background 160ms ease,
@@ -117,7 +242,56 @@
   transform: translateY(-1px);
 }
 
+.overview-work-item-bug {
+  --overview-item-tone: var(--danger);
+}
+
+.overview-work-item-task {
+  --overview-item-tone: var(--brand);
+}
+
+.overview-work-title {
+  min-width: 0;
+}
+
+.overview-work-item .ant-space,
+.overview-work-item .ant-typography {
+  min-width: 0;
+}
+
 @media (max-width: 768px) {
+  .overview-personal-header {
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .overview-personal-tools {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .overview-personal-kicker {
+    gap: 6px;
+  }
+
+  .overview-personal-kicker em {
+    display: none;
+  }
+
+  .overview-focus-total {
+    min-width: 86px;
+    padding: 7px 9px;
+  }
+
+  .overview-personal-main h2.ant-typography {
+    font-size: 24px;
+  }
+
+  .overview-focus-total strong {
+    font-size: 26px;
+  }
+
   .overview-focus-signals {
     grid-template-columns: 1fr;
   }
