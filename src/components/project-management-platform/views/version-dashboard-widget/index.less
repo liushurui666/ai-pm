@@ -1,1 +1,14 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* 版本大屏统一卡片外壳，子组件只补各自的内容布局，避免每个图表重复写边框和背景。 */
+.version-dashboard-widget.version-board-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--version-board-card);
+  box-shadow: none;
+}
+
+.version-dashboard-widget.version-board-card:hover,
+.version-dashboard-widget.version-board-card:focus-visible {
+  border-color: color-mix(in srgb, var(--version-board-blue) 48%, var(--border));
+}

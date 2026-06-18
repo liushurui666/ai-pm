@@ -1,1 +1,33 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* 版本大屏 board 只负责三列指标网格排布，具体卡片视觉放在 widget 和各业务图表组件内。 */
+.version-board-grid {
+  display: grid;
+  grid-template-columns: minmax(310px, 0.92fr) minmax(310px, 0.92fr) minmax(560px, 1.88fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.version-board-lane {
+  display: grid;
+  min-width: 0;
+  gap: 16px;
+}
+
+@media (max-width: 1200px) {
+  .version-board-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .version-board-lane-wide {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 768px) {
+  .version-board-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .version-board-lane-wide {
+    grid-column: auto;
+  }
+}
