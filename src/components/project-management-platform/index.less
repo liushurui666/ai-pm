@@ -1053,118 +1053,6 @@
   min-width: 0;
 }
 
-.project-milestone-panel {
-  padding: 10px 16px 0;
-}
-
-.requirement-version-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 16px;
-}
-
-.requirement-version-card,
-.requirement-version-empty {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-elevated);
-  box-shadow: var(--shadow-card);
-}
-
-.requirement-version-card {
-  display: flex;
-  min-height: 250px;
-  flex-direction: column;
-  gap: 14px;
-  padding: 18px;
-}
-
-.requirement-version-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.requirement-version-goal {
-  min-height: 48px;
-  margin-bottom: 0 !important;
-}
-
-.requirement-version-progress {
-  display: grid;
-  gap: 6px;
-}
-
-.requirement-version-meta,
-.requirement-version-summary {
-  display: grid;
-  gap: 12px;
-}
-
-.requirement-version-meta {
-  grid-template-columns: repeat(auto-fit, minmax(86px, 1fr));
-  margin-top: auto;
-}
-
-.requirement-version-meta > div,
-.requirement-version-summary-item {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-subtle);
-}
-
-.requirement-version-summary {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  margin-bottom: 16px;
-}
-
-.requirement-version-owner-summary {
-  grid-column: span 2;
-}
-
-.requirement-version-milestones {
-  margin: 16px 0;
-  padding: 14px 16px 2px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-}
-
-.requirement-version-milestones-header {
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.requirement-version-empty {
-  display: grid;
-  min-height: 220px;
-  place-items: center;
-  padding: 24px;
-}
-
-.requirement-detail-table {
-  min-width: 0;
-  overflow: hidden;
-}
-
-.requirement-detail-table .ant-table-container {
-  border-start-start-radius: 8px;
-  border-start-end-radius: 8px;
-}
-
-.requirement-detail-table .ant-table-cell {
-  overflow-wrap: anywhere;
-  vertical-align: top;
-}
-
 .member-role-select {
   width: 156px;
 }
@@ -1188,49 +1076,6 @@
   display: grid;
   grid-template-columns: minmax(140px, 180px) minmax(0, 1fr);
   gap: 12px;
-}
-
-.milestone-form {
-  margin-top: 8px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border);
-}
-
-.milestone-form-header {
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.milestone-form-item {
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-}
-
-.milestone-form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  align-items: start;
-}
-
-.milestone-form-grid .ant-form-item {
-  margin-bottom: 12px;
-}
-
-.milestone-form-grid .ant-form-item-control-input-content {
-  min-width: 0;
-}
-
-.milestone-form-grid .ant-picker,
-.milestone-form-grid .ant-select {
-  width: 100%;
-}
-
-.milestone-note {
-  margin-bottom: 0;
 }
 
 .schedule-list {
@@ -3746,14 +3591,6 @@
     grid-template-columns: 1fr;
   }
 
-  .requirement-version-summary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .milestone-form-grid {
-    grid-template-columns: 1fr;
-  }
-
   .version-dashboard-hero,
   .version-dashboard-grid {
     grid-template-columns: 1fr;
@@ -3775,18 +3612,11 @@
 }
 
 @media (max-width: 520px) {
-  .requirement-version-grid,
-  .requirement-version-summary,
-  .requirement-version-meta,
   .project-risk-metrics,
   .project-risk-focus-grid,
   .version-dashboard-metrics,
   .version-dashboard-card-grid {
     grid-template-columns: 1fr;
-  }
-
-  .requirement-version-owner-summary {
-    grid-column: span 1;
   }
 
   .version-dashboard-hero-copy {

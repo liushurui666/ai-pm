@@ -1,10 +1,19 @@
 /* 版本详情页是需求评审与交付跟进的工作区，摘要、里程碑和需求表要形成清楚的阅读顺序。 */
 .requirement-version-summary {
+  display: grid;
   gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   margin-bottom: 16px;
 }
 
 .requirement-version-summary-item {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
   min-height: 78px;
   border-color: color-mix(in srgb, var(--brand) 10%, var(--border));
   background:
@@ -24,12 +33,17 @@
 }
 
 .requirement-version-owner-summary {
+  grid-column: span 2;
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--teal) 7%, transparent), transparent 68%),
     var(--surface);
 }
 
 .requirement-version-milestones {
+  margin: 16px 0;
+  padding: 14px 16px 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
   border-color: color-mix(in srgb, var(--amber) 16%, var(--border));
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--amber) 7%, transparent), transparent 60%),
@@ -38,12 +52,30 @@
 }
 
 .requirement-version-milestones-header {
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
   padding-bottom: 10px;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
 }
 
 .requirement-version-milestones .ant-timeline {
   margin-top: 14px;
+}
+
+.requirement-detail-table {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.requirement-detail-table .ant-table-container {
+  border-start-start-radius: 8px;
+  border-start-end-radius: 8px;
+}
+
+.requirement-detail-table .ant-table-cell {
+  overflow-wrap: anywhere;
+  vertical-align: top;
 }
 
 .requirement-detail-table.ant-table-wrapper {

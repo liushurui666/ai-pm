@@ -1,13 +1,26 @@
 /* 需求版本卡片是产品流程入口，强调版本状态和进入路径，
    编辑/删除等维护动作降一级，避免卡片看起来像按钮堆。 */
 .requirement-version-grid {
+  display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 14px;
 }
 
+.requirement-version-card,
+.requirement-version-empty {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-card);
+}
+
 .requirement-version-card {
   position: relative;
+  display: flex;
   min-height: 292px;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
   border-color: color-mix(in srgb, var(--brand) 12%, var(--border));
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--brand) 7%, transparent), transparent 50%),
@@ -67,6 +80,8 @@
 }
 
 .requirement-version-goal {
+  min-height: 48px;
+  margin-bottom: 0 !important;
   display: -webkit-box;
   overflow: hidden;
   color: var(--muted);
@@ -77,6 +92,8 @@
 }
 
 .requirement-version-progress {
+  display: grid;
+  gap: 6px;
   padding: 10px 12px;
   border: 1px solid color-mix(in srgb, var(--brand) 14%, var(--border));
   border-radius: 8px;
@@ -84,11 +101,20 @@
 }
 
 .requirement-version-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(86px, 1fr));
   gap: 8px;
+  margin-top: auto;
 }
 
 .requirement-version-meta > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
   padding: 9px;
+  border: 1px solid;
+  border-radius: 8px;
   border-color: color-mix(in srgb, var(--border) 82%, transparent);
   background: color-mix(in srgb, var(--surface) 88%, var(--surface-subtle) 12%);
 }
@@ -126,7 +152,11 @@
 }
 
 .requirement-version-actions {
+  display: flex;
+  align-items: center;
   justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .requirement-version-actions .ant-btn {
@@ -134,6 +164,10 @@
 }
 
 .requirement-version-empty {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+  padding: 24px;
   border-style: dashed;
   border-color: color-mix(in srgb, var(--brand) 18%, var(--border));
   background:
@@ -150,5 +184,11 @@
   .requirement-version-card {
     min-height: auto;
     padding: 16px;
+  }
+}
+
+@media (max-width: 520px) {
+  .requirement-version-meta {
+    grid-template-columns: 1fr;
   }
 }

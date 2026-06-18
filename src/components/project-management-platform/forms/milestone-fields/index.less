@@ -1,1 +1,50 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* 版本里程碑和项目里程碑共用字段结构，这里只负责表单密度与边界；
+   不在全局样式里兜底，避免抽屉和详情页出现两套间距。 */
+.milestone-form {
+  margin-top: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.milestone-form-header {
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.milestone-form-item {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.milestone-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.milestone-form-grid .ant-form-item {
+  margin-bottom: 12px;
+}
+
+.milestone-form-grid .ant-form-item-control-input-content {
+  min-width: 0;
+}
+
+.milestone-form-grid .ant-picker,
+.milestone-form-grid .ant-select {
+  width: 100%;
+}
+
+.milestone-note {
+  margin-bottom: 0;
+}
+
+@media (max-width: 768px) {
+  .milestone-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
