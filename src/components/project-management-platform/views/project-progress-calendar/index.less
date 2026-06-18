@@ -70,7 +70,7 @@
   overflow: hidden;
   border-width: 1px;
   color: var(--foreground) !important;
-  box-shadow: var(--shadow-card);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.055);
   cursor: pointer;
 }
 
@@ -166,13 +166,15 @@
 }
 
 .project-scheduler-cell-weekend .scheduler_default_cell_inner {
-  background: color-mix(in srgb, var(--surface-subtle) 78%, transparent);
+  background: color-mix(in srgb, var(--surface-subtle) 54%, transparent);
 }
 
 .project-scheduler-cell-today .scheduler_default_cell_inner {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--brand) 12%, transparent), transparent 68%),
-    var(--surface-elevated);
+  /* 今天列只做网格定位提示，不再铺整块蓝色底，避免短任务后方形成突兀竖向色块。 */
+  background: color-mix(in srgb, var(--surface-elevated) 96%, var(--brand) 4%);
+  box-shadow:
+    inset 1px 0 color-mix(in srgb, var(--brand) 18%, transparent),
+    inset -1px 0 color-mix(in srgb, var(--brand) 10%, transparent);
 }
 
 .project-scheduler-day-header {
@@ -752,18 +754,20 @@
 }
 
 .project-scheduler-cell-weekend .scheduler_default_cell_inner {
-  background: color-mix(in srgb, var(--surface-subtle) 84%, transparent);
+  background: color-mix(in srgb, var(--surface-subtle) 58%, transparent);
 }
 
 .project-scheduler-cell-today .scheduler_default_cell_inner {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--brand) 14%, transparent), transparent 70%),
-    color-mix(in srgb, var(--surface-elevated) 92%, var(--brand) 8%);
+  /* 与上方基础规则保持一致：今天只像时间轴刻度，不像一个可操作面板。 */
+  background: color-mix(in srgb, var(--surface-elevated) 96%, var(--brand) 4%);
+  box-shadow:
+    inset 1px 0 color-mix(in srgb, var(--brand) 18%, transparent),
+    inset -1px 0 color-mix(in srgb, var(--brand) 10%, transparent);
 }
 
 .project-scheduler-resource-panel-owner,
 .project-scheduler-resource-panel-task {
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.035);
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.032);
 }
 
 .project-scheduler-resource-panel-task:hover {
