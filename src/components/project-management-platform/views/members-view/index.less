@@ -53,6 +53,11 @@
   border-radius: 8px;
 }
 
+.pm-source-alert {
+  border-color: var(--border);
+  background: var(--brand-soft);
+}
+
 .member-notification-modal .ant-modal-content {
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
@@ -154,6 +159,12 @@
 
 .member-channel-actions .ant-btn {
   border-radius: 8px;
+}
+
+@media (max-width: 1200px) {
+  .member-channel-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 768px) {
