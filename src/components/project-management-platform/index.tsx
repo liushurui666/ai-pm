@@ -1557,10 +1557,15 @@ export function ProjectManagementPlatform({
             trigger={null}
           >
             <WorkbenchSidebar
+              accountPopoverContent={accountPopoverContent}
               assistantSessionSidebar={assistantSessionSidebar}
               collapsed={collapsed}
+              currentWorkspaceName={currentWorkspace?.name ?? "当前工作区"}
               navigationView={navigationView}
               studioMenuGroups={studioMenuGroups}
+              userAvatarUrl={userAvatarUrl}
+              userInitial={userInitial}
+              userName={userName}
               onSwitchView={switchView}
             />
           </Sider>

@@ -1,8 +1,8 @@
 "use client";
 
 import "./index.less";
-import { Button, Segmented, Typography } from "antd";
-import { PlusOutlined } from "@ant-design/icons";
+import { Avatar, Button, Popover, Segmented, Typography } from "antd";
+import { DownOutlined, PlusOutlined } from "@ant-design/icons";
 import type { ReactNode } from "react";
 import {
   AccountAvatarPopover,
@@ -29,19 +29,29 @@ export type StudioMenuGroup = {
 };
 
 type WorkbenchSidebarProps = {
+  accountPopoverContent: ReactNode;
   assistantSessionSidebar: ReactNode | null;
   collapsed: boolean;
+  currentWorkspaceName: string;
   navigationView: AppView;
   studioMenuGroups: StudioMenuGroup[];
+  userAvatarUrl?: string;
+  userInitial: string;
+  userName: string;
   onSwitchView: (view: AppView) => void;
 };
 
-// 桌面侧栏只负责 Chat/Studio 模式切换和 Studio 导航，账号与工作区入口统一上移到顶栏右侧。
+// 桌面侧栏承载模式切换、Studio 导航和左下角身份卡；顶栏仍保留工作区快捷入口，满足全局可见与身份确认两种场景。
 export function WorkbenchSidebar({
+  accountPopoverContent,
   assistantSessionSidebar,
   collapsed,
+  currentWorkspaceName,
   navigationView,
   studioMenuGroups,
+  userAvatarUrl,
+  userInitial,
+  userName,
   onSwitchView
 }: WorkbenchSidebarProps) {
   return (
@@ -100,6 +110,28 @@ export function WorkbenchSidebar({
           ))}
         </nav>
       )}
+      <Popover
+        arrow={false}
+        classNames={{ root: "pm-avatar-popover pm-account-popover" }}
+        content={accountPopoverContent}
+        placement="topLeft"
+        trigger="click"
+      >
+        <button className="pm-account-switcher" type="button" aria-label="打开账号与工作区菜单">
+          <Avatar className="pm-avatar" src={userAvatarUrl}>
+            {userInitial}
+          </Avatar>
+          {!collapsed ? (
+            <>
+              <span className="pm-account-copy">
+                <span>{currentWorkspaceName}</span>
+                <em>{userName}</em>
+              </span>
+              <DownOutlined className="pm-account-chevron" />
+            </>
+          ) : null}
+        </button>
+      </Popover>
     </div>
   );
 }
