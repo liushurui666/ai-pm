@@ -1033,46 +1033,6 @@
   color: #ffffff;
 }
 
-.project-health-row {
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(200px, 0.7fr);
-  gap: 18px;
-  align-items: center;
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-}
-
-.project-health-progress {
-  min-width: 0;
-}
-
-.project-risk-metrics,
-.project-risk-focus-grid {
-  display: grid;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.project-risk-metrics {
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-}
-
-.project-risk-focus-grid {
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-}
-
-.project-risk-focus-card,
-.project-risk-metrics .ant-card {
-  border: 1px solid var(--border);
-  background: var(--surface-elevated);
-}
-
-.project-risk-expand {
-  padding: 4px 0;
-}
-
 .project-scheduler-shell {
   --project-scheduler-event-height: 52px;
   --project-scheduler-level-version-indent: 6px;
@@ -3538,10 +3498,6 @@
     font-size: 30px;
   }
 
-  .project-health-row {
-    grid-template-columns: 1fr;
-  }
-
   .version-dashboard-hero,
   .version-dashboard-grid {
     grid-template-columns: 1fr;
@@ -3563,8 +3519,6 @@
 }
 
 @media (max-width: 520px) {
-  .project-risk-metrics,
-  .project-risk-focus-grid,
   .version-dashboard-metrics,
   .version-dashboard-card-grid {
     grid-template-columns: 1fr;
