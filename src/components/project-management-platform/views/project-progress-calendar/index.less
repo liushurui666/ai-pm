@@ -6,16 +6,16 @@
   --project-scheduler-level-owner-indent: 0px;
   --project-scheduler-level-task-indent: 20px;
   --project-scheduler-row-gap: 10px;
-  --scheduler-event-success-bg: color-mix(in srgb, var(--teal) 10%, var(--surface));
+  --scheduler-event-success-bg: color-mix(in srgb, var(--teal) 20%, transparent);
   --scheduler-event-success-bar: var(--teal);
   --scheduler-event-success-border: color-mix(in srgb, var(--teal) 36%, var(--border));
-  --scheduler-event-processing-bg: color-mix(in srgb, var(--brand) 10%, var(--surface));
+  --scheduler-event-processing-bg: color-mix(in srgb, var(--brand) 20%, transparent);
   --scheduler-event-processing-bar: var(--brand);
   --scheduler-event-processing-border: color-mix(in srgb, var(--brand) 34%, var(--border));
-  --scheduler-event-warning-bg: color-mix(in srgb, var(--amber) 13%, var(--surface));
+  --scheduler-event-warning-bg: color-mix(in srgb, var(--amber) 22%, transparent);
   --scheduler-event-warning-bar: var(--amber);
   --scheduler-event-warning-border: color-mix(in srgb, var(--amber) 40%, var(--border));
-  --scheduler-event-danger-bg: color-mix(in srgb, var(--danger) 11%, var(--surface));
+  --scheduler-event-danger-bg: color-mix(in srgb, var(--danger) 24%, transparent);
   --scheduler-event-danger-bar: var(--danger);
   --scheduler-event-danger-border: color-mix(in srgb, var(--danger) 38%, var(--border));
   min-width: 0;
@@ -263,7 +263,7 @@
   min-width: 0;
   height: 100%;
   padding: 4px 8px;
-  background: var(--surface);
+  background: transparent;
 }
 
 .project-scheduler-level-row {
@@ -421,9 +421,10 @@
   padding: 6px 9px;
   border: 1px solid color-mix(in srgb, var(--teal) 24%, var(--border));
   border-left: 5px solid color-mix(in srgb, var(--teal) 74%, var(--brand));
+  /* 分组卡保留扫描锚点，但底色必须透出排期网格，避免左侧像一块实心面板。 */
   background:
-    linear-gradient(90deg, color-mix(in srgb, var(--teal) 10%, transparent), transparent 72%),
-    color-mix(in srgb, var(--teal) 5%, var(--surface));
+    linear-gradient(90deg, color-mix(in srgb, var(--teal) 18%, transparent), transparent 72%),
+    color-mix(in srgb, var(--surface-elevated) 42%, transparent);
 }
 
 .project-scheduler-resource-owner strong {
@@ -468,9 +469,10 @@
   padding: 7px 9px;
   border: 1px solid color-mix(in srgb, var(--brand) 14%, var(--border));
   border-left: 4px solid color-mix(in srgb, var(--brand) 70%, var(--teal));
+  /* 任务卡和右侧时间条都走透明层，网格背景能继续透出来。 */
   background:
-    linear-gradient(90deg, color-mix(in srgb, var(--brand) 7%, transparent), transparent 72%),
-    var(--surface);
+    linear-gradient(90deg, color-mix(in srgb, var(--brand) 12%, transparent), transparent 72%),
+    color-mix(in srgb, var(--surface-elevated) 36%, transparent);
   transition: border-color 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease, transform 0.16s ease;
 }
 
@@ -769,8 +771,8 @@
 .project-scheduler-resource-panel-task:hover {
   border-color: color-mix(in srgb, var(--brand) 24%, var(--border));
   background:
-    linear-gradient(90deg, color-mix(in srgb, var(--brand) 9%, transparent), transparent 72%),
-    var(--surface);
+    linear-gradient(90deg, color-mix(in srgb, var(--brand) 16%, transparent), transparent 72%),
+    color-mix(in srgb, var(--surface-elevated) 46%, transparent);
 }
 
 .project-scheduler-event-content {
