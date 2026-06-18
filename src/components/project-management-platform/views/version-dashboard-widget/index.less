@@ -1,6 +1,15 @@
 /* 版本大屏统一卡片外壳，子组件只补各自的内容布局，避免每个图表重复写边框和背景。 */
-.version-dashboard-widget.version-board-card {
+.version-dashboard-widget {
+  position: relative;
   min-width: 0;
+  outline: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.version-dashboard-widget.version-board-card {
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 16px;
