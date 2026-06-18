@@ -1,1 +1,111 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* 侧边栏品牌区只负责传达产品身份和当前工作台质感，避免把品牌动效继续散落在平台全局外壳里。 */
+.pm-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 76px;
+  padding: 0 18px;
+  color: #ffffff;
+}
+
+.pm-brand-mark {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 8px;
+  background: #17407f;
+  color: #ffffff;
+  box-shadow: 0 12px 24px rgba(20, 53, 122, 0.26);
+  flex: 0 0 auto;
+}
+
+.pm-brand-board {
+  position: relative;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+}
+
+.pm-brand-board::before {
+  position: absolute;
+  inset: 0;
+  border: 2px solid #ffffff;
+  border-radius: 5px;
+  content: "";
+}
+
+.pm-brand-board-card {
+  position: relative;
+  display: block;
+  height: 11px;
+  margin-top: 7px;
+  border-radius: 2px;
+  background: #ffffff;
+}
+
+.pm-brand-board-card--one {
+  height: 13px;
+  background: #7dd3fc;
+}
+
+.pm-brand-board-card--two {
+  animation: pm-brand-card-rise 2.6s ease-in-out infinite;
+  background: #ffffff;
+}
+
+.pm-brand-board-card--three {
+  height: 8px;
+  background: #14b8a6;
+}
+
+.pm-brand-board-node {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 7px;
+  height: 7px;
+  border: 2px solid #17407f;
+  border-radius: 50%;
+  background: #f8c14a;
+  animation: pm-brand-node-pulse 2.6s ease-in-out infinite;
+}
+
+@keyframes pm-brand-card-rise {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes pm-brand-node-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.16);
+  }
+}
+
+.pm-brand-title {
+  display: block;
+  color: var(--pm-sider-text) !important;
+  font-weight: 750;
+  line-height: 1.1;
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.22);
+}
+
+.pm-brand-subtitle {
+  display: block;
+  color: var(--pm-sider-muted) !important;
+  font-size: 12px;
+  margin-top: 4px;
+}
