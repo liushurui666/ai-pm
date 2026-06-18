@@ -1273,150 +1273,6 @@
   padding: 4px 0;
 }
 
-.project-calendar-toolbar {
-  max-width: 100%;
-  justify-content: flex-end;
-}
-
-.project-calendar-filter-field {
-  display: inline-grid;
-  grid-template-columns: auto minmax(220px, 320px);
-  gap: 8px;
-  align-items: center;
-}
-
-.project-calendar-filter-field > span {
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.project-calendar-project-select {
-  width: 320px !important;
-  max-width: 100%;
-}
-
-.project-calendar-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(420px, 0.78fr);
-  gap: 18px;
-  align-items: stretch;
-  margin-bottom: 18px;
-}
-
-.project-calendar-hero-copy {
-  display: grid;
-  align-content: center;
-  gap: 10px;
-  min-height: 150px;
-  padding: 22px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--brand) 14%, transparent), transparent 55%),
-    linear-gradient(180deg, var(--surface-elevated), var(--surface));
-}
-
-.project-calendar-hero-copy h3 {
-  margin: 0;
-  color: var(--foreground);
-  font-size: 28px;
-  line-height: 1.15;
-}
-
-.project-calendar-hero-stats {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.project-calendar-hero-stats .ant-statistic {
-  min-width: 0;
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-subtle);
-}
-
-.project-delay-summary {
-  display: grid;
-  gap: 12px;
-  margin-bottom: 18px;
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-}
-
-.project-delay-summary-stable {
-  border-color: color-mix(in srgb, var(--teal) 36%, var(--border));
-  background: color-mix(in srgb, var(--teal) 10%, var(--surface));
-}
-
-.project-delay-summary-risk {
-  border-color: color-mix(in srgb, var(--danger) 36%, var(--border));
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--danger) 12%, transparent), transparent 56%),
-    var(--surface);
-}
-
-.project-delay-summary .ant-typography-secondary {
-  display: block;
-  margin-top: 4px;
-}
-
-.project-delay-summary-icon {
-  margin-top: 3px;
-  color: var(--danger);
-  font-size: 18px;
-}
-
-.project-delay-risk-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 10px;
-}
-
-.project-delay-risk-tag {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 6px 8px;
-  align-items: center;
-  min-width: 0;
-  padding: 10px;
-  border: 1px solid color-mix(in srgb, var(--danger) 26%, var(--border));
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--surface-elevated) 88%, var(--danger) 12%);
-}
-
-.project-delay-risk-tag span {
-  overflow: hidden;
-  color: var(--foreground);
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.project-delay-risk-tag em {
-  grid-column: 2;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 12px;
-  font-style: normal;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.project-delay-summary-more {
-  border-radius: 8px;
-}
-
-.project-calendar-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 14px;
-  align-items: start;
-}
-
 .project-scheduler-shell {
   --project-scheduler-event-height: 52px;
   --project-scheduler-level-version-indent: 6px;
@@ -3898,8 +3754,6 @@
     grid-template-columns: 1fr;
   }
 
-  .project-calendar-hero,
-  .project-calendar-layout,
   .version-dashboard-hero,
   .version-dashboard-grid {
     grid-template-columns: 1fr;
@@ -3935,10 +3789,6 @@
     grid-column: span 1;
   }
 
-  .project-calendar-hero {
-    gap: 12px;
-  }
-
   .version-dashboard-hero-copy {
     grid-template-columns: 1fr;
   }
@@ -3951,34 +3801,6 @@
   .version-dashboard-mark-core {
     width: 46px;
     height: 46px;
-  }
-
-  .project-calendar-hero-copy {
-    min-height: auto;
-    padding: 16px;
-  }
-
-  .project-calendar-hero-copy h3 {
-    font-size: 24px;
-  }
-
-  .project-calendar-hero-stats {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .project-calendar-toolbar,
-  .project-calendar-filter-field,
-  .project-calendar-toolbar .ant-picker,
-  .project-calendar-project-select {
-    width: 100% !important;
-  }
-
-  .project-calendar-toolbar > .ant-space-item {
-    width: 100%;
-  }
-
-  .project-calendar-filter-field {
-    grid-template-columns: 1fr;
   }
 
   .task-version-filter,

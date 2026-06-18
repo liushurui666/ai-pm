@@ -1,7 +1,12 @@
 /* 延期汇总是排期页的风险提示带，正常态要轻，风险态要清楚但不抢走日历主体。 */
 .project-delay-summary {
+  display: grid;
+  gap: 12px;
   margin-bottom: 14px;
+  padding: 16px;
+  border: 1px solid var(--border);
   border-radius: 8px;
+  background: var(--surface);
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.045);
 }
 
@@ -23,7 +28,32 @@
     var(--surface);
 }
 
+.project-delay-summary .ant-typography-secondary {
+  display: block;
+  margin-top: 4px;
+}
+
+.project-delay-summary-icon {
+  margin-top: 3px;
+  color: var(--danger);
+  font-size: 18px;
+}
+
+.project-delay-risk-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
 .project-delay-risk-tag {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid;
+  border-radius: 8px;
   border-color: color-mix(in srgb, var(--danger) 20%, var(--border));
   background: color-mix(in srgb, var(--surface) 88%, var(--danger) 8%);
 }
@@ -31,6 +61,24 @@
 .project-delay-risk-tag .ant-tag {
   margin-inline-end: 0;
   font-weight: 700;
+}
+
+.project-delay-risk-tag span {
+  overflow: hidden;
+  color: var(--foreground);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-delay-risk-tag em {
+  grid-column: 2;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .project-delay-summary-more.ant-alert {
