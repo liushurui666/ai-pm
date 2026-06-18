@@ -149,19 +149,20 @@ export function ProjectsView({
         </Space>
       }
     >
-      <div className="project-calendar-hero">
-        <div className="project-calendar-hero-copy">
+      {/* 项目页顶部只承担当前筛选范围和交付信号摘要，不再使用大 hero，避免挤压真正的排期日历。 */}
+      <div className="project-calendar-summary">
+        <div className="project-calendar-summary-copy">
           <Space size={10} wrap>
             <Tag icon={<CalendarOutlined />}>全量任务</Tag>
             {versionRange ? <Tag>{versionRange}</Tag> : null}
             <Tag>{projectCount} 个关联项目</Tag>
           </Space>
-          <h3>{selectedVersion ? selectedVersion.name : "全版本交付日历"}</h3>
+          <h3>{selectedVersion ? selectedVersion.name : "全版本交付排期"}</h3>
           <Text type="secondary">
-            项目视图和任务看板都展示当前版本范围内的全部任务，不再按月份裁剪。
+            当前筛选范围会同步影响延期汇总和排期表，方便项目经理直接判断任务跨度、负责人负载和版本风险。
           </Text>
         </div>
-        <div className="project-calendar-hero-stats">
+        <div className="project-calendar-summary-stats">
           <Statistic
             title={selectedVersion ? "版本任务" : "任务总数"}
             value={versionTaskTotal}
