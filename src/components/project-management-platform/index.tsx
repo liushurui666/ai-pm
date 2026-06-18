@@ -82,6 +82,7 @@ import {
 import {
   AccountAvatarPopover,
   AccountPopoverContent,
+  AccountWorkspacePopover,
   AssistantSessionSidebar,
   WorkbenchSidebar,
   type StudioMenuGroup
@@ -1556,15 +1557,10 @@ export function ProjectManagementPlatform({
             trigger={null}
           >
             <WorkbenchSidebar
-              accountPopoverContent={accountPopoverContent}
               assistantSessionSidebar={assistantSessionSidebar}
               collapsed={collapsed}
-              currentWorkspaceName={currentWorkspace?.name ?? "当前工作区"}
               navigationView={navigationView}
               studioMenuGroups={studioMenuGroups}
-              userAvatarUrl={userAvatarUrl}
-              userInitial={userInitial}
-              userName={userName}
               onSwitchView={switchView}
             />
           </Sider>
@@ -1614,12 +1610,6 @@ export function ProjectManagementPlatform({
                 <Tooltip title="查看日程">
                   <Button icon={<CalendarOutlined />} onClick={() => setScheduleOpen(true)} />
                 </Tooltip>
-                <ThemeToggleButton
-                  mode={themeMode}
-                  effectiveTheme={effectiveTheme}
-                  onClick={cycleMode}
-                  showLabel={!isMobile}
-                />
                 {isMobile ? (
                   <AccountAvatarPopover
                     content={accountPopoverContent}
@@ -1627,7 +1617,18 @@ export function ProjectManagementPlatform({
                     userAvatarUrl={userAvatarUrl}
                     userInitial={userInitial}
                   />
-                ) : null}
+                ) : (
+                  <AccountWorkspacePopover
+                    content={accountPopoverContent}
+                    currentWorkspaceName={currentWorkspace?.name ?? "当前工作区"}
+                  />
+                )}
+                <ThemeToggleButton
+                  mode={themeMode}
+                  effectiveTheme={effectiveTheme}
+                  onClick={cycleMode}
+                  showLabel={false}
+                />
               </Space>
             </Header>
 

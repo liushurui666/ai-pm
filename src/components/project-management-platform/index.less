@@ -93,6 +93,19 @@
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.035);
 }
 
+.pm-header .theme-toggle-button.ant-btn,
+.pm-header-actions > .ant-space-item > .ant-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pm-header .theme-toggle-button.ant-btn {
+  width: 38px;
+  min-width: 38px;
+  padding: 0;
+}
+
 .pm-content {
   /* 内容区保持工作台密度：桌面多给一点呼吸感，移动端再收紧，避免表格页看起来像营销页。 */
   min-height: calc(100dvh - 64px);
@@ -197,6 +210,10 @@
   .pm-header-actions {
     justify-content: flex-end;
     flex-wrap: wrap;
+  }
+
+  .pm-header-workspace-trigger {
+    max-width: 152px;
   }
 
   .pm-header-actions .ant-tag {

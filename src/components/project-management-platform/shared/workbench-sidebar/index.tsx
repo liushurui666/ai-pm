@@ -1,17 +1,21 @@
 "use client";
 
 import "./index.less";
-import { Avatar, Button, Popover, Segmented, Typography } from "antd";
-import { DownOutlined, PlusOutlined } from "@ant-design/icons";
+import { Button, Segmented, Typography } from "antd";
+import { PlusOutlined } from "@ant-design/icons";
 import type { ReactNode } from "react";
-import { AccountAvatarPopover, AccountPopoverContent } from "@/components/project-management-platform/shared/workbench-sidebar/account-popover";
+import {
+  AccountAvatarPopover,
+  AccountPopoverContent,
+  AccountWorkspacePopover
+} from "@/components/project-management-platform/shared/workbench-sidebar/account-popover";
 import { AssistantSessionSidebar } from "@/components/project-management-platform/shared/workbench-sidebar/assistant-session-sidebar";
 import { Brand } from "@/components/project-management-platform/shared/brand";
 import type { AppView } from "@/components/project-management-platform/types";
 
 const { Text } = Typography;
 
-export { AccountAvatarPopover, AccountPopoverContent, AssistantSessionSidebar };
+export { AccountAvatarPopover, AccountPopoverContent, AccountWorkspacePopover, AssistantSessionSidebar };
 
 export type StudioMenuItem = {
   key: Exclude<AppView, "assistant" | "bugEdit">;
@@ -25,29 +29,19 @@ export type StudioMenuGroup = {
 };
 
 type WorkbenchSidebarProps = {
-  accountPopoverContent: ReactNode;
   assistantSessionSidebar: ReactNode | null;
   collapsed: boolean;
-  currentWorkspaceName: string;
   navigationView: AppView;
   studioMenuGroups: StudioMenuGroup[];
-  userAvatarUrl?: string;
-  userInitial: string;
-  userName: string;
   onSwitchView: (view: AppView) => void;
 };
 
-// 桌面侧栏只负责 Chat/Studio 模式切换和左下角工作区入口，主平台容器只传入当前状态与回调。
+// 桌面侧栏只负责 Chat/Studio 模式切换和 Studio 导航，账号与工作区入口统一上移到顶栏右侧。
 export function WorkbenchSidebar({
-  accountPopoverContent,
   assistantSessionSidebar,
   collapsed,
-  currentWorkspaceName,
   navigationView,
   studioMenuGroups,
-  userAvatarUrl,
-  userInitial,
-  userName,
   onSwitchView
 }: WorkbenchSidebarProps) {
   return (
@@ -106,28 +100,6 @@ export function WorkbenchSidebar({
           ))}
         </nav>
       )}
-      <Popover
-        arrow={false}
-        classNames={{ root: "pm-avatar-popover pm-account-popover" }}
-        content={accountPopoverContent}
-        placement="topLeft"
-        trigger="click"
-      >
-        <button className="pm-account-switcher" type="button" aria-label="打开账号与工作区菜单">
-          <Avatar className="pm-avatar" src={userAvatarUrl}>
-            {userInitial}
-          </Avatar>
-          {!collapsed ? (
-            <>
-              <span className="pm-account-copy">
-                <span>{currentWorkspaceName}</span>
-                <em>{userName}</em>
-              </span>
-              <DownOutlined className="pm-account-chevron" />
-            </>
-          ) : null}
-        </button>
-      </Popover>
     </div>
   );
 }

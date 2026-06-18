@@ -2,7 +2,7 @@
 
 import "./index.less";
 import { Avatar, Button, Popover, Select, Space, Tooltip, Typography } from "antd";
-import { LogoutOutlined, PlusOutlined } from "@ant-design/icons";
+import { DownOutlined, LogoutOutlined, PlusOutlined } from "@ant-design/icons";
 import type { ReactNode } from "react";
 import type { DashboardWorkspace } from "@/types/dashboard";
 
@@ -38,7 +38,12 @@ type AccountAvatarPopoverProps = {
   userInitial: string;
 };
 
-// 账号弹层同时承担身份确认和工作区切换；保持在侧栏模块内，避免桌面底部入口和移动头像入口出现两套结构。
+type AccountWorkspacePopoverProps = {
+  content: ReactNode;
+  currentWorkspaceName: string;
+};
+
+// 账号弹层同时承担身份确认和工作区切换；入口位置可以变化，但弹层内容保持一套交互。
 export function AccountPopoverContent({
   canCreateWorkspace,
   currentWorkspace,
@@ -122,7 +127,27 @@ export function AccountPopoverContent({
   );
 }
 
-// 移动端顶部头像和桌面侧栏底部账号入口共用同一弹层内容，只把触发器位置交给调用方决定。
+// 顶栏工作区入口承接原左下角入口的切换能力，并和主题切换一起组成全局控制区。
+export function AccountWorkspacePopover({ content, currentWorkspaceName }: AccountWorkspacePopoverProps) {
+  return (
+    <Popover
+      arrow={false}
+      classNames={{ root: "pm-avatar-popover pm-account-popover" }}
+      content={content}
+      placement="bottomRight"
+      trigger="click"
+    >
+      <button className="pm-header-workspace-trigger" type="button" aria-label="打开账号与工作区菜单">
+        <span className="pm-header-workspace-trigger-label" title={currentWorkspaceName}>
+          {currentWorkspaceName}
+        </span>
+        <DownOutlined className="pm-header-workspace-trigger-chevron" />
+      </button>
+    </Popover>
+  );
+}
+
+// 移动端空间更紧，保留头像入口，但仍复用同一套账号与工作区弹层。
 export function AccountAvatarPopover({
   content,
   placement,
