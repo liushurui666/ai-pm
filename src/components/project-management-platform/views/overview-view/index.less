@@ -25,20 +25,19 @@
   position: relative;
   gap: 14px;
   padding: 18px;
-  border-color: color-mix(in srgb, var(--brand) 16%, var(--border));
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--brand) 9%, transparent), transparent 44%),
-    linear-gradient(180deg, var(--surface-elevated), color-mix(in srgb, var(--surface) 94%, var(--surface-subtle) 6%));
-  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.07);
+  border-color: color-mix(in srgb, var(--brand) 12%, var(--border));
+  background: var(--surface-elevated);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
 }
 
 .overview-command-main.overview-personal-main::before {
   position: absolute;
-  inset: 0 0 auto;
-  height: 3px;
-  background: linear-gradient(90deg, var(--brand), var(--teal), var(--amber));
+  inset: 16px auto 16px 0;
+  width: 3px;
+  border-radius: 0 999px 999px 0;
+  background: var(--brand);
   content: "";
-  opacity: 0.72;
+  opacity: 0.76;
 }
 
 .overview-personal-header {
@@ -111,7 +110,7 @@
 
 .overview-personal-tools .ant-btn-primary {
   border-radius: 8px;
-  box-shadow: 0 10px 22px color-mix(in srgb, var(--brand) 22%, transparent);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--brand) 15%, transparent);
 }
 
 .overview-focus-total {
@@ -122,9 +121,7 @@
   padding: 8px 11px;
   border: 1px solid color-mix(in srgb, var(--brand) 22%, var(--border));
   border-radius: 8px;
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--brand) 10%, transparent), transparent 70%),
-    var(--surface);
+  background: color-mix(in srgb, var(--brand) 4%, var(--surface));
 }
 
 .overview-focus-total strong {
@@ -154,11 +151,9 @@
   min-height: 54px;
   gap: 10px;
   padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--overview-signal-tone) 20%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--overview-signal-tone) 18%, var(--border));
   border-radius: 8px;
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--overview-signal-tone) 9%, transparent), transparent 68%),
-    var(--surface);
+  background: var(--surface);
 }
 
 .overview-focus-signal span {
@@ -194,7 +189,7 @@
   border-radius: 8px;
   border-color: color-mix(in srgb, var(--border) 84%, transparent);
   background: var(--surface-elevated);
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
 }
 
 .overview-work-card .ant-card-head {
@@ -225,9 +220,7 @@
   border: 1px solid color-mix(in srgb, var(--overview-item-tone) 18%, var(--border));
   border-left: 4px solid color-mix(in srgb, var(--overview-item-tone) 72%, var(--border));
   border-radius: 8px;
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--overview-item-tone) 7%, transparent), transparent 78%),
-    var(--surface);
+  background: var(--surface);
   transition:
     border-color 160ms ease,
     background 160ms ease,
@@ -236,9 +229,7 @@
 
 .overview-work-item:hover {
   border-color: color-mix(in srgb, var(--overview-item-tone) 34%, var(--border));
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--overview-item-tone) 11%, transparent), transparent 78%),
-    var(--surface);
+  background: color-mix(in srgb, var(--overview-item-tone) 3%, var(--surface));
   transform: translateY(-1px);
 }
 
