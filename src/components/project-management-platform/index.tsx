@@ -4,17 +4,13 @@ import "./index.less";
 import {
   Alert,
   App,
-  Avatar,
   Button,
   ConfigProvider,
   Form,
   Grid,
   Input,
   Layout,
-  Popconfirm,
-  Popover,
   Segmented,
-  Select,
   Space,
   Spin,
   Tag,
@@ -27,16 +23,10 @@ import {
   CalendarOutlined,
   CheckCircleOutlined,
   DashboardOutlined,
-  DeleteOutlined,
-  DownOutlined,
-  DownloadOutlined,
   FundProjectionScreenOutlined,
-  LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  MessageOutlined,
   NodeIndexOutlined,
-  PlusOutlined,
   ProjectOutlined,
   SearchOutlined,
   TeamOutlined
@@ -89,7 +79,13 @@ import {
   RequirementVersionEditDrawer,
   TaskEditDrawer
 } from "@/components/project-management-platform/forms/record-drawers";
-import { Brand } from "@/components/project-management-platform/shared/brand";
+import {
+  AccountAvatarPopover,
+  AccountPopoverContent,
+  AssistantSessionSidebar,
+  WorkbenchSidebar,
+  type StudioMenuGroup
+} from "@/components/project-management-platform/shared/workbench-sidebar";
 import {
   updateDashboardWithDocumentAnalysis,
   updateDashboardWithMember,
@@ -127,17 +123,6 @@ export type { AppView } from "@/components/project-management-platform/types";
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
 const { useBreakpoint } = Grid;
-
-type StudioMenuItem = {
-  key: Exclude<AppView, "assistant" | "bugEdit">;
-  icon: ReactNode;
-  label: string;
-};
-
-type StudioMenuGroup = {
-  title: string;
-  items: StudioMenuItem[];
-};
 
 // 周报导出在浏览器侧完成，避免为了一个 Markdown 文件额外落库或新增下载接口。
 function downloadMarkdownFile(fileName: string, content: string) {
@@ -1272,99 +1257,10 @@ export function ProjectManagementPlatform({
       ]
     }
   ];
-  const renderAssistantSessionSidebar = useCallback((props: AssistantSessionSidebarRenderProps) => (
-    <div className="pm-chat-session-menu">
-      <Button
-        block
-        className="pm-chat-new-button"
-        disabled={props.disabled}
-        icon={<PlusOutlined />}
-        type="primary"
-        onClick={props.onCreateSession}
-      >
-        新建聊天
-      </Button>
-      <div className="pm-chat-session-actions" aria-label="当前对话操作">
-        <Tooltip title="导出当前对话">
-          <Button
-            aria-label="导出当前对话"
-            disabled={!props.hasUserMessages}
-            icon={<DownloadOutlined />}
-            type="text"
-            onClick={props.onExportConversation}
-          />
-        </Tooltip>
-        <Popconfirm
-          title="清空当前对话？"
-          okText="清空"
-          cancelText="取消"
-          disabled={props.disabled || !props.hasUserMessages}
-          onConfirm={props.onClearConversation}
-        >
-          <Tooltip title="清空当前对话">
-            <Button
-              aria-label="清空当前对话"
-              disabled={props.disabled || !props.hasUserMessages}
-              icon={<DeleteOutlined />}
-              type="text"
-            />
-          </Tooltip>
-        </Popconfirm>
-      </div>
-      <div className="pm-chat-history">
-        <Text className="pm-chat-history-title">历史对话</Text>
-        <div className="pm-chat-history-list">
-          {props.sessions.map((session) => {
-            const isActive = session.id === props.activeSessionId;
-            const updatedAt = session.updatedAt > 0
-              ? new Date(session.updatedAt).toLocaleDateString("zh-CN", {
-                  month: "2-digit",
-                  day: "2-digit"
-                })
-              : "刚刚";
-
-            return (
-              <div
-                className={isActive ? "pm-chat-history-item is-active" : "pm-chat-history-item"}
-                key={session.id}
-              >
-                <button
-                  className="pm-chat-history-main"
-                  disabled={props.disabled}
-                  type="button"
-                  aria-current={isActive ? "page" : undefined}
-                  onClick={() => props.onSelectSession(session.id)}
-                >
-                  <MessageOutlined />
-                  <span className="pm-chat-history-copy">
-                    <span>{session.title || "新对话"}</span>
-                    <em>{updatedAt}</em>
-                  </span>
-                </button>
-                <Popconfirm
-                  title="删除这条对话？"
-                  okText="删除"
-                  cancelText="取消"
-                  disabled={props.disabled}
-                  onConfirm={() => props.onDeleteSession(session.id)}
-                >
-                  <Tooltip title="删除对话">
-                    <Button
-                      aria-label="删除对话"
-                      className="pm-chat-history-delete"
-                      disabled={props.disabled}
-                      icon={<DeleteOutlined />}
-                      type="text"
-                    />
-                  </Tooltip>
-                </Popconfirm>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  ), []);
+  const renderAssistantSessionSidebar = useCallback(
+    (props: AssistantSessionSidebarRenderProps) => <AssistantSessionSidebar {...props} />,
+    []
+  );
   // 顶部账号入口只能展示真实认证上下文或当前成员信息，不能硬编码个人昵称兜底；
   // OAuth 切换时数据还在加载，使用中性文案可以避免 GitHub/Google 登录看起来都变成同一个人。
   const currentAuthUser = data?.meta?.user;
@@ -1386,73 +1282,26 @@ export function ProjectManagementPlatform({
     [data?.workspaces]
   );
   const accountPopoverContent = (
-    <Space className="pm-avatar-menu" orientation="vertical" size={12}>
-      <Space className="pm-avatar-profile" size={10}>
-        <Avatar className="pm-avatar" src={userAvatarUrl}>
-          {userInitial}
-        </Avatar>
-        <Space className="pm-avatar-profile-copy" orientation="vertical" size={0}>
-          <Text strong>{userName}</Text>
-          <Text type="secondary">{currentWorkspace?.name ?? "当前工作区"}</Text>
-        </Space>
-      </Space>
-      {data?.workspaces?.length ? (
-        <div className="pm-workspace-control">
-          <Text className="pm-avatar-menu-label" type="secondary">
-            工作区
-          </Text>
-          <Select
-            aria-label="切换工作区"
-            className="pm-workspace-select"
-            getPopupContainer={(triggerNode) =>
-              (triggerNode.closest(".pm-avatar-popover") as HTMLElement | null) ??
-              triggerNode.parentElement ??
-              document.body
-            }
-            open={workspaceSelectOpen}
-            value={currentWorkspace?.id}
-            options={workspaceOptions}
-            popupMatchSelectWidth={220}
-            popupRender={(menu) => (
-              <>
-                {menu}
-                <div className="pm-workspace-popup-divider" />
-                {permissions?.canManageMembers ? (
-                  <Button
-                    block
-                    className="pm-workspace-popup-action"
-                    icon={<PlusOutlined />}
-                    type="text"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => {
-                      setWorkspaceSelectOpen(false);
-                      workspaceForm.resetFields();
-                      setWorkspaceDrawerOpen(true);
-                    }}
-                  >
-                    新建工作区
-                  </Button>
-                ) : (
-                  <Tooltip title={permissionDeniedReason}>
-                    <span className="pm-workspace-popup-disabled">
-                      <PlusOutlined />
-                      新建工作区
-                    </span>
-                  </Tooltip>
-                )}
-              </>
-            )}
-            onOpenChange={setWorkspaceSelectOpen}
-            onChange={switchWorkspace}
-          />
-        </div>
-      ) : null}
-      {data?.meta?.user ? (
-        <Button block className="pm-account-logout-button" href={logoutHref} icon={<LogoutOutlined />}>
-          退出登录
-        </Button>
-      ) : null}
-    </Space>
+    <AccountPopoverContent
+      canCreateWorkspace={Boolean(permissions?.canManageMembers)}
+      currentWorkspace={currentWorkspace}
+      logoutHref={logoutHref}
+      permissionDeniedReason={permissionDeniedReason}
+      showLogout={Boolean(data?.meta?.user)}
+      userAvatarUrl={userAvatarUrl}
+      userInitial={userInitial}
+      userName={userName}
+      workspaceOptions={workspaceOptions}
+      workspaces={data?.workspaces}
+      workspaceSelectOpen={workspaceSelectOpen}
+      onCreateWorkspace={() => {
+        setWorkspaceSelectOpen(false);
+        workspaceForm.resetFields();
+        setWorkspaceDrawerOpen(true);
+      }}
+      onSwitchWorkspace={switchWorkspace}
+      onWorkspaceSelectOpenChange={setWorkspaceSelectOpen}
+    />
   );
   const requirementVersions = useMemo(() => data?.requirementVersions ?? [], [data?.requirementVersions]);
   const requirementVersionOptions = useMemo(
@@ -1706,85 +1555,18 @@ export function ProjectManagementPlatform({
             className={navigationView === "assistant" ? "pm-sider pm-sider--chat" : "pm-sider"}
             trigger={null}
           >
-            <div className="pm-mode-sidebar">
-              <Brand collapsed={collapsed} />
-              <Segmented
-                block
-                className="pm-mode-switch"
-                value={navigationView === "assistant" ? "chat" : "studio"}
-                options={[
-                  { label: "Chat", value: "chat" },
-                  { label: "Studio", value: "studio" }
-                ]}
-                onChange={(value) => {
-                  // Chat 是独立对话模式；从 Chat 回到 Studio 时默认落在个人工作台，
-                  // 避免用户停留在助手页却看到 Studio 被选中的错位状态。
-                  if (value === "chat") {
-                    switchView("assistant");
-                    return;
-                  }
-
-                  if (navigationView === "assistant") {
-                    switchView("overview");
-                  }
-                }}
-              />
-              {navigationView === "assistant" ? (
-                assistantSessionSidebar ?? (
-                  <div className="pm-chat-session-menu pm-chat-session-menu-loading">
-                    <Button block className="pm-chat-new-button" disabled icon={<PlusOutlined />}>
-                      新建聊天
-                    </Button>
-                    <Text className="pm-chat-history-title">历史对话加载中...</Text>
-                  </div>
-                )
-              ) : (
-                <nav className="pm-studio-menu" aria-label="工作台导航">
-                  {studioMenuGroups.map((group) => (
-                    <section className="pm-studio-menu-section" key={group.title} aria-label={group.title}>
-                      <Text className="pm-studio-menu-title">{group.title}</Text>
-                      <div className="pm-studio-menu-list">
-                        {group.items.map((item) => (
-                          <button
-                            className={navigationView === item.key ? "pm-studio-menu-item is-active" : "pm-studio-menu-item"}
-                            key={item.key}
-                            type="button"
-                            aria-current={navigationView === item.key ? "page" : undefined}
-                            onClick={() => switchView(item.key)}
-                          >
-                            <span className="pm-studio-menu-icon">{item.icon}</span>
-                            <span className="pm-studio-menu-label">{item.label}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </section>
-                  ))}
-                </nav>
-              )}
-              {/* 桌面端把账号与工作区切换固定在左下角，和 Chat/Studio 侧栏动线保持一致；移动端侧栏隐藏，仍保留顶部头像入口。 */}
-              <Popover
-                arrow={false}
-                classNames={{ root: "pm-avatar-popover pm-account-popover" }}
-                content={accountPopoverContent}
-                placement="topLeft"
-                trigger="click"
-              >
-                <button className="pm-account-switcher" type="button" aria-label="打开账号与工作区菜单">
-                  <Avatar className="pm-avatar" src={userAvatarUrl}>
-                    {userInitial}
-                  </Avatar>
-                  {!collapsed ? (
-                    <>
-                      <span className="pm-account-copy">
-                        <span>{currentWorkspace?.name ?? "当前工作区"}</span>
-                        <em>{userName}</em>
-                      </span>
-                      <DownOutlined className="pm-account-chevron" />
-                    </>
-                  ) : null}
-                </button>
-              </Popover>
-            </div>
+            <WorkbenchSidebar
+              accountPopoverContent={accountPopoverContent}
+              assistantSessionSidebar={assistantSessionSidebar}
+              collapsed={collapsed}
+              currentWorkspaceName={currentWorkspace?.name ?? "当前工作区"}
+              navigationView={navigationView}
+              studioMenuGroups={studioMenuGroups}
+              userAvatarUrl={userAvatarUrl}
+              userInitial={userInitial}
+              userName={userName}
+              onSwitchView={switchView}
+            />
           </Sider>
 
           <Layout className="pm-main">
@@ -1839,19 +1621,12 @@ export function ProjectManagementPlatform({
                   showLabel={!isMobile}
                 />
                 {isMobile ? (
-                  <Popover
-                    arrow={false}
-                    classNames={{ root: "pm-avatar-popover" }}
+                  <AccountAvatarPopover
                     content={accountPopoverContent}
                     placement="bottomRight"
-                    trigger="click"
-                  >
-                    <button className="pm-avatar-trigger" type="button" aria-label="打开账户菜单">
-                      <Avatar className="pm-avatar" src={userAvatarUrl}>
-                        {userInitial}
-                      </Avatar>
-                    </button>
-                  </Popover>
+                    userAvatarUrl={userAvatarUrl}
+                    userInitial={userInitial}
+                  />
                 ) : null}
               </Space>
             </Header>

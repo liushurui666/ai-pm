@@ -1,0 +1,245 @@
+/* 左侧导航是产品的全局入口，浅色主题下也保持深色品牌侧栏；
+   文本、分组标题和历史记录统一从这些变量取值，避免 Chat/Studio 两套模式颜色漂移。 */
+.pm-sider {
+  --pm-sider-bg: #07111f;
+  --pm-sider-bg-top: #10233a;
+  --pm-sider-bg-bottom: #040a13;
+  --pm-sider-panel: rgba(255, 255, 255, 0.07);
+  --pm-sider-panel-strong: rgba(255, 255, 255, 0.11);
+  --pm-sider-border-strong: rgba(208, 225, 249, 0.18);
+  --pm-sider-border-soft: rgba(208, 225, 249, 0.1);
+  --pm-sider-text: rgba(248, 251, 255, 0.96);
+  --pm-sider-text-strong: #ffffff;
+  --pm-sider-muted: rgba(203, 216, 235, 0.68);
+  --pm-sider-muted-soft: rgba(190, 205, 226, 0.5);
+  --pm-sider-accent: #8ecae6;
+  --pm-sider-accent-2: #f5c977;
+  position: fixed !important;
+  inset: 0 auto 0 0 !important;
+  z-index: 30;
+  height: 100dvh;
+  min-height: 100dvh;
+  overflow: auto;
+  border-right: 1px solid var(--pm-sider-border-soft);
+  background:
+    linear-gradient(180deg, var(--pm-sider-bg-top) 0, var(--pm-sider-bg) 48%, var(--pm-sider-bg-bottom) 100%) !important;
+  box-shadow:
+    18px 0 54px rgba(7, 12, 22, 0.22),
+    inset -1px 0 0 rgba(255, 255, 255, 0.035);
+}
+
+.pm-sider--chat {
+  --pm-sider-bg-top: #102033;
+  --pm-sider-bg: #08111d;
+  --pm-sider-bg-bottom: #050b14;
+  --pm-sider-panel: rgba(255, 255, 255, 0.065);
+  --pm-sider-panel-strong: rgba(255, 255, 255, 0.1);
+  --pm-sider-border-strong: rgba(207, 222, 245, 0.16);
+  --pm-sider-border-soft: rgba(207, 222, 245, 0.13);
+  --pm-sider-muted: rgba(197, 210, 230, 0.6);
+  --pm-sider-muted-soft: rgba(197, 210, 230, 0.5);
+}
+
+.pm-sider .ant-layout-sider-children {
+  display: flex;
+  min-height: 100dvh;
+  flex-direction: column;
+  background: transparent;
+}
+
+.pm-mode-sidebar {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  padding: 0 6px 18px;
+}
+
+/* 侧栏顶部是 Chat / Studio 工作模式切换，不是普通页面 Tab；
+   它需要始终停留在第一视觉层级，帮助用户区分“对话工作流”和“项目管理工作台”。 */
+.pm-mode-switch.ant-segmented {
+  width: 100%;
+  height: 36px;
+  margin: 0 0 18px;
+  padding: 4px;
+  border-radius: 14px;
+  border: 1px solid var(--pm-sider-border-soft);
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.pm-sider--chat .pm-mode-switch.ant-segmented {
+  height: 38px;
+  margin-bottom: 16px;
+  padding: 3px;
+  border-radius: 999px;
+}
+
+.pm-mode-switch.ant-segmented .ant-segmented-group {
+  width: 100%;
+}
+
+.pm-mode-switch.ant-segmented .ant-segmented-item {
+  flex: 1 1 0;
+  min-height: 28px;
+  color: var(--pm-sider-muted);
+  border-radius: 11px;
+  font-weight: 650;
+  transition:
+    color 160ms ease,
+    background 160ms ease;
+}
+
+.pm-mode-switch.ant-segmented .ant-segmented-item-selected {
+  color: var(--pm-sider-text-strong);
+}
+
+.pm-sider--chat .pm-mode-switch.ant-segmented .ant-segmented-item {
+  min-height: 30px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.pm-sider--chat .pm-mode-switch.ant-segmented .ant-segmented-item-selected {
+  color: var(--pm-sider-text-strong);
+}
+
+.pm-mode-switch.ant-segmented .ant-segmented-thumb,
+.pm-mode-switch.ant-segmented .ant-segmented-item-selected {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.08));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.09),
+    0 8px 18px rgba(0, 0, 0, 0.16);
+}
+
+.pm-sider--chat .pm-mode-switch.ant-segmented .ant-segmented-thumb,
+.pm-sider--chat .pm-mode-switch.ant-segmented .ant-segmented-item-selected {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.09),
+    0 8px 18px rgba(0, 0, 0, 0.18);
+}
+
+.pm-studio-menu {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 18px;
+  padding: 0 4px;
+}
+
+.pm-studio-menu-section {
+  width: 100%;
+  display: grid;
+  gap: 8px;
+}
+
+.pm-studio-menu-title {
+  padding: 0 8px;
+  color: var(--pm-sider-muted-soft) !important;
+  font-size: 12px;
+  font-weight: 680;
+  line-height: 22px;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.18);
+}
+
+.pm-studio-menu-list {
+  display: grid;
+  gap: 2px;
+}
+
+.pm-studio-menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 36px;
+  gap: 10px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--pm-sider-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 620;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.pm-studio-menu-item:hover {
+  background: var(--pm-sider-panel);
+  color: var(--pm-sider-text-strong);
+}
+
+.pm-studio-menu-item.is-active {
+  background:
+    linear-gradient(135deg, rgba(142, 202, 230, 0.12), rgba(255, 255, 255, 0.06));
+  color: var(--pm-sider-text-strong);
+  box-shadow:
+    inset 3px 0 0 color-mix(in srgb, var(--pm-sider-accent) 78%, #ffffff 4%),
+    inset 0 0 0 1px var(--pm-sider-border-soft);
+}
+
+.pm-studio-menu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  min-width: 16px;
+  color: currentColor;
+  font-size: 15px;
+}
+
+.pm-studio-menu-label {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-mode-sidebar {
+  align-items: center;
+  padding-inline: 8px;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-mode-switch.ant-segmented {
+  height: auto;
+  padding: 3px;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-mode-switch.ant-segmented .ant-segmented-item-label {
+  padding-inline: 4px;
+  font-size: 0;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-mode-switch.ant-segmented .ant-segmented-item-label::first-letter {
+  font-size: 12px;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-studio-menu {
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-studio-menu-section {
+  width: 100%;
+  justify-items: center;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-studio-menu-title,
+.pm-sider.ant-layout-sider-collapsed .pm-studio-menu-label {
+  display: none;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-studio-menu-item {
+  justify-content: center;
+  width: 42px;
+  min-height: 42px;
+  padding: 0;
+}

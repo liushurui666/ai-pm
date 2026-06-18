@@ -1,0 +1,219 @@
+/* 助手会话栏承接 Chat 模式的一切会话操作，固定控件高度避免历史标题和按钮在流式状态中跳动。 */
+.pm-chat-session-menu {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
+  padding: 0 4px;
+}
+
+.pm-chat-new-button.ant-btn {
+  justify-content: flex-start;
+  height: 42px;
+  border: 1px solid color-mix(in srgb, var(--pm-sider-accent) 36%, var(--pm-sider-border-soft));
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, rgba(142, 202, 230, 0.18), rgba(245, 201, 119, 0.08) 58%, rgba(255, 255, 255, 0.055));
+  color: var(--pm-sider-text);
+  box-shadow:
+    0 14px 28px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  font-weight: 700;
+}
+
+.pm-chat-new-button.ant-btn:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--pm-sider-accent) 60%, #ffffff 8%);
+  background:
+    linear-gradient(135deg, rgba(142, 202, 230, 0.25), rgba(245, 201, 119, 0.12) 58%, rgba(255, 255, 255, 0.075));
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.pm-chat-session-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+}
+
+.pm-chat-session-actions::before {
+  flex: 1;
+  height: 1px;
+  background: var(--pm-sider-border-soft);
+  content: "";
+}
+
+.pm-chat-session-actions .ant-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--pm-sider-muted);
+}
+
+.pm-chat-session-actions .ant-btn:not(:disabled):hover {
+  background: var(--pm-sider-panel);
+  color: var(--pm-sider-text-strong);
+}
+
+.pm-chat-history {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pm-chat-history-title {
+  padding: 0 8px;
+  color: var(--pm-sider-muted-soft) !important;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 22px;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.16);
+}
+
+.pm-chat-history-list {
+  display: grid;
+  min-height: 0;
+  gap: 4px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.pm-chat-history-item {
+  display: flex;
+  align-items: center;
+  min-height: 46px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--pm-sider-text);
+}
+
+.pm-chat-history-item:hover,
+.pm-chat-history-item.is-active {
+  border-color: var(--pm-sider-border-soft);
+  background: var(--pm-sider-panel);
+  color: var(--pm-sider-text-strong);
+}
+
+.pm-chat-history-item.is-active {
+  background:
+    linear-gradient(135deg, rgba(142, 202, 230, 0.13), rgba(255, 255, 255, 0.055));
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--pm-sider-accent) 80%, #ffffff 4%);
+}
+
+.pm-chat-history-main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  height: 46px;
+  padding: 0 8px 0 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.pm-chat-history-main:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.pm-chat-history-main .anticon {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--pm-sider-accent) 70%, #ffffff 10%);
+  font-size: 15px;
+}
+
+.pm-chat-history-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.pm-chat-history-copy span {
+  overflow: hidden;
+  color: var(--pm-sider-text) !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 18px;
+}
+
+.pm-chat-history-copy em {
+  color: var(--pm-sider-muted) !important;
+  font-size: 11px;
+  font-style: normal;
+  line-height: 14px;
+}
+
+.pm-chat-history-delete.ant-btn {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  margin-right: 4px;
+  border-radius: 9px;
+  color: var(--pm-sider-muted);
+  opacity: 0;
+}
+
+.pm-chat-history-item:hover .pm-chat-history-delete.ant-btn,
+.pm-chat-history-item.is-active .pm-chat-history-delete.ant-btn {
+  opacity: 1;
+}
+
+.pm-chat-history-delete.ant-btn:not(:disabled):hover {
+  color: #ffffff;
+  background: color-mix(in srgb, var(--danger) 34%, transparent);
+}
+
+.pm-chat-session-menu-loading {
+  color: color-mix(in srgb, #ffffff 52%, transparent);
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-chat-session-menu {
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-chat-new-button.ant-btn {
+  justify-content: center;
+  width: 42px;
+  min-width: 42px;
+  padding: 0;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-chat-new-button.ant-btn span:not(.anticon),
+.pm-sider.ant-layout-sider-collapsed .pm-chat-history-title,
+.pm-sider.ant-layout-sider-collapsed .pm-chat-history-copy,
+.pm-sider.ant-layout-sider-collapsed .pm-chat-history-delete {
+  display: none;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-chat-history,
+.pm-sider.ant-layout-sider-collapsed .pm-chat-history-list {
+  width: 100%;
+  align-items: center;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-chat-history-item {
+  justify-content: center;
+  width: 42px;
+  min-height: 42px;
+}
+
+.pm-sider.ant-layout-sider-collapsed .pm-chat-history-main {
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+}
