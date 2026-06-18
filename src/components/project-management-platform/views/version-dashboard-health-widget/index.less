@@ -1,1 +1,99 @@
-/* 组件样式统一收敛到同目录，当前组件暂无专属样式。 */
+/* 健康概览只服务版本大屏右上角组件，放在组件目录内避免全局看板样式继续膨胀。 */
+.version-board-health-card {
+  display: grid;
+  min-height: 190px;
+  align-content: start;
+  gap: 16px;
+  padding: 18px 20px;
+}
+
+.version-board-health-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.version-board-health-summary > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-subtle);
+}
+
+.version-board-health-summary strong {
+  color: var(--foreground);
+  font-size: 24px;
+  line-height: 1.05;
+}
+
+.version-board-health-summary .version-board-health-warning {
+  color: var(--amber);
+}
+
+.version-board-health-summary .version-board-health-danger {
+  color: var(--danger);
+}
+
+.version-board-health-progress {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.version-board-health-progress-row {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-subtle);
+}
+
+.version-board-health-progress-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 8px;
+}
+
+.version-board-health-progress-heading .ant-typography {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.version-board-health-progress-heading strong {
+  flex: 0 0 auto;
+  color: var(--foreground);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.version-board-health-progress-bar {
+  display: block;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-muted);
+}
+
+.version-board-health-progress-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--brand), var(--teal));
+}
+
+@media (max-width: 768px) {
+  .version-board-health-summary,
+  .version-board-health-progress {
+    grid-template-columns: 1fr;
+  }
+}
