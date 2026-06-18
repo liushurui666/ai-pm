@@ -21,9 +21,7 @@
   padding: 12px;
   border: 1px solid color-mix(in srgb, var(--brand) 10%, var(--border));
   border-radius: 8px;
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--brand) 5%, transparent), transparent 68%),
-    var(--surface);
+  background: var(--surface);
   transition:
     border-color 160ms ease,
     background 160ms ease,
@@ -32,9 +30,7 @@
 
 .search-result-item:hover {
   border-color: color-mix(in srgb, var(--brand) 24%, var(--border));
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--brand) 8%, transparent), transparent 68%),
-    var(--surface);
+  background: color-mix(in srgb, var(--brand) 3%, var(--surface));
   transform: translateY(-1px);
 }
 
@@ -81,9 +77,7 @@
   padding: 28px 0;
   border: 1px dashed color-mix(in srgb, var(--brand) 18%, var(--border));
   border-radius: 8px;
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--brand) 5%, transparent), transparent 72%),
-    var(--surface);
+  background: var(--surface);
 }
 
 @media (max-width: 520px) {
