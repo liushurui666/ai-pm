@@ -177,6 +177,14 @@ function normalizeIdentity(value: unknown) {
   return asText(value).trim().toLowerCase();
 }
 
+function isCurrentUserOwnerAlias(value: unknown) {
+  const normalizedValue = asText(value).replace(/\s+/g, "").toLowerCase();
+
+  // 批量创建任务的 owner 来自模型结构化参数；模型可能把“归属给我”理解成“当前登录人”文本。
+  // worker 是最后一道数据一致性防线，不能让这种展示词直接写入任务表，否则负责人看板、我的待办和通知队列都无法按成员身份匹配。
+  return ["我", "本人", "自己", "当前登录人", "当前用户", "登录人", "我这里", "这里"].includes(normalizedValue);
+}
+
 function getMemberNotificationIdentities(member: DashboardNotificationMember) {
   const notification = asNotificationSettings(member.notification);
 
@@ -225,6 +233,66 @@ function findTaskNotificationMember(members: DashboardNotificationMember[], draf
     const memberIdentities = getMemberNotificationIdentities(member);
 
     return targetIdentities.some((identity) => memberIdentities.includes(identity));
+  });
+}
+
+function resolveDraftOwnerMember({
+  draft,
+  members,
+  requestedBy
+}: {
+  draft: AssistantCreateTaskDraft;
+  members: DashboardNotificationMember[];
+  requestedBy?: string | null;
+}) {
+  const ownerText = asText(draft.owner);
+  const lookupValues = isCurrentUserOwnerAlias(ownerText)
+    ? [requestedBy]
+    : [
+        draft.ownerMemberId,
+        draft.ownerEmail,
+        draft.ownerOpenId,
+        draft.ownerUnionId,
+        draft.ownerUserId,
+        ownerText
+      ];
+  const normalizedLookupValues = lookupValues.map(normalizeIdentity).filter(Boolean);
+
+  if (!normalizedLookupValues.length) {
+    return undefined;
+  }
+
+  return members.find((member) => {
+    const memberIdentities = getMemberNotificationIdentities(member);
+
+    return normalizedLookupValues.some((identity) => memberIdentities.includes(identity));
+  });
+}
+
+function resolveCreateTaskDraftOwners({
+  drafts,
+  members,
+  requestedBy
+}: {
+  drafts: AssistantCreateTaskDraft[];
+  members: DashboardNotificationMember[];
+  requestedBy?: string | null;
+}) {
+  // AI 助手动作 job 可能来自旧模型输出或重试队列；这里按成员表再归一化一次 owner 字段。
+  // 只要能匹配到平台成员，就补齐 ownerMemberId/邮箱/飞书 open_id，后续通知队列和“我的任务”才能使用稳定身份字段。
+  return drafts.map((draft) => {
+    const member = resolveDraftOwnerMember({ draft, members, requestedBy });
+    const notification = member ? asNotificationSettings(member.notification) : undefined;
+
+    return member
+      ? {
+          ...draft,
+          owner: member.name,
+          ownerEmail: member.email ?? undefined,
+          ownerMemberId: member.id,
+          ownerOpenId: notification?.feishuOpenId ?? draft.ownerOpenId
+        }
+      : draft;
   });
 }
 
@@ -625,7 +693,17 @@ async function runCloseBugsJob(job: AssistantActionJob, recordIds: string[]) {
 
 async function runCreateTasksJob(job: AssistantActionJob, recordIds: string[]) {
   const prisma = getPrismaClient();
-  const drafts = asCreateTaskDrafts(job.result).slice(0, recordIds.length);
+  const rawDrafts = asCreateTaskDrafts(job.result).slice(0, recordIds.length);
+  const members = await prisma.dashboardMember.findMany({
+    where: {
+      workspaceId: job.workspaceId
+    }
+  });
+  const drafts = resolveCreateTaskDraftOwners({
+    drafts: rawDrafts,
+    members,
+    requestedBy: job.requestedBy
+  });
   const now = new Date();
 
   if (!drafts.length) {

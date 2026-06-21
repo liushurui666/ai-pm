@@ -68,6 +68,14 @@ function normalizeText(value?: string) {
   return value?.trim().toLowerCase() ?? "";
 }
 
+function isCurrentUserOwnerAlias(value?: string) {
+  const normalizedValue = normalizeText(value).replace(/\s+/g, "");
+
+  // 模型有时会把用户口语里的“归属给我”转成“当前登录人”这类展示文本。
+  // 这些词不能作为真实 owner 落库，必须回退到当前工作区匹配到的成员，才能写入 ownerMemberId 和飞书 open_id。
+  return ["我", "本人", "自己", "当前登录人", "当前用户", "登录人", "我这里", "这里"].includes(normalizedValue);
+}
+
 function sanitizeAssistantFactText(value: unknown) {
   if (value === null || value === undefined) {
     return value;
@@ -342,7 +350,7 @@ function findTaskOwnerForDraft(
   ownerName: string | undefined,
   currentUserMatcher: ReturnType<typeof createCurrentUserMatcher>
 ) {
-  const normalizedOwner = normalizeText(ownerName);
+  const normalizedOwner = isCurrentUserOwnerAlias(ownerName) ? "" : normalizeText(ownerName);
   const member = normalizedOwner
     ? data.members.find((item) => normalizeText(item.name) === normalizedOwner || normalizeText(item.email) === normalizedOwner)
     : currentUserMatcher.member;
