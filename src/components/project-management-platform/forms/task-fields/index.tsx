@@ -6,19 +6,17 @@ import dayjs from "dayjs";
 import type { OwnerSelectableMember, RequirementVersionOption } from "@/components/project-management-platform/types";
 import { taskStages } from "@/components/project-management-platform/constants";
 import { OwnerSelect } from "@/components/project-management-platform/forms/owner-select";
-import { VersionProjectFields } from "@/components/project-management-platform/forms/version-fields";
+import { VersionOnlyField } from "@/components/project-management-platform/forms/version-fields";
 
-// 任务字段承接文档拆解和手动创建，两种入口共享同一套校验。
+// 任务字段承接手动创建和编辑；任务的项目归属由所选版本反推，避免用户再手动选择项目造成版本与项目不一致。
 export function TaskFields({
   form,
-  projectOptions,
   versionOptions,
   people,
   peopleLoading,
   peopleError
 }: {
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
-  projectOptions: string[];
   versionOptions: RequirementVersionOption[];
   people: OwnerSelectableMember[];
   peopleLoading: boolean;
@@ -41,7 +39,7 @@ export function TaskFields({
           </Form.Item>
         </Col>
       </Row>
-      <VersionProjectFields form={form} projectOptions={projectOptions} versionOptions={versionOptions} />
+      <VersionOnlyField form={form} versionOptions={versionOptions} />
       <OwnerSelect form={form} people={people} loading={peopleLoading} error={peopleError} />
       <Row gutter={12}>
         <Col span={12}>

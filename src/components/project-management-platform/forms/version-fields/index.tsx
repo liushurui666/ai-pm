@@ -62,7 +62,7 @@ function useSyncProjectWithVersion(
   }, [form, selectedVersionId, syncCrossProject, versionOptions]);
 }
 
-// 同时展示版本与项目字段，适用于任务和文档拆解这类需要落到项目范围的记录。
+// 同时展示版本与项目字段，仅保留给仍需显式选择项目的兼容表单；任务/Bug 应使用 VersionOnlyField 由版本反推项目。
 export function VersionProjectFields({
   form,
   projectOptions,

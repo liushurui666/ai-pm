@@ -1852,7 +1852,6 @@ export function ProjectManagementPlatform({
             form={editForm}
             task={editingTask}
             submitting={editSubmitting}
-            projectOptions={projectOptions}
             versionOptions={requirementVersionOptions}
             people={ownerOptions}
             peopleLoading={ownerSelectLoading}

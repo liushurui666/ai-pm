@@ -64,12 +64,11 @@ export function ProjectEditDrawer({
   );
 }
 
-// 任务编辑抽屉复用任务字段，确保手动任务和文档拆解任务保持一致。
+// 任务编辑抽屉复用任务字段；项目归属继续由版本隐藏同步，避免编辑时重新暴露项目选择。
 export function TaskEditDrawer({
   form,
   task,
   submitting,
-  projectOptions,
   versionOptions,
   people,
   peopleLoading,
@@ -80,7 +79,6 @@ export function TaskEditDrawer({
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   task: Task | null;
   submitting: boolean;
-  projectOptions: string[];
   versionOptions: RequirementVersionOption[];
   people: OwnerSelectableMember[];
   peopleLoading: boolean;
@@ -116,7 +114,6 @@ export function TaskEditDrawer({
             people={people}
             peopleLoading={peopleLoading}
             peopleError={peopleError}
-            projectOptions={projectOptions}
             versionOptions={versionOptions}
           />
         </Form>
