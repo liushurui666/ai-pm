@@ -275,19 +275,10 @@ async function processMySqlDashboardSideEffectJobs(workerId: string) {
   return true;
 }
 
-export async function runDashboardSideEffectWorker(workerId: string) {
-  if (isBullMqDashboardSideEffectQueueEnabled()) {
-    await runBullMqDashboardSideEffectWorker({
-      workerId,
-      onJob: runDashboardSideEffectJob
-    });
-
-    return;
-  }
-
+async function runMySqlDashboardSideEffectDrainLoop(workerId: string) {
   const settings = getDashboardSideEffectSettings();
 
-  console.log(`[dashboard-side-effect-worker] MySQL fallback worker ready: ${workerId}`);
+  console.log(`[dashboard-side-effect-worker] MySQL fallback drain ready: ${workerId}`);
 
   while (true) {
     const handled = await processMySqlDashboardSideEffectJobs(workerId);
@@ -296,6 +287,25 @@ export async function runDashboardSideEffectWorker(workerId: string) {
       await sleep(settings.workerPollMs);
     }
   }
+}
+
+export async function runDashboardSideEffectWorker(workerId: string) {
+  if (isBullMqDashboardSideEffectQueueEnabled()) {
+    // 生产启用 Redis/BullMQ 后，新通知会进入 Redis；但历史版本或缺 REDIS_URL 的 Web 进程可能已经把通知写进 MySQL fallback 表。
+    // 如果 Redis worker 完全不扫 MySQL，旧通知会永久停在 queued，用户看到“已入队”却一直收不到飞书/邮件。
+    void runMySqlDashboardSideEffectDrainLoop(`${workerId}-mysql-fallback`).catch((error) => {
+      console.error("[dashboard-side-effect-worker] MySQL fallback drain failed", error);
+    });
+
+    await runBullMqDashboardSideEffectWorker({
+      workerId,
+      onJob: runDashboardSideEffectJob
+    });
+
+    return;
+  }
+
+  await runMySqlDashboardSideEffectDrainLoop(workerId);
 }
 
 export function createNotificationPayload(input: {

@@ -1234,6 +1234,7 @@ function createMemberFromUser(user: FeishuUser, role: MemberRole, workspaceId = 
   const identities: DashboardMember["identities"] = [];
   const authProvider = getAuthIdentityProvider(user);
   const authUserId = getAuthIdentityUserId(user);
+  const feishuNotificationOpenId = getFeishuNotificationOpenId(user);
   const profileEmail = getMemberProfileEmail(user);
 
   // 登录身份只保存 SDK 的 authUserId；OAuth provider 的原始 id 仅用于飞书通知字段，不再参与运行时成员匹配。
@@ -1259,23 +1260,23 @@ function createMemberFromUser(user: FeishuUser, role: MemberRole, workspaceId = 
     status: "active",
     identities,
     notification: {
-      channels: authProvider === "feishu" && user.openId
+      channels: feishuNotificationOpenId
         ? [
             {
               id: createLocalId("notificationChannel"),
               provider: "feishu",
               enabled: true,
               name: "飞书",
-              target: user.openId,
-              feishuOpenId: user.openId,
+              target: feishuNotificationOpenId,
+              feishuOpenId: feishuNotificationOpenId,
               feishuUnionId: user.unionId,
               feishuUserId: user.userId,
               scenes: [...defaultNotificationScenes]
             }
           ]
         : [],
-      feishuEnabled: authProvider === "feishu" && Boolean(user.openId),
-      feishuOpenId: authProvider === "feishu" ? user.openId || undefined : undefined,
+      feishuEnabled: Boolean(feishuNotificationOpenId),
+      feishuOpenId: feishuNotificationOpenId,
       feishuUnionId: authProvider === "feishu" ? user.unionId : undefined,
       feishuUserId: authProvider === "feishu" ? user.userId : undefined,
       taskAssigned: true,
@@ -1294,6 +1295,12 @@ function getAuthIdentityProvider(user: FeishuUser): MemberIdentityProvider {
 
 function getAuthIdentityUserId(user: FeishuUser) {
   return user.authUserId;
+}
+
+function getFeishuNotificationOpenId(user: FeishuUser) {
+  // 统一认证 user.openId 可能是 SDK authUserId；只有飞书机器人接口接受的 `ou_...` 才能写入通知渠道。
+  // 这里做最后一道防线，避免页面读数据时把不可投递的身份再次同步回成员通知配置。
+  return getAuthIdentityProvider(user) === "feishu" && user.openId.startsWith("ou_") ? user.openId : undefined;
 }
 
 function normalizeIdentityEmail(value: unknown) {
@@ -1478,6 +1485,7 @@ function syncMemberProfile(member: DashboardMember, user: FeishuUser) {
   const feishuChannelIndex = channels.findIndex((channel) => channel.provider === "feishu");
   const authProvider = getAuthIdentityProvider(user);
   const authUserId = getAuthIdentityUserId(user);
+  const feishuNotificationOpenId = getFeishuNotificationOpenId(user);
   const hasAuthProviderIdentity = member.identities.some(
     (identity) => identity.provider === authProvider && identity.providerUserId === authUserId
   );
@@ -1485,22 +1493,22 @@ function syncMemberProfile(member: DashboardMember, user: FeishuUser) {
 
   // 资料同步发生在页面读数据时，只补齐 SDK authUserId 对应的身份；飞书通知通道必须限定飞书来源，
   // 避免 Google/GitHub 登录用户被错误创建机器人通知目标。
-  if (authProvider === "feishu" && user.openId && feishuChannelIndex >= 0) {
+  if (feishuNotificationOpenId && feishuChannelIndex >= 0) {
     channels[feishuChannelIndex] = {
       ...channels[feishuChannelIndex],
-      target: channels[feishuChannelIndex].target || user.openId,
-      feishuOpenId: channels[feishuChannelIndex].feishuOpenId || user.openId,
+      target: channels[feishuChannelIndex].target?.startsWith("ou_") ? channels[feishuChannelIndex].target : feishuNotificationOpenId,
+      feishuOpenId: channels[feishuChannelIndex].feishuOpenId?.startsWith("ou_") ? channels[feishuChannelIndex].feishuOpenId : feishuNotificationOpenId,
       feishuUnionId: channels[feishuChannelIndex].feishuUnionId || user.unionId,
       feishuUserId: channels[feishuChannelIndex].feishuUserId || user.userId
     };
-  } else if (authProvider === "feishu" && user.openId) {
+  } else if (feishuNotificationOpenId) {
     channels.push({
       id: createLocalId("notificationChannel"),
       provider: "feishu",
       enabled: member.notification.feishuEnabled,
       name: "飞书",
-      target: user.openId,
-      feishuOpenId: user.openId,
+      target: feishuNotificationOpenId,
+      feishuOpenId: feishuNotificationOpenId,
       feishuUnionId: user.unionId,
       feishuUserId: user.userId,
       scenes: getLegacyNotificationScenes({}, member.notification)
@@ -1520,7 +1528,9 @@ function syncMemberProfile(member: DashboardMember, user: FeishuUser) {
     notification: {
       ...member.notification,
       channels,
-      feishuOpenId: authProvider === "feishu" ? member.notification.feishuOpenId || user.openId || undefined : member.notification.feishuOpenId,
+      feishuOpenId: feishuNotificationOpenId
+        ? member.notification.feishuOpenId?.startsWith("ou_") ? member.notification.feishuOpenId : feishuNotificationOpenId
+        : member.notification.feishuOpenId,
       feishuUnionId: authProvider === "feishu" ? member.notification.feishuUnionId || user.unionId : member.notification.feishuUnionId,
       feishuUserId: authProvider === "feishu" ? member.notification.feishuUserId || user.userId : member.notification.feishuUserId
     }

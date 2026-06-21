@@ -11,6 +11,42 @@ import type { FeishuUser } from "@/types/dashboard";
 const DEFAULT_APP_URL = "http://localhost:3004";
 const SUPPORTED_MEMBER_IDENTITY_PROVIDERS = new Set(["feishu", "google", "github", "email"]);
 
+function isFeishuOpenId(value: unknown): value is string {
+  return typeof value === "string" && value.startsWith("ou_");
+}
+
+function asAuthUserText(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function getFeishuOpenIdFromSyntheticEmail(value: unknown) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalizedEmail = value.trim();
+
+  return normalizedEmail.startsWith("ou_") && normalizedEmail.endsWith("@feishu.local")
+    ? normalizedEmail.split("@")[0]
+    : undefined;
+}
+
+function resolveFeishuOpenId(user: AuthUser, metadata: Record<string, unknown>) {
+  const metadataOpenId = metadata.feishuOpenId;
+
+  if (isFeishuOpenId(metadataOpenId)) {
+    return metadataOpenId;
+  }
+
+  const emailOpenId = getFeishuOpenIdFromSyntheticEmail(user.email);
+
+  if (emailOpenId) {
+    return emailOpenId;
+  }
+
+  return isFeishuOpenId(user.id) ? asAuthUserText(user.id) : undefined;
+}
+
 type AiPmAuthClientOptions = Partial<Pick<CreateAuthServiceClientOptions, "authBaseURL" | "defaultRedirectURI" | "fetcher">>;
 type AiPmAuthHrefOptions = {
   appBaseURL?: string;
@@ -101,7 +137,12 @@ export function mapAuthUserToFeishuUser(user?: AuthUser | null): FeishuUser | nu
   const metadata = user?.metadata ?? {};
   const rawProvider = typeof metadata.provider === "string" ? metadata.provider : undefined;
   const authProvider = rawProvider && SUPPORTED_MEMBER_IDENTITY_PROVIDERS.has(rawProvider) ? rawProvider : "email";
-  const openId = typeof metadata.feishuOpenId === "string" ? metadata.feishuOpenId : user?.id;
+  const authUserId = asAuthUserText(user?.id);
+  // Auth Service 的 user.id 是统一身份 id，不一定是飞书 open_id；机器人消息接口只接受 `ou_...`。
+  // 早期 Feishu 登录会把 open_id 落成 `ou_xxx@feishu.local` 占位邮箱，这里优先从 metadata 和占位邮箱恢复真实 open_id。
+  const openId = user
+    ? authProvider === "feishu" ? resolveFeishuOpenId(user, metadata) ?? authUserId : authUserId
+    : undefined;
 
   if (!user || !openId) {
     return null;
@@ -109,7 +150,7 @@ export function mapAuthUserToFeishuUser(user?: AuthUser | null): FeishuUser | nu
 
   return {
     authProvider: authProvider as FeishuUser["authProvider"],
-    authUserId: user.id,
+    authUserId,
     avatarUrl: user.avatarUrl ?? undefined,
     email: user.email ?? undefined,
     enName: typeof metadata.enName === "string" ? metadata.enName : undefined,

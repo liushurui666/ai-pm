@@ -51,6 +51,8 @@
 | AIC-041 | 批量动作队列 | 发送“把我所有的任务都关闭了”或“关闭所有 Bug” | `bulkCompleteTasks` / `bulkCloseBugs` 只提交 `assistant_action_jobs` 队列，不再同步循环 PATCH；worker 批量 updateMany 后写回成功/失败统计，ChatBox 不因几十条记录长时间 pending | 通过：真实 `glm-5.1` + 临时工作区任务队列验证 |
 | AIC-042 | 批量归属任务 | 在上下文已有多个任务 ID 后发送“把这几个任务归属到我这里” | `bulkAssignTasks` 提交 `assistant_action_jobs` 队列，worker 同步 `owner`、`ownerMemberId`、邮箱和飞书身份；缺失 ID 必须进入失败明细，助手不能回复全量成功 | 通过：真实 MySQL 队列验证，发现 2 条旧 ID 缺失并补齐业务数据 |
 | AIC-043 | 动作中断防假成功 | 批量归属/创建/关闭动作过程中模拟连接中断或历史成功文本污染 | 没有本轮动作执行结果时，助手只能说明本次未确认完成，不能说已更新、已触发通知或已完成 | 待回归 |
+| AIC-044 | 批量创建任务完成态 | 发送“1.xxx 2.yyy 3.zzz 新建任务并归属给我” | `bulkCreateTasks` 必须返回后台 job 的确认态、成功/失败数量和通知入队字段；未调用 tool 或仅入队未完成时，助手不能编造任务 ID、成功列表或飞书已触发 | 通过：生产 MySQL 数据修复与通知队列回归 |
+| AIC-045 | 飞书 open_id 修正 | 使用飞书登录成员创建/归属任务并触发负责人通知 | 成员通知渠道只能写入 `ou_...` 飞书 open_id；Auth 用户 id 或其他 provider id 不能被同步到 `feishuOpenId/target`，通知 worker 发送后 job 应为 `succeeded` | 通过：生产通知 worker 验证 5 条通知 succeeded |
 
 ## 十轮对话稳定性脚本
 

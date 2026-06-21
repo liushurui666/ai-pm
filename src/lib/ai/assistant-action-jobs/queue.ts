@@ -3,6 +3,8 @@ import type { AssistantActionJob, Prisma } from "@prisma/client";
 import { toJsonValue } from "@/lib/database/json";
 import { getPrismaClient } from "@/lib/database/prisma";
 import { createIndexQueue } from "@/lib/ai/knowledge/index-queue";
+import { createDashboardSideEffectQueue, createNotificationPayload } from "@/lib/dashboard-side-effects";
+import { getEmailNotificationSettings } from "@/lib/notifications/email";
 
 const maxJobRecordIds = 500;
 const defaultActionJobLockMs = 5 * 60 * 1000;
@@ -58,6 +60,30 @@ type ProcessAssistantActionJobsOptions = {
   workerId?: string;
 };
 
+type NotificationChannel = {
+  id?: string;
+  provider?: string;
+  enabled?: boolean;
+  target?: string;
+  feishuOpenId?: string;
+  email?: string;
+  scenes?: string[];
+};
+
+type NotificationSettings = {
+  channels?: NotificationChannel[];
+  feishuOpenId?: string;
+};
+
+type DashboardNotificationMember = {
+  id: string;
+  name: string;
+  email: string | null;
+  status: string;
+  identities: Prisma.JsonValue;
+  notification: Prisma.JsonValue;
+};
+
 const globalForAssistantActionJobs = globalThis as typeof globalThis & {
   aiPmAssistantActionRunner?: Promise<void>;
 };
@@ -70,6 +96,10 @@ function readPositiveNumberEnv(name: string, fallback: number) {
 
 function normalizeRecordIds(recordIds: string[]) {
   return [...new Set(recordIds.map((id) => id.trim()).filter(Boolean))].slice(0, maxJobRecordIds);
+}
+
+function asText(value: unknown, fallback = "") {
+  return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
 
 function asStringArray(value: Prisma.JsonValue) {
@@ -131,6 +161,212 @@ function asTaskOwnerDraft(value: Prisma.JsonValue) {
   }
 
   return draft;
+}
+
+function asNotificationSettings(value: Prisma.JsonValue): NotificationSettings {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as NotificationSettings : {};
+}
+
+function asMemberIdentityObjects(value: Prisma.JsonValue) {
+  return Array.isArray(value)
+    ? value.filter((item): item is Prisma.JsonObject => Boolean(item && typeof item === "object" && !Array.isArray(item)))
+    : [];
+}
+
+function normalizeIdentity(value: unknown) {
+  return asText(value).trim().toLowerCase();
+}
+
+function getMemberNotificationIdentities(member: DashboardNotificationMember) {
+  const notification = asNotificationSettings(member.notification);
+
+  return [
+    member.id,
+    member.name,
+    member.email,
+    notification.feishuOpenId,
+    ...(notification.channels ?? []).flatMap((channel) => [
+      channel.target,
+      channel.feishuOpenId,
+      channel.email
+    ]),
+    ...asMemberIdentityObjects(member.identities).flatMap((identity) => [
+      identity.providerUserId,
+      identity.providerUnionId,
+      identity.providerTenantUserId,
+      identity.email
+    ])
+  ]
+    .map(normalizeIdentity)
+    .filter(Boolean);
+}
+
+function getTaskNotificationIdentities(draft: AssistantCreateTaskDraft) {
+  return [
+    draft.ownerMemberId,
+    draft.ownerOpenId,
+    draft.ownerUnionId,
+    draft.ownerUserId,
+    draft.ownerEmail,
+    draft.owner
+  ]
+    .map(normalizeIdentity)
+    .filter(Boolean);
+}
+
+function findTaskNotificationMember(members: DashboardNotificationMember[], draft: AssistantCreateTaskDraft) {
+  const targetIdentities = getTaskNotificationIdentities(draft);
+
+  if (!targetIdentities.length) {
+    return undefined;
+  }
+
+  return members.find((member) => {
+    const memberIdentities = getMemberNotificationIdentities(member);
+
+    return targetIdentities.some((identity) => memberIdentities.includes(identity));
+  });
+}
+
+function getTaskNotificationChannels(member: DashboardNotificationMember) {
+  const notification = asNotificationSettings(member.notification);
+
+  return (notification.channels ?? []).filter(
+    (channel) => (channel.provider === "feishu" || channel.provider === "email") && channel.enabled && (channel.scenes ?? []).includes("taskAssigned")
+  );
+}
+
+function getDispatchableTaskNotificationChannels(channels: NotificationChannel[]) {
+  const emailSettings = getEmailNotificationSettings();
+  const emailConfigured = Boolean(emailSettings.apiKey && emailSettings.from);
+
+  return {
+    channels: channels.filter((channel) => channel.provider !== "email" || emailConfigured),
+    emailDisabledReason: channels.some((channel) => channel.provider === "email") && !emailConfigured
+      ? "邮箱通知未配置 RESEND_API_KEY 或 EMAIL_FROM，邮箱不会发送。"
+      : ""
+  };
+}
+
+function getTaskOwnerNotificationSignature(draft: AssistantCreateTaskDraft) {
+  return [
+    draft.ownerMemberId,
+    draft.ownerOpenId,
+    draft.ownerUnionId,
+    draft.ownerUserId,
+    draft.ownerEmail,
+    draft.owner
+  ]
+    .map(normalizeIdentity)
+    .filter(Boolean)
+    .join("|")
+    .slice(0, 80);
+}
+
+function getNotificationChannelDedupePart(channel: NotificationChannel) {
+  return [
+    channel.provider,
+    channel.id,
+    channel.target,
+    channel.feishuOpenId,
+    channel.email
+  ]
+    .map((value) => asText(value).trim())
+    .filter(Boolean)
+    .join(":")
+    .slice(0, 80);
+}
+
+async function enqueueCreatedTaskOwnerNotifications({
+  drafts,
+  job,
+  recordIds
+}: {
+  drafts: AssistantCreateTaskDraft[];
+  job: AssistantActionJob;
+  recordIds: string[];
+}) {
+  const prisma = getPrismaClient();
+  const members = await prisma.dashboardMember.findMany({
+    where: {
+      workspaceId: job.workspaceId
+    }
+  });
+  const queue = createDashboardSideEffectQueue();
+  const skippedReasons: string[] = [];
+  let enqueuedCount = 0;
+
+  // AI 批量创建绕过了 /api/records 的单条保存路径，因此负责人通知也必须在 worker 侧显式补齐。
+  // 这里只投递 side-effect 队列，不直接发送飞书/邮箱，避免通知服务慢或失败反过来阻塞任务落库。
+  for (const [index, draft] of drafts.entries()) {
+    const taskId = recordIds[index];
+    const member = findTaskNotificationMember(members, draft);
+
+    if (!taskId) {
+      skippedReasons.push(`${draft.title}：缺少任务 ID，无法投递通知。`);
+      continue;
+    }
+
+    if (!getTaskNotificationIdentities(draft).length) {
+      skippedReasons.push(`${draft.title}：缺少负责人身份，未投递通知。`);
+      continue;
+    }
+
+    if (!member) {
+      skippedReasons.push(`${draft.title}：负责人 ${draft.owner} 未在成员管理中匹配到成员。`);
+      continue;
+    }
+
+    if (member.status !== "active") {
+      skippedReasons.push(`${draft.title}：负责人 ${member.name} 已被禁用。`);
+      continue;
+    }
+
+    const deliveryChannels = getTaskNotificationChannels(member);
+
+    if (!deliveryChannels.length) {
+      skippedReasons.push(`${draft.title}：负责人 ${member.name} 未启用任务分配通知。`);
+      continue;
+    }
+
+    const dispatchableDelivery = getDispatchableTaskNotificationChannels(deliveryChannels);
+
+    if (!dispatchableDelivery.channels.length) {
+      skippedReasons.push(`${draft.title}：${dispatchableDelivery.emailDisabledReason}`);
+      continue;
+    }
+
+    await Promise.all(dispatchableDelivery.channels.map(async (channel) => {
+      await queue.enqueue({
+        workspaceId: job.workspaceId,
+        entityType: "task",
+        entityId: taskId,
+        jobType: "notify_owner",
+        dedupeKey: `${job.workspaceId}:task:${taskId}:notify_owner:${getTaskOwnerNotificationSignature(draft)}:${getNotificationChannelDedupePart(channel)}`.slice(0, 191),
+        payload: createNotificationPayload({
+          targetIdentities: getTaskNotificationIdentities(draft),
+          notificationScene: "taskAssigned",
+          ownerName: draft.owner,
+          cardTitle: "你被设置为任务负责人",
+          cardText: `**${draft.title}**\n\n请在 AI PM 平台查看详情并确认下一步动作。`,
+          view: "tasks",
+          channelProvider: channel.provider,
+          channelId: channel.id
+        })
+      });
+      enqueuedCount += 1;
+    }));
+
+    if (dispatchableDelivery.emailDisabledReason) {
+      skippedReasons.push(`${draft.title}：${dispatchableDelivery.emailDisabledReason}`);
+    }
+  }
+
+  return {
+    通知入队数: enqueuedCount,
+    通知状态: enqueuedCount > 0 ? "已提交后台通知队列，实际送达由通知 worker 异步完成。" : "未提交通知。",
+    通知未发送原因: skippedReasons.slice(0, 8)
+  };
 }
 
 function createWorkerId(prefix = "assistant-action") {
@@ -397,7 +633,7 @@ async function runCreateTasksJob(job: AssistantActionJob, recordIds: string[]) {
   }
 
   // 批量创建任务不再回调 /api/records；worker 一次 createMany 写入 project_tasks，避免 Chat 流式请求被多次业务 API 保存拖住。
-  // 任务通知目前只在负责人变更/单条创建路径触发，AI 批量创建先保证可用性，后续如需要可再补 side-effect 队列通知。
+  // 因为绕开了单条保存路径，负责人通知需要在这里显式投递 side-effect 队列，否则模型会误报“通知已触发”但飞书/邮箱没有任何任务。
   await prisma.projectTask.createMany({
     data: drafts.map((draft, index) => ({
       id: recordIds[index] ?? `task-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`,
@@ -421,6 +657,22 @@ async function runCreateTasksJob(job: AssistantActionJob, recordIds: string[]) {
     }))
   });
 
+  let notificationResult: Record<string, unknown>;
+
+  try {
+    notificationResult = await enqueueCreatedTaskOwnerNotifications({
+      drafts,
+      job,
+      recordIds: recordIds.slice(0, drafts.length)
+    });
+  } catch (error) {
+    notificationResult = {
+      通知入队数: 0,
+      通知状态: "通知入队失败。",
+      通知未发送原因: [error instanceof Error ? error.message : "未知错误"]
+    };
+  }
+
   scheduleUpdatedRecordIndexJobs({
     ids: recordIds.slice(0, drafts.length),
     targetType: "task",
@@ -432,7 +684,8 @@ async function runCreateTasksJob(job: AssistantActionJob, recordIds: string[]) {
     failedIds: recordIds.slice(drafts.length),
     result: {
       已创建记录: drafts.map((draft) => draft.title).slice(0, 12),
-      创建时间: now.toISOString()
+      创建时间: now.toISOString(),
+      ...notificationResult
     }
   };
 }

@@ -5,7 +5,12 @@ import {
   executeAssistantInternalAction,
   type AssistantInternalActionRuntime
 } from "@/lib/ai/assistant-internal-actions";
-import { enqueueAssistantBulkActionJob, type AssistantCreateTaskDraft, type AssistantTaskOwnerDraft } from "@/lib/ai/assistant-action-jobs";
+import {
+  enqueueAssistantBulkActionJob,
+  waitForAssistantActionJob,
+  type AssistantCreateTaskDraft,
+  type AssistantTaskOwnerDraft
+} from "@/lib/ai/assistant-action-jobs";
 import {
   createDashScopeEmbedding,
   createDashScopeReranker,
@@ -92,6 +97,65 @@ function sanitizeUnknownError(error: unknown) {
   }
 
   return sanitizeAssistantFactText(message);
+}
+
+function asPlainToolObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function getAssistantActionStatusText(status: string) {
+  if (status === "succeeded") {
+    return "已确认完成";
+  }
+
+  if (status === "partially_failed") {
+    return "部分完成";
+  }
+
+  if (status === "failed") {
+    return "执行失败";
+  }
+
+  return "已入队，尚未确认完成";
+}
+
+async function waitForBulkActionConfirmation<T extends Record<string, unknown>>(result: T): Promise<T & Record<string, unknown>> {
+  const jobId = typeof result.队列任务ID === "string" ? result.队列任务ID : "";
+
+  if (!jobId) {
+    return result;
+  }
+
+  const job = await waitForAssistantActionJob(jobId);
+
+  if (!job) {
+    return {
+      ...result,
+      已确认完成: false,
+      业务结果: "批量动作已提交后台队列，但本轮尚未读到后台任务记录，不能确认数据已完成。"
+    };
+  }
+
+  const jobResult = asPlainToolObject(job.result);
+  const isFinished = job.status !== "queued" && job.status !== "running";
+  const statusText = getAssistantActionStatusText(job.status);
+
+  // 批量动作是异步 job，模型只能基于这里返回的确认态汇报结果。
+  // 如果 1.5s 内 job 还在 queued/running，必须告诉用户“尚未确认”，不能把入队误说成已创建/已通知。
+  return {
+    ...result,
+    状态: statusText,
+    已确认完成: job.status === "succeeded" || job.status === "partially_failed",
+    成功数: job.successCount,
+    失败数: job.failedCount,
+    后台动作结果: jobResult,
+    通知状态: jobResult.通知状态,
+    通知入队数: jobResult.通知入队数,
+    通知未发送原因: jobResult.通知未发送原因,
+    业务结果: isFinished
+      ? `后台动作${statusText}，成功 ${job.successCount} 条，失败 ${job.failedCount} 条。`
+      : "批量动作已提交后台队列，但仍在后台执行，本轮不能确认数据已完成。"
+  };
 }
 
 function getMessageText(message: UIMessage) {
@@ -582,7 +646,7 @@ function createBulkOperationsTool(
       titles: Object.fromEntries(drafts.map((draft, index) => [recordIds[index], draft.title]))
     });
 
-    return {
+    return waitForBulkActionConfirmation({
       当前用户: currentUserMatcher.currentUser,
       目标类型: "任务",
       请求创建数: drafts.length,
@@ -593,7 +657,7 @@ function createBulkOperationsTool(
         截止日期: draft.dueDate
       })),
       ...queued
-    };
+    });
   }
 
   async function executeBulkAssignTasks({
@@ -657,7 +721,7 @@ function createBulkOperationsTool(
       titles: Object.fromEntries(selectedRecords.map((record) => [record.id, record.title]))
     });
 
-    return {
+    return waitForBulkActionConfirmation({
       当前用户: currentUserMatcher.currentUser,
       目标范围: scope === "all" ? "当前工作区全部未完成任务" : "指定任务",
       目标负责人: targetOwner.owner,
@@ -668,7 +732,7 @@ function createBulkOperationsTool(
         原负责人: task.owner
       })),
       ...queued
-    };
+    });
   }
 
   async function executeBulkAction({
@@ -765,13 +829,13 @@ function createBulkOperationsTool(
       titles: Object.fromEntries(selectedRecords.map((record) => [record.id, record.title]))
     });
 
-    return {
+    return waitForBulkActionConfirmation({
       当前用户: currentUserMatcher.currentUser,
       目标范围: scope === "mine" ? "当前登录人负责的记录" : scope === "all" ? "当前工作区全部匹配记录" : "指定记录",
       目标类型: entity === "task" ? "任务" : "Bug",
       请求处理数: selectedRecords.length,
       ...queued
-    };
+    });
   }
 
   const scopeInputSchema = z.object({
@@ -802,7 +866,8 @@ function createBulkOperationsTool(
       description: [
         "批量创建任务；当用户一次性要求新建多个任务、列出 1/2/3/4 多条任务或说“批量创建任务”时优先使用。",
         "该能力会提交后台动作队列，由 worker 批量写入任务；不要用 operations 连续调用多次 POST /api/records。",
-        "如果用户只给了任务标题和版本名，也要基于当前工作区版本匹配 version/project，并用当前登录人作为默认负责人。"
+        "如果用户只给了任务标题和版本名，也要基于当前工作区版本匹配 version/project，并用当前登录人作为默认负责人。",
+        "回复时只能按本工具返回的“已确认完成/通知状态/通知入队数/通知未发送原因”说明结果；如果只显示已入队或尚未确认，不能说任务已创建完成或飞书已触发。"
       ].join("\n"),
       inputSchema: z.object({
         defaultVersionId: z.string().min(1).optional().describe("所有任务共用的版本 id"),

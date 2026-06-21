@@ -981,7 +981,7 @@ export function AssistantChatBox({
                 user: {
                   className: "assistant-x-bubble assistant-x-bubble-user",
                   placement: "end",
-                  shape: isWorkspace ? "round" : "default",
+                  shape: "default",
                   variant: "filled"
                 }
               }}
