@@ -278,7 +278,9 @@ export function ProjectManagementPlatform({
       setPeopleLoading(true);
 
       try {
-        const response = await fetchWithAuthRedirect("/api/feishu/users");
+        const response = await fetchWithAuthRedirect("/api/feishu/users", undefined, {
+          redirectOnUnauthorized: false
+        });
         const payload = (await response.json()) as PeopleResponse;
 
         if (!response.ok) {

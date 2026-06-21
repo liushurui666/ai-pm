@@ -1,5 +1,12 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { convertToModelMessages, stepCountIs, streamText, type ToolCallRepairFunction, type ToolSet, type UIMessage } from "ai";
+import {
+  convertToModelMessages,
+  stepCountIs,
+  streamText,
+  type ToolCallRepairFunction,
+  type ToolSet,
+  type UIMessage
+} from "ai";
 import type { DashboardData } from "@/types/dashboard";
 import { createAssistantSystemPrompt } from "@/lib/ai/assistant-prompt";
 import type { AssistantInternalActionRuntime } from "@/lib/ai/assistant-internal-actions";
@@ -9,9 +16,27 @@ import { getAiApiKey, getAiBaseUrl, resolveAiModel } from "@/lib/ai/settings";
 const MAX_MODEL_HISTORY_MESSAGES = 16;
 
 type TextUIMessagePart = Extract<UIMessage["parts"][number], { type: "text" }>;
+type ForcedActionToolChoice = {
+  type: "tool";
+  toolName: string;
+};
 
 function isTextUIMessagePart(part: UIMessage["parts"][number]): part is TextUIMessagePart {
   return part.type === "text" && Boolean(part.text.trim());
+}
+
+function getMessageText(message: UIMessage) {
+  return message.parts
+    .filter(isTextUIMessagePart)
+    .map((part) => part.text.trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+function getLatestUserMessageText(messages: UIMessage[]) {
+  const latestUserMessage = [...messages].reverse().find((message) => message.role === "user");
+
+  return latestUserMessage ? getMessageText(latestUserMessage) : "";
 }
 
 function sanitizeMessagesForModel(messages: UIMessage[]) {
@@ -38,6 +63,48 @@ function sanitizeMessagesForModel(messages: UIMessage[]) {
     })
     .filter((message): message is UIMessage => Boolean(message))
     .slice(-MAX_MODEL_HISTORY_MESSAGES);
+}
+
+function isLikelyQuestion(text: string) {
+  return /为什么|为何|怎么|怎样|如何|啥意思|什么原因|哪里|哪儿|吗\s*[？?]?|呢\s*[？?]?|[？?]/.test(text);
+}
+
+function getForcedActionToolChoice(messages: UIMessage[]): ForcedActionToolChoice | undefined {
+  const latestUserText = getLatestUserMessageText(messages);
+  const text = latestUserText.replace(/\s+/g, " ").trim();
+
+  if (!text || isLikelyQuestion(text)) {
+    return undefined;
+  }
+
+  const hasTaskReference = /任务|待办|事项|task-[a-z0-9-]+/i.test(text);
+  const hasCreateCommand = /批量创建|创建|新建|新增|生成|加一下|加上|也加|再加|补一个|建一下/.test(text);
+  const hasAssignCommand = /归属|分配|指派|转给|负责人/.test(text);
+  const hasCompleteCommand = /完成|关闭|处理掉|清掉/.test(text);
+  const hasNumberedDraftList = /(?:^|[\s，。；、])(?:\d+|[一二三四五六七八九十]+)[.、]/.test(text);
+  const mentionsBug = /bug|Bug|BUG|缺陷/.test(text);
+  const mentionsNonTaskEntity = /版本|需求|风险|项目|成员/.test(text) || mentionsBug;
+
+  if (
+    (hasCreateCommand && (hasTaskReference || !mentionsNonTaskEntity)) ||
+    (hasNumberedDraftList && hasAssignCommand && /兼容|适配|组件|物料|页面|功能/.test(text) && !mentionsBug)
+  ) {
+    return { type: "tool", toolName: "bulkCreateTasks" };
+  }
+
+  if (hasAssignCommand && hasTaskReference) {
+    return { type: "tool", toolName: "bulkAssignTasks" };
+  }
+
+  if (mentionsBug && hasCompleteCommand) {
+    return { type: "tool", toolName: "bulkCloseBugs" };
+  }
+
+  if (hasTaskReference && hasCompleteCommand) {
+    return { type: "tool", toolName: "bulkCompleteTasks" };
+  }
+
+  return undefined;
 }
 
 function shouldDisableDashScopeThinking(model: string) {
@@ -154,10 +221,18 @@ export async function createAssistantStreamResult({
   }
 
   const tools = createAssistantTools(dataSource, messages, actionRuntime);
-  const modelMessages = await convertToModelMessages(sanitizeMessagesForModel(messages), {
+  const sanitizedMessages = sanitizeMessagesForModel(messages);
+  const forcedActionToolChoice = getForcedActionToolChoice(sanitizedMessages);
+  const modelMessages = await convertToModelMessages(sanitizedMessages, {
     tools,
     ignoreIncompleteToolCalls: true
   });
+
+  if (forcedActionToolChoice) {
+    console.info("[assistant] forcing action tool for write intent", {
+      toolName: forcedActionToolChoice.toolName
+    });
+  }
 
   return streamText({
     model: await createAiModel(model),
@@ -165,6 +240,12 @@ export async function createAssistantStreamResult({
     messages: modelMessages,
     tools,
     toolChoice: "auto",
+    prepareStep: ({ steps }) => steps.length === 0 && forcedActionToolChoice
+      ? {
+          activeTools: [forcedActionToolChoice.toolName],
+          toolChoice: forcedActionToolChoice
+        }
+      : undefined,
     experimental_repairToolCall: repairAssistantToolCall,
     experimental_onToolCallStart: ({ toolCall }) => {
       console.info("[assistant] tool call started", {

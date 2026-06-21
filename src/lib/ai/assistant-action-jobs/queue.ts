@@ -9,7 +9,7 @@ import { getEmailNotificationSettings } from "@/lib/notifications/email";
 const maxJobRecordIds = 500;
 const defaultActionJobLockMs = 5 * 60 * 1000;
 const defaultWorkerBatchLimit = 5;
-const defaultInlineWaitMs = 1_500;
+const defaultInlineWaitMs = 5_000;
 
 type AssistantBulkActionType = "complete_tasks" | "close_bugs" | "create_tasks" | "assign_tasks";
 type AssistantBulkTargetType = "task" | "bug";

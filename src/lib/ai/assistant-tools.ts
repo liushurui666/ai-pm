@@ -846,7 +846,10 @@ function createBulkOperationsTool(
   const assignTaskInputSchema = z.object({
     scope: z.enum(["ids", "all"]).default("ids").describe("ids=仅归属指定任务；all=当前工作区全部未完成任务"),
     ids: z.array(z.string().min(1)).max(100).optional().describe("scope=ids 时使用的任务 id 列表"),
-    owner: z.string().min(1).optional().describe("目标负责人姓名或邮箱；未填时默认当前登录人"),
+    owner: z.preprocess(
+      (value) => typeof value === "string" && !value.trim() ? undefined : value,
+      z.string().min(1).optional()
+    ).describe("目标负责人姓名或邮箱；未填时默认当前登录人"),
     limit: z.number().int().min(1).max(100).default(100).describe("本轮最多归属的任务数")
   });
   const createTaskDraftSchema = z.object({
