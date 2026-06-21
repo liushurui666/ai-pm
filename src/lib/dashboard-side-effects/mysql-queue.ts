@@ -31,6 +31,20 @@ function asPayload(value: Prisma.JsonValue | string): DashboardSideEffectPayload
   return value && typeof value === "object" && !Array.isArray(value) ? value as DashboardSideEffectPayload : {};
 }
 
+function scheduleInlineProcessing() {
+  setTimeout(() => {
+    // MySQL fallback 队列主要服务于无 Redis/单容器部署。这里动态导入 worker，避免 queue/worker 顶层循环依赖；
+    // 如果生产另有常驻 worker，claimNext 的行锁也会保证同一条通知只被一个消费者发送。
+    void import("@/lib/dashboard-side-effects/worker")
+      .then(({ scheduleDashboardSideEffectJobProcessing }) => {
+        scheduleDashboardSideEffectJobProcessing();
+      })
+      .catch((error) => {
+        console.error("[dashboard-side-effect-queue] inline processor schedule failed", error);
+      });
+  }, 0);
+}
+
 function toClaimedJob(job: {
   id: string;
   workspaceId: string;
@@ -115,6 +129,8 @@ export function createMySqlDashboardSideEffectQueue(): DashboardSideEffectQueueP
       if (!job) {
         throw new Error("Dashboard 副作用任务入队后未能读取任务记录。");
       }
+
+      scheduleInlineProcessing();
 
       return {
         id: job.id,

@@ -11,6 +11,10 @@ import { createMySqlDashboardSideEffectQueue } from "@/lib/dashboard-side-effect
 import { getDashboardSideEffectSettings } from "@/lib/dashboard-side-effects/settings";
 import type { ClaimedDashboardSideEffectJob, DashboardSideEffectPayload } from "@/lib/dashboard-side-effects/ports";
 
+const globalForDashboardSideEffects = globalThis as typeof globalThis & {
+  aiPmDashboardSideEffectRunner?: Promise<void>;
+};
+
 type NotificationChannel = {
   id?: string;
   provider?: string;
@@ -273,6 +277,39 @@ async function processMySqlDashboardSideEffectJobs(workerId: string) {
   }
 
   return true;
+}
+
+async function processMySqlDashboardSideEffectJobsOnce(workerId: string) {
+  const settings = getDashboardSideEffectSettings();
+
+  for (let index = 0; index < settings.workerConcurrency; index += 1) {
+    const handled = await processMySqlDashboardSideEffectJobs(workerId);
+
+    if (!handled) {
+      break;
+    }
+  }
+}
+
+export function scheduleDashboardSideEffectJobProcessing(workerId = `dashboard-side-effect-inline-${process.pid}`) {
+  if (isBullMqDashboardSideEffectQueueEnabled()) {
+    return;
+  }
+
+  if (globalForDashboardSideEffects.aiPmDashboardSideEffectRunner) {
+    return;
+  }
+
+  // Jenkins 当前生产发布是单 Web 容器；没有常驻 side-effect worker 时，MySQL fallback 队列会一直 queued。
+  // 这里只在无 Redis 的 fallback 模式下触发一次轻量后台消费，主请求仍然先完成保存和入队，不把飞书/邮箱慢调用串回 UI。
+  globalForDashboardSideEffects.aiPmDashboardSideEffectRunner = Promise.resolve()
+    .then(() => processMySqlDashboardSideEffectJobsOnce(workerId))
+    .catch((error) => {
+      console.error("[dashboard-side-effect-worker] inline drain failed", error);
+    })
+    .then(() => {
+      globalForDashboardSideEffects.aiPmDashboardSideEffectRunner = undefined;
+    });
 }
 
 async function runMySqlDashboardSideEffectDrainLoop(workerId: string) {
