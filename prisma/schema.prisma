@@ -30,6 +30,7 @@ model Workspace {
   aiIndexJobs         AiIndexJob[]
   aiIndexTraces       AiIndexTrace[]
   assistantActionJobs AssistantActionJob[]
+  dashboardSideEffectJobs DashboardSideEffectJob[]
 
   @@map("workspaces")
 }
@@ -534,6 +535,32 @@ model AssistantActionJob {
   @@map("assistant_action_jobs")
 }
 
+model DashboardSideEffectJob {
+  id          String                       @id @default(cuid())
+  workspaceId String
+  entityType  String
+  entityId    String
+  jobType     DashboardSideEffectJobType
+  dedupeKey   String?                      @unique @db.VarChar(191)
+  payload     Json                         @default("{}")
+  status      DashboardSideEffectJobStatus @default(queued)
+  priority    Int                          @default(0)
+  retryCount  Int                          @default(0)
+  maxRetries  Int                          @default(5)
+  nextRunAt   DateTime?
+  lockedAt    DateTime?
+  lockedBy    String?
+  error       String?                      @db.Text
+  createdAt   DateTime                     @default(now())
+  updatedAt   DateTime                     @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, status, nextRunAt])
+  @@index([status, priority, createdAt])
+  @@map("dashboard_side_effect_jobs")
+}
+
 enum GitProvider {
   github
   gitlab
@@ -615,6 +642,21 @@ enum AiIndexJobStatus {
   pending
   running
   success
+  failed
+}
+
+enum DashboardSideEffectJobType {
+  notify_owner
+  notify_bug_tester
+  refresh_project_metrics
+  cascade_version_updated
+  cascade_version_deleted
+}
+
+enum DashboardSideEffectJobStatus {
+  queued
+  running
+  succeeded
   failed
 }
 

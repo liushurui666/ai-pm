@@ -18,6 +18,7 @@
     "ai-index:doctor": "tsx scripts/ai-index-doctor.ts",
     "ai-index:eval": "tsx scripts/ai-index-eval.ts",
     "assistant-action:worker": "tsx scripts/assistant-action-worker.ts",
+    "dashboard-side-effect:worker": "tsx scripts/dashboard-side-effect-worker.ts",
     "bug-fix:worker": "tsx scripts/bug-fix-worker.ts"
   },
   "dependencies": {

@@ -65,6 +65,25 @@ services:
     depends_on:
       - ai-pm
 
+  dashboard-side-effect-worker:
+    # Dashboard 写入副作用队列：Web 只保存主记录并入队，
+    # worker 异步发送飞书通知、执行跨表补偿和后续统计刷新，避免业务保存请求被慢任务卡住。
+    image: ${AI_PM_IMAGE:-ai-pm:latest}
+    container_name: ${AI_PM_DASHBOARD_SIDE_EFFECT_WORKER_CONTAINER_NAME:-ai-pm-dashboard-side-effect-worker}
+    restart: unless-stopped
+    env_file:
+      - ${AI_PM_ENV_FILE:-../../.env}
+    environment:
+      NODE_ENV: production
+      RUN_MIGRATIONS: 0
+      RUN_AUTH_MIGRATIONS: 0
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      DASHBOARD_SIDE_EFFECT_QUEUE_NAME: ${DASHBOARD_SIDE_EFFECT_QUEUE_NAME:-ai-pm-dashboard-side-effects}
+    command: ["pnpm", "dashboard-side-effect:worker"]
+    depends_on:
+      - ai-pm
+      - redis
+
   redis:
     # BullMQ 的正式队列依赖 Redis；没有 Redis 时代码会退回 MySQL 轮询，
     # 但 V1 生产部署必须默认带上 Redis，保证去重、延迟重试和并发消费能力。

@@ -11,7 +11,7 @@ import {
   writeDashboardIdentityDatabase
 } from "@/data/database-dashboard";
 import { dashboardData } from "@/data/dashboard";
-import { sendFeishuBotTaskCard } from "@/lib/feishu/message";
+import { createDashboardSideEffectQueue, createNotificationPayload } from "@/lib/dashboard-side-effects";
 import { findWorkspaceMemberForUser, getDashboardPermissions } from "@/lib/access/permissions";
 import type {
   BugReport,
@@ -2035,6 +2035,21 @@ async function notifyOwner(data: LocalDatabase, workspaceId: string, type: Dashb
   );
   const ownerOpenId = feishuChannel?.feishuOpenId ?? feishuChannel?.target ?? member?.notification.feishuOpenId;
   const ownerName = asOwnerName(values);
+  const recordTitle = getRecordTitle(type, values);
+  const cardTitle = type === "bug" ? "你有一个 Bug 需要处理" : `你被设置为${getEntityLabel(type)}负责人`;
+  const cardText =
+    type === "bug"
+      ? [
+          `**${recordTitle}**`,
+          "",
+          `提交人：${asText(values.reporter, "未填写")}`,
+          `严重程度：${asText(values.severity, "一般")}`,
+          `当前状态：${asText(values.status, "新建")}`,
+          `关联版本：${asText(values.versionName, "未规划")}`,
+          "",
+          "测试已提交或重新打开该 Bug，请开发负责人进入 AI PM 查看复现步骤并继续定位处理。"
+        ].join("\n")
+      : `**${recordTitle}**\n\n请在 AI PM 平台查看详情并确认下一步动作。`;
 
   if (!getNotificationTargetIdentities(values).length) {
     return "";
@@ -2061,30 +2076,26 @@ async function notifyOwner(data: LocalDatabase, workspaceId: string, type: Dashb
   }
 
   try {
-    const recordTitle = getRecordTitle(type, values);
-
-    await sendFeishuBotTaskCard({
-      openId: ownerOpenId,
-      title: type === "bug" ? "你有一个 Bug 需要处理" : `你被设置为${getEntityLabel(type)}负责人`,
-      text:
-        type === "bug"
-          ? [
-              `**${recordTitle}**`,
-              "",
-              `提交人：${asText(values.reporter, "未填写")}`,
-              `严重程度：${asText(values.severity, "一般")}`,
-              `当前状态：${asText(values.status, "新建")}`,
-              `关联版本：${asText(values.versionName, "未规划")}`,
-              "",
-              "测试已提交或重新打开该 Bug，请开发负责人进入 AI PM 查看复现步骤并继续定位处理。"
-            ].join("\n")
-          : `**${recordTitle}**\n\n请在 AI PM 平台查看详情并确认下一步动作。`,
-      view: type === "project" ? "projects" : type === "bug" ? "bugs" : type === "task" ? "tasks" : "overview"
+    // 飞书发送放入 Dashboard 副作用队列，Web 请求只负责保存主记录和入队，避免外部通知接口拖住保存按钮。
+    await createDashboardSideEffectQueue().enqueue({
+      workspaceId,
+      entityType: type,
+      entityId: asText(values.id, recordTitle).slice(0, 191),
+      jobType: "notify_owner",
+      dedupeKey: `${workspaceId}:${type}:${asText(values.id, recordTitle)}:notify_owner:${getOwnerNotificationSignature(values)}`.slice(0, 191),
+      payload: createNotificationPayload({
+        targetIdentities: getNotificationTargetIdentities(values),
+        notificationScene,
+        ownerName,
+        cardTitle,
+        cardText,
+        view: type === "project" ? "projects" : type === "bug" ? "bugs" : type === "task" ? "tasks" : "overview"
+      })
     });
 
-    return `已通过飞书机器人通知 ${asOwnerName(values)}。`;
+    return `已提交后台飞书通知：${asOwnerName(values)}。`;
   } catch (error) {
-    return `机器人通知失败：${error instanceof Error ? error.message : "未知错误"}。`;
+    return `飞书通知入队失败：${error instanceof Error ? error.message : "未知错误"}。`;
   }
 }
 
@@ -2134,10 +2145,19 @@ async function notifyBugTesterOnReady(
   }
 
   try {
-    await sendFeishuBotTaskCard({
-      openId: testerOpenId,
-      title: "Bug 修复任务已结束，请回归验证",
-      text: [
+    // 回归通知同样走后台队列，避免 Bug 状态保存等待飞书接口完成。
+    await createDashboardSideEffectQueue().enqueue({
+      workspaceId,
+      entityType: "bug",
+      entityId: nextBug.id,
+      jobType: "notify_bug_tester",
+      dedupeKey: `${workspaceId}:bug:${nextBug.id}:notify_bug_tester:${nextBug.status}`.slice(0, 191),
+      payload: createNotificationPayload({
+        targetIdentities: testerIdentities,
+        notificationScene: "bugFlowChanged",
+        ownerName: testerName,
+        cardTitle: "Bug 修复任务已结束，请回归验证",
+        cardText: [
         `**${nextBug.title}**`,
         "",
         `修复负责人：${nextBug.owner || "未分配"}`,
@@ -2145,13 +2165,14 @@ async function notifyBugTesterOnReady(
         `当前状态：${nextBug.status}`,
         "",
         "开发修复任务已结束，请测试人员进入 AI PM 查看复现步骤、预期结果和实际结果，并完成回归验证。"
-      ].join("\n"),
-      view: "bugs"
+        ].join("\n"),
+        view: "bugs"
+      })
     });
 
-    return `已通过飞书机器人通知测试人员 ${member.name} 进行回归验证。`;
+    return `已提交后台测试通知：${member.name}。`;
   } catch (error) {
-    return `测试通知失败：${error instanceof Error ? error.message : "未知错误"}。`;
+    return `测试通知入队失败：${error instanceof Error ? error.message : "未知错误"}。`;
   }
 }
 
@@ -2435,7 +2456,6 @@ export async function createDashboardRecord<T extends DashboardEntityType>(
   };
   const scopedValues = type === "bug" ? withBugVersionProject(data, baseValues, workspace.id) : baseValues;
   const record = createRecord(type, scopedValues);
-  const notifyMessage = await notifyOwner(data, workspace.id, type, scopedValues);
 
   if (type === "project") {
     data.projects = [record as Project, ...data.projects];
@@ -2467,6 +2487,10 @@ export async function createDashboardRecord<T extends DashboardEntityType>(
 
   const savedData = applyProjectMetrics(data);
   const savedRecord = findRecord(savedData, type, record.id) ?? record;
+  const notifyMessage = await notifyOwner(data, workspace.id, type, {
+    ...scopedValues,
+    id: savedRecord.id
+  });
 
   if (type === "bug") {
     // 创建 Bug 会先触发负责人通知；保存阶段只写当前 Bug 行和其附件/流转记录，避免飞书已送达但前端仍等待全量同步。
@@ -2610,7 +2634,10 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
     type === "bug" && shouldNotifyBugDeveloperOnOpen(existingRecord as BugReport, savedRecord as BugReport);
   const notifyMessages = [
     shouldNotifyOwnerUpdate(type, existingRecord, scopedValues) && !shouldNotifyBugOpen
-      ? await notifyOwner(savedData, getWorkspaceId(existingRecord), type, scopedValues)
+      ? await notifyOwner(savedData, getWorkspaceId(existingRecord), type, {
+          ...scopedValues,
+          id
+        })
       : "",
     type === "bug"
       ? await notifyBugDeveloperOnOpen(
