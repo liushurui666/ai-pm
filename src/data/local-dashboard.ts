@@ -5,6 +5,7 @@ import {
   readDashboardDatabase,
   readDashboardWorkspacesDatabase,
   updateDashboardTaskDatabase,
+  upsertDashboardMemberDatabase,
   writeDashboardDatabase,
   writeDashboardIdentityDatabase
 } from "@/data/database-dashboard";
@@ -1398,6 +1399,28 @@ function getMemberProfileEmail(user: FeishuUser, fallback?: string) {
   return getLegacyFeishuOpenIdFromSyntheticEmail(user.email) ? fallback : user.email || fallback;
 }
 
+function mergeMemberIdentities(
+  fallbackIdentities: DashboardMember["identities"] | undefined,
+  nextIdentities: DashboardMember["identities"]
+) {
+  const identities = [...(fallbackIdentities ?? []), ...nextIdentities];
+  const seen = new Set<string>();
+
+  // 成员编辑表单只提交通知相关的邮箱/飞书字段，但运行时成员匹配依赖 SDK 写入的 auth_... 身份。
+  // 因此保存通知配置时必须保留既有 OAuth 身份，并对完全相同的 provider/id 去重，避免刷新后找不到当前成员。
+  return identities.filter((identity) => {
+    const key = `${identity.provider}:${normalizeIdentityEmail(identity.providerUserId) || identity.providerUserId}`;
+
+    if (!identity.providerUserId || seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+
+    return true;
+  });
+}
+
 function detachAuthIdentityFromDuplicateMembers(
   members: DashboardMember[],
   workspaceId: string,
@@ -2254,6 +2277,8 @@ function normalizeMemberInput(values: Record<string, unknown>, fallback?: Dashbo
     });
   }
 
+  const formIdentities: DashboardMember["identities"] = identities;
+
   return {
     id: fallback?.id ?? createLocalId("member"),
     workspaceId,
@@ -2263,7 +2288,7 @@ function normalizeMemberInput(values: Record<string, unknown>, fallback?: Dashbo
     registrationChannel: fallback?.registrationChannel ?? "email",
     role: normalizeMemberRole(values.role ?? fallback?.role),
     status: normalizeMemberStatus(values.status ?? fallback?.status),
-    identities,
+    identities: mergeMemberIdentities(fallback?.identities, formIdentities),
     notification: {
       channels,
       feishuEnabled: primaryFeishuChannel?.enabled ?? asBoolean(values.feishuEnabled, fallback?.notification.feishuEnabled ?? Boolean(feishuOpenId)),
@@ -2298,7 +2323,9 @@ export async function createDashboardMember(values: Record<string, unknown>, wor
   }
 
   data.members = [member, ...data.members.map((item) => normalizeMember(item))];
-  await writeDatabase(data);
+  // 新增成员只需要写入 workspace_members 一行；全量 writeDatabase 会重写任务/Bug/需求等业务表，
+  // 对公网 MySQL 来说成本过高，也会让通知配置这类轻量操作看起来“卡住”。
+  await upsertDashboardMemberDatabase(member);
 
   return {
     member,
@@ -2342,7 +2369,8 @@ export async function updateDashboardMember(id: string, values: Record<string, u
   }
 
   data.members = members.map((item) => item.id === id ? member : item);
-  await writeDatabase(data);
+  // 成员更新尤其是通知渠道保存是后台配置单行写入，不能触发全量 dashboard 同步事务。
+  await upsertDashboardMemberDatabase(member);
 
   return {
     member,

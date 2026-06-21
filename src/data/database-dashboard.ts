@@ -477,6 +477,22 @@ async function upsertIdentityMembers(prisma: PrismaClient, members: DashboardMem
   }
 }
 
+export async function upsertDashboardMemberDatabase(member: DashboardMember, client?: PrismaClient) {
+  const prisma = client ?? getPrismaClient();
+  const payload = getMemberPayload(member);
+
+  // 成员资料和通知渠道是单行配置写入，不能复用全量 dashboard 同步事务。
+  // 否则用户只改一个邮箱通知渠道，也会重写任务、Bug、需求等业务表，在公网 MySQL 下容易表现为保存按钮长时间 loading。
+  await prisma.dashboardMember.upsert({
+    where: { id: member.id },
+    update: payload,
+    create: {
+      id: member.id,
+      ...payload
+    }
+  });
+}
+
 async function syncProjects(prisma: DashboardPrisma, projects: Project[]) {
   await prisma.project.deleteMany({
     where: getDeleteWhere(projects.map((project) => project.id))
