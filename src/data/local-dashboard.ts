@@ -12,6 +12,7 @@ import {
 } from "@/data/database-dashboard";
 import { dashboardData } from "@/data/dashboard";
 import { createDashboardSideEffectQueue, createNotificationPayload } from "@/lib/dashboard-side-effects";
+import { getEmailNotificationSettings } from "@/lib/notifications/email/settings";
 import { findWorkspaceMemberForUser, getDashboardPermissions } from "@/lib/access/permissions";
 import type {
   BugReport,
@@ -2035,6 +2036,32 @@ function hasEnabledProvider(member: DashboardMember | undefined, provider: Membe
   return Boolean(member?.notification.channels.some((channel) => channel.provider === provider && channel.enabled));
 }
 
+function getNotificationChannelDedupePart(channel: MemberNotificationChannel) {
+  return [
+    channel.provider,
+    channel.id,
+    channel.target,
+    channel.feishuOpenId,
+    channel.email
+  ]
+    .map((value) => asText(value).trim())
+    .filter(Boolean)
+    .join(":")
+    .slice(0, 80);
+}
+
+function getDispatchableDeliveryChannels(channels: MemberNotificationChannel[]) {
+  const emailSettings = getEmailNotificationSettings();
+  const emailConfigured = Boolean(emailSettings.apiKey && emailSettings.from);
+
+  return {
+    channels: channels.filter((channel) => channel.provider !== "email" || emailConfigured),
+    emailDisabledReason: channels.some((channel) => channel.provider === "email") && !emailConfigured
+      ? "邮箱通知未配置 RESEND_API_KEY 或 EMAIL_FROM，邮箱不会发送。"
+      : ""
+  };
+}
+
 async function notifyOwner(data: LocalDatabase, workspaceId: string, type: DashboardEntityType, values: Record<string, unknown>) {
   const member = findNotificationMember(data, workspaceId, values);
   const notificationScene: MemberNotificationScene =
@@ -2044,6 +2071,7 @@ async function notifyOwner(data: LocalDatabase, workspaceId: string, type: Dashb
         ? "bugFlowChanged"
         : "taskAssigned";
   const deliveryChannels = getEnabledDeliveryChannels(member, notificationScene);
+  const dispatchableDelivery = getDispatchableDeliveryChannels(deliveryChannels);
   const ownerName = asOwnerName(values);
   const recordTitle = getRecordTitle(type, values);
   const cardTitle = type === "bug" ? "你有一个 Bug 需要处理" : `你被设置为${getEntityLabel(type)}负责人`;
@@ -2081,25 +2109,33 @@ async function notifyOwner(data: LocalDatabase, workspaceId: string, type: Dashb
     return `未发送通知：成员 ${member.name} 未启用该通知场景的飞书或邮箱渠道。`;
   }
 
-  try {
-    // 通知发送放入 Dashboard 副作用队列，Web 请求只负责保存主记录和入队，避免外部通知接口拖住保存按钮。
-    await createDashboardSideEffectQueue().enqueue({
-      workspaceId,
-      entityType: type,
-      entityId: asText(values.id, recordTitle).slice(0, 191),
-      jobType: "notify_owner",
-      dedupeKey: `${workspaceId}:${type}:${asText(values.id, recordTitle)}:notify_owner:${getOwnerNotificationSignature(values)}`.slice(0, 191),
-      payload: createNotificationPayload({
-        targetIdentities: getNotificationTargetIdentities(values),
-        notificationScene,
-        ownerName,
-        cardTitle,
-        cardText,
-        view: type === "project" ? "projects" : type === "bug" ? "bugs" : type === "task" ? "tasks" : "overview"
-      })
-    });
+  if (!dispatchableDelivery.channels.length) {
+    return `未发送通知：${dispatchableDelivery.emailDisabledReason}`;
+  }
 
-    return `已提交后台通知：${asOwnerName(values)}。`;
+  try {
+    // 通知发送按渠道拆成独立后台任务：邮箱失败不能阻断飞书，邮箱重试也不能造成飞书重复发送。
+    await Promise.all(dispatchableDelivery.channels.map((channel) =>
+      createDashboardSideEffectQueue().enqueue({
+        workspaceId,
+        entityType: type,
+        entityId: asText(values.id, recordTitle).slice(0, 191),
+        jobType: "notify_owner",
+        dedupeKey: `${workspaceId}:${type}:${asText(values.id, recordTitle)}:notify_owner:${getOwnerNotificationSignature(values)}:${getNotificationChannelDedupePart(channel)}`.slice(0, 191),
+        payload: createNotificationPayload({
+          targetIdentities: getNotificationTargetIdentities(values),
+          notificationScene,
+          ownerName,
+          cardTitle,
+          cardText,
+          view: type === "project" ? "projects" : type === "bug" ? "bugs" : type === "task" ? "tasks" : "overview",
+          channelProvider: channel.provider,
+          channelId: channel.id
+        })
+      })
+    ));
+
+    return `已提交后台通知：${asOwnerName(values)}。${dispatchableDelivery.emailDisabledReason}`;
   } catch (error) {
     return `通知入队失败：${error instanceof Error ? error.message : "未知错误"}。`;
   }
@@ -2122,6 +2158,7 @@ async function notifyBugTesterOnReady(
     .filter(Boolean);
   const member = findMemberByNotificationIdentities(data, workspaceId, testerIdentities);
   const deliveryChannels = getEnabledDeliveryChannels(member, "bugFlowChanged");
+  const dispatchableDelivery = getDispatchableDeliveryChannels(deliveryChannels);
 
   if (!testerIdentities.length) {
     return "";
@@ -2143,33 +2180,41 @@ async function notifyBugTesterOnReady(
     return `未发送测试通知：测试人员 ${member.name} 未启用 Bug 流转的飞书或邮箱渠道。`;
   }
 
-  try {
-    // 回归通知同样走后台队列，避免 Bug 状态保存等待飞书或邮箱接口完成。
-    await createDashboardSideEffectQueue().enqueue({
-      workspaceId,
-      entityType: "bug",
-      entityId: nextBug.id,
-      jobType: "notify_bug_tester",
-      dedupeKey: `${workspaceId}:bug:${nextBug.id}:notify_bug_tester:${nextBug.status}`.slice(0, 191),
-      payload: createNotificationPayload({
-        targetIdentities: testerIdentities,
-        notificationScene: "bugFlowChanged",
-        ownerName: testerName,
-        cardTitle: "Bug 修复任务已结束，请回归验证",
-        cardText: [
-        `**${nextBug.title}**`,
-        "",
-        `修复负责人：${nextBug.owner || "未分配"}`,
-        `关联版本：${nextBug.versionName ?? "未规划"}`,
-        `当前状态：${nextBug.status}`,
-        "",
-        "开发修复任务已结束，请测试人员进入 AI PM 查看复现步骤、预期结果和实际结果，并完成回归验证。"
-        ].join("\n"),
-        view: "bugs"
-      })
-    });
+  if (!dispatchableDelivery.channels.length) {
+    return `未发送测试通知：${dispatchableDelivery.emailDisabledReason}`;
+  }
 
-    return `已提交后台测试通知：${member.name}。`;
+  try {
+    // 测试通知同样按渠道拆分，避免一个渠道配置错误拖住另一个渠道。
+    await Promise.all(dispatchableDelivery.channels.map((channel) =>
+      createDashboardSideEffectQueue().enqueue({
+        workspaceId,
+        entityType: "bug",
+        entityId: nextBug.id,
+        jobType: "notify_bug_tester",
+        dedupeKey: `${workspaceId}:bug:${nextBug.id}:notify_bug_tester:${nextBug.status}:${getNotificationChannelDedupePart(channel)}`.slice(0, 191),
+        payload: createNotificationPayload({
+          targetIdentities: testerIdentities,
+          notificationScene: "bugFlowChanged",
+          ownerName: testerName,
+          cardTitle: "Bug 修复任务已结束，请回归验证",
+          cardText: [
+          `**${nextBug.title}**`,
+          "",
+          `修复负责人：${nextBug.owner || "未分配"}`,
+          `关联版本：${nextBug.versionName ?? "未规划"}`,
+          `当前状态：${nextBug.status}`,
+          "",
+          "开发修复任务已结束，请测试人员进入 AI PM 查看复现步骤、预期结果和实际结果，并完成回归验证。"
+          ].join("\n"),
+          view: "bugs",
+          channelProvider: channel.provider,
+          channelId: channel.id
+        })
+      })
+    ));
+
+    return `已提交后台测试通知：${member.name}。${dispatchableDelivery.emailDisabledReason}`;
   } catch (error) {
     return `测试通知入队失败：${error instanceof Error ? error.message : "未知错误"}。`;
   }

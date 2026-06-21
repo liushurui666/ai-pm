@@ -106,12 +106,32 @@ function getEnabledNotificationChannels(member: DashboardMemberRecord, scene: st
   return (notification.channels ?? []).filter(
     (channel) => (channel.provider === "feishu" || channel.provider === "email") && channel.enabled && (channel.scenes ?? []).includes(scene)
   ).sort((left, right) => {
-    // 邮箱通过 Resend 幂等键天然抗重试，先发邮箱再发飞书，可以降低“飞书已发但邮箱配置失败”造成的重复飞书风险。
+    // 旧版事件级 job 可能同时包含飞书和邮箱；优先发飞书，避免邮箱服务未配置时把更关键的即时消息挡住。
     if (left.provider === right.provider) {
       return 0;
     }
 
-    return left.provider === "email" ? -1 : 1;
+    return left.provider === "feishu" ? -1 : 1;
+  });
+}
+
+function getTargetNotificationChannels(
+  channels: NotificationChannel[],
+  payload: DashboardSideEffectPayload
+) {
+  const provider = asText(payload.channelProvider);
+  const channelId = asText(payload.channelId);
+
+  if (!provider && !channelId) {
+    return channels;
+  }
+
+  return channels.filter((channel) => {
+    if (provider && channel.provider !== provider) {
+      return false;
+    }
+
+    return !channelId || channel.id === channelId;
   });
 }
 
@@ -189,16 +209,36 @@ async function runNotifyJob(job: ClaimedDashboardSideEffectJob) {
     throw new Error(`成员 ${member.name} 已被禁用`);
   }
 
-  const channels = getEnabledNotificationChannels(member, scene);
+  const channels = getTargetNotificationChannels(getEnabledNotificationChannels(member, scene), payload);
 
   if (!channels.length) {
     throw new Error(`成员 ${member.name} 未启用该通知场景的飞书或邮箱渠道`);
   }
 
-  // 同一通知事件允许飞书和邮箱同时启用；worker 串行发送可以复用现有重试语义，
-  // 任何渠道失败都会让 job 进入重试，Resend 幂等键负责避免邮件重复投递。
+  const failures: string[] = [];
+  let successCount = 0;
+
+  // 新版保存路径已经把飞书/邮箱拆成独立 job；这里仍保留旧事件级 job 的兼容处理。
+  // 对事件级 job，单个渠道失败不能抹掉另一个渠道的成功发送；对渠道级 job，唯一渠道失败会正常进入重试。
   for (const channel of channels) {
-    await sendNotificationChannel({ channel, job, member, payload });
+    try {
+      await sendNotificationChannel({ channel, job, member, payload });
+      successCount += 1;
+      console.log(`[dashboard-side-effect-worker] sent ${channel.provider} notification for job ${job.id}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      failures.push(`${channel.provider ?? "unknown"}: ${message}`);
+      console.error(`[dashboard-side-effect-worker] ${channel.provider ?? "unknown"} notification failed for job ${job.id}: ${message}`);
+    }
+  }
+
+  if (successCount === 0 && failures.length) {
+    throw new Error(failures.join("；"));
+  }
+
+  if (failures.length) {
+    console.warn(`[dashboard-side-effect-worker] job ${job.id} partially sent: ${failures.join("；")}`);
   }
 }
 
@@ -265,6 +305,8 @@ export function createNotificationPayload(input: {
   cardTitle: string;
   cardText: string;
   view?: string;
+  channelProvider?: string;
+  channelId?: string;
 }): DashboardSideEffectPayload {
   return input;
 }
