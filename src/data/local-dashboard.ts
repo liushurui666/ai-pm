@@ -5,6 +5,7 @@ import {
   readDashboardDatabase,
   readDashboardWorkspacesDatabase,
   updateDashboardTaskDatabase,
+  upsertDashboardBugDatabase,
   upsertDashboardMemberDatabase,
   writeDashboardDatabase,
   writeDashboardIdentityDatabase
@@ -2467,7 +2468,12 @@ export async function createDashboardRecord<T extends DashboardEntityType>(
   const savedData = applyProjectMetrics(data);
   const savedRecord = findRecord(savedData, type, record.id) ?? record;
 
-  await writeDatabase(savedData);
+  if (type === "bug") {
+    // 创建 Bug 会先触发负责人通知；保存阶段只写当前 Bug 行和其附件/流转记录，避免飞书已送达但前端仍等待全量同步。
+    await upsertDashboardBugDatabase(savedRecord as BugReport);
+  } else {
+    await writeDatabase(savedData);
+  }
 
   return {
     type,
@@ -2627,6 +2633,9 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
   if (type === "task") {
     // 任务看板拖拽会高频调用 PATCH，只更新当前任务一行即可；如果走 writeDatabase 会触发整库同步事务并放大 MySQL 锁等待。
     await updateDashboardTaskDatabase(savedRecord as Task);
+  } else if (type === "bug") {
+    // Bug 状态流转、负责人变更和回归验证同样是单记录写入；项目统计读取时会派生，不能用全量同步拖慢保存按钮。
+    await upsertDashboardBugDatabase(savedRecord as BugReport);
   } else {
     await writeDatabase(savedData);
   }

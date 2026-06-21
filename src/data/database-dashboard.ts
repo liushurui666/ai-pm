@@ -581,41 +581,85 @@ async function syncRisks(prisma: DashboardPrisma, risks: Risk[]) {
   }
 }
 
+function getBugPayload(bug: BugReport) {
+  return {
+    workspaceId: getWorkspaceId(bug),
+    title: bug.title,
+    status: bug.status,
+    severity: bug.severity,
+    project: bug.project,
+    versionId: bug.versionId,
+    versionName: bug.versionName,
+    reporter: bug.reporter,
+    owner: bug.owner,
+    ownerMemberId: bug.ownerMemberId,
+    ownerOpenId: bug.ownerOpenId,
+    ownerUnionId: bug.ownerUnionId,
+    ownerUserId: bug.ownerUserId,
+    ownerEmail: bug.ownerEmail,
+    ownerAvatarUrl: bug.ownerAvatarUrl,
+    environment: bug.environment,
+    reproduction: bug.reproduction,
+    expected: bug.expected,
+    actual: bug.actual,
+    createdAt: bug.createdAt,
+    aiFixLatestJobId: bug.aiFix?.latestJobId,
+    aiFixStatus: bug.aiFix?.status,
+    aiFixBranch: bug.aiFix?.branch,
+    aiFixMrUrl: bug.aiFix?.mrUrl,
+    aiFixSummary: bug.aiFix?.summary,
+    aiFixError: bug.aiFix?.error,
+    aiFixUpdatedAt: bug.aiFix?.updatedAt ? new Date(bug.aiFix.updatedAt) : undefined
+  };
+}
+
+async function replaceBugChildRecords(prisma: DashboardPrisma, bug: BugReport) {
+  await prisma.bugAttachment.deleteMany({
+    where: { bugId: bug.id }
+  });
+  await prisma.bugFlowRecord.deleteMany({
+    where: { bugId: bug.id }
+  });
+
+  if (bug.attachments?.length) {
+    await prisma.bugAttachment.createMany({
+      data: bug.attachments.map((attachment) => ({
+        id: attachment.id,
+        bugId: bug.id,
+        key: attachment.key,
+        name: attachment.name,
+        url: attachment.url,
+        type: attachment.type,
+        mimeType: attachment.mimeType,
+        size: attachment.size,
+        uploadedAt: attachment.uploadedAt
+      }))
+    });
+  }
+
+  if (bug.flowRecords?.length) {
+    await prisma.bugFlowRecord.createMany({
+      data: bug.flowRecords.map((record) => ({
+        id: record.id,
+        bugId: bug.id,
+        action: record.action,
+        at: record.at,
+        operator: record.operator,
+        from: record.from,
+        to: record.to,
+        note: record.note
+      }))
+    });
+  }
+}
+
 async function syncBugs(prisma: DashboardPrisma, bugs: BugReport[]) {
   await prisma.bugReport.deleteMany({
     where: getDeleteWhere(bugs.map((bug) => bug.id))
   });
 
   for (const bug of bugs) {
-    const payload = {
-      workspaceId: getWorkspaceId(bug),
-      title: bug.title,
-      status: bug.status,
-      severity: bug.severity,
-      project: bug.project,
-      versionId: bug.versionId,
-      versionName: bug.versionName,
-      reporter: bug.reporter,
-      owner: bug.owner,
-      ownerMemberId: bug.ownerMemberId,
-      ownerOpenId: bug.ownerOpenId,
-      ownerUnionId: bug.ownerUnionId,
-      ownerUserId: bug.ownerUserId,
-      ownerEmail: bug.ownerEmail,
-      ownerAvatarUrl: bug.ownerAvatarUrl,
-      environment: bug.environment,
-      reproduction: bug.reproduction,
-      expected: bug.expected,
-      actual: bug.actual,
-      createdAt: bug.createdAt,
-      aiFixLatestJobId: bug.aiFix?.latestJobId,
-      aiFixStatus: bug.aiFix?.status,
-      aiFixBranch: bug.aiFix?.branch,
-      aiFixMrUrl: bug.aiFix?.mrUrl,
-      aiFixSummary: bug.aiFix?.summary,
-      aiFixError: bug.aiFix?.error,
-      aiFixUpdatedAt: bug.aiFix?.updatedAt ? new Date(bug.aiFix.updatedAt) : undefined
-    };
+    const payload = getBugPayload(bug);
 
     await prisma.bugReport.upsert({
       where: { id: bug.id },
@@ -626,43 +670,7 @@ async function syncBugs(prisma: DashboardPrisma, bugs: BugReport[]) {
       }
     });
 
-    await prisma.bugAttachment.deleteMany({
-      where: { bugId: bug.id }
-    });
-    await prisma.bugFlowRecord.deleteMany({
-      where: { bugId: bug.id }
-    });
-
-    if (bug.attachments?.length) {
-      await prisma.bugAttachment.createMany({
-        data: bug.attachments.map((attachment) => ({
-          id: attachment.id,
-          bugId: bug.id,
-          key: attachment.key,
-          name: attachment.name,
-          url: attachment.url,
-          type: attachment.type,
-          mimeType: attachment.mimeType,
-          size: attachment.size,
-          uploadedAt: attachment.uploadedAt
-        }))
-      });
-    }
-
-    if (bug.flowRecords?.length) {
-      await prisma.bugFlowRecord.createMany({
-        data: bug.flowRecords.map((record) => ({
-          id: record.id,
-          bugId: bug.id,
-          action: record.action,
-          at: record.at,
-          operator: record.operator,
-          from: record.from,
-          to: record.to,
-          note: record.note
-        }))
-      });
-    }
+    await replaceBugChildRecords(prisma, bug);
   }
 }
 
@@ -833,6 +841,30 @@ export async function updateDashboardTaskDatabase(task: Task, client?: PrismaCli
     where: { id: task.id },
     data: getTaskPayload(task)
   });
+}
+
+export async function upsertDashboardBugDatabase(bug: BugReport, client?: PrismaClient) {
+  const prisma = client ?? getPrismaClient();
+
+  await prisma.$transaction(
+    async (tx) => {
+      const payload = getBugPayload(bug);
+
+      // Bug 创建/流转只需要更新当前 Bug 以及它自己的附件、流转记录。
+      // 不能为了一个 Bug 保存调用全量 dashboard 同步，否则飞书通知已经发出后，前端还会继续等待整库重写完成。
+      await tx.bugReport.upsert({
+        where: { id: bug.id },
+        update: payload,
+        create: {
+          id: bug.id,
+          ...payload
+        }
+      });
+
+      await replaceBugChildRecords(tx, bug);
+    },
+    DASHBOARD_SYNC_TRANSACTION_OPTIONS
+  );
 }
 
 export async function writeDashboardIdentityDatabase(data: Pick<DashboardDatabase, "members" | "workspaces">, client?: PrismaClient) {

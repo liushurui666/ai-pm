@@ -39,8 +39,8 @@ const statusOptions: Array<{ value: MemberStatus; label: string }> = [
 
 const channelProviderOptions: Array<{ value: MemberNotificationChannelProvider; label: string; color: string; disabled?: boolean }> = [
   { value: "feishu", label: "飞书", color: "blue" },
-  { value: "email", label: "邮箱", color: "cyan" },
-  { value: "webhook", label: "Webhook", color: "purple" },
+  { value: "email", label: "邮箱", color: "cyan", disabled: true },
+  { value: "webhook", label: "Webhook", color: "purple", disabled: true },
   { value: "telegram", label: "TG", color: "default", disabled: true }
 ];
 
@@ -79,9 +79,15 @@ function getPersonSearchText(person: FeishuPerson) {
 
 function getChannelTargetSummary(member: DashboardMember, provider: MemberNotificationChannelProvider) {
   const channels = member.notification.channels.filter((channel) => channel.provider === provider);
+  const providerMeta = getChannelProviderMeta(provider);
 
   if (!channels.length) {
     return "";
+  }
+
+  if (providerMeta.disabled) {
+    // 邮箱/Webhook/TG 目前只保留配置数据，不应在列表里展示成“已启用发送”，避免测试时误判通知链路已经接通。
+    return "待接入";
   }
 
   const enabledCount = channels.filter((channel) => channel.enabled).length;
@@ -628,7 +634,7 @@ export function MembersView({
           type="info"
           showIcon
           title="通知渠道与通知场景分开配置"
-          description="当前先支持飞书机器人通知；邮箱、Webhook 和 TG 已作为渠道结构预留，后续接入发送器后可直接启用。"
+          description="当前实际发送只支持飞书机器人；邮箱、Webhook 和 TG 仅保留数据结构，待接入发送器后再开放新增。"
         />
         <Form
           form={notificationForm}
@@ -665,8 +671,16 @@ export function MembersView({
                   <Button icon={<PlusOutlined />} onClick={() => add(createDefaultNotificationChannel("feishu"))}>
                     添加飞书渠道
                   </Button>
-                  <Button onClick={() => add(createDefaultNotificationChannel("email"))}>添加邮箱渠道</Button>
-                  <Button onClick={() => add(createDefaultNotificationChannel("webhook"))}>添加 Webhook</Button>
+                  <Tooltip title="邮箱发送器待接入，当前不会发送邮件">
+                    <span>
+                      <Button disabled>添加邮箱渠道</Button>
+                    </span>
+                  </Tooltip>
+                  <Tooltip title="Webhook 发送器待接入，当前不会触发回调">
+                    <span>
+                      <Button disabled>添加 Webhook</Button>
+                    </span>
+                  </Tooltip>
                   <Tooltip title="TG 通知发送器待接入，当前先置灰展示">
                     <span>
                       <Button disabled>添加 TG 渠道</Button>
