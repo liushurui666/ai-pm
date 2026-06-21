@@ -664,6 +664,7 @@ enum AssistantActionType {
   complete_tasks
   close_bugs
   create_tasks
+  assign_tasks
 }
 
 enum AssistantActionTargetType {

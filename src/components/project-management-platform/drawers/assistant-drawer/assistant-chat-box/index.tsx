@@ -114,7 +114,7 @@ function createLocalTextMessage(role: UIMessage["role"], text: string, prefix: s
 
 function hasCompletedMutationTool(messages: UIMessage[]) {
   const lastAssistantMessage = [...messages].reverse().find((message) => message.role === "assistant");
-  const mutationToolTypes = new Set(["tool-operations", "tool-bulkCreateTasks", "tool-bulkCompleteTasks", "tool-bulkCloseBugs"]);
+  const mutationToolTypes = new Set(["tool-operations", "tool-bulkAssignTasks", "tool-bulkCreateTasks", "tool-bulkCompleteTasks", "tool-bulkCloseBugs"]);
 
   // 只有动作类 tool 会写业务数据；普通分析、风险读取、周报上下文读取都只是查询。
   // 过去每条回复结束都刷新 dashboard，会让连续对话被大量数据库读请求拖慢，并增加输入框生成态交错的概率。

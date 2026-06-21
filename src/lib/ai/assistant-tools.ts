@@ -5,7 +5,7 @@ import {
   executeAssistantInternalAction,
   type AssistantInternalActionRuntime
 } from "@/lib/ai/assistant-internal-actions";
-import { enqueueAssistantBulkActionJob, type AssistantCreateTaskDraft } from "@/lib/ai/assistant-action-jobs";
+import { enqueueAssistantBulkActionJob, type AssistantCreateTaskDraft, type AssistantTaskOwnerDraft } from "@/lib/ai/assistant-action-jobs";
 import {
   createDashScopeEmbedding,
   createDashScopeReranker,
@@ -596,6 +596,81 @@ function createBulkOperationsTool(
     };
   }
 
+  async function executeBulkAssignTasks({
+    ids,
+    limit,
+    owner,
+    scope
+  }: {
+    ids?: string[];
+    limit: number;
+    owner?: string;
+    scope: "ids" | "all";
+  }) {
+    const data = await loadData();
+    const currentUserMatcher = createCurrentUserMatcher(data);
+    const workspaceId = data.meta?.currentWorkspace?.id ?? actionRuntime.workspaceId;
+    const idSet = new Set(ids ?? []);
+    const rowLimit = Math.min(Math.max(Math.trunc(limit || 100), 1), 100);
+
+    if (!workspaceId) {
+      return {
+        已执行: false,
+        状态: "失败",
+        业务结果: "缺少当前工作区，无法提交批量归属任务。"
+      };
+    }
+
+    if (scope === "ids" && !idSet.size) {
+      return {
+        已执行: false,
+        状态: "失败",
+        业务结果: "按指定任务归属时必须提供任务 id。"
+      };
+    }
+
+    const targetOwner: AssistantTaskOwnerDraft = findTaskOwnerForDraft(data, owner, currentUserMatcher);
+    const selectedRecords = data.tasks
+      .filter((task) => scope !== "ids" || idSet.has(task.id))
+      .filter((task) => scope !== "all" || task.stage !== "已完成")
+      .slice(0, rowLimit);
+
+    if (!selectedRecords.length) {
+      return {
+        已执行: false,
+        状态: "无需处理",
+        总数: 0,
+        成功数: 0,
+        失败数: 0,
+        业务结果: scope === "ids" ? "没有匹配到这些任务记录。" : "没有匹配到可归属的未完成任务。"
+      };
+    }
+
+    const queued = await enqueueAssistantBulkActionJob({
+      actionType: "assign_tasks",
+      targetType: "task",
+      workspaceId,
+      scope,
+      requestedBy: currentUserMatcher.currentUser.姓名,
+      recordIds: selectedRecords.map((record) => record.id),
+      owner: targetOwner,
+      titles: Object.fromEntries(selectedRecords.map((record) => [record.id, record.title]))
+    });
+
+    return {
+      当前用户: currentUserMatcher.currentUser,
+      目标范围: scope === "all" ? "当前工作区全部未完成任务" : "指定任务",
+      目标负责人: targetOwner.owner,
+      请求处理数: selectedRecords.length,
+      任务预览: selectedRecords.slice(0, 8).map((task) => ({
+        id: task.id,
+        标题: task.title,
+        原负责人: task.owner
+      })),
+      ...queued
+    };
+  }
+
   async function executeBulkAction({
     action,
     entity,
@@ -704,6 +779,12 @@ function createBulkOperationsTool(
     ids: z.array(z.string().min(1)).max(100).optional().describe("scope=ids 时使用的记录 id 列表"),
     limit: z.number().int().min(1).max(100).default(100).describe("本轮最多处理的记录数")
   });
+  const assignTaskInputSchema = z.object({
+    scope: z.enum(["ids", "all"]).default("ids").describe("ids=仅归属指定任务；all=当前工作区全部未完成任务"),
+    ids: z.array(z.string().min(1)).max(100).optional().describe("scope=ids 时使用的任务 id 列表"),
+    owner: z.string().min(1).optional().describe("目标负责人姓名或邮箱；未填时默认当前登录人"),
+    limit: z.number().int().min(1).max(100).default(100).describe("本轮最多归属的任务数")
+  });
   const createTaskDraftSchema = z.object({
     title: z.string().min(1).max(160).describe("任务标题，必须是可执行事项"),
     versionId: z.string().min(1).optional().describe("明确知道版本 id 时填写"),
@@ -730,6 +811,15 @@ function createBulkOperationsTool(
         tasks: z.array(createTaskDraftSchema).min(1).max(50).describe("本次要创建的任务列表")
       }),
       execute: executeBulkCreateTasks
+    },
+    bulkAssignTasks: {
+      description: [
+        "批量修改任务负责人/归属人；当用户说“把这些任务归属给我、转给我、负责人改成我、分配给某人、归属到某人名下”时必须优先使用。",
+        "该能力会提交后台动作队列，并同步 ownerMemberId、邮箱、头像和飞书身份字段；不要用普通 operations 只改 owner 文本。",
+        "如果用户说“我/这里/当前登录人”，owner 可不填，系统会使用当前登录成员作为目标负责人。"
+      ].join("\n"),
+      inputSchema: assignTaskInputSchema,
+      execute: executeBulkAssignTasks
     },
     bulkCompleteTasks: {
       description: [

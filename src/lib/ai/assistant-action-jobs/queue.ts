@@ -9,7 +9,7 @@ const defaultActionJobLockMs = 5 * 60 * 1000;
 const defaultWorkerBatchLimit = 5;
 const defaultInlineWaitMs = 1_500;
 
-type AssistantBulkActionType = "complete_tasks" | "close_bugs" | "create_tasks";
+type AssistantBulkActionType = "complete_tasks" | "close_bugs" | "create_tasks" | "assign_tasks";
 type AssistantBulkTargetType = "task" | "bug";
 
 export type AssistantCreateTaskDraft = {
@@ -31,9 +31,20 @@ export type AssistantCreateTaskDraft = {
   versionName?: string;
 };
 
+export type AssistantTaskOwnerDraft = {
+  owner: string;
+  ownerAvatarUrl?: string;
+  ownerEmail?: string;
+  ownerMemberId?: string;
+  ownerOpenId?: string;
+  ownerUnionId?: string;
+  ownerUserId?: string;
+};
+
 type EnqueueAssistantBulkActionJobInput = {
   actionType: AssistantBulkActionType;
   drafts?: AssistantCreateTaskDraft[];
+  owner?: AssistantTaskOwnerDraft;
   recordIds: string[];
   requestedBy?: string;
   scope: string;
@@ -98,6 +109,28 @@ function asCreateTaskDrafts(value: Prisma.JsonValue) {
       return draft;
     })
     .filter((item) => Boolean(item.title.trim() && item.startDate && item.dueDate));
+}
+
+function asTaskOwnerDraft(value: Prisma.JsonValue) {
+  const result = asObjectRecord(value);
+  const ownerValue = asObjectRecord(result.owner);
+  const owner = typeof ownerValue.owner === "string" ? ownerValue.owner.trim() : "";
+
+  if (!owner) {
+    return undefined;
+  }
+
+  const draft: AssistantTaskOwnerDraft = {
+    owner
+  };
+
+  for (const key of ["ownerAvatarUrl", "ownerEmail", "ownerMemberId", "ownerOpenId", "ownerUnionId", "ownerUserId"] as const) {
+    if (typeof ownerValue[key] === "string") {
+      draft[key] = ownerValue[key];
+    }
+  }
+
+  return draft;
 }
 
 function createWorkerId(prefix = "assistant-action") {
@@ -404,6 +437,77 @@ async function runCreateTasksJob(job: AssistantActionJob, recordIds: string[]) {
   };
 }
 
+async function runAssignTasksJob(job: AssistantActionJob, recordIds: string[]) {
+  const prisma = getPrismaClient();
+  const owner = asTaskOwnerDraft(job.result);
+
+  if (!owner) {
+    throw new Error("批量归属任务缺少目标负责人。");
+  }
+
+  const records = await prisma.projectTask.findMany({
+    where: {
+      workspaceId: job.workspaceId,
+      id: {
+        in: recordIds
+      }
+    },
+    select: {
+      id: true,
+      owner: true,
+      ownerMemberId: true,
+      title: true
+    }
+  });
+  const existingIds = new Set(records.map((record) => record.id));
+  const targetIds = records
+    .filter((record) => record.owner !== owner.owner || record.ownerMemberId !== (owner.ownerMemberId ?? null))
+    .map((record) => record.id);
+  const alreadyAssignedIds = records
+    .filter((record) => record.owner === owner.owner && record.ownerMemberId === (owner.ownerMemberId ?? null))
+    .map((record) => record.id);
+  const missingIds = recordIds.filter((id) => !existingIds.has(id));
+
+  if (targetIds.length) {
+    // 负责人归属必须一次性同步姓名、成员 id、邮箱和飞书身份字段；负责人看板和“我的待办”优先按 ownerMemberId 匹配。
+    // 只改 owner 文本会造成回复说已归属，但 UI 仍按旧成员筛选，这正是本次问题的根因。
+    await prisma.projectTask.updateMany({
+      where: {
+        workspaceId: job.workspaceId,
+        id: {
+          in: targetIds
+        }
+      },
+      data: {
+        owner: owner.owner,
+        ownerMemberId: owner.ownerMemberId ?? null,
+        ownerOpenId: owner.ownerOpenId ?? null,
+        ownerUnionId: owner.ownerUnionId ?? null,
+        ownerUserId: owner.ownerUserId ?? null,
+        ownerEmail: owner.ownerEmail ?? null,
+        ownerAvatarUrl: owner.ownerAvatarUrl ?? null
+      }
+    });
+  }
+
+  scheduleUpdatedRecordIndexJobs({
+    ids: targetIds,
+    targetType: "task",
+    workspaceId: job.workspaceId
+  });
+
+  return {
+    successIds: targetIds,
+    failedIds: missingIds,
+    result: {
+      目标负责人: owner.owner,
+      已转交记录: targetIds.map((id) => records.find((record) => record.id === id)?.title || id).slice(0, 12),
+      已是目标负责人: alreadyAssignedIds.slice(0, 12),
+      未找到记录: missingIds.slice(0, 12)
+    }
+  };
+}
+
 async function runAssistantActionJob(job: AssistantActionJob) {
   const prisma = getPrismaClient();
   const recordIds = asStringArray(job.recordIds);
@@ -416,7 +520,9 @@ async function runAssistantActionJob(job: AssistantActionJob) {
     ? await runCompleteTasksJob(job, recordIds)
     : job.actionType === "create_tasks"
       ? await runCreateTasksJob(job, recordIds)
-      : await runCloseBugsJob(job, recordIds);
+      : job.actionType === "assign_tasks"
+        ? await runAssignTasksJob(job, recordIds)
+        : await runCloseBugsJob(job, recordIds);
   const successCount = result.successIds.length;
   const failedCount = result.failedIds.length;
   const status = failedCount > 0
@@ -470,6 +576,7 @@ export async function enqueueAssistantBulkActionJob(input: EnqueueAssistantBulkA
       requestedBy: input.requestedBy,
       result: toJsonValue({
         drafts: input.drafts ?? [],
+        owner: input.owner ?? null,
         titles: input.titles ?? {}
       })
     }

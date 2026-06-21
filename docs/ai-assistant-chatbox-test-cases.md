@@ -49,6 +49,7 @@
 | AIC-039 | 思考过程聚合 | 发送会触发 tools 的周报或风险问题 | 每条助手消息最多展示一个默认收起的 `思考过程` 面板；展开后只在一个面板内展示推理文本和 ThoughtChain 步骤，不出现多个散落的“思考过程” | 待回归 |
 | AIC-040 | 污染历史恢复 | 在同一持久化会话里保留旧版失败 tool/reasoning 分片后继续发送“把我所有任务都关闭了” | 服务端只把历史文本送入模型，旧工具参数不再进入百炼 `function.arguments`；本轮仍由模型选择批量任务 tool 并返回非空业务结论 | 通过：命令行真实 `glm-5.1` + 污染历史验证 |
 | AIC-041 | 批量动作队列 | 发送“把我所有的任务都关闭了”或“关闭所有 Bug” | `bulkCompleteTasks` / `bulkCloseBugs` 只提交 `assistant_action_jobs` 队列，不再同步循环 PATCH；worker 批量 updateMany 后写回成功/失败统计，ChatBox 不因几十条记录长时间 pending | 通过：真实 `glm-5.1` + 临时工作区任务队列验证 |
+| AIC-042 | 批量归属任务 | 在上下文已有多个任务 ID 后发送“把这几个任务归属到我这里” | `bulkAssignTasks` 提交 `assistant_action_jobs` 队列，worker 同步 `owner`、`ownerMemberId`、邮箱和飞书身份；缺失 ID 必须进入失败明细，助手不能回复全量成功 | 通过：真实 MySQL 队列验证，发现 2 条旧 ID 缺失并补齐业务数据 |
 
 ## 十轮对话稳定性脚本
 
