@@ -663,6 +663,7 @@ enum DashboardSideEffectJobStatus {
 enum AssistantActionType {
   complete_tasks
   close_bugs
+  create_tasks
 }
 
 enum AssistantActionTargetType {

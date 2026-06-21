@@ -114,11 +114,12 @@ function createLocalTextMessage(role: UIMessage["role"], text: string, prefix: s
 
 function hasCompletedMutationTool(messages: UIMessage[]) {
   const lastAssistantMessage = [...messages].reverse().find((message) => message.role === "assistant");
+  const mutationToolTypes = new Set(["tool-operations", "tool-bulkCreateTasks", "tool-bulkCompleteTasks", "tool-bulkCloseBugs"]);
 
   // 只有动作类 tool 会写业务数据；普通分析、风险读取、周报上下文读取都只是查询。
   // 过去每条回复结束都刷新 dashboard，会让连续对话被大量数据库读请求拖慢，并增加输入框生成态交错的概率。
   return Boolean(lastAssistantMessage?.parts.some((part) =>
-    (part.type === "tool-operations" || part.type === "tool-bulkCompleteTasks" || part.type === "tool-bulkCloseBugs") &&
+    mutationToolTypes.has(part.type) &&
       "state" in part &&
       part.state === "output-available"
   ));
@@ -370,7 +371,9 @@ export function AssistantChatBox({
   const canRegenerate = Boolean(lastAssistantMessage) && !generating && messages.length > 1;
   const hasUserMessages = messages.some((message) => message.role === "user");
   const displayMessages = useMemo(() => createDisplayMessages(messages), [messages]);
-  const sessionError = isSessionExpiredError(error);
+  // ChatBox 的流式请求可能已经写入了用户消息和部分上下文；会话失效时只在当前面板提示，
+  // 不再自动 replace 到登录页，避免用户“说着说着”被打断且丢失正在看的对话现场。
+  const sessionError = sessionExpired || isSessionExpiredError(error);
   const visibleErrorMessage = sessionError
     ? "登录状态已失效，请重新登录后继续使用 AI 项目助手。"
     : sanitizeAssistantErrorMessage(error);
@@ -466,12 +469,6 @@ export function AssistantChatBox({
       ignore = true;
     };
   }, [modelStorageKey]);
-
-  useEffect(() => {
-    if (sessionExpired || isSessionExpiredError(error)) {
-      redirectToLogin();
-    }
-  }, [error, sessionExpired]);
 
   useEffect(() => {
     latestMessagesRef.current = messages;
@@ -990,7 +987,7 @@ export function AssistantChatBox({
               }}
             />
           )}
-          {error ? (
+          {error || sessionExpired ? (
             <Alert
               className="assistant-error"
               type="error"

@@ -1,10 +1,11 @@
 import type { ToolSet, UIMessage } from "ai";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
   executeAssistantInternalAction,
   type AssistantInternalActionRuntime
 } from "@/lib/ai/assistant-internal-actions";
-import { enqueueAssistantBulkActionJob } from "@/lib/ai/assistant-action-jobs";
+import { enqueueAssistantBulkActionJob, type AssistantCreateTaskDraft } from "@/lib/ai/assistant-action-jobs";
 import {
   createDashScopeEmbedding,
   createDashScopeReranker,
@@ -230,6 +231,73 @@ function matchesVersion(version: RequirementVersion, query?: { versionId?: strin
   return !versionId && !versionName;
 }
 
+function formatDate(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
+function addDays(date: Date, days: number) {
+  const nextDate = new Date(date);
+
+  nextDate.setDate(nextDate.getDate() + days);
+
+  return nextDate;
+}
+
+function normalizeTaskStageValue(value?: string): Task["stage"] {
+  return value === "进行中" || value === "评审中" || value === "已完成" ? value : "待处理";
+}
+
+function normalizeTaskPriorityValue(value?: string): Task["priority"] {
+  return value === "高" || value === "低" ? value : "中";
+}
+
+function findTaskVersionForDraft(
+  data: DashboardData,
+  draft: {
+    versionId?: string;
+    versionName?: string;
+  },
+  defaults: {
+    versionId?: string;
+    versionName?: string;
+  }
+) {
+  const versionId = normalizeText(draft.versionId || defaults.versionId);
+  const versionName = normalizeText(draft.versionName || defaults.versionName);
+
+  return (
+    data.requirementVersions.find((version) => versionId && version.id.toLowerCase() === versionId) ??
+    data.requirementVersions.find((version) => versionName && version.name.toLowerCase().includes(versionName)) ??
+    data.requirementVersions.find((version) => version.name === "未规划需求池") ??
+    data.requirementVersions[0]
+  );
+}
+
+function findTaskOwnerForDraft(
+  data: DashboardData,
+  ownerName: string | undefined,
+  currentUserMatcher: ReturnType<typeof createCurrentUserMatcher>
+) {
+  const normalizedOwner = normalizeText(ownerName);
+  const member = normalizedOwner
+    ? data.members.find((item) => normalizeText(item.name) === normalizedOwner || normalizeText(item.email) === normalizedOwner)
+    : currentUserMatcher.member;
+
+  return member
+    ? {
+        owner: member.name,
+        ownerAvatarUrl: member.avatarUrl,
+        ownerEmail: member.email,
+        ownerMemberId: member.id,
+        ownerOpenId: member.notification.feishuOpenId,
+        ownerUnionId: member.notification.feishuUnionId,
+        ownerUserId: member.notification.feishuUserId
+      }
+    : {
+        owner: ownerName?.trim() || currentUserMatcher.currentUser.姓名 || "未分配"
+      };
+}
+
 function compactTask(task: Task) {
   return {
     id: task.id,
@@ -408,6 +476,126 @@ function createBulkOperationsTool(
   loadData: AssistantDashboardDataLoader,
   actionRuntime: AssistantInternalActionRuntime
 ) {
+  async function executeBulkCreateTasks({
+    defaultOwner,
+    defaultVersionId,
+    defaultVersionName,
+    tasks
+  }: {
+    defaultOwner?: string;
+    defaultVersionId?: string;
+    defaultVersionName?: string;
+    tasks: Array<{
+      aiHint?: string;
+      dueDate?: string;
+      owner?: string;
+      priority?: string;
+      stage?: string;
+      startDate?: string;
+      title: string;
+      versionId?: string;
+      versionName?: string;
+    }>;
+  }) {
+    const data = await loadData();
+    const currentUserMatcher = createCurrentUserMatcher(data);
+    const workspaceId = data.meta?.currentWorkspace?.id ?? actionRuntime.workspaceId;
+    const todayText = formatDate(today());
+    const defaultDueDate = formatDate(addDays(today(), 7));
+    const drafts: AssistantCreateTaskDraft[] = [];
+    const recordIds: string[] = [];
+
+    if (!workspaceId) {
+      return {
+        已执行: false,
+        状态: "失败",
+        业务结果: "缺少当前工作区，无法提交批量创建任务。"
+      };
+    }
+
+    if (!tasks.length) {
+      return {
+        已执行: false,
+        状态: "失败",
+        业务结果: "没有可创建的任务。"
+      };
+    }
+
+    // 批量创建任务必须在 tool 侧先把版本、项目、负责人归一化，worker 才能做纯数据库写入。
+    // 这样 Chat 流式请求只等入队，不再串行调用多次 /api/records，也避免模型把项目和版本填成不一致。
+    for (const task of tasks.slice(0, 50)) {
+      const title = task.title.trim();
+
+      if (!title) {
+        continue;
+      }
+
+      const version = findTaskVersionForDraft(data, task, {
+        versionId: defaultVersionId,
+        versionName: defaultVersionName
+      });
+
+      if (!version) {
+        return {
+          已执行: false,
+          状态: "失败",
+          业务结果: "当前工作区没有可关联的版本，请先创建版本后再批量创建任务。"
+        };
+      }
+
+      const owner = findTaskOwnerForDraft(data, task.owner || defaultOwner, currentUserMatcher);
+      const dueDate = task.dueDate?.trim() || defaultDueDate;
+      const startDate = task.startDate?.trim() || todayText;
+      const id = `task-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
+
+      recordIds.push(id);
+      drafts.push({
+        ...owner,
+        aiHint: task.aiHint?.trim() || "由 AI 助手批量创建，请负责人补充细节。",
+        dueDate,
+        priority: normalizeTaskPriorityValue(task.priority),
+        project: version.project,
+        stage: normalizeTaskStageValue(task.stage),
+        startDate,
+        title,
+        versionId: version.id,
+        versionName: version.name
+      });
+    }
+
+    if (!drafts.length) {
+      return {
+        已执行: false,
+        状态: "失败",
+        业务结果: "没有有效的任务标题可创建。"
+      };
+    }
+
+    const queued = await enqueueAssistantBulkActionJob({
+      actionType: "create_tasks",
+      targetType: "task",
+      workspaceId,
+      scope: "create",
+      requestedBy: currentUserMatcher.currentUser.姓名,
+      recordIds,
+      drafts,
+      titles: Object.fromEntries(drafts.map((draft, index) => [recordIds[index], draft.title]))
+    });
+
+    return {
+      当前用户: currentUserMatcher.currentUser,
+      目标类型: "任务",
+      请求创建数: drafts.length,
+      任务预览: drafts.slice(0, 8).map((draft) => ({
+        标题: draft.title,
+        版本: draft.versionName,
+        负责人: draft.owner,
+        截止日期: draft.dueDate
+      })),
+      ...queued
+    };
+  }
+
   async function executeBulkAction({
     action,
     entity,
@@ -516,8 +704,33 @@ function createBulkOperationsTool(
     ids: z.array(z.string().min(1)).max(100).optional().describe("scope=ids 时使用的记录 id 列表"),
     limit: z.number().int().min(1).max(100).default(100).describe("本轮最多处理的记录数")
   });
+  const createTaskDraftSchema = z.object({
+    title: z.string().min(1).max(160).describe("任务标题，必须是可执行事项"),
+    versionId: z.string().min(1).optional().describe("明确知道版本 id 时填写"),
+    versionName: z.string().min(1).optional().describe("版本名称或用户提到的版本关键词，例如 PC-UI"),
+    owner: z.string().min(1).optional().describe("负责人姓名或邮箱；未填时默认当前登录人"),
+    priority: z.enum(["高", "中", "低"]).default("中").describe("任务优先级"),
+    stage: z.enum(["待处理", "进行中", "评审中", "已完成"]).default("待处理").describe("任务阶段"),
+    startDate: z.string().min(1).optional().describe("开始日期，YYYY-MM-DD"),
+    dueDate: z.string().min(1).optional().describe("截止日期，YYYY-MM-DD"),
+    aiHint: z.string().max(500).optional().describe("AI 给负责人的补充说明、风险或验收提示")
+  });
 
   return {
+    bulkCreateTasks: {
+      description: [
+        "批量创建任务；当用户一次性要求新建多个任务、列出 1/2/3/4 多条任务或说“批量创建任务”时优先使用。",
+        "该能力会提交后台动作队列，由 worker 批量写入任务；不要用 operations 连续调用多次 POST /api/records。",
+        "如果用户只给了任务标题和版本名，也要基于当前工作区版本匹配 version/project，并用当前登录人作为默认负责人。"
+      ].join("\n"),
+      inputSchema: z.object({
+        defaultVersionId: z.string().min(1).optional().describe("所有任务共用的版本 id"),
+        defaultVersionName: z.string().min(1).optional().describe("所有任务共用的版本名称或关键词"),
+        defaultOwner: z.string().min(1).optional().describe("所有任务共用负责人，未填默认当前登录人"),
+        tasks: z.array(createTaskDraftSchema).min(1).max(50).describe("本次要创建的任务列表")
+      }),
+      execute: executeBulkCreateTasks
+    },
     bulkCompleteTasks: {
       description: [
         "批量将任务标记为已完成；当用户说“关闭/完成/处理掉/清掉我的所有任务、全部任务、批量任务”时优先使用。",
@@ -866,6 +1079,7 @@ export function createAssistantTools(
             description: [
               "执行 AI PM 平台内部业务动作；当用户明确要求你帮他创建、更新、关闭、删除、保存、发起、配置或修改时使用。",
               "每次调用只执行一个明确动作；不要把多个 PATCH/DELETE/POST 动作拼成数组，也不要在一个 arguments 里写自然语言计划。",
+              "如果用户要求一次创建多个任务，必须优先使用批量创建任务工具提交后台队列，不要用 operations 连续调用多次创建任务。",
               "如果用户要求一次处理很多任务或 Bug，必须优先使用批量动作工具提交后台队列，不要用 operations 连续调用多次单条接口。",
               "只能调用当前站点同源 /api/* JSON 业务接口，不要调用认证或助手自身接口。",
               "常见动作：更新记录使用 PATCH /api/records，body 为 { type, id, workspaceId, values }；关闭 Bug 时 type=bug，values.status=已关闭。",

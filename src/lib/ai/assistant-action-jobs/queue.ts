@@ -9,11 +9,31 @@ const defaultActionJobLockMs = 5 * 60 * 1000;
 const defaultWorkerBatchLimit = 5;
 const defaultInlineWaitMs = 1_500;
 
-type AssistantBulkActionType = "complete_tasks" | "close_bugs";
+type AssistantBulkActionType = "complete_tasks" | "close_bugs" | "create_tasks";
 type AssistantBulkTargetType = "task" | "bug";
+
+export type AssistantCreateTaskDraft = {
+  aiHint: string;
+  dueDate: string;
+  owner: string;
+  ownerAvatarUrl?: string;
+  ownerEmail?: string;
+  ownerMemberId?: string;
+  ownerOpenId?: string;
+  ownerUnionId?: string;
+  ownerUserId?: string;
+  priority: string;
+  project: string;
+  stage: string;
+  startDate: string;
+  title: string;
+  versionId?: string;
+  versionName?: string;
+};
 
 type EnqueueAssistantBulkActionJobInput = {
   actionType: AssistantBulkActionType;
+  drafts?: AssistantCreateTaskDraft[];
   recordIds: string[];
   requestedBy?: string;
   scope: string;
@@ -43,6 +63,41 @@ function normalizeRecordIds(recordIds: string[]) {
 
 function asStringArray(value: Prisma.JsonValue) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())) : [];
+}
+
+function asObjectRecord(value: Prisma.JsonValue): Record<string, Prisma.JsonValue> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, Prisma.JsonValue>
+    : {};
+}
+
+function asCreateTaskDrafts(value: Prisma.JsonValue) {
+  const result = asObjectRecord(value);
+  const drafts = Array.isArray(result.drafts) ? result.drafts : [];
+
+  return drafts
+    .filter((item): item is Record<string, Prisma.JsonValue> => typeof item === "object" && item !== null && !Array.isArray(item))
+    .map((item) => {
+      const draft: AssistantCreateTaskDraft = {
+        aiHint: typeof item.aiHint === "string" ? item.aiHint : "AI 暂未发现额外风险。",
+        dueDate: typeof item.dueDate === "string" ? item.dueDate : "",
+        owner: typeof item.owner === "string" ? item.owner : "未分配",
+        priority: typeof item.priority === "string" ? item.priority : "中",
+        project: typeof item.project === "string" ? item.project : "未关联项目",
+        stage: typeof item.stage === "string" ? item.stage : "待处理",
+        startDate: typeof item.startDate === "string" ? item.startDate : "",
+        title: typeof item.title === "string" ? item.title : ""
+      };
+
+      for (const key of ["ownerAvatarUrl", "ownerEmail", "ownerMemberId", "ownerOpenId", "ownerUnionId", "ownerUserId", "versionId", "versionName"] as const) {
+        if (typeof item[key] === "string") {
+          draft[key] = item[key];
+        }
+      }
+
+      return draft;
+    })
+    .filter((item) => Boolean(item.title.trim() && item.startDate && item.dueDate));
 }
 
 function createWorkerId(prefix = "assistant-action") {
@@ -299,6 +354,56 @@ async function runCloseBugsJob(job: AssistantActionJob, recordIds: string[]) {
   };
 }
 
+async function runCreateTasksJob(job: AssistantActionJob, recordIds: string[]) {
+  const prisma = getPrismaClient();
+  const drafts = asCreateTaskDrafts(job.result).slice(0, recordIds.length);
+  const now = new Date();
+
+  if (!drafts.length) {
+    throw new Error("批量创建任务缺少可写入的任务草稿。");
+  }
+
+  // 批量创建任务不再回调 /api/records；worker 一次 createMany 写入 project_tasks，避免 Chat 流式请求被多次业务 API 保存拖住。
+  // 任务通知目前只在负责人变更/单条创建路径触发，AI 批量创建先保证可用性，后续如需要可再补 side-effect 队列通知。
+  await prisma.projectTask.createMany({
+    data: drafts.map((draft, index) => ({
+      id: recordIds[index] ?? `task-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`,
+      workspaceId: job.workspaceId,
+      title: draft.title,
+      stage: draft.stage,
+      owner: draft.owner,
+      ownerMemberId: draft.ownerMemberId ?? null,
+      ownerOpenId: draft.ownerOpenId ?? null,
+      ownerUnionId: draft.ownerUnionId ?? null,
+      ownerUserId: draft.ownerUserId ?? null,
+      ownerEmail: draft.ownerEmail ?? null,
+      ownerAvatarUrl: draft.ownerAvatarUrl ?? null,
+      project: draft.project,
+      versionId: draft.versionId ?? null,
+      versionName: draft.versionName ?? null,
+      priority: draft.priority,
+      startDate: draft.startDate,
+      dueDate: draft.dueDate,
+      aiHint: draft.aiHint
+    }))
+  });
+
+  scheduleUpdatedRecordIndexJobs({
+    ids: recordIds.slice(0, drafts.length),
+    targetType: "task",
+    workspaceId: job.workspaceId
+  });
+
+  return {
+    successIds: recordIds.slice(0, drafts.length),
+    failedIds: recordIds.slice(drafts.length),
+    result: {
+      已创建记录: drafts.map((draft) => draft.title).slice(0, 12),
+      创建时间: now.toISOString()
+    }
+  };
+}
+
 async function runAssistantActionJob(job: AssistantActionJob) {
   const prisma = getPrismaClient();
   const recordIds = asStringArray(job.recordIds);
@@ -309,7 +414,9 @@ async function runAssistantActionJob(job: AssistantActionJob) {
 
   const result = job.actionType === "complete_tasks"
     ? await runCompleteTasksJob(job, recordIds)
-    : await runCloseBugsJob(job, recordIds);
+    : job.actionType === "create_tasks"
+      ? await runCreateTasksJob(job, recordIds)
+      : await runCloseBugsJob(job, recordIds);
   const successCount = result.successIds.length;
   const failedCount = result.failedIds.length;
   const status = failedCount > 0
@@ -362,6 +469,7 @@ export async function enqueueAssistantBulkActionJob(input: EnqueueAssistantBulkA
       requestedCount: recordIds.length,
       requestedBy: input.requestedBy,
       result: toJsonValue({
+        drafts: input.drafts ?? [],
         titles: input.titles ?? {}
       })
     }
