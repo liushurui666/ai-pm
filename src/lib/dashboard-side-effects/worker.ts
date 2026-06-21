@@ -2,6 +2,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { Prisma } from "@prisma/client";
 import { getPrismaClient } from "@/lib/database/prisma";
 import { sendFeishuBotTaskCard } from "@/lib/feishu/message";
+import { sendDashboardNotificationEmail } from "@/lib/notifications/email";
 import {
   isBullMqDashboardSideEffectQueueEnabled,
   runBullMqDashboardSideEffectWorker
@@ -11,10 +12,12 @@ import { getDashboardSideEffectSettings } from "@/lib/dashboard-side-effects/set
 import type { ClaimedDashboardSideEffectJob, DashboardSideEffectPayload } from "@/lib/dashboard-side-effects/ports";
 
 type NotificationChannel = {
+  id?: string;
   provider?: string;
   enabled?: boolean;
   target?: string;
   feishuOpenId?: string;
+  email?: string;
   scenes?: string[];
 };
 
@@ -67,7 +70,8 @@ function getMemberNotificationIdentities(member: DashboardMemberRecord) {
     notification.feishuOpenId,
     ...(notification.channels ?? []).flatMap((channel) => [
       channel.target,
-      channel.feishuOpenId
+      channel.feishuOpenId,
+      channel.email
     ]),
     ...asMemberIdentities(member.identities).flatMap((identity) => [
       identity.providerUserId,
@@ -96,18 +100,78 @@ async function findNotificationMember(workspaceId: string, targetIdentities: str
   });
 }
 
-function getFeishuChannel(member: DashboardMemberRecord, scene: string) {
+function getEnabledNotificationChannels(member: DashboardMemberRecord, scene: string) {
   const notification = asNotificationSettings(member.notification);
 
-  return (notification.channels ?? []).find(
-    (channel) => channel.provider === "feishu" && channel.enabled && (channel.scenes ?? []).includes(scene)
-  );
+  return (notification.channels ?? []).filter(
+    (channel) => (channel.provider === "feishu" || channel.provider === "email") && channel.enabled && (channel.scenes ?? []).includes(scene)
+  ).sort((left, right) => {
+    // 邮箱通过 Resend 幂等键天然抗重试，先发邮箱再发飞书，可以降低“飞书已发但邮箱配置失败”造成的重复飞书风险。
+    if (left.provider === right.provider) {
+      return 0;
+    }
+
+    return left.provider === "email" ? -1 : 1;
+  });
 }
 
 function getFeishuOpenId(member: DashboardMemberRecord, channel?: NotificationChannel) {
   const notification = asNotificationSettings(member.notification);
 
   return channel?.feishuOpenId ?? channel?.target ?? notification.feishuOpenId;
+}
+
+function getEmailAddress(member: DashboardMemberRecord, channel: NotificationChannel) {
+  return asText(channel.email) || asText(channel.target) || asText(member.email);
+}
+
+async function sendNotificationChannel({
+  channel,
+  job,
+  member,
+  payload
+}: {
+  channel: NotificationChannel;
+  job: ClaimedDashboardSideEffectJob;
+  member: DashboardMemberRecord;
+  payload: DashboardSideEffectPayload;
+}) {
+  const title = asText(payload.cardTitle, "AI PM 通知");
+  const text = asText(payload.cardText, "请进入 AI PM 查看详情。");
+  const view = asText(payload.view) || undefined;
+
+  if (channel.provider === "feishu") {
+    const openId = getFeishuOpenId(member, channel);
+
+    if (!openId) {
+      throw new Error(`成员 ${member.name} 未绑定飞书账号`);
+    }
+
+    await sendFeishuBotTaskCard({
+      openId,
+      title,
+      text,
+      view
+    });
+
+    return;
+  }
+
+  if (channel.provider === "email") {
+    const email = getEmailAddress(member, channel);
+
+    if (!email) {
+      throw new Error(`成员 ${member.name} 未配置邮箱地址`);
+    }
+
+    await sendDashboardNotificationEmail({
+      to: email,
+      title,
+      text,
+      view,
+      idempotencyKey: `dashboard:${job.id}:${channel.id ?? email}`
+    });
+  }
 }
 
 async function runNotifyJob(job: ClaimedDashboardSideEffectJob) {
@@ -125,23 +189,17 @@ async function runNotifyJob(job: ClaimedDashboardSideEffectJob) {
     throw new Error(`成员 ${member.name} 已被禁用`);
   }
 
-  const channel = getFeishuChannel(member, scene);
-  const openId = getFeishuOpenId(member, channel);
+  const channels = getEnabledNotificationChannels(member, scene);
 
-  if (!openId) {
-    throw new Error(`成员 ${member.name} 未绑定飞书账号`);
+  if (!channels.length) {
+    throw new Error(`成员 ${member.name} 未启用该通知场景的飞书或邮箱渠道`);
   }
 
-  if (!channel) {
-    throw new Error(`成员 ${member.name} 已关闭该通知场景`);
+  // 同一通知事件允许飞书和邮箱同时启用；worker 串行发送可以复用现有重试语义，
+  // 任何渠道失败都会让 job 进入重试，Resend 幂等键负责避免邮件重复投递。
+  for (const channel of channels) {
+    await sendNotificationChannel({ channel, job, member, payload });
   }
-
-  await sendFeishuBotTaskCard({
-    openId,
-    title: asText(payload.cardTitle, "AI PM 通知"),
-    text: asText(payload.cardText, "请进入 AI PM 查看详情。"),
-    view: asText(payload.view) || undefined
-  });
 }
 
 async function runDashboardSideEffectJob(job: ClaimedDashboardSideEffectJob) {

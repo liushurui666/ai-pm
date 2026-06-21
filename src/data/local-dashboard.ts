@@ -2022,6 +2022,19 @@ function findNotificationMember(data: LocalDatabase, workspaceId: string, values
   return findMemberByNotificationIdentities(data, workspaceId, getNotificationTargetIdentities(values));
 }
 
+function getEnabledDeliveryChannels(member: DashboardMember | undefined, scene: MemberNotificationScene) {
+  return (member?.notification.channels ?? []).filter(
+    (channel) =>
+      (channel.provider === "feishu" || channel.provider === "email") &&
+      channel.enabled &&
+      channel.scenes.includes(scene)
+  );
+}
+
+function hasEnabledProvider(member: DashboardMember | undefined, provider: MemberNotificationChannelProvider) {
+  return Boolean(member?.notification.channels.some((channel) => channel.provider === provider && channel.enabled));
+}
+
 async function notifyOwner(data: LocalDatabase, workspaceId: string, type: DashboardEntityType, values: Record<string, unknown>) {
   const member = findNotificationMember(data, workspaceId, values);
   const notificationScene: MemberNotificationScene =
@@ -2030,10 +2043,7 @@ async function notifyOwner(data: LocalDatabase, workspaceId: string, type: Dashb
       : type === "bug"
         ? "bugFlowChanged"
         : "taskAssigned";
-  const feishuChannel = member?.notification.channels.find(
-    (channel) => channel.provider === "feishu" && channel.enabled && channel.scenes.includes(notificationScene)
-  );
-  const ownerOpenId = feishuChannel?.feishuOpenId ?? feishuChannel?.target ?? member?.notification.feishuOpenId;
+  const deliveryChannels = getEnabledDeliveryChannels(member, notificationScene);
   const ownerName = asOwnerName(values);
   const recordTitle = getRecordTitle(type, values);
   const cardTitle = type === "bug" ? "你有一个 Bug 需要处理" : `你被设置为${getEntityLabel(type)}负责人`;
@@ -2060,23 +2070,19 @@ async function notifyOwner(data: LocalDatabase, workspaceId: string, type: Dashb
   }
 
   if (member.status !== "active") {
-    return `未发送飞书通知：成员 ${member.name} 已被禁用。`;
+    return `未发送通知：成员 ${member.name} 已被禁用。`;
   }
 
-  if (!member.notification.channels.some((channel) => channel.provider === "feishu" && channel.enabled)) {
-    return `未发送飞书通知：成员 ${member.name} 已关闭飞书通知。`;
+  if (!hasEnabledProvider(member, "feishu") && !hasEnabledProvider(member, "email")) {
+    return `未发送通知：成员 ${member.name} 已关闭飞书和邮箱通知。`;
   }
 
-  if (!ownerOpenId) {
-    return `未发送飞书通知：成员 ${member.name} 未绑定飞书账号。`;
-  }
-
-  if (!feishuChannel) {
-    return `未发送飞书通知：成员 ${member.name} 已关闭该通知场景。`;
+  if (!deliveryChannels.length) {
+    return `未发送通知：成员 ${member.name} 未启用该通知场景的飞书或邮箱渠道。`;
   }
 
   try {
-    // 飞书发送放入 Dashboard 副作用队列，Web 请求只负责保存主记录和入队，避免外部通知接口拖住保存按钮。
+    // 通知发送放入 Dashboard 副作用队列，Web 请求只负责保存主记录和入队，避免外部通知接口拖住保存按钮。
     await createDashboardSideEffectQueue().enqueue({
       workspaceId,
       entityType: type,
@@ -2093,9 +2099,9 @@ async function notifyOwner(data: LocalDatabase, workspaceId: string, type: Dashb
       })
     });
 
-    return `已提交后台飞书通知：${asOwnerName(values)}。`;
+    return `已提交后台通知：${asOwnerName(values)}。`;
   } catch (error) {
-    return `飞书通知入队失败：${error instanceof Error ? error.message : "未知错误"}。`;
+    return `通知入队失败：${error instanceof Error ? error.message : "未知错误"}。`;
   }
 }
 
@@ -2115,10 +2121,7 @@ async function notifyBugTesterOnReady(
     .map((value) => asText(value).trim().toLowerCase())
     .filter(Boolean);
   const member = findMemberByNotificationIdentities(data, workspaceId, testerIdentities);
-  const feishuChannel = member?.notification.channels.find(
-    (channel) => channel.provider === "feishu" && channel.enabled && channel.scenes.includes("bugFlowChanged")
-  );
-  const testerOpenId = feishuChannel?.feishuOpenId ?? feishuChannel?.target ?? member?.notification.feishuOpenId;
+  const deliveryChannels = getEnabledDeliveryChannels(member, "bugFlowChanged");
 
   if (!testerIdentities.length) {
     return "";
@@ -2132,20 +2135,16 @@ async function notifyBugTesterOnReady(
     return `未发送测试通知：测试人员 ${member.name} 已被禁用。`;
   }
 
-  if (!member.notification.channels.some((channel) => channel.provider === "feishu" && channel.enabled)) {
-    return `未发送测试通知：测试人员 ${member.name} 已关闭飞书通知。`;
+  if (!hasEnabledProvider(member, "feishu") && !hasEnabledProvider(member, "email")) {
+    return `未发送测试通知：测试人员 ${member.name} 已关闭飞书和邮箱通知。`;
   }
 
-  if (!testerOpenId) {
-    return `未发送测试通知：测试人员 ${member.name} 未绑定飞书账号。`;
-  }
-
-  if (!feishuChannel) {
-    return `未发送测试通知：测试人员 ${member.name} 已关闭 Bug 流转通知场景。`;
+  if (!deliveryChannels.length) {
+    return `未发送测试通知：测试人员 ${member.name} 未启用 Bug 流转的飞书或邮箱渠道。`;
   }
 
   try {
-    // 回归通知同样走后台队列，避免 Bug 状态保存等待飞书接口完成。
+    // 回归通知同样走后台队列，避免 Bug 状态保存等待飞书或邮箱接口完成。
     await createDashboardSideEffectQueue().enqueue({
       workspaceId,
       entityType: "bug",

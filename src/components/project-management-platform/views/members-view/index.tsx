@@ -39,7 +39,7 @@ const statusOptions: Array<{ value: MemberStatus; label: string }> = [
 
 const channelProviderOptions: Array<{ value: MemberNotificationChannelProvider; label: string; color: string; disabled?: boolean }> = [
   { value: "feishu", label: "飞书", color: "blue" },
-  { value: "email", label: "邮箱", color: "cyan", disabled: true },
+  { value: "email", label: "邮箱", color: "cyan" },
   { value: "webhook", label: "Webhook", color: "purple", disabled: true },
   { value: "telegram", label: "TG", color: "default", disabled: true }
 ];
@@ -86,7 +86,7 @@ function getChannelTargetSummary(member: DashboardMember, provider: MemberNotifi
   }
 
   if (providerMeta.disabled) {
-    // 邮箱/Webhook/TG 目前只保留配置数据，不应在列表里展示成“已启用发送”，避免测试时误判通知链路已经接通。
+    // Webhook/TG 目前只保留配置数据，不应在列表里展示成“已启用发送”，避免测试时误判通知链路已经接通。
     return "待接入";
   }
 
@@ -634,7 +634,7 @@ export function MembersView({
           type="info"
           showIcon
           title="通知渠道与通知场景分开配置"
-          description="当前实际发送只支持飞书机器人；邮箱、Webhook 和 TG 仅保留数据结构，待接入发送器后再开放新增。"
+          description="当前实际发送支持飞书机器人和邮箱；Webhook 和 TG 仅保留数据结构，待接入发送器后再开放新增。"
         />
         <Form
           form={notificationForm}
@@ -671,11 +671,17 @@ export function MembersView({
                   <Button icon={<PlusOutlined />} onClick={() => add(createDefaultNotificationChannel("feishu"))}>
                     添加飞书渠道
                   </Button>
-                  <Tooltip title="邮箱发送器待接入，当前不会发送邮件">
-                    <span>
-                      <Button disabled>添加邮箱渠道</Button>
-                    </span>
-                  </Tooltip>
+                  <Button
+                    onClick={() =>
+                      add({
+                        ...createDefaultNotificationChannel("email"),
+                        email: notificationMember?.email || "",
+                        target: notificationMember?.email || ""
+                      })
+                    }
+                  >
+                    添加邮箱渠道
+                  </Button>
                   <Tooltip title="Webhook 发送器待接入，当前不会触发回调">
                     <span>
                       <Button disabled>添加 Webhook</Button>
