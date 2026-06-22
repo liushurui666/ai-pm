@@ -73,7 +73,7 @@ function isCurrentUserOwnerAlias(value?: string) {
 
   // 模型有时会把用户口语里的“归属给我”转成“当前登录人”这类展示文本。
   // 这些词不能作为真实 owner 落库，必须回退到当前工作区匹配到的成员，才能写入 ownerMemberId 和飞书 open_id。
-  return ["我", "本人", "自己", "当前登录人", "当前用户", "登录人", "我这里", "这里"].includes(normalizedValue);
+  return ["我", "你", "您", "本人", "自己", "当前登录人", "当前用户", "登录人", "我这里", "你这里", "这里"].includes(normalizedValue);
 }
 
 function sanitizeAssistantFactText(value: unknown) {

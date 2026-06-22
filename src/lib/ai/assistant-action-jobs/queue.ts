@@ -182,7 +182,7 @@ function isCurrentUserOwnerAlias(value: unknown) {
 
   // 批量创建任务的 owner 来自模型结构化参数；模型可能把“归属给我”理解成“当前登录人”文本。
   // worker 是最后一道数据一致性防线，不能让这种展示词直接写入任务表，否则负责人看板、我的待办和通知队列都无法按成员身份匹配。
-  return ["我", "本人", "自己", "当前登录人", "当前用户", "登录人", "我这里", "这里"].includes(normalizedValue);
+  return ["我", "你", "您", "本人", "自己", "当前登录人", "当前用户", "登录人", "我这里", "你这里", "这里"].includes(normalizedValue);
 }
 
 function getMemberNotificationIdentities(member: DashboardNotificationMember) {
