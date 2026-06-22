@@ -99,6 +99,45 @@ async function createAssistantResponseError(response: Response) {
   return new Error(payload?.error || fallbackMessage);
 }
 
+function createResponseWithStreamCleanup(response: Response, cleanup: () => void) {
+  if (!response.body) {
+    cleanup();
+
+    return response;
+  }
+
+  const reader = response.body.getReader();
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          cleanup();
+          controller.close();
+
+          return;
+        }
+
+        controller.enqueue(value);
+      } catch (error) {
+        cleanup();
+        controller.error(error);
+      }
+    },
+    async cancel(reason) {
+      cleanup();
+      await reader.cancel(reason);
+    }
+  });
+
+  return new Response(body, {
+    headers: response.headers,
+    status: response.status,
+    statusText: response.statusText
+  });
+}
+
 function createLocalTextMessage(role: UIMessage["role"], text: string, prefix: string): UIMessage {
   return {
     id: `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -250,12 +289,21 @@ export function AssistantChatBox({
   }, [commitSessionState]);
   const assistantFetch = useCallback(async (input: RequestInfo | URL, init?: RequestInit) => {
     const timeoutController = new AbortController();
+    let timeoutCleared = false;
     const timeoutId = window.setTimeout(() => {
       timeoutController.abort(new Error("AI 助手请求超过 110 秒仍未完成，请稍后重试。"));
     }, ASSISTANT_CHAT_REQUEST_TIMEOUT_MS);
+    const clearRequestTimeout = () => {
+      if (timeoutCleared) {
+        return;
+      }
+
+      timeoutCleared = true;
+      window.clearTimeout(timeoutId);
+    };
 
     // AI SDK 会把“停止生成”的 abort signal 放在 init.signal 里；这里再叠加本地超时。
-    // 超时时间必须短于服务端 maxDuration，否则平台先硬切 SSE 连接时浏览器只能得到裸 network error。
+    // 超时时间必须覆盖整个 SSE 读取过程并短于服务端 maxDuration，否则平台先硬切连接时浏览器只能得到裸 network error。
     if (init?.signal) {
       if (init.signal.aborted) {
         timeoutController.abort(init.signal.reason);
@@ -277,12 +325,14 @@ export function AssistantChatBox({
       });
 
       if (!response.ok) {
+        clearRequestTimeout();
         throw await createAssistantResponseError(response);
       }
 
-      return response;
-    } finally {
-      window.clearTimeout(timeoutId);
+      return createResponseWithStreamCleanup(response, clearRequestTimeout);
+    } catch (error) {
+      clearRequestTimeout();
+      throw error;
     }
   }, []);
   const transport = useMemo(() => new DefaultChatTransport({
