@@ -2,7 +2,9 @@
    编辑/删除等维护动作降一级，避免卡片看起来像按钮堆。 */
 .requirement-version-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  /* 单个版本也要保持和多版本列表一致的列宽；auto-fill 会保留空列，
+     避免 auto-fit 折叠空列后把唯一卡片拉成整行。 */
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 14px;
 }
 
