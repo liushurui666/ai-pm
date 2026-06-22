@@ -355,7 +355,9 @@ export async function indexBusinessEntity(job: ClaimedIndexJob, queue: IndexQueu
     entityType: source.entityType,
     entityId: source.entityId,
     jobType: "embed_chunks",
-    dedupeKey: `${source.workspaceId}:${savedSource.id}:embed_chunks`,
+    // embed job 需要随 contentHash 变化而重新入队；否则 BullMQ 保留旧完成 job 时，
+    // 同一 source 的新 chunk 会停在 pending，最终向量库仍是旧内容。
+    dedupeKey: `${source.workspaceId}:${savedSource.id}:embed_chunks:${contentHash}`,
     payload: {
       sourceId: savedSource.id,
       contentHash,

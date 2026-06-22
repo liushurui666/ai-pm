@@ -1,14 +1,5 @@
 /* 成员管理属于后台配置页，重点是扫读身份、权限和通知状态；
    这里把默认表格压成更稳定的管理台样式，不改变任何权限或更新逻辑。 */
-.member-management-actions {
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.member-management-actions .ant-btn {
-  border-radius: 8px;
-}
-
 .member-management-table .ant-table-cell {
   vertical-align: middle;
 }
@@ -168,15 +159,6 @@
 }
 
 @media (max-width: 768px) {
-  .member-management-actions {
-    width: 100%;
-    justify-content: flex-start;
-  }
-
-  .member-management-actions .ant-btn {
-    flex: 1 1 160px;
-  }
-
   .member-person-copy .ant-typography {
     max-width: 200px;
   }

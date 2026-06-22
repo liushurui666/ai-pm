@@ -81,6 +81,7 @@ export function createMastraKnowledgeWorkflow(queue: IndexQueuePort, handlers: W
 
   async function enqueueWorkspaceRebuild(workspaceId: string) {
     const prisma = getPrismaClient();
+    const enqueueRunId = Date.now();
     const [sources, versions, requirements, bugs, tasks, linkedRequirements] = await Promise.all([
       prisma.aiIndexSource.findMany({
         where: {
@@ -170,7 +171,9 @@ export function createMastraKnowledgeWorkflow(queue: IndexQueuePort, handlers: W
       entityType: record.entityType,
       entityId: record.entityId,
       jobType: "index_entity" as const,
-      dedupeKey: `${workspaceId}:${record.entityType}:${record.entityId}:index_entity`,
+      // 重建请求需要成为独立的一轮后台任务；BullMQ 保留已完成 job 时，固定 jobId 会让重建被误判为重复。
+      // 真正的无变化数据会在 source contentHash 阶段跳过重型 embedding。
+      dedupeKey: `${workspaceId}:${record.entityType}:${record.entityId}:index_entity:${enqueueRunId}`,
       priority: 10,
       payload: {
         scope: "workspace_rebuild"
@@ -184,7 +187,7 @@ export function createMastraKnowledgeWorkflow(queue: IndexQueuePort, handlers: W
         entityType: source.entityType,
         entityId: source.entityId,
         jobType: "rebuild_source",
-        dedupeKey: `${workspaceId}:${source.id}:rebuild_source`,
+        dedupeKey: `${workspaceId}:${source.id}:rebuild_source:${enqueueRunId}`,
         priority: 9,
         payload: {
           scope: "workspace_rebuild",
@@ -198,7 +201,7 @@ export function createMastraKnowledgeWorkflow(queue: IndexQueuePort, handlers: W
         entityType: "feishu_doc",
         entityId: requirement.id,
         jobType: "sync_feishu",
-        dedupeKey: `${workspaceId}:requirement:${requirement.id}:sync_feishu`,
+        dedupeKey: `${workspaceId}:requirement:${requirement.id}:sync_feishu:${enqueueRunId}`,
         priority: 8,
         payload: {
           scope: "workspace_rebuild",

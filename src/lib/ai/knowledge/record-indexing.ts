@@ -19,6 +19,7 @@ function getRecordWorkspaceId(result: CreateRecordResult) {
 export async function enqueueRecordIndexJob(result: CreateRecordResult, reason: "created" | "updated") {
   const entityType = indexableEntityTypes[result.type];
   const workspaceId = getRecordWorkspaceId(result);
+  const enqueueRunId = Date.now();
 
   if (!entityType || !workspaceId) {
     return;
@@ -31,7 +32,9 @@ export async function enqueueRecordIndexJob(result: CreateRecordResult, reason: 
     entityType,
     entityId: result.record.id,
     jobType: "index_entity",
-    dedupeKey: `${workspaceId}:${entityType}:${result.record.id}:index_entity`,
+    // BullMQ 会保留一段时间的已完成 job；固定 jobId 会让后续保存被误判为重复任务。
+    // 这里把每次业务写入作为独立索引请求，真正的重复内容由 indexBusinessEntity 的 contentHash 跳过重型 embedding。
+    dedupeKey: `${workspaceId}:${entityType}:${result.record.id}:index_entity:${enqueueRunId}`,
     payload: {
       reason,
       dashboardType: result.type
@@ -48,7 +51,7 @@ export async function enqueueRecordIndexJob(result: CreateRecordResult, reason: 
         entityType: "feishu_doc",
         entityId: requirement.id,
         jobType: "sync_feishu",
-        dedupeKey: `${workspaceId}:requirement:${requirement.id}:sync_feishu`,
+        dedupeKey: `${workspaceId}:requirement:${requirement.id}:sync_feishu:${enqueueRunId}`,
         payload: {
           reason,
           requirementId: requirement.id,

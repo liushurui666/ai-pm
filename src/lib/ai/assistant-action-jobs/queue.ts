@@ -477,6 +477,7 @@ async function enqueueUpdatedRecordIndexJobs({
   try {
     const queue = createIndexQueue();
     const entityType = targetType === "task" ? "task" : "bug";
+    const enqueueRunId = Date.now();
 
     // 批量动作本身只负责业务状态更新；RAG 索引仍走既有异步索引队列，避免把 embedding/Qdrant 写入绑回动作 worker。
     // 索引入队失败只影响后续知识检索新鲜度，不能反过来把已经成功的业务批量动作标记失败。
@@ -486,7 +487,9 @@ async function enqueueUpdatedRecordIndexJobs({
         entityType,
         entityId: id,
         jobType: "index_entity",
-        dedupeKey: `${workspaceId}:${entityType}:${id}:index_entity`,
+        // BullMQ 会短期保留已完成 job，固定 jobId 会吞掉下一次状态变更；批量动作每轮使用独立 key，
+        // 后续 source contentHash 会负责跳过无变化内容，避免重复 embedding。
+        dedupeKey: `${workspaceId}:${entityType}:${id}:index_entity:${enqueueRunId}`,
         payload: {
           reason: "assistant_bulk_action",
           dashboardType: targetType

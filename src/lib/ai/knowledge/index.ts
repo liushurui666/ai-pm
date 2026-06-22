@@ -1,4 +1,5 @@
 export { createBullMqIndexQueue, isBullMqIndexQueueEnabled, runBullMqIndexWorker } from "@/lib/ai/knowledge/bullmq-index-queue";
+export { runKnowledgeIndexCompensation } from "@/lib/ai/knowledge/compensation";
 export { createDashScopeEmbedding } from "@/lib/ai/knowledge/dashscope-embedding";
 export { createDashScopeReranker, createFallbackReranker } from "@/lib/ai/knowledge/dashscope-reranker";
 export { createIndexQueue } from "@/lib/ai/knowledge/index-queue";
