@@ -46,6 +46,7 @@ model DashboardMember {
   status              String
   identities          Json
   notification        Json
+  lastActiveAt        String?
   createdAt           String
   updatedAt           String
 

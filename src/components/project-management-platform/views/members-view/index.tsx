@@ -3,6 +3,9 @@
 import "./index.less";
 import { Alert, Avatar, Button, Drawer, Empty, Form, Input, Modal, Select, Space, Switch, Table, Tag, Tooltip, Typography } from "antd";
 import { BellOutlined, DeleteOutlined, PlusOutlined, SettingOutlined, TeamOutlined } from "@ant-design/icons";
+import dayjs from "dayjs";
+import relativeTime from "dayjs/plugin/relativeTime";
+import "dayjs/locale/zh-cn";
 import { useState } from "react";
 import type { ColumnsType } from "antd/es/table";
 import type {
@@ -19,6 +22,9 @@ import { DrawerFooterActions } from "@/components/project-management-platform/fo
 import { TableView } from "@/components/project-management-platform/shared/page-shell";
 
 const { Text } = Typography;
+
+dayjs.extend(relativeTime);
+dayjs.locale("zh-cn");
 
 const roleOptions: Array<{ value: MemberRole; label: string; color: string }> = [
   { value: "owner", label: "所有者", color: "red" },
@@ -74,6 +80,42 @@ function getMemberInitial(name?: string) {
 
 function getPersonSearchText(person: FeishuPerson) {
   return [person.name, person.enName, person.email, person.openId, person.userId].filter(Boolean).join(" ");
+}
+
+function formatMemberLastActiveAt(value?: string) {
+  if (!value) {
+    return {
+      absolute: "",
+      text: "从未登录"
+    };
+  }
+
+  const activeAt = dayjs(value);
+
+  if (!activeAt.isValid()) {
+    return {
+      absolute: "",
+      text: "从未登录"
+    };
+  }
+
+  const now = dayjs();
+  const diffMinutes = now.diff(activeAt, "minute");
+  const absolute = activeAt.format("YYYY-MM-DD HH:mm");
+
+  // 最近活跃是 5 分钟节流写入，不是实时在线心跳；一分钟内统一展示“刚刚”，
+  // 既避免用户误读成秒级在线状态，也让成员管理表格保持紧凑。
+  if (diffMinutes < 1) {
+    return {
+      absolute,
+      text: "刚刚"
+    };
+  }
+
+  return {
+    absolute,
+    text: diffMinutes < 24 * 60 ? activeAt.fromNow() : absolute
+  };
 }
 
 function getChannelTargetSummary(member: DashboardMember, provider: MemberNotificationChannelProvider) {
@@ -480,6 +522,23 @@ export function MembersView({
       )
     },
     {
+      title: "最近活跃",
+      dataIndex: "lastActiveAt",
+      key: "lastActiveAt",
+      width: 150,
+      render: (_, member) => {
+        const lastActive = formatMemberLastActiveAt(member.lastActiveAt);
+
+        return (
+          <Tooltip title={lastActive.absolute || "该成员还没有登录或访问记录"}>
+            <Text className="member-last-active" type="secondary">
+              {lastActive.text}
+            </Text>
+          </Tooltip>
+        );
+      }
+    },
+    {
       title: "通知渠道",
       key: "channels",
       width: 260,
@@ -565,7 +624,7 @@ export function MembersView({
         dataSource={members}
         pagination={false}
         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无成员" /> }}
-        scroll={{ x: 1120 }}
+        scroll={{ x: 1260 }}
       />
       <Modal
         className="member-notification-modal"

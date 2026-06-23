@@ -377,6 +377,7 @@ export type DashboardMember = {
   status: MemberStatus;
   identities: MemberIdentity[];
   notification: MemberNotificationSettings;
+  lastActiveAt?: string;
   createdAt: string;
   updatedAt: string;
 };

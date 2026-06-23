@@ -50,6 +50,7 @@ export async function seedDashboardDatabase(data: DashboardDatabase, prisma: Pri
             status: member.status,
             identities: asJson(member.identities),
             notification: asJson(member.notification),
+            lastActiveAt: member.lastActiveAt,
             createdAt: member.createdAt,
             updatedAt: member.updatedAt
           }))

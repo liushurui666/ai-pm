@@ -104,6 +104,7 @@ function getMemberPayload(member: DashboardMember) {
     status: member.status,
     identities: asJson(member.identities),
     notification: asJson(member.notification),
+    lastActiveAt: member.lastActiveAt,
     createdAt: member.createdAt,
     updatedAt: member.updatedAt
   };
@@ -212,6 +213,7 @@ export async function readDashboardDatabase(
         status: member.status as DashboardMember["status"],
         identities,
         notification: member.notification as DashboardMember["notification"],
+        lastActiveAt: toOptionalText(member.lastActiveAt),
         createdAt: member.createdAt,
         updatedAt: member.updatedAt
       };

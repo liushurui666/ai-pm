@@ -73,6 +73,7 @@ const DEFAULT_REQUIREMENT_VERSION_ID = DEFAULT_REQUIREMENT_VERSION.id;
 const defaultNotificationScenes: MemberNotificationScene[] = ["taskAssigned", "requirementChanged", "bugFlowChanged"];
 const validNotificationScenes = new Set<MemberNotificationScene>(defaultNotificationScenes);
 const validMemberIdentityProviders = new Set<MemberIdentityProvider>(["feishu", "email", "google", "github"]);
+const memberLastActiveRefreshIntervalMs = 5 * 60 * 1000;
 
 type LocalDatabase = Omit<DashboardData, "meta"> & {
   updatedAt: string;
@@ -1224,6 +1225,7 @@ function normalizeMember(value: unknown, fallbackWorkspaceId = DEFAULT_WORKSPACE
       taskAssigned: legacyScenes.includes("taskAssigned"),
       requirementChanged: legacyScenes.includes("requirementChanged")
     },
+    lastActiveAt: asText(member.lastActiveAt) || undefined,
     createdAt: asText(member.createdAt, now),
     updatedAt: asText(member.updatedAt, now)
   };
@@ -1282,6 +1284,7 @@ function createMemberFromUser(user: FeishuUser, role: MemberRole, workspaceId = 
       taskAssigned: true,
       requirementChanged: true
     },
+    lastActiveAt: now,
     createdAt: now,
     updatedAt: now
   };
@@ -1556,6 +1559,33 @@ function syncMemberProfile(member: DashboardMember, user: FeishuUser) {
     : member;
 }
 
+function shouldRefreshMemberLastActiveAt(member: DashboardMember, nowMs: number) {
+  if (!member.lastActiveAt) {
+    return true;
+  }
+
+  const previousActiveAt = new Date(member.lastActiveAt).getTime();
+
+  // 历史数据可能来自手工导入或旧版本 JSON；遇到不可解析的时间直接刷新成当前 ISO，
+  // 避免成员页长期展示一个无效值，也不需要在 UI 层再兜底多套格式。
+  if (!Number.isFinite(previousActiveAt)) {
+    return true;
+  }
+
+  return nowMs - previousActiveAt >= memberLastActiveRefreshIntervalMs;
+}
+
+function stampMemberLastActiveAt(member: DashboardMember, now = new Date()) {
+  // 最近活跃只表达“该成员最近访问过 AI PM”，和成员资料更新时间不是同一含义；
+  // 因此这里只写 lastActiveAt，不改 updatedAt，避免成员管理页把活跃刷新误读成资料被编辑。
+  return shouldRefreshMemberLastActiveAt(member, now.getTime())
+    ? {
+        ...member,
+        lastActiveAt: now.toISOString()
+      }
+    : member;
+}
+
 function resolveCurrentWorkspace(data: LocalDatabase, workspaceId?: string) {
   const workspaces = normalizeWorkspaces(data.workspaces);
   const currentWorkspace =
@@ -1593,15 +1623,17 @@ function ensureCurrentMember(data: LocalDatabase, workspaceId: string, user?: Fe
 
   if (existingMember) {
     const syncedMember = syncMemberProfile(existingMember, user);
-    const membersWithSyncedCurrentMember = members.map((member) => member.id === existingMember.id ? syncedMember : member);
+    const activeStampedMember = stampMemberLastActiveAt(syncedMember);
+    const membersWithSyncedCurrentMember = members.map((member) => member.id === existingMember.id ? activeStampedMember : member);
     const duplicateIdentityResult = detachAuthIdentityFromDuplicateMembers(
       membersWithSyncedCurrentMember,
       workspaceId,
-      syncedMember.id,
+      activeStampedMember.id,
       user
     );
-    // 页面读取阶段会对成员结构做一次兼容性规范化，但这不应该反复触发数据库写入；只有登录成员资料真的补齐或变化时才持久化。
-    const changed = syncedMember !== existingMember || duplicateIdentityResult.changed;
+    // 页面读取阶段会对成员结构做一次兼容性规范化，同时以 5 分钟节流刷新最近活跃；
+    // 两者都只写 workspace_members，不触碰任务/Bug/需求，避免普通工作台读取退化成全量数据同步。
+    const changed = activeStampedMember !== existingMember || duplicateIdentityResult.changed;
 
     return {
       data: {
@@ -1609,7 +1641,7 @@ function ensureCurrentMember(data: LocalDatabase, workspaceId: string, user?: Fe
         members: duplicateIdentityResult.members
       },
       changed,
-      currentMember: syncedMember
+      currentMember: activeStampedMember
     };
   }
 
@@ -2374,6 +2406,7 @@ function normalizeMemberInput(values: Record<string, unknown>, fallback?: Dashbo
       taskAssigned: legacyScenes.includes("taskAssigned"),
       requirementChanged: legacyScenes.includes("requirementChanged")
     },
+    lastActiveAt: asText(values.lastActiveAt, fallback?.lastActiveAt) || undefined,
     createdAt: fallback?.createdAt ?? now,
     updatedAt: now
   };
