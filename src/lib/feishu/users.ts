@@ -38,6 +38,16 @@ type FeishuScopeResponse = {
   };
 };
 
+type FeishuGroupMember = {
+  member_id?: string;
+  member_type?: "user" | "department" | string;
+};
+
+type FeishuPeopleResult = {
+  people: FeishuPerson[];
+  warning?: string;
+};
+
 type FeishuUserResponse = {
   code: number;
   msg?: string;
@@ -73,6 +83,16 @@ function getFeishuContactError(
   return payload.code === undefined ? message : `${message}（code: ${payload.code}）`;
 }
 
+function getFeishuGroupReadWarning(error: Error) {
+  // 飞书会在缺少权限时返回带后台授权链接的长错误；前端只需要告诉管理员缺哪项权限，
+  // 避免把开放平台 URL 和 app 标识直接展示在业务弹窗里造成噪音。
+  if (error.message.includes("contact:group:readonly")) {
+    return "飞书应用缺少 contact:group:readonly 用户组读取权限，请在飞书开放平台为当前应用开通后重新发布/生效。";
+  }
+
+  return error.message.replace(/https?:\/\/\S+/g, "").trim();
+}
+
 function mapContactUser(user: FeishuContactUser): FeishuPerson | null {
   if (!user.open_id || !user.name) {
     return null;
@@ -92,6 +112,7 @@ function mapContactUser(user: FeishuContactUser): FeishuPerson | null {
 async function listContactScopes(accessToken: string) {
   const userIds = new Set<string>();
   const departmentIds = new Set<string>();
+  const groupIds = new Set<string>();
   let pageToken = "";
 
   do {
@@ -131,11 +152,18 @@ async function listContactScopes(accessToken: string) {
       }
     }
 
+    for (const groupId of payload.data?.group_ids ?? []) {
+      if (groupId) {
+        groupIds.add(groupId);
+      }
+    }
+
     pageToken = payload.data?.has_more ? payload.data.page_token ?? "" : "";
-  } while (pageToken && userIds.size + departmentIds.size < 2_000);
+  } while (pageToken && userIds.size + departmentIds.size + groupIds.size < 2_000);
 
   return {
     departmentIds: [...departmentIds],
+    groupIds: [...groupIds],
     userIds: [...userIds]
   };
 }
@@ -243,6 +271,57 @@ async function listDepartmentPeople(accessToken: string, departmentId: string) {
   return people;
 }
 
+async function listGroupMemberIds(accessToken: string, groupId: string) {
+  const userIds = new Set<string>();
+  const departmentIds = new Set<string>();
+  let pageToken = "";
+
+  do {
+    const url = new URL(`https://open.feishu.cn/open-apis/contact/v3/group/${groupId}/member/simplelist`);
+
+    // 飞书用户组成员可能是用户，也可能是部门；member_id_type=open_id 能让用户返回 open_id，
+    // 部门返回 open_department_id，后续继续复用现有用户详情和部门成员读取链路。
+    url.searchParams.set("member_id_type", "open_id");
+    url.searchParams.set("page_size", "100");
+
+    if (pageToken) {
+      url.searchParams.set("page_token", pageToken);
+    }
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      },
+      cache: "no-store"
+    });
+    const payload = (await response.json()) as FeishuListResponse<FeishuGroupMember>;
+
+    if (!response.ok || payload.code !== 0) {
+      throw new Error(getFeishuContactError(payload, "读取飞书用户组成员失败"));
+    }
+
+    for (const member of payload.data?.items ?? []) {
+      if (!member.member_id) {
+        continue;
+      }
+
+      if (member.member_type === "department") {
+        departmentIds.add(member.member_id);
+        continue;
+      }
+
+      userIds.add(member.member_id);
+    }
+
+    pageToken = payload.data?.has_more ? payload.data.page_token ?? "" : "";
+  } while (pageToken && userIds.size + departmentIds.size < 2_000);
+
+  return {
+    departmentIds: [...departmentIds],
+    userIds: [...userIds]
+  };
+}
+
 async function getUserDetail(accessToken: string, userId: string) {
   const url = new URL(`https://open.feishu.cn/open-apis/contact/v3/users/${userId}`);
   url.searchParams.set("department_id_type", "open_department_id");
@@ -263,14 +342,36 @@ async function getUserDetail(accessToken: string, userId: string) {
   return mapContactUser(payload.data.user);
 }
 
-export async function listFeishuPeople(query = "") {
+export async function listFeishuPeopleWithDiagnostics(query = ""): Promise<FeishuPeopleResult> {
   const accessToken = await getFeishuTenantAccessToken();
   const peopleByOpenId = new Map<string, FeishuPerson>();
   const scopes = await listContactScopes(accessToken);
-  const departmentIds = await expandScopedDepartmentIds(accessToken, scopes.departmentIds);
+  const scopedUserIds = new Set(scopes.userIds);
+  const scopedDepartmentIds = new Set(scopes.departmentIds);
   const departmentErrors: Error[] = [];
+  const groupErrors: Error[] = [];
 
-  for (const userId of scopes.userIds) {
+  for (const groupId of scopes.groupIds) {
+    try {
+      const groupMemberIds = await listGroupMemberIds(accessToken, groupId);
+
+      // 通讯录授权范围可以通过“用户组”维护一批人；如果只处理 user_ids/department_ids，
+      // 后台看起来授权了很多人，但 AI PM 下拉只会出现零散用户，容易误判成前端过滤问题。
+      for (const userId of groupMemberIds.userIds) {
+        scopedUserIds.add(userId);
+      }
+
+      for (const departmentId of groupMemberIds.departmentIds) {
+        scopedDepartmentIds.add(departmentId);
+      }
+    } catch (error) {
+      groupErrors.push(error instanceof Error ? error : new Error("读取飞书用户组成员失败"));
+    }
+  }
+
+  const departmentIds = await expandScopedDepartmentIds(accessToken, [...scopedDepartmentIds]);
+
+  for (const userId of scopedUserIds) {
     const person = await getUserDetail(accessToken, userId);
 
     if (person) {
@@ -307,13 +408,24 @@ export async function listFeishuPeople(query = "") {
 
   const keyword = query.trim().toLowerCase();
 
-  if (!keyword) {
-    return people;
-  }
+  const filteredPeople = keyword
+    ? people.filter((person) =>
+        [person.name, person.enName, person.email, person.openId]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(keyword))
+      )
+    : people;
 
-  return people.filter((person) =>
-    [person.name, person.enName, person.email, person.openId]
-      .filter(Boolean)
-      .some((value) => String(value).toLowerCase().includes(keyword))
-  );
+  return {
+    people: filteredPeople,
+    warning: groupErrors.length
+      ? `飞书通讯录授权范围包含 ${scopes.groupIds.length} 个用户组，但用户组成员读取失败：${getFeishuGroupReadWarning(groupErrors[0])}`
+      : undefined
+  };
+}
+
+export async function listFeishuPeople(query = "") {
+  const result = await listFeishuPeopleWithDiagnostics(query);
+
+  return result.people;
 }

@@ -178,12 +178,14 @@ function MemberIdentityFields({
   form,
   people,
   peopleError,
-  peopleLoading
+  peopleLoading,
+  peopleWarning
 }: {
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   people: FeishuPerson[];
   peopleError: string;
   peopleLoading: boolean;
+  peopleWarning: string;
 }) {
   return (
     <>
@@ -226,6 +228,15 @@ function MemberIdentityFields({
         description={peopleError}
       />
       ) : null}
+      {!peopleError && peopleWarning ? (
+        <Alert
+          className="pm-form-alert"
+          type="warning"
+          showIcon
+          title="飞书通讯录只返回了部分成员"
+          description={peopleWarning}
+        />
+      ) : null}
       <Form.Item name="feishuUnionId" hidden>
         <Input />
       </Form.Item>
@@ -244,16 +255,24 @@ function MemberFields({
   form,
   people,
   peopleError,
-  peopleLoading
+  peopleLoading,
+  peopleWarning
 }: {
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   people: FeishuPerson[];
   peopleError: string;
   peopleLoading: boolean;
+  peopleWarning: string;
 }) {
   return (
     <>
-      <MemberIdentityFields form={form} people={people} peopleError={peopleError} peopleLoading={peopleLoading} />
+      <MemberIdentityFields
+        form={form}
+        people={people}
+        peopleError={peopleError}
+        peopleLoading={peopleLoading}
+        peopleWarning={peopleWarning}
+      />
       <Form.Item label="成员姓名" name="name" rules={[{ required: true, message: "请输入成员姓名" }]}>
         <Input placeholder="例如：林夏" />
       </Form.Item>
@@ -284,6 +303,7 @@ function NotificationChannelItem({
   people,
   peopleError,
   peopleLoading,
+  peopleWarning,
   remove
 }: {
   field: { key: number; name: number };
@@ -291,6 +311,7 @@ function NotificationChannelItem({
   people: FeishuPerson[];
   peopleError: string;
   peopleLoading: boolean;
+  peopleWarning: string;
   remove: (index: number) => void;
 }) {
   const provider = Form.useWatch(["channels", field.name, "provider"], form) as MemberNotificationChannelProvider | undefined;
@@ -392,6 +413,15 @@ function NotificationChannelItem({
               description={peopleError}
             />
           ) : null}
+          {!peopleError && peopleWarning ? (
+            <Alert
+              className="pm-form-alert"
+              type="warning"
+              showIcon
+              title="飞书通讯录只返回了部分成员"
+              description={peopleWarning}
+            />
+          ) : null}
         </>
       ) : null}
       {currentProvider === "email" ? (
@@ -435,6 +465,7 @@ export function MembersView({
   people,
   peopleError,
   peopleLoading,
+  peopleWarning,
   permissions,
   submitting,
   onCreateMember,
@@ -444,6 +475,7 @@ export function MembersView({
   people: FeishuPerson[];
   peopleError: string;
   peopleLoading: boolean;
+  peopleWarning: string;
   permissions: DashboardPermissions;
   submitting: boolean;
   onCreateMember: (values: Record<string, unknown>) => void;
@@ -669,6 +701,7 @@ export function MembersView({
                       people={people}
                       peopleError={peopleError}
                       peopleLoading={peopleLoading}
+                      peopleWarning={peopleWarning}
                       remove={remove}
                     />
                   ))
@@ -730,7 +763,13 @@ export function MembersView({
             setDrawerOpen(false);
           }}
         >
-          <MemberFields form={form} people={people} peopleError={peopleError} peopleLoading={peopleLoading} />
+          <MemberFields
+            form={form}
+            people={people}
+            peopleError={peopleError}
+            peopleLoading={peopleLoading}
+            peopleWarning={peopleWarning}
+          />
         </Form>
       </Drawer>
     </TableView>

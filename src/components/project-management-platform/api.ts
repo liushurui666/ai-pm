@@ -4,6 +4,7 @@ import type { DashboardData, FeishuPerson } from "@/types/dashboard";
 export type PeopleResponse = {
   people?: FeishuPerson[];
   error?: string;
+  warning?: string;
 };
 
 export const sessionExpiredMessage = "登录状态已失效，请重新登录。";

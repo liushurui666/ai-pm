@@ -181,6 +181,7 @@ export function ProjectManagementPlatform({
   const [peopleLoaded, setPeopleLoaded] = useState(false);
   const [peopleLoading, setPeopleLoading] = useState(false);
   const [peopleError, setPeopleError] = useState("");
+  const [peopleWarning, setPeopleWarning] = useState("");
   const [memberSubmitting, setMemberSubmitting] = useState(false);
   const [workspaceSubmitting, setWorkspaceSubmitting] = useState(false);
   const [workspaceDrawerOpen, setWorkspaceDrawerOpen] = useState(false);
@@ -290,10 +291,14 @@ export function ProjectManagementPlatform({
         if (mounted) {
           setPeople(payload.people ?? []);
           setPeopleError("");
+          // 飞书通讯录可能返回“部分可用”：例如授权范围里有用户组，但应用还缺用户组读取权限。
+          // 这类问题不应该禁用已读到的人，只在成员页提示管理员去补权限。
+          setPeopleWarning(payload.warning ?? "");
         }
       } catch (error) {
         if (mounted) {
           setPeopleError(error instanceof Error ? error.message : "读取飞书通讯录失败");
+          setPeopleWarning("");
         }
       } finally {
         if (mounted) {
@@ -1791,6 +1796,7 @@ export function ProjectManagementPlatform({
                       people={people}
                       peopleError={peopleError}
                       peopleLoading={peopleLoading}
+                      peopleWarning={peopleWarning}
                       permissions={permissions ?? {
                         canManageMembers: false,
                         canCreateRequirements: false,

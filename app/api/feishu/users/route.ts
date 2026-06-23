@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listFeishuPeople } from "@/lib/feishu/users";
+import { listFeishuPeopleWithDiagnostics } from "@/lib/feishu/users";
 import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 import { getSession } from "@/lib/auth/session";
 
@@ -27,8 +27,11 @@ export async function GET(request: NextRequest) {
   const query = request.nextUrl.searchParams.get("query") ?? "";
 
   try {
+    const result = await listFeishuPeopleWithDiagnostics(query);
+
     return NextResponse.json({
-      people: await listFeishuPeople(query)
+      people: result.people,
+      warning: result.warning
     });
   } catch (error) {
     return NextResponse.json(
