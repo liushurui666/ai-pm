@@ -19,6 +19,7 @@ type AccountPopoverContentProps = {
   logoutHref: string;
   permissionDeniedReason: string;
   showLogout: boolean;
+  showWorkspaceControls?: boolean;
   userAvatarUrl?: string;
   userInitial: string;
   userName: string;
@@ -43,13 +44,15 @@ type AccountWorkspacePopoverProps = {
   currentWorkspaceName: string;
 };
 
-// 账号弹层同时承担身份确认和工作区切换；入口位置可以变化，但弹层内容保持一套交互。
+// 账号弹层同时服务顶部工作区入口和左下角身份入口；左下角只承担身份确认与退出登录，
+// 工作区切换保留在顶部入口，避免两个位置出现重复的工作区 Select 干扰日常退出操作。
 export function AccountPopoverContent({
   canCreateWorkspace,
   currentWorkspace,
   logoutHref,
   permissionDeniedReason,
   showLogout,
+  showWorkspaceControls = true,
   userAvatarUrl,
   userInitial,
   userName,
@@ -71,7 +74,7 @@ export function AccountPopoverContent({
           <Text type="secondary">{currentWorkspace?.name ?? "当前工作区"}</Text>
         </Space>
       </Space>
-      {workspaces?.length ? (
+      {showWorkspaceControls && workspaces?.length ? (
         <div className="pm-workspace-control">
           <Text className="pm-avatar-menu-label" type="secondary">
             工作区

@@ -1284,13 +1284,16 @@ export function ProjectManagementPlatform({
         })),
     [data?.workspaces]
   );
-  const accountPopoverContent = (
+  // 顶部工作区入口与左下角身份卡复用同一个弹层组件，但左下角不再承担工作区切换；
+  // 用一个渲染函数集中注入账号信息，避免两处弹层因为复制字段而出现昵称、头像或退出链接不一致。
+  const renderAccountPopoverContent = (showWorkspaceControls: boolean) => (
     <AccountPopoverContent
       canCreateWorkspace={Boolean(permissions?.canManageMembers)}
       currentWorkspace={currentWorkspace}
       logoutHref={logoutHref}
       permissionDeniedReason={permissionDeniedReason}
       showLogout={Boolean(data?.meta?.user)}
+      showWorkspaceControls={showWorkspaceControls}
       userAvatarUrl={userAvatarUrl}
       userInitial={userInitial}
       userName={userName}
@@ -1306,6 +1309,8 @@ export function ProjectManagementPlatform({
       onWorkspaceSelectOpenChange={setWorkspaceSelectOpen}
     />
   );
+  const accountPopoverContent = renderAccountPopoverContent(true);
+  const sidebarAccountPopoverContent = renderAccountPopoverContent(false);
   const requirementVersions = useMemo(() => data?.requirementVersions ?? [], [data?.requirementVersions]);
   const requirementVersionOptions = useMemo(
     () =>
@@ -1559,7 +1564,7 @@ export function ProjectManagementPlatform({
             trigger={null}
           >
             <WorkbenchSidebar
-              accountPopoverContent={accountPopoverContent}
+              accountPopoverContent={sidebarAccountPopoverContent}
               assistantSessionSidebar={assistantSessionSidebar}
               collapsed={collapsed}
               currentWorkspaceName={currentWorkspace?.name ?? "当前工作区"}
