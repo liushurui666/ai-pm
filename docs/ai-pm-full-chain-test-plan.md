@@ -26,7 +26,7 @@
 | GATE-003 | Prisma Client | `pnpm db:generate` | 退出码 0 | 通过，2026-06-24 |
 | GATE-004 | 业务迁移 | `pnpm db:migrate` | 所有迁移 applied | 通过，2026-06-24，无待应用迁移 |
 | GATE-005 | AI 索引自检 | `pnpm ai-index:doctor` | 依赖可达项通过；缺外部依赖需记录 | 部分通过：代码依赖、Mastra、百炼通过；缺 `REDIS_URL` 与 `QDRANT_URL` |
-| GATE-006 | 构建噪音检查 | `git diff --check` + `git status --short` | 无空白错误；无无关生成文件 | 待执行 |
+| GATE-006 | 构建噪音检查 | `git diff --check` + `git status --short` | 无空白错误；无无关生成文件 | 通过，2026-06-24 |
 
 ## 登录与会话
 
@@ -227,4 +227,15 @@
 - AUTH-003 前置入口：脚本验证登录页返回 200，HTML 包含飞书、Google、GitHub 登录入口；当前脚本只检查入口存在，不代替真实 OAuth 授权。
 - AUTH-006：脚本验证 22 个业务 API 无 Cookie 时均返回 401 且 JSON error 为 `未登录`，未出现提前解析请求体导致的 400/500。
 - 本轮回归：`pnpm exec tsx scripts/full-chain-auth-smoke.ts` 通过，`pnpm exec tsx scripts/full-chain-crud-smoke.ts` 通过，`pnpm exec tsx scripts/full-chain-service-smoke.ts` 通过；临时任务/Bug/需求/成员/工作区残留均为 0。
+- 本轮质量门禁：`git diff --check` 通过；`pnpm lint` 通过；`pnpm build` 通过。
+
+### 2026-06-24 基础设施队列与 Bug 修复仓储冒烟
+
+- 新增 `pnpm exec tsx scripts/full-chain-infra-smoke.ts`：覆盖 MySQL AI 索引队列、MySQL Dashboard 副作用队列、Bug AI 修复仓储，不调用真实外部通知、不启动真实 Git 修复 worker。
+- RAG-001/RAG-003 队列协议：脚本创建 `index_entity` 测试任务，验证 `enqueue -> claimNext -> fail(立即重试) -> claimNext -> complete`，最终 `ai_index_jobs.status=success` 且 `retryCount=1`。
+- OPS-004 通知副作用队列：脚本创建非发送型 `refresh_project_metrics` 测试任务，先用未来 `nextRunAt` 避开 inline worker，再验证 `claimNext -> fail(立即重试) -> claimNext -> complete`，最终 `dashboard_side_effect_jobs.status=succeeded` 且 `retryCount=1`。
+- BUGFIX-002/BUGFIX-003 仓储协议：脚本创建临时仓库与临时 Bug，验证 `createBugFixJob`、日志写入、检查结果写入、`claimNextBugFixJob` 或安全直写 preparing、`failBugFixJob`，并确认 Bug 回写 `aiFixLatestJobId` 与 `aiFixStatus=failed`。
+- 安全边界：脚本发现全局队列有更高优先级历史任务时会恢复意外领取的任务为 pending/queued 并失败；所有测试数据使用 `infra-e2e-*` runLabel，finally 按外键顺序清理。
+- 本轮执行：run `infra-e2e-1782308491793` 通过；AI 索引 job `cmqs4gitd0000qb9zh2iztuqw`、Dashboard 副作用 job `dashboardSideEffect-mqs4godm-d2149d52`、Bug 修复 job `cmqs4gvg70002qb9zgndcp1lq` 均完成预期状态机；残留检查 `infraAi/infraSide/infraBug/infraRepo` 均为 0。
+- 本轮回归：`pnpm exec tsx scripts/full-chain-infra-smoke.ts`、`pnpm exec tsx scripts/full-chain-auth-smoke.ts`、`pnpm exec tsx scripts/full-chain-crud-smoke.ts`、`pnpm exec tsx scripts/full-chain-service-smoke.ts` 全部通过；临时 `infra-e2e-*`、`service-e2e-*`、`codex-e2e-*` 数据残留均为 0。
 - 本轮质量门禁：`git diff --check` 通过；`pnpm lint` 通过；`pnpm build` 通过。
