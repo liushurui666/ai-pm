@@ -239,3 +239,11 @@
 - 本轮执行：run `infra-e2e-1782308491793` 通过；AI 索引 job `cmqs4gitd0000qb9zh2iztuqw`、Dashboard 副作用 job `dashboardSideEffect-mqs4godm-d2149d52`、Bug 修复 job `cmqs4gvg70002qb9zgndcp1lq` 均完成预期状态机；残留检查 `infraAi/infraSide/infraBug/infraRepo` 均为 0。
 - 本轮回归：`pnpm exec tsx scripts/full-chain-infra-smoke.ts`、`pnpm exec tsx scripts/full-chain-auth-smoke.ts`、`pnpm exec tsx scripts/full-chain-crud-smoke.ts`、`pnpm exec tsx scripts/full-chain-service-smoke.ts` 全部通过；临时 `infra-e2e-*`、`service-e2e-*`、`codex-e2e-*` 数据残留均为 0。
 - 本轮质量门禁：`git diff --check` 通过；`pnpm lint` 通过；`pnpm build` 通过。
+
+### 2026-06-24 AI 助手动作 Worker 冒烟
+
+- 新增 `pnpm exec tsx scripts/full-chain-assistant-action-smoke.ts`：覆盖 `assistant_action_jobs` 的 `complete_tasks`、`close_bugs`、`assign_tasks`、`create_tasks` 四类动作，不经过模型、不发送真实通知。
+- AI-007/AI-008/AI-009：脚本创建临时成员、任务和 Bug，验证 worker 将任务改为“已完成”、Bug 改为“已关闭”并追加 `AI 助手批量关闭` 流转、任务转交同步 `ownerMemberId/owner/email`、批量创建任务解析“我”为真实成员。
+- OPS-004/RAG-001：动作完成后验证相关临时任务/Bug 投递 AI 索引刷新 job；无通知渠道测试成员不应产生 Dashboard 通知副作用 job，避免误发飞书/邮箱。
+- 安全边界：脚本运行前检查是否存在非本次测试的 queued/running assistant action job；如存在则停止，避免全局 worker 抢走真实用户任务。所有测试数据使用 `assistant-action-e2e-*`，finally 清理。
+- 本轮执行：run `assistant-action-e2e-1782308988186` 通过，4 个 action job 全部 `succeeded`，创建任务 2 条、索引刷新 job 5 条、通知 job 0 条；残留检查 `tasks/bugs/members/actionJobs/indexJobs/sideJobs` 均为 0。
