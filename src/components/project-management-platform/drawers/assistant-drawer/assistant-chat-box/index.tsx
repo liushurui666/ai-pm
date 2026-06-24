@@ -29,6 +29,7 @@ import {
 } from "@/components/project-management-platform/drawers/assistant-drawer/assistant-message-utils";
 import {
   createAssistantSession,
+  createHydrationSafeAssistantSessionState,
   loadAssistantSessionState,
   normalizeAssistantSessionState,
   saveAssistantSessionState,
@@ -238,7 +239,7 @@ export function AssistantChatBox({
   variant = "drawer"
 }: AssistantChatBoxProps) {
   const [sessionState, setSessionState] = useState<AssistantSessionState>(() =>
-    loadAssistantSessionState(currentWorkspaceId, initialAssistantMessages)
+    createHydrationSafeAssistantSessionState(initialAssistantMessages)
   );
   const [input, setInput] = useState("");
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);

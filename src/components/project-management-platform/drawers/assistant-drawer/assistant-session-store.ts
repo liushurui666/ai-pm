@@ -99,6 +99,17 @@ function createSsrSession(initialMessages: UIMessage[]): AssistantChatSession {
   };
 }
 
+export function createHydrationSafeAssistantSessionState(initialMessages: UIMessage[]): AssistantSessionState {
+  const session = createSsrSession(initialMessages);
+
+  // ChatBox 会服务端渲染；首帧不能读取 localStorage 里的历史会话，否则服务端欢迎态和客户端历史态
+  // 会在 hydration 时生成完全不同的 DOM 树。这里固定返回可复现的欢迎会话，真实历史在 mount 后再载入。
+  return {
+    activeSessionId: session.id,
+    sessions: [session]
+  };
+}
+
 export function normalizeAssistantSessionState(
   state: AssistantSessionState,
   initialMessages: UIMessage[]
@@ -137,11 +148,7 @@ export function normalizeAssistantSessionState(
 
 export function loadAssistantSessionState(workspaceId: string, initialMessages: UIMessage[]) {
   if (typeof window === "undefined") {
-    const session = createSsrSession(initialMessages);
-    return {
-      activeSessionId: session.id,
-      sessions: [session]
-    };
+    return createHydrationSafeAssistantSessionState(initialMessages);
   }
 
   const rawSessions = window.localStorage.getItem(getStorageKey(SESSION_PREFIX, workspaceId));

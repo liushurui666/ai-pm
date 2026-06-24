@@ -163,7 +163,8 @@ export function BugAiFixDrawer({
         </Space>
       }
       open={open}
-      width={460}
+      // Ant Design 6 已废弃 Drawer 的 width prop；AI 修复确认表单内容较少，使用默认抽屉宽度即可保持紧凑并避免运行时 warning。
+      size="default"
       onClose={onClose}
       destroyOnHidden
       extra={

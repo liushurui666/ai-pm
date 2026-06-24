@@ -195,4 +195,16 @@
 - REQ-001 冒烟：需求管理加载成功，版本卡片和“新建版本”入口可见。
 - VERSION-005 冒烟：版本大屏加载成功，版本切换、筛选器、KPI/排行/健康概览/负责人看板/进展看板可见。
 - AI-001 冒烟：AI 助手全屏入口加载成功，历史消息、输入框、清空、导出、重新生成控件可见。
-- 发现并修复：需求管理加载时控制台出现 Ant Design 警告 `[antd: Space] direction is deprecated`，根因是 `requirement-version-children` 仍使用 `Space direction="vertical"`；已改为 `orientation="vertical"`，待 lint/build 回归。
+- 发现并修复：需求管理加载时控制台出现 Ant Design 警告 `[antd: Space] direction is deprecated`，根因是 `requirement-version-children` 仍使用 `Space direction="vertical"`；已改为 `orientation="vertical"`，后续 `pnpm lint` / `pnpm build` 回归通过。
+
+### 2026-06-24 二次全链路推进
+
+- 新增并执行 `pnpm exec tsx scripts/full-chain-crud-smoke.ts`：使用无通知渠道成员 `member-mpuz3752-u13tux` 做安全 owner，临时创建任务 `task-mqs25p6p-kwnvq4` 与 Bug `bug-mqs25p6p-7beuo1`，更新任务阶段为“进行中”、更新 Bug 状态为“定位中”，Bug 流转记录生成 2 条；删除后任务/Bug 主记录均不存在，Bug 流转子表级联清理为 0，测试记录未产生 dashboard 通知副作用，AI 索引创建 job 4 条、cleanup job 2 条。
+- MEMBER-003：成员页刷新后当前用户“最近活跃”显示为“刚刚/1 分钟前”，其他未登录成员显示“从未登录”；左下角账号菜单只展示用户、当前工作区和“退出登录”，不再展示工作区切换控件。
+- MEMBER-002 补充：浏览器当前 dev server `/api/feishu/users` 返回 2 个直接可读成员且状态 200；同进程外脚本直连飞书仍能复现 `contact:group:readonly` 用户组读取权限缺失 warning，说明重启 dev server 后需要复查通讯录 warning 是否与当前飞书 app 配置一致。
+- SEARCH-001：顶部全局搜索输入 `Bug` 后按 Enter 打开全局搜索抽屉，展示任务/Bug 结果；点击 Bug 结果“打开”可跳转到 `/bugs/bug-mqq1ssv5-i3m9es?workspaceId=ws-default`。
+- BUG-002：Bug 详情页加载成功，展示编辑 Bug 表单、复现材料区、AI 修复 MR 卡片和流转记录；发现 Ant Design 警告 `[antd: Drawer] width is deprecated`，根因为 AI 修复确认抽屉仍使用 `Drawer width={460}`，已改为 `size="default"`，重载后 warning 消失。
+- TASK-001/REQ-001/VERSION-005 浏览器复查：任务看板、需求管理、版本大屏均可直接加载，控制台仅有 React DevTools/HMR 开发信息，无 error/warning。
+- AI-001/AI-002：AI 助手页首次加载曾出现 hydration mismatch 与 `<script>` warning；根因是 ChatBox 首帧 `useState` 读取 localStorage 历史会话，服务端欢迎态和客户端历史态 DOM 不一致。已改为首帧使用确定性欢迎会话、mount 后再加载 localStorage；重载后控制台无 hydration/script warning，`/api/assistant/models` 返回 200。
+- AI-003 回归：创建新聊天后连续发送 10 轮“只回复收到”的短对话，10 轮均生成非空助手气泡，最终 DOM 中 10 条测试回复均为“收到。”；期间控制台无 warning/error。
+- 质量回归：`pnpm lint` 通过；`pnpm build` 通过，Next.js 20 个路由生产构建成功。
