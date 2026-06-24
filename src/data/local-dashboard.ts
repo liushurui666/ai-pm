@@ -3,11 +3,13 @@ import {
   createDashboardWorkspaceDatabase,
   DASHBOARD_DATABASE_STORAGE,
   deleteDashboardBugDatabase,
+  deleteDashboardRequirementDatabase,
   deleteDashboardTaskDatabase,
   readDashboardDatabase,
   readDashboardWorkspacesDatabase,
   updateDashboardTaskDatabase,
   upsertDashboardBugDatabase,
+  upsertDashboardRequirementDatabase,
   upsertDashboardTaskDatabase,
   upsertDashboardMemberDatabase,
   writeDashboardDatabase,
@@ -2589,6 +2591,10 @@ export async function createDashboardRecord<T extends DashboardEntityType>(
   } else if (type === "bug") {
     // 创建 Bug 会先触发负责人通知；保存阶段只写当前 Bug 行和其附件/流转记录，避免飞书已送达但前端仍等待全量同步。
     await upsertDashboardBugDatabase(savedRecord as BugReport);
+  } else if (type === "requirement") {
+    // 单条需求保存只影响 requirements 当前行；需求 AI 索引由 API route 异步投递，
+    // 这里不能再调用全量 writeDatabase，否则会复现公网 MySQL 60 秒事务超时。
+    await upsertDashboardRequirementDatabase(savedRecord as Requirement);
   } else {
     await writeDatabase(savedData);
   }
@@ -2757,6 +2763,9 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
   } else if (type === "bug") {
     // Bug 状态流转、负责人变更和回归验证同样是单记录写入；项目统计读取时会派生，不能用全量同步拖慢保存按钮。
     await upsertDashboardBugDatabase(savedRecord as BugReport);
+  } else if (type === "requirement") {
+    // 需求状态/负责人等编辑不需要重算并回写所有业务表；版本联动已在内存对象中完成，当前需求行单独持久化即可。
+    await upsertDashboardRequirementDatabase(savedRecord as Requirement);
   } else {
     await writeDatabase(savedData);
   }
@@ -2858,6 +2867,9 @@ export async function deleteDashboardRecord<T extends DashboardEntityType>(type:
   } else if (type === "bug") {
     // Bug 删除依赖数据库级联清理附件、流转记录和 AI 修复任务，不再触发全量 dashboard 同步。
     await deleteDashboardBugDatabase(id);
+  } else if (type === "requirement") {
+    // 需求删除不需要全量同步任务/Bug/版本；异步知识索引 cleanup 会在 API route 层负责投递。
+    await deleteDashboardRequirementDatabase(id);
   } else {
     await writeDatabase(savedData);
   }

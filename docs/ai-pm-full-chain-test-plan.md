@@ -208,3 +208,14 @@
 - AI-001/AI-002：AI 助手页首次加载曾出现 hydration mismatch 与 `<script>` warning；根因是 ChatBox 首帧 `useState` 读取 localStorage 历史会话，服务端欢迎态和客户端历史态 DOM 不一致。已改为首帧使用确定性欢迎会话、mount 后再加载 localStorage；重载后控制台无 hydration/script warning，`/api/assistant/models` 返回 200。
 - AI-003 回归：创建新聊天后连续发送 10 轮“只回复收到”的短对话，10 轮均生成非空助手气泡，最终 DOM 中 10 条测试回复均为“收到。”；期间控制台无 warning/error。
 - 质量回归：`pnpm lint` 通过；`pnpm build` 通过，Next.js 20 个路由生产构建成功。
+
+### 2026-06-24 服务层冒烟与需求写库修复
+
+- 新增 `pnpm exec tsx scripts/full-chain-service-smoke.ts`：覆盖 `createDashboardMember/updateDashboardMember`、`createDashboardRecord/updateDashboardRecord/deleteDashboardRecord` 的任务、Bug、需求链路，以及 `createDashboardWorkspace`；脚本使用临时无通知渠道成员，结束后清理任务、Bug、需求、成员和临时工作区。
+- 首次运行服务层脚本复现 REQ-001/REQ-002 风险：创建/更新需求仍会进入 `writeDatabase` 全量同步，公网 MySQL 在 `syncTasks -> prisma.projectTask.upsert` 超过 60 秒后报 `P2028 Transaction API error`。已修复为 `upsertDashboardRequirementDatabase/deleteDashboardRequirementDatabase` 单行写入/删除。
+- 修复脚本运行环境问题：`access/permissions.ts` 原本从 `auth/unified-auth` 导入 `isAuthServiceConfigured`，导致 `tsx` 脚本间接解析 Unified Auth SDK `service-client` 运行时导出失败；已拆出 `src/lib/auth/settings.ts`，权限模块不再依赖 SDK 客户端。
+- 服务层脚本复跑通过：run `service-e2e-1782307262510` 创建任务 `task-mqs3qav8-ar9hjw`、Bug `bug-mqs3qfvz-4ypn6f`、需求 `requirement-mqs3qlqq-tpocoi`、成员 `member-mqs3q7eb-iu350m`、工作区 `workspace-mqs3qq5i-suprws`；Bug 流转记录 2 条、通知副作用 0 条、索引 job 6 条；清理后 task/bug/requirement 均为 0。
+- 临时数据兜底检查通过：标题/名称包含 `service-e2e-` 的任务、Bug、需求、成员、工作区均为 0。
+- MEMBER-002 复核：脚本直连飞书通讯录 `listFeishuPeopleWithDiagnostics("")` 返回 83 人，无 warning；说明“添加成员只看到少数人”的根因是子部门分页/ID 展开，当前已恢复读取授权部门下级成员。
+- AUTH-001/AUTH-006 复核：Codex 内置浏览器访问 `/workbench?view=members&workspaceId=ws-default` 跳转 `/login?client_id=ai-pm&redirect_uri=...`，登录页包含飞书、Google、GitHub 入口且控制台无 error/warning；无 Cookie 请求 `/api/dashboard`、`/api/feishu/users`、`/api/members`、`POST /api/records` 均返回 401 `未登录`。
+- 本轮质量门禁：`pnpm exec tsx scripts/full-chain-crud-smoke.ts` 通过；`pnpm exec tsx scripts/full-chain-service-smoke.ts` 通过；`pnpm lint` 通过；`git diff --check` 通过；`pnpm build` 通过。

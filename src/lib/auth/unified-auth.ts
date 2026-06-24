@@ -6,9 +6,9 @@ import type {
   CreateAuthServiceClientOptions
 } from "@rc-tool/unified-auth-sdk/service-client";
 import { unifiedAuthConfig } from "@/lib/auth/config";
+import { isAuthServiceConfigured, resolveAppBaseURL, resolveAuthServiceBaseURL } from "@/lib/auth/settings";
 import type { FeishuUser } from "@/types/dashboard";
 
-const DEFAULT_APP_URL = "http://localhost:3004";
 const SUPPORTED_MEMBER_IDENTITY_PROVIDERS = new Set(["feishu", "google", "github", "email"]);
 
 function isFeishuOpenId(value: unknown): value is string {
@@ -52,24 +52,6 @@ type AiPmAuthHrefOptions = {
   appBaseURL?: string;
   authBaseURL?: string;
 };
-
-function resolveAuthServiceBaseURL() {
-  if (typeof window !== "undefined") {
-    // 前端运行时优先使用当前页面 origin，保证 /login、/logout 和 /api/auth/* 都落在 AI PM 自己的路由上。
-    // root config 主要给服务端和 CLI 使用；浏览器里继续信任当前 origin，可以避免构建期把 localhost 写入生产 href。
-    return window.location.origin;
-  }
-
-  return unifiedAuthConfig.auth?.origin ?? unifiedAuthConfig.app?.origin ?? process.env.APP_URL ?? DEFAULT_APP_URL;
-}
-
-function resolveAppBaseURL() {
-  if (typeof window !== "undefined") {
-    return window.location.origin;
-  }
-
-  return process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || DEFAULT_APP_URL;
-}
 
 function toAbsoluteAppURL(pathOrURL: string, appBaseURL = resolveAppBaseURL()) {
   if (/^https?:\/\//i.test(pathOrURL)) {
@@ -161,13 +143,7 @@ export function mapAuthUserToFeishuUser(user?: AuthUser | null): FeishuUser | nu
   };
 }
 
-/**
- * 判断是否启用黑盒认证服务。
- * 默认本地开发使用 AI PM 自己的 origin，认证页面和接口由 SDK route handler 内嵌提供。
- */
-export function isAuthServiceConfigured() {
-  return Boolean(resolveAuthServiceBaseURL());
-}
+export { isAuthServiceConfigured };
 
 /**
  * 空认证上下文用于 Auth Service 暂时不可用时的安全兜底。

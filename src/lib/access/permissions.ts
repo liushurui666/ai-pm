@@ -1,4 +1,4 @@
-import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
+import { isAuthServiceConfigured } from "@/lib/auth/settings";
 import type { DashboardMember, DashboardPermissions, FeishuUser, MemberRole } from "@/types/dashboard";
 
 export type DashboardPermissionAction =

@@ -727,38 +727,42 @@ async function syncRequirementVersions(prisma: DashboardPrisma, versions: Requir
   }
 }
 
+function getRequirementPayload(requirement: Requirement) {
+  return {
+    workspaceId: getWorkspaceId(requirement),
+    title: requirement.title,
+    priority: requirement.priority,
+    status: requirement.status,
+    project: requirement.project,
+    versionId: requirement.versionId,
+    versionName: requirement.versionName,
+    owner: requirement.owner,
+    ownerMemberId: requirement.ownerMemberId,
+    ownerOpenId: requirement.ownerOpenId,
+    ownerUnionId: requirement.ownerUnionId,
+    ownerUserId: requirement.ownerUserId,
+    ownerEmail: requirement.ownerEmail,
+    ownerAvatarUrl: requirement.ownerAvatarUrl,
+    uiLink: requirement.uiLink,
+    documentLink: requirement.documentLink,
+    acceptance: requirement.acceptance,
+    aiSummary: requirement.aiSummary,
+    aiRisks: asJson(requirement.aiRisks ?? []),
+    aiMissingItems: asJson(requirement.aiMissingItems ?? []),
+    aiFrontendNotes: asJson(requirement.aiFrontendNotes ?? []),
+    aiBackendNotes: asJson(requirement.aiBackendNotes ?? []),
+    aiTestingNotes: asJson(requirement.aiTestingNotes ?? []),
+    aiCompletenessScore: requirement.aiCompletenessScore
+  };
+}
+
 async function syncRequirements(prisma: DashboardPrisma, requirements: Requirement[]) {
   await prisma.requirement.deleteMany({
     where: getDeleteWhere(requirements.map((requirement) => requirement.id))
   });
 
   for (const requirement of requirements) {
-    const payload = {
-      workspaceId: getWorkspaceId(requirement),
-      title: requirement.title,
-      priority: requirement.priority,
-      status: requirement.status,
-      project: requirement.project,
-      versionId: requirement.versionId,
-      versionName: requirement.versionName,
-      owner: requirement.owner,
-      ownerMemberId: requirement.ownerMemberId,
-      ownerOpenId: requirement.ownerOpenId,
-      ownerUnionId: requirement.ownerUnionId,
-      ownerUserId: requirement.ownerUserId,
-      ownerEmail: requirement.ownerEmail,
-      ownerAvatarUrl: requirement.ownerAvatarUrl,
-      uiLink: requirement.uiLink,
-      documentLink: requirement.documentLink,
-      acceptance: requirement.acceptance,
-      aiSummary: requirement.aiSummary,
-      aiRisks: asJson(requirement.aiRisks ?? []),
-      aiMissingItems: asJson(requirement.aiMissingItems ?? []),
-      aiFrontendNotes: asJson(requirement.aiFrontendNotes ?? []),
-      aiBackendNotes: asJson(requirement.aiBackendNotes ?? []),
-      aiTestingNotes: asJson(requirement.aiTestingNotes ?? []),
-      aiCompletenessScore: requirement.aiCompletenessScore
-    };
+    const payload = getRequirementPayload(requirement);
 
     await prisma.requirement.upsert({
       where: { id: requirement.id },
@@ -901,6 +905,31 @@ export async function deleteDashboardBugDatabase(bugId: string, client?: PrismaC
   // 避免“删除一个 Bug”在公网 MySQL 上退化成多表 delete/upsert 长事务。
   await prisma.bugReport.delete({
     where: { id: bugId }
+  });
+}
+
+export async function upsertDashboardRequirementDatabase(requirement: Requirement, client?: PrismaClient) {
+  const prisma = client ?? getPrismaClient();
+  const payload = getRequirementPayload(requirement);
+
+  // 需求创建/编辑和任务、Bug 一样是单条业务记录变更；如果回退到全量 dashboard 同步，
+  // 会在保存一个需求时重写项目、任务、Bug 等所有表，公网 MySQL 很容易超过 60 秒事务窗口。
+  await prisma.requirement.upsert({
+    where: { id: requirement.id },
+    update: payload,
+    create: {
+      id: requirement.id,
+      ...payload
+    }
+  });
+}
+
+export async function deleteDashboardRequirementDatabase(requirementId: string, client?: PrismaClient) {
+  const prisma = client ?? getPrismaClient();
+
+  // 需求删除只删除 requirements 当前行；知识索引 cleanup 由 API 层单独入队，避免删除需求时触发整库同步。
+  await prisma.requirement.delete({
+    where: { id: requirementId }
   });
 }
 
