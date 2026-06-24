@@ -2,10 +2,13 @@ import dayjs from "dayjs";
 import {
   createDashboardWorkspaceDatabase,
   DASHBOARD_DATABASE_STORAGE,
+  deleteDashboardBugDatabase,
+  deleteDashboardTaskDatabase,
   readDashboardDatabase,
   readDashboardWorkspacesDatabase,
   updateDashboardTaskDatabase,
   upsertDashboardBugDatabase,
+  upsertDashboardTaskDatabase,
   upsertDashboardMemberDatabase,
   writeDashboardDatabase,
   writeDashboardIdentityDatabase
@@ -2579,7 +2582,11 @@ export async function createDashboardRecord<T extends DashboardEntityType>(
     id: savedRecord.id
   });
 
-  if (type === "bug") {
+  if (type === "task") {
+    // 任务创建是高频入口，和拖拽更新一样只写当前任务行；项目统计在读取时派生，
+    // 不能为了新增一条任务调用全量 writeDatabase 重写所有业务表。
+    await upsertDashboardTaskDatabase(savedRecord as Task);
+  } else if (type === "bug") {
     // 创建 Bug 会先触发负责人通知；保存阶段只写当前 Bug 行和其附件/流转记录，避免飞书已送达但前端仍等待全量同步。
     await upsertDashboardBugDatabase(savedRecord as BugReport);
   } else {
@@ -2845,7 +2852,15 @@ export async function deleteDashboardRecord<T extends DashboardEntityType>(type:
 
   const savedData = applyProjectMetrics(data);
 
-  await writeDatabase(savedData);
+  if (type === "task") {
+    // 任务删除同样保持单行删除，索引 cleanup 由 API route 后续投递，项目统计读取时派生。
+    await deleteDashboardTaskDatabase(id);
+  } else if (type === "bug") {
+    // Bug 删除依赖数据库级联清理附件、流转记录和 AI 修复任务，不再触发全量 dashboard 同步。
+    await deleteDashboardBugDatabase(id);
+  } else {
+    await writeDatabase(savedData);
+  }
 
   return {
     type,

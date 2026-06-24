@@ -845,6 +845,31 @@ export async function updateDashboardTaskDatabase(task: Task, client?: PrismaCli
   });
 }
 
+export async function upsertDashboardTaskDatabase(task: Task, client?: PrismaClient) {
+  const prisma = client ?? getPrismaClient();
+  const payload = getTaskPayload(task);
+
+  // 新建任务和编辑任务一样只影响 project_tasks 当前行；如果复用全量 dashboard 同步，
+  // 会把创建一个任务放大成所有任务、项目、需求、Bug 的长事务，在公网 MySQL 上容易超过 60 秒事务窗口。
+  await prisma.projectTask.upsert({
+    where: { id: task.id },
+    update: payload,
+    create: {
+      id: task.id,
+      ...payload
+    }
+  });
+}
+
+export async function deleteDashboardTaskDatabase(taskId: string, client?: PrismaClient) {
+  const prisma = client ?? getPrismaClient();
+
+  // 删除任务只需要删除 project_tasks 主记录；AI 索引清理由 API 层单独入队，项目进度在读取时重新派生。
+  await prisma.projectTask.delete({
+    where: { id: taskId }
+  });
+}
+
 export async function upsertDashboardBugDatabase(bug: BugReport, client?: PrismaClient) {
   const prisma = client ?? getPrismaClient();
 
@@ -867,6 +892,16 @@ export async function upsertDashboardBugDatabase(bug: BugReport, client?: Prisma
     },
     DASHBOARD_SYNC_TRANSACTION_OPTIONS
   );
+}
+
+export async function deleteDashboardBugDatabase(bugId: string, client?: PrismaClient) {
+  const prisma = client ?? getPrismaClient();
+
+  // Bug 删除依赖 Prisma 外键级联清理附件、流转记录和 AI 修复任务；这里不再全量重写 dashboard，
+  // 避免“删除一个 Bug”在公网 MySQL 上退化成多表 delete/upsert 长事务。
+  await prisma.bugReport.delete({
+    where: { id: bugId }
+  });
 }
 
 export async function writeDashboardIdentityDatabase(data: Pick<DashboardDatabase, "members" | "workspaces">, client?: PrismaClient) {

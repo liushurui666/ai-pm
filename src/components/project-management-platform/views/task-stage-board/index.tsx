@@ -671,6 +671,7 @@ export function TaskStageBoard({
 
   return (
     <DndContext
+      id="task-stage-board-dnd"
       collisionDetection={taskStageCollisionDetection}
       measuring={taskStageMeasuring}
       sensors={sensors}

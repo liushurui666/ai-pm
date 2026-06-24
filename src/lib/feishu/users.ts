@@ -74,6 +74,23 @@ type FeishuListResponse<T> = {
   };
 };
 
+type FeishuDepartmentResponse = {
+  code: number;
+  msg?: string;
+  message?: string;
+  error?: {
+    message?: string;
+  };
+  data?: {
+    department?: FeishuDepartment;
+  };
+};
+
+type FeishuDepartmentNode = {
+  departmentId: string;
+  openDepartmentId: string;
+};
+
 function getFeishuContactError(
   payload: { code?: number; msg?: string; message?: string; error?: { message?: string } },
   fallback: string
@@ -168,15 +185,56 @@ async function listContactScopes(accessToken: string) {
   };
 }
 
-async function listChildDepartmentIds(accessToken: string, departmentId: string) {
-  const departmentIds = new Set<string>();
+function mapDepartmentNode(department: FeishuDepartment): FeishuDepartmentNode | null {
+  const departmentId = department.department_id?.trim();
+  const openDepartmentId = department.open_department_id?.trim();
+
+  if (!departmentId || !openDepartmentId) {
+    return null;
+  }
+
+  return {
+    departmentId,
+    openDepartmentId
+  };
+}
+
+async function getDepartmentNode(accessToken: string, openDepartmentId: string): Promise<FeishuDepartmentNode | null> {
+  if (openDepartmentId === "0") {
+    return {
+      departmentId: "0",
+      openDepartmentId: "0"
+    };
+  }
+
+  const url = new URL(`https://open.feishu.cn/open-apis/contact/v3/departments/${openDepartmentId}`);
+  url.searchParams.set("department_id_type", "open_department_id");
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    },
+    cache: "no-store"
+  });
+  const payload = (await response.json()) as FeishuDepartmentResponse;
+
+  if (!response.ok || payload.code !== 0) {
+    return null;
+  }
+
+  return payload.data?.department ? mapDepartmentNode(payload.data.department) : null;
+}
+
+async function listChildDepartments(accessToken: string, departmentId: string) {
+  const departments: FeishuDepartmentNode[] = [];
   let pageToken = "";
 
   do {
     const url = new URL(`https://open.feishu.cn/open-apis/contact/v3/departments/${departmentId}/children`);
-    url.searchParams.set("department_id_type", "open_department_id");
-    url.searchParams.set("user_id_type", "open_id");
-    url.searchParams.set("page_size", "100");
+    url.searchParams.set("department_id_type", "department_id");
+    // 飞书子部门接口对 page_size 上限更保守，传 100 会直接返回 field validation failed；
+    // 这里用 50 保持分页展开稳定，避免授权了上级部门但下拉只看到直属成员。
+    url.searchParams.set("page_size", "50");
 
     if (pageToken) {
       url.searchParams.set("page_token", pageToken);
@@ -195,41 +253,55 @@ async function listChildDepartmentIds(accessToken: string, departmentId: string)
     }
 
     for (const department of payload.data?.items ?? []) {
-      const childDepartmentId = department.open_department_id || department.department_id;
+      const childDepartment = mapDepartmentNode(department);
 
-      if (childDepartmentId) {
-        departmentIds.add(childDepartmentId);
+      if (childDepartment) {
+        departments.push(childDepartment);
       }
     }
 
     pageToken = payload.data?.has_more ? payload.data.page_token ?? "" : "";
-  } while (pageToken && departmentIds.size < 1_000);
+  } while (pageToken && departments.length < 1_000);
 
-  return [...departmentIds];
+  return departments;
 }
 
 async function expandScopedDepartmentIds(accessToken: string, departmentIds: string[]) {
-  const expandedDepartmentIds = new Set(departmentIds);
-  const queue = [...departmentIds];
+  const expandedOpenDepartmentIds = new Set<string>();
+  const visitedDepartmentIds = new Set<string>();
+  const queue: FeishuDepartmentNode[] = [];
 
-  while (queue.length && expandedDepartmentIds.size < 1_000) {
-    const departmentId = queue.shift();
+  for (const departmentId of departmentIds) {
+    const departmentNode = await getDepartmentNode(accessToken, departmentId);
 
-    if (!departmentId) {
+    if (!departmentNode) {
+      expandedOpenDepartmentIds.add(departmentId);
       continue;
     }
 
-    const childDepartmentIds = await listChildDepartmentIds(accessToken, departmentId);
+    expandedOpenDepartmentIds.add(departmentNode.openDepartmentId);
+    queue.push(departmentNode);
+  }
 
-    for (const childDepartmentId of childDepartmentIds) {
-      if (!expandedDepartmentIds.has(childDepartmentId)) {
-        expandedDepartmentIds.add(childDepartmentId);
-        queue.push(childDepartmentId);
+  while (queue.length && expandedOpenDepartmentIds.size < 1_000) {
+    const department = queue.shift();
+
+    if (!department || visitedDepartmentIds.has(department.departmentId)) {
+      continue;
+    }
+
+    visitedDepartmentIds.add(department.departmentId);
+    const childDepartments = await listChildDepartments(accessToken, department.departmentId);
+
+    for (const childDepartment of childDepartments) {
+      if (!expandedOpenDepartmentIds.has(childDepartment.openDepartmentId)) {
+        expandedOpenDepartmentIds.add(childDepartment.openDepartmentId);
+        queue.push(childDepartment);
       }
     }
   }
 
-  return [...expandedDepartmentIds];
+  return [...expandedOpenDepartmentIds];
 }
 
 async function listDepartmentPeople(accessToken: string, departmentId: string) {

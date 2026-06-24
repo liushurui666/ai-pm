@@ -334,6 +334,7 @@ export function TaskOwnerBoard({
 
   return (
     <DndContext
+      id="task-owner-board-dnd"
       collisionDetection={pointerWithin}
       sensors={sensors}
       onDragStart={handleDragStart}
