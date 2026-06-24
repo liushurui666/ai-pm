@@ -35,7 +35,7 @@ export function RequirementVersionChildren({
         </Space>
         <Tag>{childVersions.length} 个</Tag>
       </Flex>
-      <Space direction="vertical" size={8} className="requirement-version-children-list">
+      <Space orientation="vertical" size={8} className="requirement-version-children-list">
         {childVersions.map((version) => (
           <button
             className="requirement-version-child-row"
