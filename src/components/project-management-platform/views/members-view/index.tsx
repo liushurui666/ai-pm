@@ -6,7 +6,7 @@ import { BellOutlined, DeleteOutlined, PlusOutlined, SettingOutlined, TeamOutlin
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import "dayjs/locale/zh-cn";
-import { useState } from "react";
+import { useState, type ReactElement } from "react";
 import type { ColumnsType } from "antd/es/table";
 import type {
   DashboardMember,
@@ -80,6 +80,33 @@ function getMemberInitial(name?: string) {
 
 function getPersonSearchText(person: FeishuPerson) {
   return [person.name, person.enName, person.email, person.openId, person.userId].filter(Boolean).join(" ");
+}
+
+// 飞书联系人下拉会先加载完整授权范围，再由 Select 本地搜索过滤；
+// 这里把“已加载人数”和“搜索无匹配”直接展示出来，避免用户把过滤结果误判为通讯录只同步了一两个人。
+function getFeishuPeopleNotFoundContent(people: FeishuPerson[], peopleLoading: boolean) {
+  if (peopleLoading) {
+    return "正在加载通讯录";
+  }
+
+  return people.length ? "当前搜索没有匹配联系人" : "通讯录未返回联系人";
+}
+
+function renderFeishuPeoplePopup(menu: ReactElement, people: FeishuPerson[], peopleLoading: boolean) {
+  return (
+    <div className="member-feishu-select-popup">
+      {menu}
+      <div className="member-feishu-select-summary">
+        <Text type="secondary">
+          {peopleLoading
+            ? "正在同步飞书通讯录..."
+            : people.length
+              ? `已加载 ${people.length} 位联系人，输入内容会在这些联系人内过滤`
+              : "未加载到飞书联系人，可先手动填写成员信息"}
+        </Text>
+      </div>
+    </div>
+  );
 }
 
 function formatMemberLastActiveAt(value?: string) {
@@ -195,8 +222,10 @@ function MemberIdentityFields({
           showSearch
           loading={peopleLoading}
           disabled={Boolean(peopleError) || !people.length}
+          notFoundContent={getFeishuPeopleNotFoundContent(people, peopleLoading)}
           placeholder="可选，用于绑定飞书通知"
           optionFilterProp="searchText"
+          popupRender={(menu) => renderFeishuPeoplePopup(menu, people, peopleLoading)}
           options={people.map((person) => ({
             value: person.openId,
             label: `${person.name}${person.email ? ` · ${person.email}` : ""}`,
@@ -371,8 +400,10 @@ function NotificationChannelItem({
               showSearch
               loading={peopleLoading}
               disabled={Boolean(peopleError) || !people.length}
+              notFoundContent={getFeishuPeopleNotFoundContent(people, peopleLoading)}
               placeholder="选择要通知的飞书账号"
               optionFilterProp="searchText"
+              popupRender={(menu) => renderFeishuPeoplePopup(menu, people, peopleLoading)}
               options={people.map((person) => ({
                 value: person.openId,
                 label: `${person.name}${person.email ? ` · ${person.email}` : ""}`,
