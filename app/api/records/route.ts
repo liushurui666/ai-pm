@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createDashboardRecord, createDashboardTaskRecord, deleteDashboardRecord, getDashboardData, updateDashboardRecord, updateDashboardTaskRecord } from "@/data/local-dashboard";
+import {
+  createDashboardRecord,
+  createDashboardTaskRecord,
+  deleteDashboardRecord,
+  getDashboardBugById,
+  getWorkspaceAccessContext,
+  updateDashboardRecord,
+  updateDashboardTaskRecord
+} from "@/data/local-dashboard";
 import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 import { canPerformAction, getPermissionDeniedReason } from "@/lib/access/permissions";
 import { safelyEnqueueRecordCleanupJob, safelyEnqueueRecordIndexJob } from "@/lib/ai/knowledge/record-indexing";
@@ -88,13 +96,12 @@ export async function POST(request: NextRequest) {
   }
 
   if (isRequirementManagementType(body.type)) {
-    const data = await getDashboardData(session?.user, body.workspaceId);
-    const permissions = data.meta?.permissions;
+    const { permissions } = await getWorkspaceAccessContext(session?.user, body.workspaceId);
 
-    if (!permissions || !canPerformAction(permissions, "requirement:create")) {
+    if (!canPerformAction(permissions, "requirement:create")) {
       return NextResponse.json(
         {
-          error: permissions ? getPermissionDeniedReason(permissions, "requirement:create") : "无创建权限"
+          error: getPermissionDeniedReason(permissions, "requirement:create")
         },
         {
           status: 403
@@ -161,13 +168,12 @@ export async function PATCH(request: NextRequest) {
   let updateValues = body.values;
 
   if (isRequirementManagementType(body.type)) {
-    const data = await getDashboardData(session?.user, body.workspaceId);
-    const permissions = data.meta?.permissions;
+    const { permissions } = await getWorkspaceAccessContext(session?.user, body.workspaceId);
 
-    if (!permissions || !canPerformAction(permissions, "requirement:update")) {
+    if (!canPerformAction(permissions, "requirement:update")) {
       return NextResponse.json(
         {
-          error: permissions ? getPermissionDeniedReason(permissions, "requirement:update") : "无编辑权限"
+          error: getPermissionDeniedReason(permissions, "requirement:update")
         },
         {
           status: 403
@@ -177,13 +183,12 @@ export async function PATCH(request: NextRequest) {
   }
 
   if (body.type === "bug") {
-    const data = await getDashboardData(session?.user, body.workspaceId);
-    const permissions = data.meta?.permissions;
+    const { permissions } = await getWorkspaceAccessContext(session?.user, body.workspaceId);
 
-    if (!permissions || !canPerformAction(permissions, "bug:update")) {
+    if (!canPerformAction(permissions, "bug:update")) {
       return NextResponse.json(
         {
-          error: permissions ? getPermissionDeniedReason(permissions, "bug:update") : "无编辑权限"
+          error: getPermissionDeniedReason(permissions, "bug:update")
         },
         {
           status: 403
@@ -192,7 +197,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (!permissions.canEditBugsFully) {
-      const existingBug = data.bugs.find((bug) => bug.id === body.id);
+      const existingBug = await getDashboardBugById(body.id);
 
       if (!existingBug) {
         return NextResponse.json(
@@ -267,14 +272,14 @@ export async function DELETE(request: NextRequest) {
     );
   }
 
-  const data = await getDashboardData(session?.user, body.workspaceId);
-  const permissions = data.meta?.permissions;
+  const accessContext = await getWorkspaceAccessContext(session?.user, body.workspaceId);
+  const permissions = accessContext.permissions;
   const action = getDeleteAction(body.type);
 
-  if (!permissions || !canPerformAction(permissions, action)) {
+  if (!canPerformAction(permissions, action)) {
     return NextResponse.json(
       {
-        error: permissions ? getPermissionDeniedReason(permissions, action) : "无删除权限"
+        error: getPermissionDeniedReason(permissions, action)
       },
       {
         status: 403
@@ -287,7 +292,7 @@ export async function DELETE(request: NextRequest) {
 
     // 删除业务记录后同样只投递后台清理任务；Qdrant point 和 source/chunk 清理由 worker 异步完成。
     await safelyEnqueueRecordCleanupJob({
-      workspaceId: data.meta?.currentWorkspace?.id ?? body.workspaceId,
+      workspaceId: accessContext.currentWorkspace.id ?? body.workspaceId,
       type: body.type,
       id: body.id
     });

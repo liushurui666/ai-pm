@@ -74,6 +74,11 @@ function verifyDashboardReadPerformanceContracts() {
   assertSmoke(createTaskBlock.includes("resolveTaskVersionForCreate"), "任务创建轻量路径没有按版本回填任务范围。");
   assertSmoke(createTaskBlock.includes("upsertDashboardTaskDatabase(task)"), "任务创建轻量路径没有单行写入 project_tasks。");
   assertSmoke(!createTaskBlock.includes("readDatabase()"), "任务创建轻量路径仍在读取整份 dashboard。");
+  // records API 的权限判断不能再为了 permissions 调用完整 getDashboardData；权限只需要工作区成员身份，
+  // Bug 限权编辑也只需要按 id 读取当前 Bug 保留不可编辑字段。
+  assertSmoke(!recordsRouteText.includes("getDashboardData"), "records API 权限判断仍在读取整份 dashboard。");
+  assertSmoke(recordsRouteText.includes("getWorkspaceAccessContext(session?.user, body.workspaceId)"), "records API 没有使用轻量权限上下文。");
+  assertSmoke(recordsRouteText.includes("getDashboardBugById(body.id)"), "Bug 限权编辑没有使用单 Bug 轻量读取。");
 }
 
 async function enqueueIndex<T extends DashboardEntityType>(

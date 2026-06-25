@@ -5,6 +5,7 @@ import {
   deleteDashboardBugDatabase,
   deleteDashboardRequirementDatabase,
   deleteDashboardTaskDatabase,
+  readDashboardBugDatabase,
   readDashboardMemberDatabase,
   readDashboardMembersDatabase,
   readDashboardDatabase,
@@ -2492,6 +2493,26 @@ export async function getDashboardData(user?: FeishuUser, workspaceId?: string):
       message: "已接入 MySQL 数据库，平台成员负责权限与负责人选择，飞书仅用于登录和机器人通知。"
     }
   };
+}
+
+export async function getWorkspaceAccessContext(user?: FeishuUser, workspaceId?: string) {
+  const currentWorkspace = resolveWorkspaceFromList(await readWorkspaces(), workspaceId);
+  const members = (await readDashboardMembersDatabase(currentWorkspace.id)).map((member) =>
+    normalizeMember(member, currentWorkspace.id)
+  );
+  const currentMember = findWorkspaceMemberForUser(members, currentWorkspace.id, user);
+
+  // 业务 API 做权限判断时只需要当前工作区成员身份，不需要任务、Bug、需求等完整 dashboard；
+  // 这条轻量路径和 getDashboardData 使用同一套 member 匹配/权限函数，避免性能优化后权限语义分叉。
+  return {
+    currentMember,
+    currentWorkspace,
+    permissions: getDashboardPermissions(currentMember)
+  };
+}
+
+export async function getDashboardBugById(id: string) {
+  return readDashboardBugDatabase(id);
 }
 
 function normalizeMemberInput(values: Record<string, unknown>, fallback?: DashboardMember): DashboardMember {

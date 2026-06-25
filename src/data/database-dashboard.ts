@@ -227,6 +227,110 @@ function mapRequirementVersionRecord(version: {
   };
 }
 
+function mapBugRecord(bug: {
+  id: string;
+  workspaceId: string;
+  title: string;
+  status: string;
+  severity: string;
+  project: string;
+  versionId: string | null;
+  versionName: string | null;
+  reporter: string;
+  owner: string;
+  ownerMemberId: string | null;
+  ownerOpenId: string | null;
+  ownerUnionId: string | null;
+  ownerUserId: string | null;
+  ownerEmail: string | null;
+  ownerAvatarUrl: string | null;
+  environment: string;
+  reproduction: string;
+  expected: string;
+  actual: string;
+  createdAt: string;
+  aiFixLatestJobId: string | null;
+  aiFixStatus: string | null;
+  aiFixBranch: string | null;
+  aiFixMrUrl: string | null;
+  aiFixSummary: string | null;
+  aiFixError: string | null;
+  aiFixUpdatedAt: Date | null;
+  attachments: Array<{
+    id: string;
+    key: string;
+    name: string;
+    url: string;
+    type: string;
+    mimeType: string;
+    size: number;
+    uploadedAt: string;
+  }>;
+  flowRecords: Array<{
+    id: string;
+    action: string;
+    at: string;
+    operator: string;
+    from: string | null;
+    to: string | null;
+    note: string | null;
+  }>;
+}): BugReport {
+  return {
+    id: bug.id,
+    workspaceId: bug.workspaceId,
+    title: bug.title,
+    status: bug.status as BugReport["status"],
+    severity: bug.severity as BugReport["severity"],
+    project: bug.project,
+    versionId: toOptionalText(bug.versionId),
+    versionName: toOptionalText(bug.versionName),
+    reporter: bug.reporter,
+    owner: bug.owner,
+    ownerMemberId: toOptionalText(bug.ownerMemberId),
+    ownerOpenId: toOptionalText(bug.ownerOpenId),
+    ownerUnionId: toOptionalText(bug.ownerUnionId),
+    ownerUserId: toOptionalText(bug.ownerUserId),
+    ownerEmail: toOptionalText(bug.ownerEmail),
+    ownerAvatarUrl: toOptionalText(bug.ownerAvatarUrl),
+    environment: bug.environment,
+    reproduction: bug.reproduction,
+    expected: bug.expected,
+    actual: bug.actual,
+    createdAt: bug.createdAt,
+    attachments: bug.attachments.map((attachment): BugAttachment => ({
+      id: attachment.id,
+      key: attachment.key,
+      name: attachment.name,
+      url: attachment.url,
+      type: attachment.type as BugAttachment["type"],
+      mimeType: attachment.mimeType,
+      size: attachment.size,
+      uploadedAt: attachment.uploadedAt
+    })),
+    flowRecords: bug.flowRecords.map((record): BugFlowRecord => ({
+      id: record.id,
+      action: record.action as BugFlowRecord["action"],
+      at: record.at,
+      operator: record.operator,
+      from: toOptionalText(record.from),
+      to: toOptionalText(record.to),
+      note: toOptionalText(record.note)
+    })),
+    aiFix: bug.aiFixLatestJobId
+      ? {
+          latestJobId: bug.aiFixLatestJobId,
+          status: (bug.aiFixStatus ?? undefined) as NonNullable<BugReport["aiFix"]>["status"],
+          branch: toOptionalText(bug.aiFixBranch),
+          mrUrl: toOptionalText(bug.aiFixMrUrl),
+          summary: toOptionalText(bug.aiFixSummary),
+          error: toOptionalText(bug.aiFixError),
+          updatedAt: toOptionalDateText(bug.aiFixUpdatedAt)
+        }
+      : undefined
+  };
+}
+
 // 工作区写库字段被全量同步和增量创建复用，集中组装可以保证两条路径的数据结构一致。
 function getWorkspacePayload(workspace: DashboardWorkspace) {
   return {
@@ -404,59 +508,7 @@ export async function readDashboardDatabase(
       project: risk.project,
       mitigation: risk.mitigation
     })),
-    bugs: bugs.map((bug): BugReport => ({
-      id: bug.id,
-      workspaceId: bug.workspaceId,
-      title: bug.title,
-      status: bug.status as BugReport["status"],
-      severity: bug.severity as BugReport["severity"],
-      project: bug.project,
-      versionId: toOptionalText(bug.versionId),
-      versionName: toOptionalText(bug.versionName),
-      reporter: bug.reporter,
-      owner: bug.owner,
-      ownerMemberId: toOptionalText(bug.ownerMemberId),
-      ownerOpenId: toOptionalText(bug.ownerOpenId),
-      ownerUnionId: toOptionalText(bug.ownerUnionId),
-      ownerUserId: toOptionalText(bug.ownerUserId),
-      ownerEmail: toOptionalText(bug.ownerEmail),
-      ownerAvatarUrl: toOptionalText(bug.ownerAvatarUrl),
-      environment: bug.environment,
-      reproduction: bug.reproduction,
-      expected: bug.expected,
-      actual: bug.actual,
-      createdAt: bug.createdAt,
-      attachments: bug.attachments.map((attachment): BugAttachment => ({
-        id: attachment.id,
-        key: attachment.key,
-        name: attachment.name,
-        url: attachment.url,
-        type: attachment.type as BugAttachment["type"],
-        mimeType: attachment.mimeType,
-        size: attachment.size,
-        uploadedAt: attachment.uploadedAt
-      })),
-      flowRecords: bug.flowRecords.map((record): BugFlowRecord => ({
-        id: record.id,
-        action: record.action as BugFlowRecord["action"],
-        at: record.at,
-        operator: record.operator,
-        from: toOptionalText(record.from),
-        to: toOptionalText(record.to),
-        note: toOptionalText(record.note)
-      })),
-      aiFix: bug.aiFixLatestJobId
-        ? {
-            latestJobId: bug.aiFixLatestJobId,
-            status: bug.aiFixStatus ?? undefined,
-            branch: toOptionalText(bug.aiFixBranch),
-            mrUrl: toOptionalText(bug.aiFixMrUrl),
-            summary: toOptionalText(bug.aiFixSummary),
-            error: toOptionalText(bug.aiFixError),
-            updatedAt: toOptionalDateText(bug.aiFixUpdatedAt)
-          }
-        : undefined
-    })),
+    bugs: bugs.map(mapBugRecord),
     requirementVersions: requirementVersions.map(mapRequirementVersionRecord),
     requirements: requirements.map((requirement): Requirement => ({
       id: requirement.id,
@@ -563,6 +615,26 @@ export async function readDashboardRequirementVersionDatabase(
 
   // 任务创建只需要用关联版本回填 versionName/project，不需要读取当前工作区全部版本树。
   return version ? mapRequirementVersionRecord(version) : undefined;
+}
+
+export async function readDashboardBugDatabase(bugId: string, client?: PrismaClient): Promise<BugReport | undefined> {
+  const prisma = client ?? getPrismaClient();
+  const bug = await prisma.bugReport.findUnique({
+    where: {
+      id: bugId
+    },
+    include: {
+      attachments: true,
+      flowRecords: {
+        orderBy: {
+          at: "asc"
+        }
+      }
+    }
+  });
+
+  // Bug 限权编辑只需要当前 Bug 用于保留不可编辑字段，不能为此读取整个 dashboard。
+  return bug ? mapBugRecord(bug) : undefined;
 }
 
 async function syncWorkspaces(prisma: DashboardPrisma, workspaces: DashboardWorkspace[]) {
