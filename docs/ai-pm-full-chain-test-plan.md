@@ -327,10 +327,10 @@
 
 ### 2026-06-25 全链路冒烟套件统一入口
 
-- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 18 个 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
+- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 19 个 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
 - 新增 package scripts：`pnpm full-chain:smoke` 默认跑核心链路，`pnpm full-chain:smoke:all` 跑全量链路，`pnpm full-chain:smoke:list` 输出用例清单。
 - 分组策略：`static` 覆盖权限、覆盖清单、依赖降级、部署静态配置和 Bug 附件 mock；`auth` 覆盖未登录 API/页面保护与真实浏览器登录页；`db` 覆盖真实 MySQL 写入/清理；`core` 将登录、浏览器、静态、CRUD、工作区身份、版本范围等高价值链路合并成日常回归入口。
-- 本轮执行：`pnpm full-chain:coverage` 通过，登记 18 个脚本/18 个 suite 用例/9 个 package 入口；当前 `pnpm full-chain:smoke` 通过 15/15，用时约 219.3s，覆盖登录 26 个无 Cookie 入口、localhost/127.0.0.1 Origin 一致性、真实 Chromium 登录页/未登录跳转/移动端登录页、飞书通讯录全量读取、权限矩阵、覆盖清单防退化、依赖降级、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、成员管理写入、通知渠道入队、工作区身份和版本范围。
+- 本轮执行：`pnpm full-chain:coverage` 通过，登记 19 个脚本/19 个 suite 用例/10 个 package 入口；当前 `pnpm full-chain:smoke` 通过 16/16，用时约 222.9s，覆盖登录 26 个无 Cookie 入口、localhost/127.0.0.1 Origin 一致性、真实 Chromium 登录页/未登录跳转/移动端登录页、工作台 Shell UI 契约、飞书通讯录全量读取、权限矩阵、覆盖清单防退化、依赖降级、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、成员管理写入、通知渠道入队、工作区身份和版本范围。
 
 ### 2026-06-25 浏览器 UI 冒烟脚本化
 
@@ -345,6 +345,12 @@
 - AUTH-003/AUTH-004/AUTH-005：采集脚本不打印 Cookie/token，默认写入已忽略的 `.ai-pm/qa-auth-storage-state.json`；保存后立即用全新浏览器上下文复放成员管理页和 `/api/dashboard`，确认 Cookie domain/path 可复用。
 - `pnpm full-chain:browser` 现在会在未显式设置 `AI_PM_QA_STORAGE_STATE` 时自动复用 `.ai-pm/qa-auth-storage-state.json`，使本地日常回归可以直接覆盖已登录工作台 8 个一级视图。
 - 本轮执行：`pnpm full-chain:coverage` 通过并确认 9 个 package 入口；`pnpm full-chain:browser` 在无默认 storageState 时通过匿名 4/4 且明确跳过已登录视图；`pnpm lint`、`pnpm build`、`pnpm exec tsc --noEmit --pretty false` 均通过。`pnpm full-chain:browser:login` 需要人工 OAuth，作为下一次真实登录态采集入口。
+
+### 2026-06-25 工作台 Shell UI 契约冒烟
+
+- 新增 `scripts/full-chain-workbench-ui-smoke.ts` 与 `pnpm full-chain:workbench-ui`：静态守住工作台 Shell 的视图枚举、桌面 Studio 菜单、移动导航、Chat/Studio 切换、`/workbench` URL 同步和侧栏折叠。
+- SHELL-002/SHELL-004/SHELL-005/SHELL-006/SHELL-007：脚本验证左下角账号弹层关闭工作区 Select、顶部保留工作区切换、退出登录入口存在、顶部搜索可打开全局搜索抽屉、搜索覆盖项目/任务/Bug/需求版本/需求、日程抽屉覆盖里程碑/任务/Bug 且默认“只看我的”、主题切换绑定 `cycleMode`。
+- 本轮执行：`pnpm full-chain:workbench-ui` 通过 5/5，`appViewCount=9/validViewCount=9`、Studio 菜单 7 项、移动导航 7 项、搜索实体 5 类、日程来源 3 类。
 
 ### 2026-06-25 认证 Origin 一致性冒烟
 

@@ -44,6 +44,13 @@ const smokeCases: SmokeCase[] = [
     timeoutMs: 120_000
   },
   {
+    description: "工作台 Shell 视图枚举、导航、账号、搜索、日程和主题切换契约。",
+    groups: ["all", "core", "static"],
+    id: "workbench-ui",
+    script: "scripts/full-chain-workbench-ui-smoke.ts",
+    timeoutMs: 60_000
+  },
+  {
     description: "飞书通讯录授权范围、子部门/用户组展开、去重和搜索过滤。",
     groups: ["all", "core"],
     id: "feishu-contact",
