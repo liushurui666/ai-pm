@@ -157,6 +157,76 @@ function mapTaskRecord(task: {
   };
 }
 
+function mapRequirementVersionRecord(version: {
+  id: string;
+  workspaceId: string;
+  parentVersionId: string | null;
+  parentVersionName: string | null;
+  name: string;
+  project: string;
+  status: string;
+  startDate: string;
+  releaseDate: string;
+  goal: string;
+  productOwner: string | null;
+  productOwnerMemberId: string | null;
+  productOwnerOpenId: string | null;
+  productOwnerUnionId: string | null;
+  productOwnerUserId: string | null;
+  productOwnerEmail: string | null;
+  productOwnerAvatarUrl: string | null;
+  uiOwner: string | null;
+  uiOwnerMemberId: string | null;
+  uiOwnerOpenId: string | null;
+  uiOwnerUnionId: string | null;
+  uiOwnerUserId: string | null;
+  uiOwnerEmail: string | null;
+  uiOwnerAvatarUrl: string | null;
+  devOwner: string | null;
+  devOwnerMemberId: string | null;
+  devOwnerOpenId: string | null;
+  devOwnerUnionId: string | null;
+  devOwnerUserId: string | null;
+  devOwnerEmail: string | null;
+  devOwnerAvatarUrl: string | null;
+  milestones: Prisma.JsonValue;
+}): RequirementVersion {
+  return {
+    id: version.id,
+    workspaceId: version.workspaceId,
+    parentVersionId: toOptionalText(version.parentVersionId),
+    parentVersionName: toOptionalText(version.parentVersionName),
+    name: version.name,
+    project: version.project,
+    status: version.status as RequirementVersion["status"],
+    startDate: version.startDate,
+    releaseDate: version.releaseDate,
+    goal: version.goal,
+    productOwner: toOptionalText(version.productOwner),
+    productOwnerMemberId: toOptionalText(version.productOwnerMemberId),
+    productOwnerOpenId: toOptionalText(version.productOwnerOpenId),
+    productOwnerUnionId: toOptionalText(version.productOwnerUnionId),
+    productOwnerUserId: toOptionalText(version.productOwnerUserId),
+    productOwnerEmail: toOptionalText(version.productOwnerEmail),
+    productOwnerAvatarUrl: toOptionalText(version.productOwnerAvatarUrl),
+    uiOwner: toOptionalText(version.uiOwner),
+    uiOwnerMemberId: toOptionalText(version.uiOwnerMemberId),
+    uiOwnerOpenId: toOptionalText(version.uiOwnerOpenId),
+    uiOwnerUnionId: toOptionalText(version.uiOwnerUnionId),
+    uiOwnerUserId: toOptionalText(version.uiOwnerUserId),
+    uiOwnerEmail: toOptionalText(version.uiOwnerEmail),
+    uiOwnerAvatarUrl: toOptionalText(version.uiOwnerAvatarUrl),
+    devOwner: toOptionalText(version.devOwner),
+    devOwnerMemberId: toOptionalText(version.devOwnerMemberId),
+    devOwnerOpenId: toOptionalText(version.devOwnerOpenId),
+    devOwnerUnionId: toOptionalText(version.devOwnerUnionId),
+    devOwnerUserId: toOptionalText(version.devOwnerUserId),
+    devOwnerEmail: toOptionalText(version.devOwnerEmail),
+    devOwnerAvatarUrl: toOptionalText(version.devOwnerAvatarUrl),
+    milestones: fromJsonArray<ProjectMilestone>(version.milestones)
+  };
+}
+
 // 工作区写库字段被全量同步和增量创建复用，集中组装可以保证两条路径的数据结构一致。
 function getWorkspacePayload(workspace: DashboardWorkspace) {
   return {
@@ -387,40 +457,7 @@ export async function readDashboardDatabase(
           }
         : undefined
     })),
-    requirementVersions: requirementVersions.map((version): RequirementVersion => ({
-      id: version.id,
-      workspaceId: version.workspaceId,
-      parentVersionId: toOptionalText(version.parentVersionId),
-      parentVersionName: toOptionalText(version.parentVersionName),
-      name: version.name,
-      project: version.project,
-      status: version.status as RequirementVersion["status"],
-      startDate: version.startDate,
-      releaseDate: version.releaseDate,
-      goal: version.goal,
-      productOwner: toOptionalText(version.productOwner),
-      productOwnerMemberId: toOptionalText(version.productOwnerMemberId),
-      productOwnerOpenId: toOptionalText(version.productOwnerOpenId),
-      productOwnerUnionId: toOptionalText(version.productOwnerUnionId),
-      productOwnerUserId: toOptionalText(version.productOwnerUserId),
-      productOwnerEmail: toOptionalText(version.productOwnerEmail),
-      productOwnerAvatarUrl: toOptionalText(version.productOwnerAvatarUrl),
-      uiOwner: toOptionalText(version.uiOwner),
-      uiOwnerMemberId: toOptionalText(version.uiOwnerMemberId),
-      uiOwnerOpenId: toOptionalText(version.uiOwnerOpenId),
-      uiOwnerUnionId: toOptionalText(version.uiOwnerUnionId),
-      uiOwnerUserId: toOptionalText(version.uiOwnerUserId),
-      uiOwnerEmail: toOptionalText(version.uiOwnerEmail),
-      uiOwnerAvatarUrl: toOptionalText(version.uiOwnerAvatarUrl),
-      devOwner: toOptionalText(version.devOwner),
-      devOwnerMemberId: toOptionalText(version.devOwnerMemberId),
-      devOwnerOpenId: toOptionalText(version.devOwnerOpenId),
-      devOwnerUnionId: toOptionalText(version.devOwnerUnionId),
-      devOwnerUserId: toOptionalText(version.devOwnerUserId),
-      devOwnerEmail: toOptionalText(version.devOwnerEmail),
-      devOwnerAvatarUrl: toOptionalText(version.devOwnerAvatarUrl),
-      milestones: fromJsonArray<ProjectMilestone>(version.milestones)
-    })),
+    requirementVersions: requirementVersions.map(mapRequirementVersionRecord),
     requirements: requirements.map((requirement): Requirement => ({
       id: requirement.id,
       workspaceId: requirement.workspaceId,
@@ -509,6 +546,23 @@ export async function readDashboardMembersDatabase(workspaceId: string, client?:
 
   // 负责人变更通知只需要当前工作区成员身份和渠道配置，不能为了入队通知重新读取整份 dashboard。
   return members.map(mapMemberRecord);
+}
+
+export async function readDashboardRequirementVersionDatabase(
+  workspaceId: string,
+  versionId: string,
+  client?: PrismaClient
+): Promise<RequirementVersion | undefined> {
+  const prisma = client ?? getPrismaClient();
+  const version = await prisma.requirementVersion.findFirst({
+    where: {
+      id: versionId,
+      workspaceId
+    }
+  });
+
+  // 任务创建只需要用关联版本回填 versionName/project，不需要读取当前工作区全部版本树。
+  return version ? mapRequirementVersionRecord(version) : undefined;
 }
 
 async function syncWorkspaces(prisma: DashboardPrisma, workspaces: DashboardWorkspace[]) {

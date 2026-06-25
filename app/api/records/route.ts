@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createDashboardRecord, deleteDashboardRecord, getDashboardData, updateDashboardRecord, updateDashboardTaskRecord } from "@/data/local-dashboard";
+import { createDashboardRecord, createDashboardTaskRecord, deleteDashboardRecord, getDashboardData, updateDashboardRecord, updateDashboardTaskRecord } from "@/data/local-dashboard";
 import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 import { canPerformAction, getPermissionDeniedReason } from "@/lib/access/permissions";
 import { safelyEnqueueRecordCleanupJob, safelyEnqueueRecordIndexJob } from "@/lib/ai/knowledge/record-indexing";
@@ -104,7 +104,11 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await createDashboardRecord(body.type, body.values, body.workspaceId, session?.user);
+    // 任务创建只写 project_tasks 当前行，版本回填和负责人通知都可以用轻量查询完成；
+    // 需求、Bug、版本等仍保留完整路径，避免漏掉权限、流转和级联同步语义。
+    const result = body.type === "task"
+      ? await createDashboardTaskRecord(body.values, body.workspaceId)
+      : await createDashboardRecord(body.type, body.values, body.workspaceId, session?.user);
 
     // RAG 索引只在业务数据保存成功后入队；失败不影响创建响应，避免用户看到后台索引状态。
     await safelyEnqueueRecordIndexJob(result, "created");

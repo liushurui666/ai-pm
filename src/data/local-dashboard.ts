@@ -8,6 +8,7 @@ import {
   readDashboardMemberDatabase,
   readDashboardMembersDatabase,
   readDashboardDatabase,
+  readDashboardRequirementVersionDatabase,
   readDashboardTaskDatabase,
   readDashboardWorkspacesDatabase,
   updateDashboardTaskDatabase,
@@ -2054,6 +2055,32 @@ function withRequirementVersionProject(data: LocalDatabase, values: Record<strin
   };
 }
 
+function withResolvedRequirementVersionProject(values: Record<string, unknown>, version: RequirementVersion) {
+  const submittedProject = asText(values.project);
+
+  // 轻量任务创建不读取完整版本列表，但版本口径必须和完整路径一致：
+  // “跨项目”版本保留调用方项目，明确项目版本强制覆盖，避免项目视图和版本大屏统计分叉。
+  return {
+    ...values,
+    versionId: version.id,
+    versionName: version.name,
+    project: version.project === "跨项目" && submittedProject ? submittedProject : version.project
+  };
+}
+
+async function resolveTaskVersionForCreate(workspaceId: string, values: Record<string, unknown>) {
+  const versionId = asText(values.versionId);
+  const version = versionId
+    ? await readDashboardRequirementVersionDatabase(workspaceId, versionId)
+    : undefined;
+
+  return {
+    ...DEFAULT_REQUIREMENT_VERSION,
+    workspaceId,
+    ...(version ?? {})
+  };
+}
+
 function withRequirementVersionParentProject(data: LocalDatabase, values: Record<string, unknown>, workspaceId: string) {
   const parentVersionId = asText(values.parentVersionId);
 
@@ -2738,6 +2765,41 @@ export async function createDashboardRecord<T extends DashboardEntityType>(
   return {
     type,
     record: savedRecord,
+    persisted: true,
+    message: [`已保存到 AI PM 项目管理平台。`, notifyMessage].filter(Boolean).join(" ")
+  };
+}
+
+export async function createDashboardTaskRecord(
+  values: Record<string, unknown>,
+  workspaceId = DEFAULT_WORKSPACE.id
+): Promise<CreateRecordResult<"task">> {
+  const workspace = resolveWorkspaceFromList(await readWorkspaces(), workspaceId);
+  const version = await resolveTaskVersionForCreate(workspace.id, values);
+  const scopedValues = withResolvedRequirementVersionProject({
+    ...values,
+    workspaceId: workspace.id
+  }, version);
+  const task = normalizeCreateTask(scopedValues);
+  const notifyMessage = getNotificationTargetIdentities(task as unknown as Record<string, unknown>).length
+    ? await notifyOwner(
+        createNotificationLookupData(workspace.id, await readDashboardMembersDatabase(workspace.id)),
+        workspace.id,
+        "task",
+        {
+          ...task,
+          id: task.id
+        }
+      )
+    : "";
+
+  // 新建任务是常见工作台操作，只影响 project_tasks 当前行；版本回填、负责人通知都用轻量查询完成，
+  // 不再为了插入一条任务读取项目、Bug、需求、文档等整份 dashboard。
+  await upsertDashboardTaskDatabase(task);
+
+  return {
+    type: "task",
+    record: task,
     persisted: true,
     message: [`已保存到 AI PM 项目管理平台。`, notifyMessage].filter(Boolean).join(" ")
   };

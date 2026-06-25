@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   createDashboardMember,
   createDashboardRecord,
+  createDashboardTaskRecord,
   createDashboardWorkspace,
   deleteDashboardRecord,
   updateDashboardMember,
@@ -20,6 +21,7 @@ loadEnv({ path: ".env", quiet: true });
 const WORKSPACE_ID = process.env.AI_PM_QA_WORKSPACE_ID || "ws-default";
 const repoRoot = process.cwd();
 const localDashboardPath = path.join(repoRoot, "src/data/local-dashboard.ts");
+const recordsRoutePath = path.join(repoRoot, "app/api/records/route.ts");
 
 type CreatedRecord = {
   id: string;
@@ -38,6 +40,7 @@ function assertSmoke(condition: unknown, message: string): asserts condition {
 
 function verifyDashboardReadPerformanceContracts() {
   const localDashboardText = readFileSync(localDashboardPath, "utf8");
+  const recordsRouteText = readFileSync(recordsRoutePath, "utf8");
   const createMemberBlock = localDashboardText.slice(
     localDashboardText.indexOf("export async function createDashboardMember"),
     localDashboardText.indexOf("export async function updateDashboardMember")
@@ -45,6 +48,10 @@ function verifyDashboardReadPerformanceContracts() {
   const updateMemberBlock = localDashboardText.slice(
     localDashboardText.indexOf("export async function updateDashboardMember"),
     localDashboardText.indexOf("export async function createDashboardWorkspace")
+  );
+  const createTaskBlock = localDashboardText.slice(
+    localDashboardText.indexOf("export async function createDashboardTaskRecord"),
+    localDashboardText.indexOf("export async function updateDashboardTaskRecord")
   );
 
   // dashboard 首屏和工作区切换都会触发项目指标派生；这里必须按工作区+项目名预分组，
@@ -62,6 +69,11 @@ function verifyDashboardReadPerformanceContracts() {
   assertSmoke(updateMemberBlock.includes("readDashboardMemberDatabase(id)"), "成员更新没有按成员 id 轻量定位当前成员。");
   assertSmoke(updateMemberBlock.includes("readDashboardMembersDatabase(existingMember.workspaceId)"), "成员更新没有按工作区读取同区成员。");
   assertSmoke(!updateMemberBlock.includes("readDatabase()"), "成员更新仍在读取整份 dashboard。");
+  assertSmoke(recordsRouteText.includes("body.type === \"task\""), "任务创建 POST 没有在 API 层进入轻量路径。");
+  assertSmoke(recordsRouteText.includes("createDashboardTaskRecord(body.values, body.workspaceId)"), "任务创建 POST 没有调用轻量服务函数。");
+  assertSmoke(createTaskBlock.includes("resolveTaskVersionForCreate"), "任务创建轻量路径没有按版本回填任务范围。");
+  assertSmoke(createTaskBlock.includes("upsertDashboardTaskDatabase(task)"), "任务创建轻量路径没有单行写入 project_tasks。");
+  assertSmoke(!createTaskBlock.includes("readDatabase()"), "任务创建轻量路径仍在读取整份 dashboard。");
 }
 
 async function enqueueIndex<T extends DashboardEntityType>(
@@ -207,7 +219,7 @@ async function main() {
       ownerMemberId: memberResult.member.id,
       ownerEmail: memberResult.member.email
     };
-    const taskCreate = await createDashboardRecord("task", {
+    const taskCreate = await createDashboardTaskRecord({
       ...ownerValues,
       aiHint: "服务层冒烟任务，可删除。",
       dueDate: "2026-06-30",
