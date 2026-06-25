@@ -30,6 +30,13 @@ const smokeCases: SmokeCase[] = [
     timeoutMs: 90_000
   },
   {
+    description: "localhost/127.0.0.1 登录页与 redirect_uri origin 一致性。",
+    groups: ["all", "auth", "core"],
+    id: "auth-origin",
+    script: "scripts/full-chain-auth-origin-smoke.ts",
+    timeoutMs: 90_000
+  },
+  {
     description: "真实 Chromium 登录页、未登录跳转、移动端登录页；提供 storageState 时覆盖已登录一级视图。",
     groups: ["all", "auth", "core"],
     id: "browser",

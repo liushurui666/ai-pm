@@ -327,17 +327,23 @@
 
 ### 2026-06-25 全链路冒烟套件统一入口
 
-- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 17 个 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
+- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 18 个 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
 - 新增 package scripts：`pnpm full-chain:smoke` 默认跑核心链路，`pnpm full-chain:smoke:all` 跑全量链路，`pnpm full-chain:smoke:list` 输出用例清单。
 - 分组策略：`static` 覆盖权限、覆盖清单、依赖降级、部署静态配置和 Bug 附件 mock；`auth` 覆盖未登录 API/页面保护与真实浏览器登录页；`db` 覆盖真实 MySQL 写入/清理；`core` 将登录、浏览器、静态、CRUD、工作区身份、版本范围等高价值链路合并成日常回归入口。
-- 本轮执行：`pnpm full-chain:smoke:list` 通过；加入覆盖清单后 `pnpm exec tsx scripts/full-chain-smoke-suite.ts --group static` 通过 5/5；当前 `pnpm full-chain:smoke` 通过 14/14，用时约 207.8s，覆盖登录 25 个无 Cookie 入口、真实 Chromium 登录页/未登录跳转/移动端登录页、飞书通讯录全量读取、权限矩阵、覆盖清单防退化、依赖降级、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、成员管理写入、通知渠道入队、工作区身份和版本范围。
+- 本轮执行：`pnpm full-chain:coverage` 通过，登记 18 个脚本/18 个 suite 用例/8 个 package 入口；当前 `pnpm full-chain:smoke` 通过 15/15，用时约 219.3s，覆盖登录 26 个无 Cookie 入口、localhost/127.0.0.1 Origin 一致性、真实 Chromium 登录页/未登录跳转/移动端登录页、飞书通讯录全量读取、权限矩阵、覆盖清单防退化、依赖降级、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、成员管理写入、通知渠道入队、工作区身份和版本范围。
 
 ### 2026-06-25 浏览器 UI 冒烟脚本化
 
 - 新增 `scripts/full-chain-browser-smoke.ts` 与 `pnpm full-chain:browser`：使用真实 Chromium 验证登录页渲染、未登录工作台跳转、移动端登录页布局；设置 `AI_PM_QA_STORAGE_STATE` 时还会覆盖已登录工作台 8 个一级视图。
 - AUTH-001/AUTH-003/AUTH-006：浏览器脚本验证登录页返回 200，飞书、Google、GitHub 入口在渲染后可见；访问 `/workbench?view=members&workspaceId=ws-default` 会进入 `/login?...redirect_uri=...` 且登录入口可见。
 - SHELL-008：375px 移动端登录页无横向溢出，`scrollWidth=clientWidth=375`，console 无 error/warning。
-- 本轮执行：`pnpm full-chain:browser` 通过 4/4，其中已登录工作台视图因未设置 `AI_PM_QA_STORAGE_STATE` 明确跳过；`pnpm exec tsx scripts/full-chain-smoke-suite.ts --group auth` 通过 2/2，确认浏览器脚本已纳入统一套件。
+- 本轮执行：`pnpm full-chain:browser` 通过 4/4，其中已登录工作台视图因未设置 `AI_PM_QA_STORAGE_STATE` 明确跳过；当前 auth 分组已扩展为 `auth/auth-origin/browser` 3 个用例，并在 `pnpm full-chain:smoke` 中全部通过。
+
+### 2026-06-25 认证 Origin 一致性冒烟
+
+- 新增 `scripts/full-chain-auth-origin-smoke.ts` 与 `pnpm full-chain:auth-origin`：验证 `getRequestOriginFromHeaders/resolveTrustedRequestOrigin` 对代理头、本地 host 和非白名单域名的处理，并用真实 HTTP 请求覆盖 localhost/127.0.0.1 登录页和未登录工作台回跳。
+- AUTH-009：脚本要求 `/workbench` 未登录重定向到同 origin 的 `/login`，且 `redirect_uri` 仍保持同一 origin，避免 localhost 与 127.0.0.1 混用造成 OAuth 成功后 Cookie 写到另一个 host。
+- 本轮执行：`pnpm full-chain:auth-origin` 通过 5/5，覆盖 request-origin helper、`http://localhost:3004` 与 `http://127.0.0.1:3004` 登录页 200/OAuth 入口、未登录工作台 307 到同 origin `/login`，且 `redirect_uri` origin 与当前访问 origin 一致。
 
 ### 2026-06-25 覆盖清单防退化校验
 
