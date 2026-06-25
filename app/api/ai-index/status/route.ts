@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDashboardData } from "@/data/local-dashboard";
+import { getWorkspaceAccessContext } from "@/data/local-dashboard";
 import { canPerformAction, getPermissionDeniedReason } from "@/lib/access/permissions";
 import { getSession } from "@/lib/auth/session";
 import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
@@ -34,9 +34,10 @@ export async function GET(request: NextRequest) {
   }
 
   const workspaceIdFromQuery = request.nextUrl.searchParams.get("workspaceId")?.trim();
-  const data = await getDashboardData(session?.user, workspaceIdFromQuery);
-  const workspaceId = data.meta?.currentWorkspace?.id ?? workspaceIdFromQuery;
-  const permissions = data.meta?.permissions;
+  // AI 索引状态只需要定位当前工作区和校验管理员权限，避免读取整份工作台数据拖慢切换链路。
+  const accessContext = await getWorkspaceAccessContext(session?.user, workspaceIdFromQuery);
+  const workspaceId = accessContext.currentWorkspace.id;
+  const permissions = accessContext.permissions;
 
   if (!workspaceId) {
     return NextResponse.json(

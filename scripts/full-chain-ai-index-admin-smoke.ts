@@ -307,6 +307,10 @@ function verifyApiContracts() {
   // API route 正向权限目前依赖真实登录态；脚本用服务层跑重建，再用静态契约守住 route 的鉴权和只读状态查询。
   assertSmoke(statusRoute.includes("isAuthServiceConfigured() && !session"), "AI 索引状态接口缺少登录保护。");
   assertSmoke(rebuildRoute.includes("isAuthServiceConfigured() && !session"), "AI 索引重建接口缺少登录保护。");
+  assertSmoke(statusRoute.includes("getWorkspaceAccessContext(session?.user, workspaceIdFromQuery)"), "AI 索引状态接口应使用轻量工作区访问上下文。");
+  assertSmoke(rebuildRoute.includes("getWorkspaceAccessContext(session?.user, body?.workspaceId)"), "AI 索引重建接口应使用轻量工作区访问上下文。");
+  assertSmoke(!statusRoute.includes("getDashboardData("), "AI 索引状态接口不应读取整份 dashboard。");
+  assertSmoke(!rebuildRoute.includes("getDashboardData("), "AI 索引重建接口不应读取整份 dashboard。");
   assertSmoke(statusRoute.includes("canPerformAction(permissions, \"member:manage\")"), "AI 索引状态接口缺少管理员权限校验。");
   assertSmoke(rebuildRoute.includes("canPerformAction(permissions, \"member:manage\")"), "AI 索引重建接口缺少管理员权限校验。");
   assertSmoke(statusRoute.includes("countByStatus(sourceStatuses"), "AI 索引状态接口未统计 source 状态。");

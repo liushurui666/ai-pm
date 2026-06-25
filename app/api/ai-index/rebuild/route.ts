@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDashboardData } from "@/data/local-dashboard";
+import { getWorkspaceAccessContext } from "@/data/local-dashboard";
 import { canPerformAction, getPermissionDeniedReason } from "@/lib/access/permissions";
 import { createIndexQueue, createMastraKnowledgeWorkflow } from "@/lib/ai/knowledge";
 import { getSession } from "@/lib/auth/session";
@@ -22,9 +22,10 @@ export async function POST(request: NextRequest) {
   }
 
   const body = (await request.json().catch(() => null)) as { workspaceId?: string } | null;
-  const data = await getDashboardData(session?.user, body?.workspaceId);
-  const workspaceId = data.meta?.currentWorkspace?.id ?? body?.workspaceId;
-  const permissions = data.meta?.permissions;
+  // 管理员重建只依赖目标工作区和成员管理权限，不需要读取项目/任务/Bug/需求整包数据。
+  const accessContext = await getWorkspaceAccessContext(session?.user, body?.workspaceId);
+  const workspaceId = accessContext.currentWorkspace.id;
+  const permissions = accessContext.permissions;
 
   if (!workspaceId) {
     return NextResponse.json(
