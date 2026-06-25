@@ -51,6 +51,13 @@ const smokeCases: SmokeCase[] = [
     timeoutMs: 60_000
   },
   {
+    description: "概览页 AI 周报导出、个人口径、Markdown 模板、接口兜底和下载契约。",
+    groups: ["all", "core", "static"],
+    id: "weekly-report",
+    script: "scripts/full-chain-weekly-report-smoke.ts",
+    timeoutMs: 60_000
+  },
+  {
     description: "飞书通讯录授权范围、子部门/用户组展开、去重和搜索过滤。",
     groups: ["all", "core"],
     id: "feishu-contact",

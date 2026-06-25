@@ -37,7 +37,7 @@ export function createWeeklyReportAiPrompt(data: DashboardData, referenceDate = 
       "如果某个章节没有数据，用“暂无。”或空表说明，不要删除章节。",
       "",
       "【Markdown 模板】",
-      createMarkdownTemplate({ range, reportTitle, scopeLabel }),
+      createMarkdownTemplate({ range, referenceDate, reportTitle, scopeLabel }),
       "",
       "【结构化数据】",
       JSON.stringify({
@@ -100,18 +100,22 @@ export function createWeeklyReportAiPrompt(data: DashboardData, referenceDate = 
 
 function createMarkdownTemplate({
   range,
+  referenceDate,
   reportTitle,
   scopeLabel
 }: {
   range: WeekRange;
+  referenceDate: Date;
   reportTitle: string;
   scopeLabel: string;
 }) {
+  // Prompt 模板里的生成时间必须和结构化数据共用同一个参考时间，
+  // 否则跨零点或测试固定日期时，AI 会看到两套不一致的周报口径。
   return [
     `# ${reportTitle}`,
     "",
     `> 周期：${range.label}  `,
-    `> 生成时间：${formatDate(new Date())}  `,
+    `> 生成时间：${formatDate(referenceDate)}  `,
     `> 数据口径：基于 AI PM 站内数据自动生成；本报告口径为「${scopeLabel}」任务、Bug、风险、需求和项目，文档摘要为工作区参考信息。`,
     "",
     "## 1. 本周结论",

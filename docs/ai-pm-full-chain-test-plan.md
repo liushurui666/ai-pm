@@ -327,10 +327,10 @@
 
 ### 2026-06-25 全链路冒烟套件统一入口
 
-- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 19 个 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
+- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 20 个 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
 - 新增 package scripts：`pnpm full-chain:smoke` 默认跑核心链路，`pnpm full-chain:smoke:all` 跑全量链路，`pnpm full-chain:smoke:list` 输出用例清单。
 - 分组策略：`static` 覆盖权限、覆盖清单、依赖降级、部署静态配置和 Bug 附件 mock；`auth` 覆盖未登录 API/页面保护与真实浏览器登录页；`db` 覆盖真实 MySQL 写入/清理；`core` 将登录、浏览器、静态、CRUD、工作区身份、版本范围等高价值链路合并成日常回归入口。
-- 本轮执行：`pnpm full-chain:coverage` 通过，登记 19 个脚本/19 个 suite 用例/10 个 package 入口；当前 `pnpm full-chain:smoke` 通过 16/16，用时约 222.9s，覆盖登录 26 个无 Cookie 入口、localhost/127.0.0.1 Origin 一致性、真实 Chromium 登录页/未登录跳转/移动端登录页、工作台 Shell UI 契约、飞书通讯录全量读取、权限矩阵、覆盖清单防退化、依赖降级、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、成员管理写入、通知渠道入队、工作区身份和版本范围。
+- 本轮执行：`pnpm full-chain:coverage` 通过，登记 20 个脚本/20 个 suite 用例/11 个 package 入口；当前 `pnpm full-chain:smoke` 通过 17/17，用时约 195.5s，覆盖登录 26 个无 Cookie 入口、localhost/127.0.0.1 Origin 一致性、真实 Chromium 登录页/未登录跳转/移动端登录页、工作台 Shell UI 契约、周报导出、飞书通讯录全量读取、权限矩阵、覆盖清单防退化、依赖降级、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、成员管理写入、通知渠道入队、工作区身份和版本范围。
 
 ### 2026-06-25 浏览器 UI 冒烟脚本化
 
@@ -350,7 +350,14 @@
 
 - 新增 `scripts/full-chain-workbench-ui-smoke.ts` 与 `pnpm full-chain:workbench-ui`：静态守住工作台 Shell 的视图枚举、桌面 Studio 菜单、移动导航、Chat/Studio 切换、`/workbench` URL 同步和侧栏折叠。
 - SHELL-002/SHELL-004/SHELL-005/SHELL-006/SHELL-007：脚本验证左下角账号弹层关闭工作区 Select、顶部保留工作区切换、退出登录入口存在、顶部搜索可打开全局搜索抽屉、搜索覆盖项目/任务/Bug/需求版本/需求、日程抽屉覆盖里程碑/任务/Bug 且默认“只看我的”、主题切换绑定 `cycleMode`。
-- 本轮执行：`pnpm full-chain:workbench-ui` 通过 5/5，`appViewCount=9/validViewCount=9`、Studio 菜单 7 项、移动导航 7 项、搜索实体 5 类、日程来源 3 类。
+- 本轮执行：`pnpm full-chain:workbench-ui` 通过 6/6，`appViewCount=9/validViewCount=9`、Studio 菜单 7 项、移动导航 7 项、搜索实体 5 类、日程来源 3 类，并守住飞书通讯录强制刷新竞态。
+
+### 2026-06-25 周报导出链路冒烟
+
+- 新增 `scripts/full-chain-weekly-report-smoke.ts` 与 `pnpm full-chain:weekly-report`：不调用真实模型，构造最小 `DashboardData` 覆盖概览页周报导出、个人口径、Markdown 11 章模板、文件名清洗、AI Prompt 事实约束、接口登录保护和本地兜底契约。
+- OVERVIEW-003/OVERVIEW-004：脚本验证当前登录用户导出个人周报时不会混入无关项目任务；`/api/assistant/weekly-report` 必须保留 `getSession` 登录保护、`workspaceId` 透传、未配置 AI 和 AI 失败时的本地固定模板 warning。
+- UI 契约：概览页“导出周报”只触发专用接口，显示 `pm-global-loading`，完成后用 `createWeeklyReportFileName` 下载 `.md`，不打开旧助手抽屉。
+- 本轮执行：`pnpm full-chain:weekly-report` 通过 4/4，生成文件名样例 `默认-工作区-周报-周报用户-个人周报-2026-06-25.md`，Markdown 包含 11 个章节且个人 scope 任务数 2、Bug 数 1。
 
 ### 2026-06-25 认证 Origin 一致性冒烟
 

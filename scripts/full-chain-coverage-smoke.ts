@@ -23,6 +23,7 @@ const requiredPackageScripts = [
   "full-chain:smoke:all",
   "full-chain:smoke:list",
   "full-chain:notification",
+  "full-chain:weekly-report",
   "full-chain:workbench-ui"
 ];
 
@@ -129,6 +130,10 @@ function verifyPackageScripts() {
 
     if (scriptName === "full-chain:notification") {
       return !command.includes("scripts/full-chain-notification-smoke.ts");
+    }
+
+    if (scriptName === "full-chain:weekly-report") {
+      return !command.includes("scripts/full-chain-weekly-report-smoke.ts");
     }
 
     if (scriptName === "full-chain:workbench-ui") {
