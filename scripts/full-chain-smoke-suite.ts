@@ -30,6 +30,13 @@ const smokeCases: SmokeCase[] = [
     timeoutMs: 90_000
   },
   {
+    description: "真实 Chromium 登录页、未登录跳转、移动端登录页；提供 storageState 时覆盖已登录一级视图。",
+    groups: ["all", "auth", "core"],
+    id: "browser",
+    script: "scripts/full-chain-browser-smoke.ts",
+    timeoutMs: 120_000
+  },
+  {
     description: "权限矩阵、禁用成员、未加入成员和 Unified Auth 身份匹配。",
     groups: ["all", "core", "static"],
     id: "permission",
