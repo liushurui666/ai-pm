@@ -340,7 +340,7 @@
 - 新增 package scripts：`pnpm full-chain:smoke` 默认跑核心链路，`pnpm full-chain:smoke:all` 跑全量链路，`pnpm full-chain:smoke:list` 输出用例清单。
 - 分组策略：`static` 覆盖权限、覆盖清单、依赖降级、部署静态配置和 Bug 附件 mock；`auth` 覆盖未登录 API/页面保护与真实浏览器登录页；`db` 覆盖真实 MySQL 写入/清理；`core` 将登录、浏览器、静态、CRUD、工作区身份、版本范围等高价值链路合并成日常回归入口。
 - 本轮执行：`pnpm full-chain:coverage` 通过，登记 25 个脚本/25 个 suite 用例/16 个 package 入口；`pnpm full-chain:smoke` 通过 22/22，用时约 319.5s，覆盖登录、浏览器未登录跳转、工作台 UI、工作区管理、周报、AI 助手 ChatBox、飞书通讯录、权限矩阵、覆盖清单、依赖降级、需求飞书链接 AI 体检、文档拆任务、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、成员管理、通知入队、AI 索引管理员重建、工作区身份和版本范围。
-- 全量复核：`pnpm full-chain:smoke:all` 已通过 25/25，用时约 509.3s；`browser` 用例因本机未设置 `AI_PM_QA_STORAGE_STATE` 仍只覆盖登录页、未登录跳转和移动端登录页，已登录工作台 8 个一级视图需要人工 OAuth storageState 后再跑。
+- 全量复核：`pnpm full-chain:smoke:all` 已通过 25/25，用时约 587.2s；`browser` 用例已复用 `.ai-pm/qa-auth-storage-state.json` 覆盖已登录工作台 8 个一级视图，登录页、未登录跳转、移动端登录页和已登录桌面工作台均通过。
 - 发现并修复：`infra` 冒烟原先使用 schema 预留但 worker 尚未实现的 `refresh_project_metrics`，会被 inline worker 标记失败；已改用生产已实现的 `notify_owner` 队列协议，并保持未来 `nextRunAt` 防止真实飞书/邮箱发送。
 
 ### 2026-06-25 工作区管理契约冒烟
@@ -355,14 +355,14 @@
 - 新增 `scripts/full-chain-browser-smoke.ts` 与 `pnpm full-chain:browser`：使用真实 Chromium 验证登录页渲染、未登录工作台跳转、移动端登录页布局；设置 `AI_PM_QA_STORAGE_STATE` 时还会覆盖已登录工作台 8 个一级视图。
 - AUTH-001/AUTH-003/AUTH-006：浏览器脚本验证登录页返回 200，飞书、Google、GitHub 入口在渲染后可见；访问 `/workbench?view=members&workspaceId=ws-default` 会进入 `/login?...redirect_uri=...` 且登录入口可见。
 - SHELL-008：375px 移动端登录页无横向溢出，`scrollWidth=clientWidth=375`，console 无 error/warning。
-- 本轮执行：`pnpm full-chain:browser` 通过 4/4，其中已登录工作台视图因未设置 `AI_PM_QA_STORAGE_STATE` 明确跳过；当前 auth 分组已扩展为 `auth/auth-origin/browser` 3 个用例，并在 `pnpm full-chain:smoke` 中全部通过。
+- 本轮执行：`pnpm full-chain:browser` 通过 4/4；其中已登录工作台使用默认 storageState 覆盖 overview、projects、versionDashboard、tasks、bugs、requirements、members、assistant 8 个一级视图，console 无 error，桌面无横向溢出。
 
 ### 2026-06-25 已登录浏览器状态采集
 
 - 新增 `scripts/capture-auth-storage-state.ts` 与 `pnpm full-chain:browser:login`：打开真实登录页，人工完成 Feishu/Google/GitHub OAuth 后等待回到 `/workbench`，校验 `/api/dashboard` 能识别当前成员，再保存 Playwright storageState。
 - AUTH-003/AUTH-004/AUTH-005：采集脚本不打印 Cookie/token，默认写入已忽略的 `.ai-pm/qa-auth-storage-state.json`；保存后立即用全新浏览器上下文复放成员管理页和 `/api/dashboard`，确认 Cookie domain/path 可复用。
 - `pnpm full-chain:browser` 现在会在未显式设置 `AI_PM_QA_STORAGE_STATE` 时自动复用 `.ai-pm/qa-auth-storage-state.json`，使本地日常回归可以直接覆盖已登录工作台 8 个一级视图。
-- 本轮执行：`pnpm full-chain:coverage` 通过并确认 9 个 package 入口；`pnpm full-chain:browser` 在无默认 storageState 时通过匿名 4/4 且明确跳过已登录视图；`pnpm lint`、`pnpm build`、`pnpm exec tsc --noEmit --pretty false` 均通过。`pnpm full-chain:browser:login` 需要人工 OAuth，作为下一次真实登录态采集入口。
+- 本轮执行：本机从 `auth_ai_pm.session` 仍有效的真实会话生成 `.ai-pm/qa-auth-storage-state.json` 后，`pnpm full-chain:browser` 通过 4/4，且 `storageState=configured/skipped=false`；`pnpm full-chain:smoke:all` 通过 25/25，用时约 587.2s。
 
 ### 2026-06-25 工作台 Shell UI 契约冒烟
 

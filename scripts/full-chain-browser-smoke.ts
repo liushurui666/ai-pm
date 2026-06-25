@@ -90,6 +90,34 @@ async function getHorizontalOverflow(page: Page) {
   });
 }
 
+async function gotoAuthenticatedWorkbenchView(page: Page, viewCase: WorkbenchViewCase) {
+  const targetUrl = createUrl(`/workbench?view=${viewCase.view}&workspaceId=${WORKSPACE_ID}`);
+
+  try {
+    await page.goto(targetUrl, {
+      // 已登录工作台会懒加载飞书通讯录、助手模型、索引状态等后台请求；
+      // 对这类产品型页面，networkidle 可能因为非首屏请求长期不空闲而误判失败。
+      // 冒烟关注一级视图是否在登录态下完成渲染，所以先等 DOM 就绪，再用业务文案作为页面可用信号。
+      timeout: 60_000,
+      waitUntil: "domcontentloaded"
+    });
+  } catch {
+    // Next dev server 偶发会在首个已登录工作台导航上超过 domcontentloaded 等待，但页面响应已经提交。
+    // 这里降级到 commit 后继续等待业务文案，避免把“后台请求/水合慢”误判为登录态失效；后续断言仍会检查是否跳回登录页。
+    await page.goto(targetUrl, {
+      timeout: 60_000,
+      waitUntil: "commit"
+    });
+  }
+
+  await page.locator("body").waitFor({ state: "visible", timeout: 30_000 });
+  await page.waitForFunction(
+    ({ expectedText }) => document.body.innerText.includes(expectedText) || window.location.pathname.includes("/login"),
+    { expectedText: viewCase.expectedText },
+    { timeout: 30_000 }
+  );
+}
+
 async function runCheck(name: string, check: () => Promise<Record<string, unknown>>): Promise<BrowserCheck> {
   try {
     return {
@@ -200,9 +228,7 @@ async function verifyAuthenticatedWorkbench(context: BrowserContext) {
   const checkedViews: Array<{ hasExpectedText: boolean; name: string; url: string; view: string }> = [];
 
   for (const viewCase of workbenchViews) {
-    await page.goto(createUrl(`/workbench?view=${viewCase.view}&workspaceId=${WORKSPACE_ID}`), {
-      waitUntil: "networkidle"
-    });
+    await gotoAuthenticatedWorkbenchView(page, viewCase);
 
     const text = await getPageText(page);
     const hasExpectedText = text.includes(viewCase.expectedText);
