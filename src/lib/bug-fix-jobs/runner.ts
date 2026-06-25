@@ -24,7 +24,8 @@ function getRunnerCommand() {
   return command;
 }
 
-function parseRunnerOutput(output: string): AiCodeRunnerResult {
+// Runner 输出解析单独导出给全链路冒烟脚本复用，确保生产执行和测试校验使用同一套 JSON/fallback 规则。
+export function parseAiCodeRunnerOutput(output: string): AiCodeRunnerResult {
   const trimmedOutput = output.trim();
   const jsonStart = trimmedOutput.lastIndexOf("{");
 
@@ -90,5 +91,5 @@ export async function runAiCodeFix(input: AiCodeRunnerInput): Promise<AiCodeRunn
   });
   const output = await runShellCommand(command, input.workspaceDir, prompt);
 
-  return parseRunnerOutput(output);
+  return parseAiCodeRunnerOutput(output);
 }

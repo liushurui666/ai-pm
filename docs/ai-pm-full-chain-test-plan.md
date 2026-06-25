@@ -282,3 +282,13 @@
 - 安全边界：脚本默认不真实写入 COS，避免全链路回归反复留下公共测试对象；真实 COS PUT 使用已登录浏览器单独执行 8 字节 `image/png` 小文件验证。
 - 真实上传验证：浏览器 POST `/api/bug-attachments` 返回 200，生成 `bug-materials/2026-06-25/25ff36c1-f736-490e-98d3-cfd4b3240c9e-codex-cos-smoke-1782353808608.png`，host 为 `ai-1350977987.cos.ap-guangzhou.myqcloud.com`，控制台无 warning/error。
 - 本轮回归：`pnpm exec tsx scripts/full-chain-bug-attachment-smoke.ts`、`pnpm exec tsx scripts/full-chain-dependency-fallback-smoke.ts`、`pnpm exec tsx scripts/full-chain-auth-smoke.ts`、`git diff --check`、`pnpm lint`、`pnpm build` 均通过。
+
+### 2026-06-25 Bug 修复仓库与安全边界冒烟
+
+- 新增 `pnpm exec tsx scripts/full-chain-bug-fix-security-smoke.ts`：覆盖 Bug AI 修复的项目仓库配置、仓库匹配、Runner 输出解析、MR 标题/正文模板和 diff 安全边界；脚本不调用真实 GitHub、不启动真实 AI Runner、不创建真实 PR。
+- BUGFIX-001：脚本真实写入 `project_repositories`，验证默认 provider/defaultBranch/packageManager/installCommand、`allowedPaths/blockedPaths/defaultReviewers` JSON 数组回读、项目专属仓库优先匹配、专属仓库禁用后回退到工作区默认仓库、禁用仓库不会出现在可选列表。
+- BUGFIX-003：脚本验证安全白名单和默认阻断路径，覆盖空 diff、文件数超限、改动行数超限、`deploy/**`、`src/lib/auth/**`、`*.pem` 等高危路径拒绝；同时验证合法 diff 可通过。
+- BUGFIX-003 补充：导出 `parseAiCodeRunnerOutput` 后，脚本验证结构化 JSON 输出和非 JSON 文本兜底都能生成可追踪结果；MR 标题包含 Bug 标题，正文包含 Bug ID、目标分支、变更摘要、测试结果和风险说明。
+- 数据清理：所有仓库测试数据使用 `bugfix-security-e2e-*` runLabel，finally 只按本轮 `repoFullName` 清理，避免误删真实生产仓库配置。
+- 本轮执行：脚本退出码 0；项目仓库匹配到项目 `1.4`，安全边界错误文案均符合预期。
+- 本轮回归：`pnpm exec tsx scripts/full-chain-bug-fix-security-smoke.ts`、`pnpm exec tsx scripts/full-chain-infra-smoke.ts`、`git diff --check`、`pnpm lint`、`pnpm build` 均通过。
