@@ -2,7 +2,7 @@
 
 状态：执行中  
 负责人：Codex QA  
-最后更新：2026-06-24  
+最后更新：2026-06-25
 
 ## 目标
 
@@ -263,3 +263,13 @@
 - REQ-004/REQ-005：脚本验证文档拆任务 fallback 可生成前端/后端/测试任务且日期合法，需求体检 fallback 可生成验收标准、前后端测试建议、完整度分数和 warning。
 - BUG-004：脚本验证当前 COS 状态为 `configured`；真实文件上传仍需在已登录浏览器/API 场景里单独验证 COS PUT 结果。
 - 本轮执行：`pnpm exec tsx scripts/full-chain-dependency-fallback-smoke.ts` 通过；当前环境 AI/COS/Email 为 configured，Redis/Qdrant 未配置但 fallback 配置存在，文档 fallback 生成 9 条任务，需求 fallback 完整度 85。
+
+### 2026-06-25 部署与运行时配置冒烟
+
+- 新增 `pnpm exec tsx scripts/full-chain-deploy-smoke.ts`：静态校验 package scripts、Dockerfile、Docker Compose、docker entrypoint、Docker/SSH/ops 部署脚本、运行时 env 样例、deploy env 样例和 `.dockerignore`，不执行真实 SSH/Docker 部署。
+- OPS-002：脚本验证 Docker build 阶段使用占位 `AUTH_DATABASE_URL`/`BETTER_AUTH_SECRET`，并强制 `pnpm db:generate -> pnpm build` 顺序，避免构建期依赖真实 Auth PostgreSQL。
+- OPS-003：脚本验证容器入口和非 Docker 部署脚本默认只执行业务 MySQL 迁移，Unified Auth 迁移必须通过 `RUN_AUTH_MIGRATIONS` / `RUN_AUTH_MIGRATE` / `DEPLOY_RUN_AUTH_MIGRATE` 显式打开。
+- OPS-004：发现并修复部署缺口：compose 示例缺少 `bug-fix-worker`，Docker runner 镜像缺少 `git`；已补充 `bug-fix-worker` 常驻服务、`AI_PM_BUG_FIX_WORKER_CONTAINER_NAME` 覆盖变量、runner `git` 依赖和 Bug AI 修复运行时 env 样例。
+- OPS-005：脚本验证 `.dockerignore` 排除 `.env/.env.*`、`node_modules`、`.next`、`.git` 和 `scripts/deploy.env`，避免部署镜像混入本地密钥或构建产物。
+- 本轮执行：`pnpm exec tsx scripts/full-chain-deploy-smoke.ts` 通过，8 个检查组全部通过，覆盖 7 个 compose 服务、4 个 worker 命令、31 个运行时 env 键和 14 个远程部署 env 键。
+- 本轮回归：`pnpm exec tsx scripts/full-chain-permission-smoke.ts`、`pnpm exec tsx scripts/full-chain-dependency-fallback-smoke.ts`、`git diff --check`、`pnpm lint`、`pnpm build` 均通过；本机缺少 `docker` 命令，未执行 `docker compose config` 语法解析。

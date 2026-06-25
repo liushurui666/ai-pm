@@ -16,6 +16,7 @@ set -Eeuo pipefail
 : "${AI_PM_IMAGE:=ai-pm:latest}"
 : "${AI_PM_CONTAINER_NAME:=ai-pm}"
 : "${AI_PM_WORKER_CONTAINER_NAME:=ai-pm-index-worker}"
+: "${AI_PM_BUG_FIX_WORKER_CONTAINER_NAME:=ai-pm-bug-fix-worker}"
 : "${AI_PM_HOST_PORT:=3003}"
 : "${AI_PM_CONTAINER_PORT:=3003}"
 : "${REDIS_IMAGE:=redis:7-alpine}"
@@ -130,6 +131,7 @@ deploy_with_compose() {
   export AI_PM_IMAGE
   export AI_PM_CONTAINER_NAME
   export AI_PM_WORKER_CONTAINER_NAME
+  export AI_PM_BUG_FIX_WORKER_CONTAINER_NAME
   export AI_PM_HOST_PORT
   export AI_PM_CONTAINER_PORT
   export REDIS_IMAGE

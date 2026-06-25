@@ -49,8 +49,10 @@ ENV PORT=3003
 ENV HOSTNAME=0.0.0.0
 
 # 运行阶段同样需要 OpenSSL：容器启动入口会先执行 Prisma migrate，再启动 Next 服务。
+# Bug AI 修复 worker 会在容器内 clone 目标仓库并创建修复分支，因此生产 runner 必须带 git；
+# 否则 Web 能创建 bug_fix_jobs，但后台 worker 会在第一步 `git clone` 直接失败。
 RUN apt-get update -y \
-  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && apt-get install -y --no-install-recommends openssl ca-certificates git \
   && rm -rf /var/lib/apt/lists/* \
   && corepack enable \
   && corepack prepare pnpm@10.15.1 --activate

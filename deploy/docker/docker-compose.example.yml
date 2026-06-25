@@ -84,6 +84,23 @@ services:
       - ai-pm
       - redis
 
+  bug-fix-worker:
+    # Bug AI 修复是 Bug 管理闭环的一部分：Web 只创建 bug_fix_jobs，
+    # worker 负责 clone 仓库、调用 AI Coding Runner、运行检查并创建 GitHub PR。
+    image: ${AI_PM_IMAGE:-ai-pm:latest}
+    container_name: ${AI_PM_BUG_FIX_WORKER_CONTAINER_NAME:-ai-pm-bug-fix-worker}
+    restart: unless-stopped
+    env_file:
+      - ${AI_PM_ENV_FILE:-../../.env}
+    environment:
+      NODE_ENV: production
+      RUN_MIGRATIONS: 0
+      RUN_AUTH_MIGRATIONS: 0
+      AI_BUG_FIX_WORKDIR: ${AI_BUG_FIX_WORKDIR:-/tmp/ai-pm-bug-fix-workspaces}
+    command: ["pnpm", "bug-fix:worker"]
+    depends_on:
+      - ai-pm
+
   redis:
     # BullMQ 的正式队列依赖 Redis；没有 Redis 时代码会退回 MySQL 轮询，
     # 但 V1 生产部署必须默认带上 Redis，保证去重、延迟重试和并发消费能力。
