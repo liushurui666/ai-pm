@@ -9,6 +9,9 @@ import {
   readDashboardWorkspacesDatabase,
   updateDashboardTaskDatabase,
   upsertDashboardBugDatabase,
+  upsertDashboardProjectDatabase,
+  upsertDashboardRequirementVersionDatabase,
+  upsertDashboardRequirementVersionScopeDatabase,
   upsertDashboardRequirementDatabase,
   upsertDashboardTaskDatabase,
   upsertDashboardMemberDatabase,
@@ -1949,18 +1952,61 @@ function findRecord<T extends DashboardEntityType>(
   return data.documents.find((document) => document.id === id) as DashboardEntityMap[T] | undefined;
 }
 
-function withBugVersionProject(data: LocalDatabase, values: Record<string, unknown>, workspaceId: string) {
-  const versionId = asText(values.versionId);
-  const version = data.requirementVersions.find(
+function findRequirementVersionInWorkspace(data: LocalDatabase, versionId: string, workspaceId: string) {
+  return data.requirementVersions.find(
     (item) => item.id === versionId && getWorkspaceId(item) === workspaceId
-  ) ?? DEFAULT_REQUIREMENT_VERSION;
+  );
+}
 
+function withRequirementVersionProject(data: LocalDatabase, values: Record<string, unknown>, workspaceId: string) {
+  const versionId = asText(values.versionId);
+  const version = findRequirementVersionInWorkspace(data, versionId, workspaceId) ?? DEFAULT_REQUIREMENT_VERSION;
+  const submittedProject = asText(values.project);
+
+  // 任务、需求和 Bug 的项目选择已经在 UI 收敛到版本上下文；服务端仍要用 versionId 二次回填，
+  // 因为 API、AI 助手和脚本都可能绕过表单直接提交旧 project/versionName，导致版本大屏和项目视图口径错位。
+  // “跨项目”版本允许保留调用方已有项目；明确项目版本则强制覆盖成版本项目。
   return {
     ...values,
     versionId: version.id,
     versionName: version.name,
-    project: version.project
+    project: version.project === "跨项目" && submittedProject ? submittedProject : version.project
   };
+}
+
+function withRequirementVersionParentProject(data: LocalDatabase, values: Record<string, unknown>, workspaceId: string) {
+  const parentVersionId = asText(values.parentVersionId);
+
+  if (!parentVersionId) {
+    return values;
+  }
+
+  const parentVersion = findRequirementVersionInWorkspace(data, parentVersionId, workspaceId);
+
+  if (!parentVersion) {
+    return values;
+  }
+
+  // 子版本项目由父版本决定；前端会同步这个隐藏字段，但服务端也必须兜底，
+  // 否则通过 API 直接创建子版本时会出现版本树父子项目不一致。
+  return {
+    ...values,
+    parentVersionId: parentVersion.id,
+    parentVersionName: parentVersion.name,
+    project: parentVersion.project
+  };
+}
+
+function withRecordVersionScope(data: LocalDatabase, type: DashboardEntityType, values: Record<string, unknown>, workspaceId: string) {
+  if (type === "task" || type === "bug" || type === "requirement") {
+    return withRequirementVersionProject(data, values, workspaceId);
+  }
+
+  if (type === "requirementVersion") {
+    return withRequirementVersionParentProject(data, values, workspaceId);
+  }
+
+  return values;
 }
 
 function createMetrics(data: Pick<DashboardData, "projects" | "tasks" | "bugs" | "requirements" | "documents">) {
@@ -2546,7 +2592,7 @@ export async function createDashboardRecord<T extends DashboardEntityType>(
         }
       : {})
   };
-  const scopedValues = type === "bug" ? withBugVersionProject(data, baseValues, workspace.id) : baseValues;
+  const scopedValues = withRecordVersionScope(data, type, baseValues, workspace.id);
   const record = createRecord(type, scopedValues);
 
   if (type === "project") {
@@ -2584,7 +2630,10 @@ export async function createDashboardRecord<T extends DashboardEntityType>(
     id: savedRecord.id
   });
 
-  if (type === "task") {
+  if (type === "project") {
+    // 项目创建只影响 projects 当前行；项目进度/健康度读取时派生，避免全量同步重写任务等大表。
+    await upsertDashboardProjectDatabase(savedRecord as Project);
+  } else if (type === "task") {
     // 任务创建是高频入口，和拖拽更新一样只写当前任务行；项目统计在读取时派生，
     // 不能为了新增一条任务调用全量 writeDatabase 重写所有业务表。
     await upsertDashboardTaskDatabase(savedRecord as Task);
@@ -2595,6 +2644,9 @@ export async function createDashboardRecord<T extends DashboardEntityType>(
     // 单条需求保存只影响 requirements 当前行；需求 AI 索引由 API route 异步投递，
     // 这里不能再调用全量 writeDatabase，否则会复现公网 MySQL 60 秒事务超时。
     await upsertDashboardRequirementDatabase(savedRecord as Requirement);
+  } else if (type === "requirementVersion") {
+    // 新建版本只写当前版本行；子版本项目继承和后续记录归一化已经在服务层完成。
+    await upsertDashboardRequirementVersionDatabase(savedRecord as RequirementVersion);
   } else {
     await writeDatabase(savedData);
   }
@@ -2629,8 +2681,7 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
         }
       : {})
   };
-  const scopedValues =
-    type === "bug" ? withBugVersionProject(data, baseValues, getWorkspaceId(existingRecord)) : baseValues;
+  const scopedValues = withRecordVersionScope(data, type, baseValues, getWorkspaceId(existingRecord));
   const record = createRecord(type, scopedValues);
   let typedRecord = {
     ...record,
@@ -2757,7 +2808,10 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
       : ""
   ].filter(Boolean);
 
-  if (type === "task") {
+  if (type === "project") {
+    // 项目编辑不需要整库同步；关联任务/Bug 的项目口径由版本或各自记录控制。
+    await upsertDashboardProjectDatabase(savedRecord as Project);
+  } else if (type === "task") {
     // 任务看板拖拽会高频调用 PATCH，只更新当前任务一行即可；如果走 writeDatabase 会触发整库同步事务并放大 MySQL 锁等待。
     await updateDashboardTaskDatabase(savedRecord as Task);
   } else if (type === "bug") {
@@ -2766,6 +2820,17 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
   } else if (type === "requirement") {
     // 需求状态/负责人等编辑不需要重算并回写所有业务表；版本联动已在内存对象中完成，当前需求行单独持久化即可。
     await upsertDashboardRequirementDatabase(savedRecord as Requirement);
+  } else if (type === "requirementVersion") {
+    const version = savedRecord as RequirementVersion;
+
+    // 版本名称或项目变更会影响该版本下的需求、任务和 Bug 展示口径；
+    // 只同步这个版本的关联记录，避免一次版本编辑退化成全库长事务。
+    await upsertDashboardRequirementVersionScopeDatabase({
+      bugs: savedData.bugs.filter((bug) => bug.versionId === version.id),
+      requirements: savedData.requirements.filter((requirement) => requirement.versionId === version.id),
+      tasks: savedData.tasks.filter((task) => task.versionId === version.id),
+      version
+    });
   } else {
     await writeDatabase(savedData);
   }

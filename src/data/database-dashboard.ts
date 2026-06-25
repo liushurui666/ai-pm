@@ -110,6 +110,28 @@ function getMemberPayload(member: DashboardMember) {
   };
 }
 
+function getProjectPayload(project: Project) {
+  return {
+    workspaceId: getWorkspaceId(project),
+    name: project.name,
+    owner: project.owner,
+    ownerMemberId: project.ownerMemberId,
+    ownerOpenId: project.ownerOpenId,
+    ownerUnionId: project.ownerUnionId,
+    ownerUserId: project.ownerUserId,
+    ownerEmail: project.ownerEmail,
+    ownerAvatarUrl: project.ownerAvatarUrl,
+    status: project.status,
+    progress: project.progress,
+    health: project.health,
+    dueDate: project.dueDate,
+    team: project.team,
+    riskCount: project.riskCount,
+    summary: project.summary,
+    milestones: asJson(project.milestones)
+  };
+}
+
 // 任务看板的拖拽、排序和跨负责人流转属于高频单行更新，必须只写 project_tasks 当前记录。
 // 如果继续复用全量同步事务，会在公网 MySQL 上反复 delete/upsert 多张业务表，容易和页面并发读取或连续拖拽保存产生锁等待。
 function getTaskPayload(task: Task) {
@@ -501,25 +523,7 @@ async function syncProjects(prisma: DashboardPrisma, projects: Project[]) {
   });
 
   for (const project of projects) {
-    const payload = {
-      workspaceId: getWorkspaceId(project),
-      name: project.name,
-      owner: project.owner,
-      ownerMemberId: project.ownerMemberId,
-      ownerOpenId: project.ownerOpenId,
-      ownerUnionId: project.ownerUnionId,
-      ownerUserId: project.ownerUserId,
-      ownerEmail: project.ownerEmail,
-      ownerAvatarUrl: project.ownerAvatarUrl,
-      status: project.status,
-      progress: project.progress,
-      health: project.health,
-      dueDate: project.dueDate,
-      team: project.team,
-      riskCount: project.riskCount,
-      summary: project.summary,
-      milestones: asJson(project.milestones)
-    };
+    const payload = getProjectPayload(project);
 
     await prisma.project.upsert({
       where: { id: project.id },
@@ -682,39 +686,7 @@ async function syncRequirementVersions(prisma: DashboardPrisma, versions: Requir
   });
 
   for (const version of versions) {
-    const payload = {
-      workspaceId: getWorkspaceId(version),
-      parentVersionId: version.parentVersionId,
-      parentVersionName: version.parentVersionName,
-      name: version.name,
-      project: version.project,
-      status: version.status,
-      startDate: version.startDate,
-      releaseDate: version.releaseDate,
-      goal: version.goal,
-      productOwner: version.productOwner,
-      productOwnerMemberId: version.productOwnerMemberId,
-      productOwnerOpenId: version.productOwnerOpenId,
-      productOwnerUnionId: version.productOwnerUnionId,
-      productOwnerUserId: version.productOwnerUserId,
-      productOwnerEmail: version.productOwnerEmail,
-      productOwnerAvatarUrl: version.productOwnerAvatarUrl,
-      uiOwner: version.uiOwner,
-      uiOwnerMemberId: version.uiOwnerMemberId,
-      uiOwnerOpenId: version.uiOwnerOpenId,
-      uiOwnerUnionId: version.uiOwnerUnionId,
-      uiOwnerUserId: version.uiOwnerUserId,
-      uiOwnerEmail: version.uiOwnerEmail,
-      uiOwnerAvatarUrl: version.uiOwnerAvatarUrl,
-      devOwner: version.devOwner,
-      devOwnerMemberId: version.devOwnerMemberId,
-      devOwnerOpenId: version.devOwnerOpenId,
-      devOwnerUnionId: version.devOwnerUnionId,
-      devOwnerUserId: version.devOwnerUserId,
-      devOwnerEmail: version.devOwnerEmail,
-      devOwnerAvatarUrl: version.devOwnerAvatarUrl,
-      milestones: asJson(version.milestones)
-    };
+    const payload = getRequirementVersionPayload(version);
 
     await prisma.requirementVersion.upsert({
       where: { id: version.id },
@@ -725,6 +697,42 @@ async function syncRequirementVersions(prisma: DashboardPrisma, versions: Requir
       }
     });
   }
+}
+
+function getRequirementVersionPayload(version: RequirementVersion) {
+  return {
+    workspaceId: getWorkspaceId(version),
+    parentVersionId: version.parentVersionId,
+    parentVersionName: version.parentVersionName,
+    name: version.name,
+    project: version.project,
+    status: version.status,
+    startDate: version.startDate,
+    releaseDate: version.releaseDate,
+    goal: version.goal,
+    productOwner: version.productOwner,
+    productOwnerMemberId: version.productOwnerMemberId,
+    productOwnerOpenId: version.productOwnerOpenId,
+    productOwnerUnionId: version.productOwnerUnionId,
+    productOwnerUserId: version.productOwnerUserId,
+    productOwnerEmail: version.productOwnerEmail,
+    productOwnerAvatarUrl: version.productOwnerAvatarUrl,
+    uiOwner: version.uiOwner,
+    uiOwnerMemberId: version.uiOwnerMemberId,
+    uiOwnerOpenId: version.uiOwnerOpenId,
+    uiOwnerUnionId: version.uiOwnerUnionId,
+    uiOwnerUserId: version.uiOwnerUserId,
+    uiOwnerEmail: version.uiOwnerEmail,
+    uiOwnerAvatarUrl: version.uiOwnerAvatarUrl,
+    devOwner: version.devOwner,
+    devOwnerMemberId: version.devOwnerMemberId,
+    devOwnerOpenId: version.devOwnerOpenId,
+    devOwnerUnionId: version.devOwnerUnionId,
+    devOwnerUserId: version.devOwnerUserId,
+    devOwnerEmail: version.devOwnerEmail,
+    devOwnerAvatarUrl: version.devOwnerAvatarUrl,
+    milestones: asJson(version.milestones)
+  };
 }
 
 function getRequirementPayload(requirement: Requirement) {
@@ -834,6 +842,110 @@ export async function writeDashboardDatabase(data: DashboardDatabase, client?: P
       await syncWeeklyInsights(tx, data);
     },
     // 腾讯云 MySQL 公网访问比本地库延迟高，首次空库种子同步会连续写入多张表；保留事务原子性，同时把等待和执行窗口拉到足够覆盖冷启动。
+    DASHBOARD_SYNC_TRANSACTION_OPTIONS
+  );
+}
+
+export async function upsertDashboardProjectDatabase(project: Project, client?: PrismaClient) {
+  const prisma = client ?? getPrismaClient();
+  const payload = getProjectPayload(project);
+
+  // 项目创建/编辑是单条项目元数据变更；项目健康度和风险数读取时派生，
+  // 不能为了保存一个项目把任务、Bug、需求等所有业务表重新同步一遍。
+  await prisma.project.upsert({
+    where: { id: project.id },
+    update: payload,
+    create: {
+      id: project.id,
+      ...payload
+    }
+  });
+}
+
+export async function upsertDashboardRequirementVersionDatabase(version: RequirementVersion, client?: PrismaClient) {
+  const prisma = client ?? getPrismaClient();
+  const payload = getRequirementVersionPayload(version);
+
+  // 新建版本只影响 requirement_versions 当前行；子记录在后续创建时按 versionId 归一化，
+  // 不需要触发全量 dashboard 同步事务。
+  await prisma.requirementVersion.upsert({
+    where: { id: version.id },
+    update: payload,
+    create: {
+      id: version.id,
+      ...payload
+    }
+  });
+}
+
+export async function upsertDashboardRequirementVersionScopeDatabase({
+  bugs,
+  requirements,
+  tasks,
+  version
+}: {
+  bugs: BugReport[];
+  requirements: Requirement[];
+  tasks: Task[];
+  version: RequirementVersion;
+}, client?: PrismaClient) {
+  const prisma = client ?? getPrismaClient();
+
+  await prisma.$transaction(
+    async (tx) => {
+      const versionPayload = getRequirementVersionPayload(version);
+
+      // 编辑版本名称/项目后，只需要同步该版本及其直接关联记录；这条路径不能回退到整库同步，
+      // 否则版本编辑会在公网 MySQL 上重写所有任务并触发 60 秒事务过期。
+      await tx.requirementVersion.upsert({
+        where: { id: version.id },
+        update: versionPayload,
+        create: {
+          id: version.id,
+          ...versionPayload
+        }
+      });
+
+      for (const requirement of requirements) {
+        const payload = getRequirementPayload(requirement);
+
+        await tx.requirement.upsert({
+          where: { id: requirement.id },
+          update: payload,
+          create: {
+            id: requirement.id,
+            ...payload
+          }
+        });
+      }
+
+      for (const task of tasks) {
+        const payload = getTaskPayload(task);
+
+        await tx.projectTask.upsert({
+          where: { id: task.id },
+          update: payload,
+          create: {
+            id: task.id,
+            ...payload
+          }
+        });
+      }
+
+      for (const bug of bugs) {
+        const payload = getBugPayload(bug);
+
+        await tx.bugReport.upsert({
+          where: { id: bug.id },
+          update: payload,
+          create: {
+            id: bug.id,
+            ...payload
+          }
+        });
+        await replaceBugChildRecords(tx, bug);
+      }
+    },
     DASHBOARD_SYNC_TRANSACTION_OPTIONS
   );
 }

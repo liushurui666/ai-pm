@@ -304,3 +304,15 @@
 - 发现并修复：首次 `pnpm build` 发现脚本直接访问可选 `DashboardData.meta` 导致 TypeScript 失败；已加入 `getRequiredCurrentMember` 显式断言，运行期错误也会更准确。
 - 本轮执行：`pnpm exec tsx scripts/full-chain-workspace-identity-smoke.ts` 通过，覆盖 owner 创建、邮箱归并、飞书历史桥接三个场景。
 - 本轮回归：`pnpm exec tsx scripts/full-chain-workspace-identity-smoke.ts`、残留检查、`git diff --check`、`pnpm lint`、`pnpm build` 均通过。
+
+### 2026-06-25 版本范围与项目继承冒烟
+
+- 新增 `pnpm exec tsx scripts/full-chain-version-scope-smoke.ts`：使用真实 MySQL 创建临时项目、父版本、子版本、需求、任务和 Bug，故意提交错误 `project/versionName`，验证服务端按 `versionId` 统一回填版本名称和项目口径。
+- VERSION-001/VERSION-002：脚本验证创建子版本时服务端按父版本回填 `parentVersionName/project`，不只依赖前端隐藏字段。
+- REQ-001/TASK-001/BUG-001：脚本验证需求、任务、Bug 创建时均继承目标版本 `versionId/versionName/project`，避免版本大屏、任务看板和 Bug 管理口径错位。
+- VERSION-005：脚本调用 `createVersionDashboardSnapshots`，验证父版本 scope 包含子版本，父版本大屏能汇总子版本需求/任务/Bug，子版本也能统计自身记录。
+- VERSION-003：脚本验证编辑子版本名称时，同步更新该版本下需求、任务、Bug 的 `versionName/project`；子版本项目仍继承父版本，提交值不能覆盖。
+- 发现并修复：首次运行复现项目/版本创建仍走 `writeDatabase` 全量同步，在 `syncTasks -> projectTask.upsert` 处触发 Prisma `P2028` 60 秒事务过期；已新增项目/版本单行 upsert 和版本关联记录小范围同步，避免版本操作重写整库。
+- 发现并修复：任务/需求创建原本没有像 Bug 一样用 `versionId` 二次回填项目；已统一到 `withRecordVersionScope`，服务端兜底 API/AI/脚本直接写入场景。
+- 数据清理：所有临时数据使用 `version-scope-e2e-*` runLabel，finally 直接清理项目、版本、需求、任务、Bug；残留检查均为 0。
+- 本轮回归：`pnpm exec tsx scripts/full-chain-version-scope-smoke.ts`、残留检查、`git diff --check`、`pnpm lint`、`pnpm build` 均通过。
