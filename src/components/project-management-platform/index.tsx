@@ -31,7 +31,7 @@ import {
   SearchOutlined,
   TeamOutlined
 } from "@ant-design/icons";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type {
   BugReport,
   DashboardData,
@@ -184,6 +184,7 @@ export function ProjectManagementPlatform({
   const [peopleLoading, setPeopleLoading] = useState(false);
   const [peopleError, setPeopleError] = useState("");
   const [peopleWarning, setPeopleWarning] = useState("");
+  const feishuPeopleRequestSeqRef = useRef(0);
   const [memberSubmitting, setMemberSubmitting] = useState(false);
   const [workspaceSubmitting, setWorkspaceSubmitting] = useState(false);
   const [workspaceDrawerOpen, setWorkspaceDrawerOpen] = useState(false);
@@ -286,10 +287,13 @@ export function ProjectManagementPlatform({
 
       // 通讯录曾经因为飞书权限/分页问题返回过少量联系人；这里保留短缓存只为避免切页反复打外部接口，
       // 添加成员或通知配置入口会强制刷新，防止旧的“部分结果”一直卡在选择框里。
-      if (peopleLoading || shouldUseCache) {
+      if ((!options.force && peopleLoading) || shouldUseCache) {
         return;
       }
 
+      const requestSeq = feishuPeopleRequestSeqRef.current + 1;
+
+      feishuPeopleRequestSeqRef.current = requestSeq;
       setPeopleLoading(true);
 
       try {
@@ -302,15 +306,29 @@ export function ProjectManagementPlatform({
           throw new Error(payload.error || "读取飞书通讯录失败");
         }
 
+        // 成员页进入时的懒加载可能和“添加成员”的强制刷新并发；只允许最后一次请求落状态，
+        // 防止慢返回的旧请求把最新 83 人通讯录覆盖成历史缓存里的少量成员。
+        if (feishuPeopleRequestSeqRef.current !== requestSeq) {
+          return;
+        }
+
         setPeople(payload.people ?? []);
         setPeopleError("");
         // 飞书通讯录可能返回“部分可用”：例如授权范围里有用户组，但应用还缺用户组读取权限。
         // 这类问题不应该禁用已读到的人，只在成员页提示管理员去补权限。
         setPeopleWarning(payload.warning ?? "");
       } catch (error) {
+        if (feishuPeopleRequestSeqRef.current !== requestSeq) {
+          return;
+        }
+
         setPeopleError(error instanceof Error ? error.message : "读取飞书通讯录失败");
         setPeopleWarning("");
       } finally {
+        if (feishuPeopleRequestSeqRef.current !== requestSeq) {
+          return;
+        }
+
         setPeopleLoading(false);
         setPeopleLoaded(true);
         setPeopleLoadedAt(Date.now());

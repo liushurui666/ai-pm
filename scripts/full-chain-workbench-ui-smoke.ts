@@ -175,6 +175,26 @@ function verifySearchAndScheduleContracts() {
   };
 }
 
+function verifyFeishuPeopleRefreshContracts() {
+  const indexText = readText(indexPath);
+  const membersText = readText(path.join(platformDir, "views/members-view/index.tsx"));
+
+  // 成员管理的通讯录加载同时存在“进入页面懒加载”和“打开添加成员强制刷新”两条触发路径。
+  // 如果强制刷新仍被 peopleLoading 短路，或者旧请求可覆盖新请求，用户会看到飞书真实有 83 人但下拉只剩历史少量成员。
+  assertSmoke(indexText.includes("const feishuPeopleRequestSeqRef = useRef(0);"), "飞书通讯录加载缺少请求序号闸门。");
+  assertSmoke(indexText.includes("const requestSeq = feishuPeopleRequestSeqRef.current + 1;"), "飞书通讯录刷新没有为每次请求生成序号。");
+  assertSmoke(indexText.includes("feishuPeopleRequestSeqRef.current !== requestSeq"), "飞书通讯录旧请求仍可能覆盖最新强制刷新结果。");
+  assertSmoke(indexText.includes("if ((!options.force && peopleLoading) || shouldUseCache)"), "飞书通讯录强制刷新仍会被进行中的懒加载短路。");
+  assertSmoke(membersText.includes("onReloadPeople();\n              form.resetFields();"), "添加成员入口没有先刷新通讯录再打开表单。");
+  assertSmoke(membersText.includes("已加载 ${people.length} 位联系人"), "飞书联系人下拉缺少已加载人数提示。");
+
+  return {
+    forceBypassesLoading: true,
+    staleRequestIgnored: true,
+    visibleContactCount: true
+  };
+}
+
 function verifyThemeAndShellControls() {
   const indexText = readText(indexPath);
 
@@ -199,6 +219,7 @@ const results = [
   runCheck("navigation contracts", verifyNavigationContracts),
   runCheck("account and workspace contracts", verifyAccountAndWorkspaceContracts),
   runCheck("search and schedule contracts", verifySearchAndScheduleContracts),
+  runCheck("feishu people refresh contracts", verifyFeishuPeopleRefreshContracts),
   runCheck("theme and shell controls", verifyThemeAndShellControls)
 ];
 const failed = results.filter((result) => !result.ok);
