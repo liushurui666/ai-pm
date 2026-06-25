@@ -100,6 +100,13 @@ const smokeCases: SmokeCase[] = [
     timeoutMs: 60_000
   },
   {
+    description: "文档拆任务 fallback、documents/analyze 接口、版本/负责人回填和任务看板入库契约。",
+    groups: ["all", "core", "static"],
+    id: "document-breakdown",
+    script: "scripts/full-chain-document-breakdown-smoke.ts",
+    timeoutMs: 60_000
+  },
+  {
     description: "Docker/部署脚本/运行时 env 静态配置完整性。",
     groups: ["all", "core", "static"],
     id: "deploy",

@@ -327,10 +327,10 @@
 
 ### 2026-06-25 全链路冒烟套件统一入口
 
-- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 23 个 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
+- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 24 个 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
 - 新增 package scripts：`pnpm full-chain:smoke` 默认跑核心链路，`pnpm full-chain:smoke:all` 跑全量链路，`pnpm full-chain:smoke:list` 输出用例清单。
 - 分组策略：`static` 覆盖权限、覆盖清单、依赖降级、部署静态配置和 Bug 附件 mock；`auth` 覆盖未登录 API/页面保护与真实浏览器登录页；`db` 覆盖真实 MySQL 写入/清理；`core` 将登录、浏览器、静态、CRUD、工作区身份、版本范围等高价值链路合并成日常回归入口。
-- 本轮执行：`pnpm full-chain:coverage` 通过，登记 23 个脚本/23 个 suite 用例/14 个 package 入口；`pnpm full-chain:smoke` 通过 20/20，用时约 215.6s，覆盖登录、浏览器未登录跳转、工作台 UI、周报、AI 助手 ChatBox、飞书通讯录、权限矩阵、覆盖清单、依赖降级、需求飞书链接 AI 体检、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、成员管理、通知入队、AI 索引管理员重建、工作区身份和版本范围。
+- 本轮执行：`pnpm full-chain:coverage` 通过，登记 24 个脚本/24 个 suite 用例/15 个 package 入口；`pnpm full-chain:smoke` 通过 21/21，用时约 274.3s，覆盖登录、浏览器未登录跳转、工作台 UI、周报、AI 助手 ChatBox、飞书通讯录、权限矩阵、覆盖清单、依赖降级、需求飞书链接 AI 体检、文档拆任务、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、成员管理、通知入队、AI 索引管理员重建、工作区身份和版本范围。
 
 ### 2026-06-25 浏览器 UI 冒烟脚本化
 
@@ -373,6 +373,14 @@
 - AI-003/AI-004/AI-005：脚本验证前端保留 110s SSE 超时、非 2xx JSON 错误解析、stream cleanup、workspace+session 隔离、regenerate 裁剪、停止生成、模型下拉、输入 300 字限制和 SSR 安全会话。
 - AI-007/AI-008/AI-009/AI-012：脚本验证服务端历史只保留文本并截断 16 条、忽略旧 tool 残留、修复 JSON 外壳、首步强制批量创建/归属/完成/关闭工具、tools/prompt 禁止泄露内部工具和 API 路径。
 - 本轮执行：`pnpm full-chain:assistant-chat` 通过 5/5，覆盖 route、stream、tools/prompt、frontend 和 error sanitizer；错误净化检查 8 类输入。
+
+### 2026-06-25 文档拆任务契约冒烟
+
+- 新增 `scripts/full-chain-document-breakdown-smoke.ts` 与 `pnpm full-chain:document-breakdown`：不上传真实文件、不写库，覆盖文档拆任务 fallback、`/api/documents/analyze` route、抽屉 UI、FormData 字段和 dashboard 本地回填。
+- REQ-005：脚本验证本地 fallback 可从技术方案生成前端/后端/测试三类任务，空文档也会生成 3 个兜底任务，任务带合法优先级、截止日期和 AI 提示。
+- API 契约：脚本静态守住登录保护、4MB 文件大小、30k 正文截断、docx/text 文件白名单、目标版本必填、跨工作区版本防护、AI 未配置/失败 fallback、空任务兜底、文档和任务入库、用户输入错误 400 与外部错误 502 区分。
+- UI 契约：脚本验证 `DocumentBreakdownDrawer` 只暴露目标版本和可选默认负责人，上传不自动提交；主容器必须提交 file/workspace/version/owner 身份字段，成功后更新本地 dashboard、关闭抽屉并跳到任务看板。
+- 本轮执行：`pnpm full-chain:document-breakdown` 通过 4/4，fallback 技术方案生成 9 个任务，空文档兜底生成 3 个任务。
 
 ### 2026-06-25 需求飞书链接 AI 体检冒烟
 

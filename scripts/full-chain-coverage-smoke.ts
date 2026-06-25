@@ -19,6 +19,7 @@ const requiredPackageScripts = [
   "full-chain:auth-origin",
   "full-chain:browser",
   "full-chain:browser:login",
+  "full-chain:document-breakdown",
   "full-chain:feishu-contact",
   "full-chain:member-management",
   "full-chain:smoke",
@@ -129,6 +130,10 @@ function verifyPackageScripts() {
 
     if (scriptName === "full-chain:browser:login") {
       return !command.includes("scripts/capture-auth-storage-state.ts");
+    }
+
+    if (scriptName === "full-chain:document-breakdown") {
+      return !command.includes("scripts/full-chain-document-breakdown-smoke.ts");
     }
 
     if (scriptName === "full-chain:feishu-contact") {
