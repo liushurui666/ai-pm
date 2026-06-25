@@ -45,6 +45,10 @@
 }
 
 .member-feishu-select-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 8px 12px;
   border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
   background: color-mix(in srgb, var(--surface-subtle) 72%, transparent);
@@ -52,11 +56,20 @@
 
 .member-feishu-select-summary .ant-typography {
   display: block;
+  min-width: 0;
   overflow: hidden;
   font-size: 12px;
   line-height: 18px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.member-feishu-select-summary .ant-btn {
+  flex: 0 0 auto;
+  height: 24px;
+  padding-inline: 6px;
+  border-radius: 6px;
+  font-size: 12px;
 }
 
 .member-management-table .ant-tag {

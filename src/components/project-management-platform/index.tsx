@@ -124,6 +124,7 @@ export type { AppView } from "@/components/project-management-platform/types";
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
 const { useBreakpoint } = Grid;
+const feishuPeopleCacheTtlMs = 5 * 60 * 1000;
 
 // 周报导出在浏览器侧完成，避免为了一个 Markdown 文件额外落库或新增下载接口。
 function downloadMarkdownFile(fileName: string, content: string) {
@@ -179,6 +180,7 @@ export function ProjectManagementPlatform({
   const [selectedRequirementVersionId, setSelectedRequirementVersionId] = useState<string | null>(null);
   const [people, setPeople] = useState<FeishuPerson[]>([]);
   const [peopleLoaded, setPeopleLoaded] = useState(false);
+  const [peopleLoadedAt, setPeopleLoadedAt] = useState(0);
   const [peopleLoading, setPeopleLoading] = useState(false);
   const [peopleError, setPeopleError] = useState("");
   const [peopleWarning, setPeopleWarning] = useState("");
@@ -266,16 +268,20 @@ export function ProjectManagementPlatform({
     };
   }, [initialData, initialLoadError, initialWorkspaceId]);
 
-  useEffect(() => {
-    // 飞书通讯录只服务于成员管理里的联系人选择；工作台、项目和任务首屏不需要它，
-    // 延迟到进入成员页后再加载可以少一次认证读取和一次外部通讯录请求。
-    if (activeView !== "members" || peopleLoaded) {
-      return;
-    }
+  const loadFeishuPeople = useCallback(
+    async (options: { force?: boolean } = {}) => {
+      const shouldUseCache =
+        peopleLoaded &&
+        !options.force &&
+        peopleLoadedAt > 0 &&
+        Date.now() - peopleLoadedAt < feishuPeopleCacheTtlMs;
 
-    let mounted = true;
+      // 通讯录曾经因为飞书权限/分页问题返回过少量联系人；这里保留短缓存只为避免切页反复打外部接口，
+      // 添加成员或通知配置入口会强制刷新，防止旧的“部分结果”一直卡在选择框里。
+      if (peopleLoading || shouldUseCache) {
+        return;
+      }
 
-    async function loadPeople() {
       setPeopleLoading(true);
 
       try {
@@ -288,32 +294,40 @@ export function ProjectManagementPlatform({
           throw new Error(payload.error || "读取飞书通讯录失败");
         }
 
-        if (mounted) {
-          setPeople(payload.people ?? []);
-          setPeopleError("");
-          // 飞书通讯录可能返回“部分可用”：例如授权范围里有用户组，但应用还缺用户组读取权限。
-          // 这类问题不应该禁用已读到的人，只在成员页提示管理员去补权限。
-          setPeopleWarning(payload.warning ?? "");
-        }
+        setPeople(payload.people ?? []);
+        setPeopleError("");
+        // 飞书通讯录可能返回“部分可用”：例如授权范围里有用户组，但应用还缺用户组读取权限。
+        // 这类问题不应该禁用已读到的人，只在成员页提示管理员去补权限。
+        setPeopleWarning(payload.warning ?? "");
       } catch (error) {
-        if (mounted) {
-          setPeopleError(error instanceof Error ? error.message : "读取飞书通讯录失败");
-          setPeopleWarning("");
-        }
+        setPeopleError(error instanceof Error ? error.message : "读取飞书通讯录失败");
+        setPeopleWarning("");
       } finally {
-        if (mounted) {
-          setPeopleLoading(false);
-          setPeopleLoaded(true);
-        }
+        setPeopleLoading(false);
+        setPeopleLoaded(true);
+        setPeopleLoadedAt(Date.now());
       }
+    },
+    [peopleLoaded, peopleLoadedAt, peopleLoading]
+  );
+
+  useEffect(() => {
+    // 飞书通讯录只服务于成员管理里的联系人选择；工作台、项目和任务首屏不需要它，
+    // 延迟到进入成员页后再加载可以少一次认证读取和一次外部通讯录请求。
+    if (activeView !== "members") {
+      return;
     }
 
-    loadPeople();
+    // React 19 的 lint 会阻止 effect 同步触发 setState；通讯录本来就是外部系统同步，
+    // 延后一拍执行可以保留懒加载行为，也避免进入成员页时形成级联渲染。
+    const loadTimer = window.setTimeout(() => {
+      void loadFeishuPeople();
+    }, 0);
 
     return () => {
-      mounted = false;
+      window.clearTimeout(loadTimer);
     };
-  }, [activeView, peopleLoaded]);
+  }, [activeView, loadFeishuPeople]);
 
   const filteredProjects = useMemo(() => {
     if (!data) {
@@ -1810,6 +1824,7 @@ export function ProjectManagementPlatform({
                       }}
                       submitting={memberSubmitting}
                       onCreateMember={handleCreateMember}
+                      onReloadPeople={() => loadFeishuPeople({ force: true })}
                       onUpdateMember={handleUpdateMember}
                     />
                   ) : null}

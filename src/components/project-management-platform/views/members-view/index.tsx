@@ -2,7 +2,7 @@
 
 import "./index.less";
 import { Alert, Avatar, Button, Drawer, Empty, Form, Input, Modal, Select, Space, Switch, Table, Tag, Tooltip, Typography } from "antd";
-import { BellOutlined, DeleteOutlined, PlusOutlined, SettingOutlined, TeamOutlined } from "@ant-design/icons";
+import { BellOutlined, DeleteOutlined, PlusOutlined, ReloadOutlined, SettingOutlined, TeamOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import "dayjs/locale/zh-cn";
@@ -92,7 +92,12 @@ function getFeishuPeopleNotFoundContent(people: FeishuPerson[], peopleLoading: b
   return people.length ? "当前搜索没有匹配联系人" : "通讯录未返回联系人";
 }
 
-function renderFeishuPeoplePopup(menu: ReactElement, people: FeishuPerson[], peopleLoading: boolean) {
+function renderFeishuPeoplePopup(
+  menu: ReactElement,
+  people: FeishuPerson[],
+  peopleLoading: boolean,
+  onReloadPeople: () => void
+) {
   return (
     <div className="member-feishu-select-popup">
       {menu}
@@ -104,6 +109,16 @@ function renderFeishuPeoplePopup(menu: ReactElement, people: FeishuPerson[], peo
               ? `已加载 ${people.length} 位联系人，输入内容会在这些联系人内过滤`
               : "未加载到飞书联系人，可先手动填写成员信息"}
         </Text>
+        <Button
+          icon={<ReloadOutlined />}
+          loading={peopleLoading}
+          size="small"
+          type="text"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={onReloadPeople}
+        >
+          刷新
+        </Button>
       </div>
     </div>
   );
@@ -206,13 +221,15 @@ function MemberIdentityFields({
   people,
   peopleError,
   peopleLoading,
-  peopleWarning
+  peopleWarning,
+  onReloadPeople
 }: {
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   people: FeishuPerson[];
   peopleError: string;
   peopleLoading: boolean;
   peopleWarning: string;
+  onReloadPeople: () => void;
 }) {
   return (
     <>
@@ -225,7 +242,7 @@ function MemberIdentityFields({
           notFoundContent={getFeishuPeopleNotFoundContent(people, peopleLoading)}
           placeholder="可选，用于绑定飞书通知"
           optionFilterProp="searchText"
-          popupRender={(menu) => renderFeishuPeoplePopup(menu, people, peopleLoading)}
+          popupRender={(menu) => renderFeishuPeoplePopup(menu, people, peopleLoading, onReloadPeople)}
           options={people.map((person) => ({
             value: person.openId,
             label: `${person.name}${person.email ? ` · ${person.email}` : ""}`,
@@ -285,13 +302,15 @@ function MemberFields({
   people,
   peopleError,
   peopleLoading,
-  peopleWarning
+  peopleWarning,
+  onReloadPeople
 }: {
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   people: FeishuPerson[];
   peopleError: string;
   peopleLoading: boolean;
   peopleWarning: string;
+  onReloadPeople: () => void;
 }) {
   return (
     <>
@@ -301,6 +320,7 @@ function MemberFields({
         peopleError={peopleError}
         peopleLoading={peopleLoading}
         peopleWarning={peopleWarning}
+        onReloadPeople={onReloadPeople}
       />
       <Form.Item label="成员姓名" name="name" rules={[{ required: true, message: "请输入成员姓名" }]}>
         <Input placeholder="例如：林夏" />
@@ -333,6 +353,7 @@ function NotificationChannelItem({
   peopleError,
   peopleLoading,
   peopleWarning,
+  onReloadPeople,
   remove
 }: {
   field: { key: number; name: number };
@@ -341,6 +362,7 @@ function NotificationChannelItem({
   peopleError: string;
   peopleLoading: boolean;
   peopleWarning: string;
+  onReloadPeople: () => void;
   remove: (index: number) => void;
 }) {
   const provider = Form.useWatch(["channels", field.name, "provider"], form) as MemberNotificationChannelProvider | undefined;
@@ -403,7 +425,7 @@ function NotificationChannelItem({
               notFoundContent={getFeishuPeopleNotFoundContent(people, peopleLoading)}
               placeholder="选择要通知的飞书账号"
               optionFilterProp="searchText"
-              popupRender={(menu) => renderFeishuPeoplePopup(menu, people, peopleLoading)}
+              popupRender={(menu) => renderFeishuPeoplePopup(menu, people, peopleLoading, onReloadPeople)}
               options={people.map((person) => ({
                 value: person.openId,
                 label: `${person.name}${person.email ? ` · ${person.email}` : ""}`,
@@ -500,6 +522,7 @@ export function MembersView({
   permissions,
   submitting,
   onCreateMember,
+  onReloadPeople,
   onUpdateMember
 }: {
   members: DashboardMember[];
@@ -510,6 +533,7 @@ export function MembersView({
   permissions: DashboardPermissions;
   submitting: boolean;
   onCreateMember: (values: Record<string, unknown>) => void;
+  onReloadPeople: () => void;
   onUpdateMember: (member: DashboardMember, values: Record<string, unknown>) => void;
 }) {
   const [form] = Form.useForm<Record<string, unknown>>();
@@ -630,6 +654,9 @@ export function MembersView({
             icon={<SettingOutlined />}
             disabled={!canManageMembers}
             onClick={() => {
+              // 添加成员依赖最新飞书通讯录。旧会话可能已经缓存过“部分返回”的联系人，
+              // 打开配置弹窗时强制刷新一次，避免用户只能在过期的少量联系人里选择。
+              onReloadPeople();
               setNotificationMember(member);
               notificationForm.setFieldsValue(getMemberNotificationFormValues(member));
             }}
@@ -652,6 +679,8 @@ export function MembersView({
             type="primary"
             icon={<PlusOutlined />}
             onClick={() => {
+              // 新建成员前主动刷新通讯录，保证下拉优先拿当前飞书授权范围，而不是沿用历史缓存。
+              onReloadPeople();
               form.resetFields();
               form.setFieldsValue({
                 role: "productMember",
@@ -733,6 +762,7 @@ export function MembersView({
                       peopleError={peopleError}
                       peopleLoading={peopleLoading}
                       peopleWarning={peopleWarning}
+                      onReloadPeople={onReloadPeople}
                       remove={remove}
                     />
                   ))
@@ -800,6 +830,7 @@ export function MembersView({
             peopleError={peopleError}
             peopleLoading={peopleLoading}
             peopleWarning={peopleWarning}
+            onReloadPeople={onReloadPeople}
           />
         </Form>
       </Drawer>

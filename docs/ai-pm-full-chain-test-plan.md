@@ -316,3 +316,10 @@
 - 发现并修复：任务/需求创建原本没有像 Bug 一样用 `versionId` 二次回填项目；已统一到 `withRecordVersionScope`，服务端兜底 API/AI/脚本直接写入场景。
 - 数据清理：所有临时数据使用 `version-scope-e2e-*` runLabel，finally 直接清理项目、版本、需求、任务、Bug；残留检查均为 0。
 - 本轮回归：`pnpm exec tsx scripts/full-chain-version-scope-smoke.ts`、残留检查、`git diff --check`、`pnpm lint`、`pnpm build` 均通过。
+
+### 2026-06-25 成员添加通讯录刷新复核
+
+- MEMBER-002：直连 `listFeishuPeopleWithDiagnostics("")` 复核当前飞书授权范围返回 83 位联系人且无 warning，说明飞书权限、用户组和子部门展开链路正常。
+- 发现并修复：成员页原本进入后只加载一次 `/api/feishu/users`，如果旧会话曾缓存“只返回 2 人”的部分结果，添加成员下拉会持续使用旧联系人；已改为进入成员页短缓存加载，打开“添加成员”或“通知配置”时强制刷新。
+- UI 补充：飞书联系人 Select 底部继续显示已加载人数，并新增“刷新”按钮，便于管理员在飞书授权调整或 dev server 热更新后立即重拉通讯录。
+- 本轮回归：直连通讯录脚本返回 `count=83/warning=""`；`git diff --check`、`pnpm lint`、`pnpm build` 均通过。
