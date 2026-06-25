@@ -371,7 +371,7 @@
 - SHELL-002/SHELL-004/SHELL-005/SHELL-006/SHELL-007：脚本验证左下角账号弹层关闭工作区 Select、顶部保留工作区切换、退出登录入口存在、顶部搜索可打开全局搜索抽屉、搜索覆盖项目/任务/Bug/需求版本/需求、日程抽屉覆盖里程碑/任务/Bug 且默认“只看我的”、主题切换绑定 `cycleMode`。
 - 任务拖拽弱网策略：阶段/负责人拖拽成功后不再每次立即拉 `/api/dashboard`，统一走 1800ms 防抖静默校准；静默刷新和拖拽 PATCH 的单次 401 只回滚/提示，不直接跳转 `session_expired` 登录页。
 - 任务接口策略：新建任务的 `POST /api/records` 显式走 `createDashboardTaskRecord`，阶段/负责人拖拽的 `PATCH /api/records` 显式走 `updateDashboardTaskRecord`；两条路径都只读取当前任务/版本/必要成员通知数据，不再为单行任务保存读取整份 dashboard。
-- 成员管理接口策略：成员新增/更新只读取工作区列表、当前成员和同工作区成员，重复身份与最后管理员校验不再触发任务/Bug/需求等整份 dashboard 读取。
+- 成员管理接口策略：`/api/members` 列表/新增/更新只读取工作区列表、当前成员权限和同工作区成员，重复身份与最后管理员校验不再触发任务/Bug/需求等整份 dashboard 读取。
 - Records 权限策略：`/api/records` 的需求、Bug、删除权限判断使用 `getWorkspaceAccessContext` 轻量读取当前工作区成员；Bug 限权编辑只额外按 id 读取当前 Bug，不再为了权限读整份 dashboard。
 - 工作区切换弱网策略：已访问工作区优先用内存 dashboard 缓存即时渲染，再后台请求校准；切换请求带序号闸门，慢返回不会覆盖新选择，单次 401 只提示并保留当前/缓存数据。
 - 本轮执行：`pnpm full-chain:workbench-ui` 通过 8/8，`appViewCount=9/validViewCount=9`、Studio 菜单 7 项、移动导航 7 项、搜索实体 5 类、日程来源 3 类，并守住飞书通讯录强制刷新竞态、任务拖拽弱网刷新策略和工作区切换缓存校准策略。

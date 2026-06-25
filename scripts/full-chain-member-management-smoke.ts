@@ -1,4 +1,6 @@
 import { config as loadEnv } from "dotenv";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { createDashboardMember, updateDashboardMember } from "@/data/local-dashboard";
 import { getPrismaClient } from "@/lib/database/prisma";
 
@@ -6,6 +8,8 @@ loadEnv({ path: ".env.local", quiet: true });
 loadEnv({ path: ".env", quiet: true });
 
 const WORKSPACE_ID = process.env.AI_PM_QA_WORKSPACE_ID || "ws-default";
+const repoRoot = process.cwd();
+const membersRoutePath = path.join(repoRoot, "app/api/members/route.ts");
 
 type MemberNotificationSnapshot = {
   channels?: Array<{
@@ -35,6 +39,17 @@ function asNotification(value: unknown): MemberNotificationSnapshot {
 
 function createSmokeEmail(runLabel: string, suffix: string) {
   return `${suffix}.${runLabel}@example.test`;
+}
+
+function verifyMemberApiReadContracts() {
+  const routeText = readFileSync(membersRoutePath, "utf8");
+
+  // 成员管理 API 是配置类接口，只需要 workspace_members 和当前成员权限；
+  // 如果回退到 getDashboardData，会把成员列表/保存动作放大成项目、任务、Bug、需求全量读取。
+  assertSmoke(!routeText.includes("getDashboardData"), "成员管理 API 不应读取整份 dashboard。");
+  assertSmoke(routeText.includes("getWorkspaceAccessContext(session?.user, workspaceId)"), "成员管理 API 缺少轻量权限上下文。");
+  assertSmoke(routeText.includes("readDashboardMembersDatabase(context.currentWorkspace.id)"), "成员列表 GET 没有按当前工作区轻量读取成员。");
+  assertSmoke(routeText.includes("createDashboardMember(body.values, context.currentWorkspace.id)"), "成员创建没有使用轻量权限上下文中的工作区。");
 }
 
 async function countBusinessRows(workspaceId: string) {
@@ -73,6 +88,8 @@ async function expectDuplicateError(action: () => Promise<unknown>, expectedText
 }
 
 async function main() {
+  verifyMemberApiReadContracts();
+
   const prisma = getPrismaClient();
   const workspace = await prisma.workspace.findUnique({
     where: { id: WORKSPACE_ID },
