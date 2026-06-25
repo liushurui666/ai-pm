@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "full-chain:ai-index-admin": "tsx scripts/full-chain-ai-index-admin-smoke.ts",
     "full-chain:auth-origin": "tsx scripts/full-chain-auth-origin-smoke.ts",
     "full-chain:browser": "tsx scripts/full-chain-browser-smoke.ts",
     "full-chain:browser:login": "tsx scripts/capture-auth-storage-state.ts",

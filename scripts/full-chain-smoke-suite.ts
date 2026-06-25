@@ -142,6 +142,13 @@ const smokeCases: SmokeCase[] = [
     timeoutMs: 180_000
   },
   {
+    description: "AI 索引管理员状态/重建契约、Mastra 工作区重建入队和临时数据清理。",
+    groups: ["all", "core", "db"],
+    id: "ai-index-admin",
+    script: "scripts/full-chain-ai-index-admin-smoke.ts",
+    timeoutMs: 180_000
+  },
+  {
     description: "AI 助手动作 worker 的完成任务、关闭 Bug、转交任务、批量创建任务。",
     groups: ["all", "db"],
     id: "assistant-action",

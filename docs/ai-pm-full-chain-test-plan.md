@@ -327,10 +327,10 @@
 
 ### 2026-06-25 全链路冒烟套件统一入口
 
-- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 20 个 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
+- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 21 个 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
 - 新增 package scripts：`pnpm full-chain:smoke` 默认跑核心链路，`pnpm full-chain:smoke:all` 跑全量链路，`pnpm full-chain:smoke:list` 输出用例清单。
 - 分组策略：`static` 覆盖权限、覆盖清单、依赖降级、部署静态配置和 Bug 附件 mock；`auth` 覆盖未登录 API/页面保护与真实浏览器登录页；`db` 覆盖真实 MySQL 写入/清理；`core` 将登录、浏览器、静态、CRUD、工作区身份、版本范围等高价值链路合并成日常回归入口。
-- 本轮执行：`pnpm full-chain:coverage` 通过，登记 20 个脚本/20 个 suite 用例/11 个 package 入口；当前 `pnpm full-chain:smoke` 通过 17/17，用时约 195.5s，覆盖登录 26 个无 Cookie 入口、localhost/127.0.0.1 Origin 一致性、真实 Chromium 登录页/未登录跳转/移动端登录页、工作台 Shell UI 契约、周报导出、飞书通讯录全量读取、权限矩阵、覆盖清单防退化、依赖降级、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、成员管理写入、通知渠道入队、工作区身份和版本范围。
+- 本轮执行：`pnpm full-chain:coverage` 通过，登记 21 个脚本/21 个 suite 用例/12 个 package 入口；当前 `pnpm full-chain:smoke` 通过 18/18，用时约 207.0s，覆盖登录 26 个无 Cookie 入口、localhost/127.0.0.1 Origin 一致性、真实 Chromium 登录页/未登录跳转/移动端登录页、工作台 Shell UI 契约、周报导出、飞书通讯录全量读取、权限矩阵、覆盖清单防退化、依赖降级、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、成员管理写入、通知渠道入队、AI 索引管理员重建、工作区身份和版本范围。
 
 ### 2026-06-25 浏览器 UI 冒烟脚本化
 
@@ -358,6 +358,13 @@
 - OVERVIEW-003/OVERVIEW-004：脚本验证当前登录用户导出个人周报时不会混入无关项目任务；`/api/assistant/weekly-report` 必须保留 `getSession` 登录保护、`workspaceId` 透传、未配置 AI 和 AI 失败时的本地固定模板 warning。
 - UI 契约：概览页“导出周报”只触发专用接口，显示 `pm-global-loading`，完成后用 `createWeeklyReportFileName` 下载 `.md`，不打开旧助手抽屉。
 - 本轮执行：`pnpm full-chain:weekly-report` 通过 4/4，生成文件名样例 `默认-工作区-周报-周报用户-个人周报-2026-06-25.md`，Markdown 包含 11 个章节且个人 scope 任务数 2、Bug 数 1。
+
+### 2026-06-25 AI 索引管理员重建冒烟
+
+- 新增 `scripts/full-chain-ai-index-admin-smoke.ts` 与 `pnpm full-chain:ai-index-admin`：使用真实 MySQL 创建临时工作区、版本、需求、任务、Bug 和一个历史飞书 source，执行 Mastra workspace rebuild，只验证入队和 API 契约，不启动 worker、不调用 Qdrant/Embedding。
+- RAG-004：脚本验证管理员重建扫描从未入索引的历史业务数据，投递 `version/requirement/task/bug` 四类 `index_entity` job；带 `documentLink` 的需求额外投递 `sync_feishu`，已有飞书 source 投递 `rebuild_source`。
+- RAG-005：脚本静态校验 `/api/ai-index/status` 与 `/api/ai-index/rebuild` 都保留 `getSession` 登录保护、`member:manage` 管理员权限校验，状态接口统计 source/job，重建接口走 Mastra workflow 并记录 `authUserId`。
+- 本轮执行：`pnpm full-chain:ai-index-admin` 通过 2/2，临时 workspace 重建入队 6 条：`index_entity=4`、`sync_feishu=1`、`rebuild_source=1`，finally 级联清理临时工作区和队列数据。
 
 ### 2026-06-25 认证 Origin 一致性冒烟
 

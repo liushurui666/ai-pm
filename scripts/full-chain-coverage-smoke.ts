@@ -14,6 +14,7 @@ const packagePath = path.join(repoRoot, "package.json");
 const testPlanPath = path.join(repoRoot, "docs/ai-pm-full-chain-test-plan.md");
 
 const requiredPackageScripts = [
+  "full-chain:ai-index-admin",
   "full-chain:auth-origin",
   "full-chain:browser",
   "full-chain:browser:login",
@@ -107,6 +108,10 @@ function verifyPackageScripts() {
   const missingScripts = requiredPackageScripts.filter((scriptName) => !scripts[scriptName]);
   const wrongEntrypoints = requiredPackageScripts.filter((scriptName) => {
     const command = scripts[scriptName] ?? "";
+
+    if (scriptName === "full-chain:ai-index-admin") {
+      return !command.includes("scripts/full-chain-ai-index-admin-smoke.ts");
+    }
 
     if (scriptName === "full-chain:auth-origin") {
       return !command.includes("scripts/full-chain-auth-origin-smoke.ts");
