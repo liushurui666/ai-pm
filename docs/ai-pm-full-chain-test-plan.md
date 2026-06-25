@@ -326,10 +326,10 @@
 
 ### 2026-06-25 全链路冒烟套件统一入口
 
-- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 13 个 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
+- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 14 个 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
 - 新增 package scripts：`pnpm full-chain:smoke` 默认跑核心链路，`pnpm full-chain:smoke:all` 跑全量链路，`pnpm full-chain:smoke:list` 输出用例清单。
-- 分组策略：`static` 覆盖权限、依赖降级、部署静态配置和 Bug 附件 mock；`auth` 覆盖未登录 API/页面保护与真实浏览器登录页；`db` 覆盖真实 MySQL 写入/清理；`core` 将登录、浏览器、静态、CRUD、工作区身份、版本范围等高价值链路合并成日常回归入口。
-- 本轮执行：`pnpm full-chain:smoke:list` 通过；`pnpm exec tsx scripts/full-chain-smoke-suite.ts --group static` 通过 4/4；加入浏览器脚本后 `pnpm full-chain:smoke` 通过 10/10，用时约 124.2s，覆盖登录 25 个无 Cookie 入口、真实 Chromium 登录页/未登录跳转/移动端登录页、权限矩阵、依赖降级、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、工作区身份和版本范围。
+- 分组策略：`static` 覆盖权限、覆盖清单、依赖降级、部署静态配置和 Bug 附件 mock；`auth` 覆盖未登录 API/页面保护与真实浏览器登录页；`db` 覆盖真实 MySQL 写入/清理；`core` 将登录、浏览器、静态、CRUD、工作区身份、版本范围等高价值链路合并成日常回归入口。
+- 本轮执行：`pnpm full-chain:smoke:list` 通过；加入覆盖清单后 `pnpm exec tsx scripts/full-chain-smoke-suite.ts --group static` 通过 5/5；加入浏览器脚本后 `pnpm full-chain:smoke` 通过 10/10，用时约 124.2s，覆盖登录 25 个无 Cookie 入口、真实 Chromium 登录页/未登录跳转/移动端登录页、权限矩阵、依赖降级、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、工作区身份和版本范围。
 
 ### 2026-06-25 浏览器 UI 冒烟脚本化
 
@@ -337,3 +337,8 @@
 - AUTH-001/AUTH-003/AUTH-006：浏览器脚本验证登录页返回 200，飞书、Google、GitHub 入口在渲染后可见；访问 `/workbench?view=members&workspaceId=ws-default` 会进入 `/login?...redirect_uri=...` 且登录入口可见。
 - SHELL-008：375px 移动端登录页无横向溢出，`scrollWidth=clientWidth=375`，console 无 error/warning。
 - 本轮执行：`pnpm full-chain:browser` 通过 4/4，其中已登录工作台视图因未设置 `AI_PM_QA_STORAGE_STATE` 明确跳过；`pnpm exec tsx scripts/full-chain-smoke-suite.ts --group auth` 通过 2/2，确认浏览器脚本已纳入统一套件。
+
+### 2026-06-25 覆盖清单防退化校验
+
+- 新增 `scripts/full-chain-coverage-smoke.ts` 与 `pnpm full-chain:coverage`：静态校验 `scripts/full-chain-*.ts` 是否全部纳入统一 runner、package scripts 是否指向正确入口、测试矩阵是否记录关键用例 ID 与脚本、重要 API 路由是否在矩阵中可追踪。
+- GATE-006：首次执行即捕获新脚本未写入测试计划的问题，补齐文档后该守门可避免后续新增脚本或入口“有文件但无人执行”。

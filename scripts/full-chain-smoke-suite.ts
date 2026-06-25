@@ -44,6 +44,13 @@ const smokeCases: SmokeCase[] = [
     timeoutMs: 60_000
   },
   {
+    description: "校验测试矩阵、package 命令与 full-chain 脚本都已互相登记，防止覆盖退化。",
+    groups: ["all", "core", "static"],
+    id: "coverage",
+    script: "scripts/full-chain-coverage-smoke.ts",
+    timeoutMs: 60_000
+  },
+  {
     description: "AI/Email/COS/RAG 配置解析与本地 fallback 输出。",
     groups: ["all", "core", "static"],
     id: "dependency-fallback",
