@@ -273,3 +273,12 @@
 - OPS-005：脚本验证 `.dockerignore` 排除 `.env/.env.*`、`node_modules`、`.next`、`.git` 和 `scripts/deploy.env`，避免部署镜像混入本地密钥或构建产物。
 - 本轮执行：`pnpm exec tsx scripts/full-chain-deploy-smoke.ts` 通过，8 个检查组全部通过，覆盖 7 个 compose 服务、4 个 worker 命令、31 个运行时 env 键和 14 个远程部署 env 键。
 - 本轮回归：`pnpm exec tsx scripts/full-chain-permission-smoke.ts`、`pnpm exec tsx scripts/full-chain-dependency-fallback-smoke.ts`、`git diff --check`、`pnpm lint`、`pnpm build` 均通过；本机缺少 `docker` 命令，未执行 `docker compose config` 语法解析。
+
+### 2026-06-25 Bug 附件上传规则冒烟
+
+- 新增 `pnpm exec tsx scripts/full-chain-bug-attachment-smoke.ts`：抽离 COS 签名/文件校验到 `src/lib/bug-attachments/cos.ts` 后，用 mock COS 覆盖附件上传成功、COS 失败、密钥缺失、类型错误、大小超限、文件名清洗、prefix/domain 默认值。
+- BUG-004：脚本验证图片/视频 MIME 允许上传，`text/plain` 拒绝；成功路径使用 `PUT`、`Content-Type`、`x-cos-acl=public-read`，返回附件包含 key/url/type/mime/size/uploadedAt；COS 返回 403 时 API 层可转为 502 可读错误。
+- 发现并修复：附件大小上限被调到 KB/B 级别时，旧文案会显示“文件不能超过 0MB”；已改为按 B/KB/MB 自适应展示。
+- 安全边界：脚本默认不真实写入 COS，避免全链路回归反复留下公共测试对象；真实 COS PUT 使用已登录浏览器单独执行 8 字节 `image/png` 小文件验证。
+- 真实上传验证：浏览器 POST `/api/bug-attachments` 返回 200，生成 `bug-materials/2026-06-25/25ff36c1-f736-490e-98d3-cfd4b3240c9e-codex-cos-smoke-1782353808608.png`，host 为 `ai-1350977987.cos.ap-guangzhou.myqcloud.com`，控制台无 warning/error。
+- 本轮回归：`pnpm exec tsx scripts/full-chain-bug-attachment-smoke.ts`、`pnpm exec tsx scripts/full-chain-dependency-fallback-smoke.ts`、`pnpm exec tsx scripts/full-chain-auth-smoke.ts`、`git diff --check`、`pnpm lint`、`pnpm build` 均通过。
