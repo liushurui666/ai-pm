@@ -79,6 +79,13 @@ const smokeCases: SmokeCase[] = [
     timeoutMs: 120_000
   },
   {
+    description: "已登录成员页添加成员抽屉、飞书通讯录下拉总数和搜索匹配提示。",
+    groups: ["all", "auth", "core"],
+    id: "member-ui",
+    script: "scripts/full-chain-member-ui-smoke.ts",
+    timeoutMs: 300_000
+  },
+  {
     description: "权限矩阵、禁用成员、未加入成员和 Unified Auth 身份匹配。",
     groups: ["all", "core", "static"],
     id: "permission",

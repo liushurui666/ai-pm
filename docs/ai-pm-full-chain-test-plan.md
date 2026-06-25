@@ -332,15 +332,16 @@
 - 发现并修复：成员页原本进入后只加载一次 `/api/feishu/users`，如果旧会话曾缓存“只返回 2 人”的部分结果，添加成员下拉会持续使用旧联系人；已改为进入成员页短缓存加载，打开“添加成员”或“通知配置”时强制刷新。
 - UI 补充：飞书联系人 Select 底部继续显示已加载人数，并新增“刷新”按钮，便于管理员在飞书授权调整或 dev server 热更新后立即重拉通讯录。
 - UI 复核：添加成员和通知配置里的飞书 Select 改为受控搜索；输入过滤词时同时显示“已同步总人数 + 当前搜索匹配人数”，选中后清空搜索词，避免把当前过滤结果误判为接口只取到少量成员。
-- 本轮回归：直连通讯录脚本返回 `count=83/warning=""`；`git diff --check`、`pnpm lint`、`pnpm build` 均通过。
+- 新增 `scripts/full-chain-member-ui-smoke.ts` 与 `pnpm full-chain:member-ui`：复用已登录 storageState 打开成员页，点击“添加成员”，验证飞书 Select 的已同步总人数、下拉已加载人数和搜索匹配人数一致；脚本只读验证 UI，不点击保存、不写成员数据。
+- 本轮回归：直连通讯录脚本返回 `count=83/warning=""`；`pnpm full-chain:member-ui` 通过，添加成员抽屉显示已同步 83 位联系人，关键词 `11` 搜索匹配 8 位，页面 console 无 error 且桌面无横向溢出；`git diff --check`、`pnpm lint`、`pnpm build` 均通过。
 
 ### 2026-06-25 全链路冒烟套件统一入口
 
-- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 25 个 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
+- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 26 个 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
 - 新增 package scripts：`pnpm full-chain:smoke` 默认跑核心链路，`pnpm full-chain:smoke:all` 跑全量链路，`pnpm full-chain:smoke:list` 输出用例清单。
 - 分组策略：`static` 覆盖权限、覆盖清单、依赖降级、部署静态配置和 Bug 附件 mock；`auth` 覆盖未登录 API/页面保护与真实浏览器登录页；`db` 覆盖真实 MySQL 写入/清理；`core` 将登录、浏览器、静态、CRUD、工作区身份、版本范围等高价值链路合并成日常回归入口。
-- 本轮执行：`pnpm full-chain:coverage` 通过，登记 25 个脚本/25 个 suite 用例/16 个 package 入口；`pnpm full-chain:smoke` 通过 22/22，用时约 319.5s，覆盖登录、浏览器未登录跳转、工作台 UI、工作区管理、周报、AI 助手 ChatBox、飞书通讯录、权限矩阵、覆盖清单、依赖降级、需求飞书链接 AI 体检、文档拆任务、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、成员管理、通知入队、AI 索引管理员重建、工作区身份和版本范围。
-- 全量复核：`pnpm full-chain:smoke:all` 已通过 25/25，用时约 587.2s；`browser` 用例已复用 `.ai-pm/qa-auth-storage-state.json` 覆盖已登录工作台 8 个一级视图，登录页、未登录跳转、移动端登录页和已登录桌面工作台均通过。
+- 本轮执行：`pnpm full-chain:coverage` 通过，登记 26 个脚本/26 个 suite 用例/17 个 package 入口；`pnpm full-chain:smoke` 通过 23/23，用时约 415.1s，覆盖登录、浏览器未登录跳转、工作台 UI、工作区管理、周报、AI 助手 ChatBox、飞书通讯录、成员添加 UI、权限矩阵、覆盖清单、依赖降级、需求飞书链接 AI 体检、文档拆任务、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、成员管理、通知入队、AI 索引管理员重建、工作区身份和版本范围。
+- 全量复核：`pnpm full-chain:smoke:all` 已通过 26/26，用时约 607.5s；`browser` 用例已复用 `.ai-pm/qa-auth-storage-state.json` 覆盖已登录工作台 8 个一级视图，登录页、未登录跳转、移动端登录页和已登录桌面工作台均通过；`member-ui` 用例额外覆盖添加成员抽屉里的飞书通讯录下拉与搜索匹配提示。
 - 发现并修复：`infra` 冒烟原先使用 schema 预留但 worker 尚未实现的 `refresh_project_metrics`，会被 inline worker 标记失败；已改用生产已实现的 `notify_owner` 队列协议，并保持未来 `nextRunAt` 防止真实飞书/邮箱发送。
 
 ### 2026-06-25 工作区管理契约冒烟

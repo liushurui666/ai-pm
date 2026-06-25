@@ -299,7 +299,9 @@ function MemberIdentityFields({
   return (
     <>
       <Form.Item label="从飞书通讯录选择" name="feishuOpenId">
+        {/* 成员添加 UI 冒烟要稳定定位这个通讯录 Select，避免 AntD 内部隐藏节点或角色 Select 影响全量联系人回归。 */}
         <Select
+          className="member-feishu-person-select"
           allowClear
           showSearch
           loading={peopleLoading}

@@ -16,6 +16,7 @@
     "full-chain:coverage": "tsx scripts/full-chain-coverage-smoke.ts",
     "full-chain:document-breakdown": "tsx scripts/full-chain-document-breakdown-smoke.ts",
     "full-chain:feishu-contact": "tsx scripts/full-chain-feishu-contact-smoke.ts",
+    "full-chain:member-ui": "tsx scripts/full-chain-member-ui-smoke.ts",
     "full-chain:member-management": "tsx scripts/full-chain-member-management-smoke.ts",
     "full-chain:notification": "tsx scripts/full-chain-notification-smoke.ts",
     "full-chain:requirement-ai": "tsx scripts/full-chain-requirement-ai-smoke.ts",
