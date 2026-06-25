@@ -86,6 +86,13 @@ const smokeCases: SmokeCase[] = [
     timeoutMs: 60_000
   },
   {
+    description: "需求飞书链接解析、AI 体检 fallback、接口兜底和前端表单回填契约。",
+    groups: ["all", "core", "static"],
+    id: "requirement-ai",
+    script: "scripts/full-chain-requirement-ai-smoke.ts",
+    timeoutMs: 60_000
+  },
+  {
     description: "Docker/部署脚本/运行时 env 静态配置完整性。",
     groups: ["all", "core", "static"],
     id: "deploy",

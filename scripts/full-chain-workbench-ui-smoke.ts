@@ -185,7 +185,9 @@ function verifyFeishuPeopleRefreshContracts() {
   assertSmoke(indexText.includes("const requestSeq = feishuPeopleRequestSeqRef.current + 1;"), "飞书通讯录刷新没有为每次请求生成序号。");
   assertSmoke(indexText.includes("feishuPeopleRequestSeqRef.current !== requestSeq"), "飞书通讯录旧请求仍可能覆盖最新强制刷新结果。");
   assertSmoke(indexText.includes("if ((!options.force && peopleLoading) || shouldUseCache)"), "飞书通讯录强制刷新仍会被进行中的懒加载短路。");
-  assertSmoke(membersText.includes("onReloadPeople();\n              form.resetFields();"), "添加成员入口没有先刷新通讯录再打开表单。");
+  assertSmoke(membersText.includes("await onReloadPeople();"), "添加成员入口没有等待强制刷新通讯录完成。");
+  assertSmoke(membersText.includes("setDrawerOpen(true);"), "添加成员入口没有在通讯录刷新后打开表单。");
+  assertSmoke(membersText.includes("getFeishuPeopleStatusText"), "添加成员表单缺少常驻通讯录同步状态提示。");
   assertSmoke(membersText.includes("已加载 ${people.length} 位联系人"), "飞书联系人下拉缺少已加载人数提示。");
 
   return {

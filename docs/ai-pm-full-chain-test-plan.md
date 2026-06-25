@@ -327,10 +327,10 @@
 
 ### 2026-06-25 全链路冒烟套件统一入口
 
-- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 21 个 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
+- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 22 个 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
 - 新增 package scripts：`pnpm full-chain:smoke` 默认跑核心链路，`pnpm full-chain:smoke:all` 跑全量链路，`pnpm full-chain:smoke:list` 输出用例清单。
 - 分组策略：`static` 覆盖权限、覆盖清单、依赖降级、部署静态配置和 Bug 附件 mock；`auth` 覆盖未登录 API/页面保护与真实浏览器登录页；`db` 覆盖真实 MySQL 写入/清理；`core` 将登录、浏览器、静态、CRUD、工作区身份、版本范围等高价值链路合并成日常回归入口。
-- 本轮执行：`pnpm full-chain:coverage` 通过，登记 21 个脚本/21 个 suite 用例/12 个 package 入口；当前 `pnpm full-chain:smoke` 通过 18/18，用时约 207.0s，覆盖登录 26 个无 Cookie 入口、localhost/127.0.0.1 Origin 一致性、真实 Chromium 登录页/未登录跳转/移动端登录页、工作台 Shell UI 契约、周报导出、飞书通讯录全量读取、权限矩阵、覆盖清单防退化、依赖降级、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、成员管理写入、通知渠道入队、AI 索引管理员重建、工作区身份和版本范围。
+- 本轮执行：`pnpm full-chain:coverage` 通过，登记 22 个脚本/22 个 suite 用例/13 个 package 入口；`pnpm full-chain:smoke` 通过 19/19，用时约 215.4s，覆盖登录、浏览器未登录跳转、工作台 UI、周报、飞书通讯录、权限矩阵、覆盖清单、依赖降级、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、成员管理、通知入队、AI 索引管理员重建、工作区身份、版本范围和需求飞书链接 AI 体检。
 
 ### 2026-06-25 浏览器 UI 冒烟脚本化
 
@@ -365,6 +365,14 @@
 - RAG-004：脚本验证管理员重建扫描从未入索引的历史业务数据，投递 `version/requirement/task/bug` 四类 `index_entity` job；带 `documentLink` 的需求额外投递 `sync_feishu`，已有飞书 source 投递 `rebuild_source`。
 - RAG-005：脚本静态校验 `/api/ai-index/status` 与 `/api/ai-index/rebuild` 都保留 `getSession` 登录保护、`member:manage` 管理员权限校验，状态接口统计 source/job，重建接口走 Mastra workflow 并记录 `authUserId`。
 - 本轮执行：`pnpm full-chain:ai-index-admin` 通过 2/2，临时 workspace 重建入队 6 条：`index_entity=4`、`sync_feishu=1`、`rebuild_source=1`，finally 级联清理临时工作区和队列数据。
+
+### 2026-06-25 需求飞书链接 AI 体检冒烟
+
+- 新增 `scripts/full-chain-requirement-ai-smoke.ts` 与 `pnpm full-chain:requirement-ai`：不访问真实飞书和模型，覆盖飞书/Lark 链接解析、旧版 doc 识别边界、需求体检 fallback 输出、接口兜底契约和前端表单回填。
+- REQ-004：脚本验证 `docx/wiki/larksuite` 链接可解析，无效 URL、非飞书域名、sheets 链接会给出用户可读错误；旧版 `doc` 链接先解析为 `doc`，由读取/API 阶段提示用户转新版 docx。
+- REQ-004/REQ-005：脚本验证 AI 未配置或模型失败时 `createFallbackRequirementAnalysis` 仍输出摘要、验收标准、优先级、状态、缺失项、前后端和测试关注点，信息不足需求回到“待评审”。
+- UI 契约：`RequirementAiLinkAnalyzer` 必须走 `fetchWithAuthRedirect("/api/requirements/analyze-link")`，并把分析结果写回 `title/priority/status/acceptance/aiSummary/aiRisks/aiMissingItems/aiFrontendNotes/aiBackendNotes/aiTestingNotes/aiCompletenessScore`。
+- 本轮执行：`pnpm full-chain:requirement-ai` 通过 4/4，完整需求 fallback 得分 100，信息不足需求生成 4 个缺失项并保留 warning。
 
 ### 2026-06-25 认证 Origin 一致性冒烟
 

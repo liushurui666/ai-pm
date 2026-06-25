@@ -16,6 +16,7 @@
     "full-chain:feishu-contact": "tsx scripts/full-chain-feishu-contact-smoke.ts",
     "full-chain:member-management": "tsx scripts/full-chain-member-management-smoke.ts",
     "full-chain:notification": "tsx scripts/full-chain-notification-smoke.ts",
+    "full-chain:requirement-ai": "tsx scripts/full-chain-requirement-ai-smoke.ts",
     "full-chain:smoke": "tsx scripts/full-chain-smoke-suite.ts --group core",
     "full-chain:smoke:all": "tsx scripts/full-chain-smoke-suite.ts --group all",
     "full-chain:smoke:list": "tsx scripts/full-chain-smoke-suite.ts --list",

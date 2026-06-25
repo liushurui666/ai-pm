@@ -92,6 +92,26 @@ function getFeishuPeopleNotFoundContent(people: FeishuPerson[], peopleLoading: b
   return people.length ? "当前搜索没有匹配联系人" : "通讯录未返回联系人";
 }
 
+// 飞书联系人是先由服务端聚合完整授权范围，再交给 Select 做本地搜索；
+// 常驻状态文案可以把“全量已加载多少人”和“当前搜索只命中几人”区分开，避免用户误以为接口只返回了一条数据。
+function getFeishuPeopleStatusText(people: FeishuPerson[], peopleLoading: boolean, peopleError: string, peopleWarning: string) {
+  if (peopleLoading) {
+    return "正在同步飞书通讯录...";
+  }
+
+  if (peopleError) {
+    return `通讯录同步失败：${peopleError}`;
+  }
+
+  if (people.length) {
+    return peopleWarning
+      ? `已同步 ${people.length} 位联系人，但飞书返回了部分授权提示`
+      : `已同步 ${people.length} 位联系人，可输入姓名、邮箱或 open_id 搜索`;
+  }
+
+  return "未同步到飞书联系人，可先手动填写成员信息";
+}
+
 function renderFeishuPeoplePopup(
   menu: ReactElement,
   people: FeishuPerson[],
@@ -265,6 +285,9 @@ function MemberIdentityFields({
           }}
         />
       </Form.Item>
+      <Text className="member-feishu-status" type={peopleError || peopleWarning ? "warning" : "secondary"}>
+        {getFeishuPeopleStatusText(people, peopleLoading, peopleError, peopleWarning)}
+      </Text>
       {peopleError ? (
       <Alert
         className="pm-form-alert"
@@ -533,15 +556,54 @@ export function MembersView({
   permissions: DashboardPermissions;
   submitting: boolean;
   onCreateMember: (values: Record<string, unknown>) => void;
-  onReloadPeople: () => void;
+  onReloadPeople: () => Promise<void>;
   onUpdateMember: (member: DashboardMember, values: Record<string, unknown>) => void;
 }) {
   const [form] = Form.useForm<Record<string, unknown>>();
   const [notificationForm] = Form.useForm<Record<string, unknown>>();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [notificationMember, setNotificationMember] = useState<DashboardMember | null>(null);
+  const [memberDrawerOpening, setMemberDrawerOpening] = useState(false);
+  const [notificationOpeningMemberId, setNotificationOpeningMemberId] = useState("");
   const canManageMembers = permissions.canManageMembers;
   const deniedReason = permissions.deniedReason ?? "只有所有者或管理员可以管理成员。";
+
+  async function openCreateMemberDrawer() {
+    setMemberDrawerOpening(true);
+
+    try {
+      // 新建成员依赖最新飞书通讯录。这里等待强制刷新完成后再打开抽屉，
+      // 避免用户刚点开时看到上一轮缓存里的少量联系人并误判为“只同步到一个人”。
+      await onReloadPeople();
+    } finally {
+      setMemberDrawerOpening(false);
+    }
+
+    form.resetFields();
+    form.setFieldsValue({
+      role: "productMember",
+      status: "active",
+      feishuEnabled: false,
+      taskAssigned: true,
+      requirementChanged: true,
+      channels: []
+    });
+    setDrawerOpen(true);
+  }
+
+  async function openNotificationConfig(member: DashboardMember) {
+    setNotificationOpeningMemberId(member.id);
+
+    try {
+      // 通知配置也复用同一批飞书联系人。打开前刷新可以避免把旧的部分通讯录继续用于通知目标绑定。
+      await onReloadPeople();
+    } finally {
+      setNotificationOpeningMemberId("");
+    }
+
+    setNotificationMember(member);
+    notificationForm.setFieldsValue(getMemberNotificationFormValues(member));
+  }
 
   const columns: ColumnsType<DashboardMember> = [
     {
@@ -653,12 +715,9 @@ export function MembersView({
           <Button
             icon={<SettingOutlined />}
             disabled={!canManageMembers}
+            loading={notificationOpeningMemberId === member.id}
             onClick={() => {
-              // 添加成员依赖最新飞书通讯录。旧会话可能已经缓存过“部分返回”的联系人，
-              // 打开配置弹窗时强制刷新一次，避免用户只能在过期的少量联系人里选择。
-              onReloadPeople();
-              setNotificationMember(member);
-              notificationForm.setFieldsValue(getMemberNotificationFormValues(member));
+              void openNotificationConfig(member);
             }}
           >
             通知配置
@@ -678,19 +737,9 @@ export function MembersView({
           <Button
             type="primary"
             icon={<PlusOutlined />}
+            loading={memberDrawerOpening}
             onClick={() => {
-              // 新建成员前主动刷新通讯录，保证下拉优先拿当前飞书授权范围，而不是沿用历史缓存。
-              onReloadPeople();
-              form.resetFields();
-              form.setFieldsValue({
-                role: "productMember",
-                status: "active",
-                feishuEnabled: false,
-                taskAssigned: true,
-                requirementChanged: true,
-                channels: []
-              });
-              setDrawerOpen(true);
+              void openCreateMemberDrawer();
             }}
           >
             添加成员
