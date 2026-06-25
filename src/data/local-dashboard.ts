@@ -5,6 +5,7 @@ import {
   deleteDashboardBugDatabase,
   deleteDashboardRequirementDatabase,
   deleteDashboardTaskDatabase,
+  readDashboardMemberDatabase,
   readDashboardMembersDatabase,
   readDashboardDatabase,
   readDashboardTaskDatabase,
@@ -1215,6 +1216,18 @@ function normalizeWorkspaces(workspaces: unknown[]) {
   const hasDefaultWorkspace = normalizedWorkspaces.some((workspace) => workspace.id === DEFAULT_WORKSPACE.id);
 
   return hasDefaultWorkspace ? normalizedWorkspaces : [DEFAULT_WORKSPACE, ...normalizedWorkspaces];
+}
+
+function resolveWorkspaceFromList(workspaces: DashboardWorkspace[], workspaceId?: string) {
+  const normalizedWorkspaces = normalizeWorkspaces(workspaces);
+
+  // 成员创建只需要确认目标工作区是否有效；这里复用和 dashboard 首屏相同的“指定 active 优先，否则第一个 active”规则，
+  // 但不读取任务/Bug/需求等业务表，避免成员配置这种轻量动作被全量 dashboard 拖慢。
+  return (
+    normalizedWorkspaces.find((workspace) => workspace.id === workspaceId && workspace.status === "active") ??
+    normalizedWorkspaces.find((workspace) => workspace.status === "active") ??
+    DEFAULT_WORKSPACE
+  );
 }
 
 function normalizeMember(value: unknown, fallbackWorkspaceId = DEFAULT_WORKSPACE.id): DashboardMember {
@@ -2530,26 +2543,37 @@ function normalizeMemberInput(values: Record<string, unknown>, fallback?: Dashbo
   };
 }
 
-export async function createDashboardMember(values: Record<string, unknown>, workspaceId = DEFAULT_WORKSPACE.id) {
-  const data = await readDatabase();
-  const workspace = resolveCurrentWorkspace(data, workspaceId).currentWorkspace;
-  const member = normalizeMemberInput({ ...values, workspaceId: workspace.id });
-  const duplicated = data.members.map((item) => normalizeMember(item)).some((item) =>
+function hasDuplicatedMemberIdentity(members: DashboardMember[], member: DashboardMember, ignoreMemberId?: string) {
+  const memberIdentities = [member.email, member.notification.feishuOpenId]
+    .filter(Boolean);
+
+  if (!memberIdentities.length) {
+    return false;
+  }
+
+  // 成员身份去重只需要在同一工作区内检查邮箱/飞书 openId/历史 identities；
+  // 这里不依赖任务、Bug、需求等业务数据，避免成员管理保存动作被全量 dashboard 读取拖慢。
+  return members.some((item) =>
+    item.id !== ignoreMemberId &&
     item.workspaceId === member.workspaceId &&
-    [member.email, member.notification.feishuOpenId]
-      .filter(Boolean)
-      .some((identity) =>
-        item.email === identity ||
-        item.notification.feishuOpenId === identity ||
-        item.identities.some((itemIdentity) => itemIdentity.providerUserId === identity)
-      )
+    memberIdentities.some((identity) =>
+      item.email === identity ||
+      item.notification.feishuOpenId === identity ||
+      item.identities.some((itemIdentity) => itemIdentity.providerUserId === identity)
+    )
   );
+}
+
+export async function createDashboardMember(values: Record<string, unknown>, workspaceId = DEFAULT_WORKSPACE.id) {
+  const workspace = resolveWorkspaceFromList(await readWorkspaces(), workspaceId);
+  const members = (await readDashboardMembersDatabase(workspace.id)).map((item) => normalizeMember(item, workspace.id));
+  const member = normalizeMemberInput({ ...values, workspaceId: workspace.id });
+  const duplicated = hasDuplicatedMemberIdentity(members, member);
 
   if (duplicated) {
     throw new Error("成员已存在，请直接编辑角色或通知配置");
   }
 
-  data.members = [member, ...data.members.map((item) => normalizeMember(item))];
   // 新增成员只需要写入 workspace_members 一行；全量 writeDatabase 会重写任务/Bug/需求等业务表，
   // 对公网 MySQL 来说成本过高，也会让通知配置这类轻量操作看起来“卡住”。
   await upsertDashboardMemberDatabase(member);
@@ -2561,26 +2585,20 @@ export async function createDashboardMember(values: Record<string, unknown>, wor
 }
 
 export async function updateDashboardMember(id: string, values: Record<string, unknown>) {
-  const data = await readDatabase();
-  const members = data.members.map((item) => normalizeMember(item));
-  const existingMember = members.find((member) => member.id === id);
+  const existingMember = await readDashboardMemberDatabase(id);
 
   if (!existingMember) {
     throw new Error("成员不存在或已被删除");
   }
 
-  const member = normalizeMemberInput(values, existingMember);
-  const duplicated = members.some((item) =>
-    item.id !== id &&
-    item.workspaceId === member.workspaceId &&
-    [member.email, member.notification.feishuOpenId]
-      .filter(Boolean)
-      .some((identity) =>
-        item.email === identity ||
-        item.notification.feishuOpenId === identity ||
-        item.identities.some((itemIdentity) => itemIdentity.providerUserId === identity)
-      )
+  const members = (await readDashboardMembersDatabase(existingMember.workspaceId)).map((item) =>
+    normalizeMember(item, existingMember.workspaceId)
   );
+  const member = normalizeMemberInput({
+    ...values,
+    workspaceId: existingMember.workspaceId
+  }, existingMember);
+  const duplicated = hasDuplicatedMemberIdentity(members, member, id);
   const existingCanManage = existingMember.status === "active" && ["owner", "admin"].includes(existingMember.role);
   const nextCanManage = member.status === "active" && ["owner", "admin"].includes(member.role);
   const hasAnotherManager = members.some((item) =>
@@ -2595,7 +2613,6 @@ export async function updateDashboardMember(id: string, values: Record<string, u
     throw new Error("至少需要保留一个启用的所有者或管理员");
   }
 
-  data.members = members.map((item) => item.id === id ? member : item);
   // 成员更新尤其是通知渠道保存是后台配置单行写入，不能触发全量 dashboard 同步事务。
   await upsertDashboardMemberDatabase(member);
 

@@ -38,6 +38,14 @@ function assertSmoke(condition: unknown, message: string): asserts condition {
 
 function verifyDashboardReadPerformanceContracts() {
   const localDashboardText = readFileSync(localDashboardPath, "utf8");
+  const createMemberBlock = localDashboardText.slice(
+    localDashboardText.indexOf("export async function createDashboardMember"),
+    localDashboardText.indexOf("export async function updateDashboardMember")
+  );
+  const updateMemberBlock = localDashboardText.slice(
+    localDashboardText.indexOf("export async function updateDashboardMember"),
+    localDashboardText.indexOf("export async function createDashboardWorkspace")
+  );
 
   // dashboard 首屏和工作区切换都会触发项目指标派生；这里必须按工作区+项目名预分组，
   // 防止后续改动又退回每个项目重复 filter 全量任务/Bug/风险的 O(项目数 × 记录数) 读路径。
@@ -47,6 +55,13 @@ function verifyDashboardReadPerformanceContracts() {
   assertSmoke(localDashboardText.includes("const risksByProject = groupRecordsByProject(data.risks);"), "风险指标没有使用预分组 Map。");
   assertSmoke(!localDashboardText.includes("data.tasks.filter((task) => isLinkedToProject"), "项目指标任务派生仍在重复扫描全量任务。");
   assertSmoke(localDashboardText.includes("getProjectMetricKey(getWorkspaceId(record), projectName)"), "项目指标预分组缺少工作区隔离键。");
+  // 成员配置是后台轻量操作，只需要工作区和成员表；如果这里回到 readDatabase()，
+  // 用户改一个邮箱/角色也会被项目、任务、Bug、需求全量读取拖慢。
+  assertSmoke(createMemberBlock.includes("readDashboardMembersDatabase(workspace.id)"), "成员新增没有使用按工作区成员轻量读取。");
+  assertSmoke(!createMemberBlock.includes("readDatabase()"), "成员新增仍在读取整份 dashboard。");
+  assertSmoke(updateMemberBlock.includes("readDashboardMemberDatabase(id)"), "成员更新没有按成员 id 轻量定位当前成员。");
+  assertSmoke(updateMemberBlock.includes("readDashboardMembersDatabase(existingMember.workspaceId)"), "成员更新没有按工作区读取同区成员。");
+  assertSmoke(!updateMemberBlock.includes("readDatabase()"), "成员更新仍在读取整份 dashboard。");
 }
 
 async function enqueueIndex<T extends DashboardEntityType>(

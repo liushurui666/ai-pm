@@ -484,6 +484,18 @@ export async function readDashboardTaskDatabase(taskId: string, client?: PrismaC
   return task ? mapTaskRecord(task) : undefined;
 }
 
+export async function readDashboardMemberDatabase(memberId: string, client?: PrismaClient): Promise<DashboardMember | undefined> {
+  const prisma = client ?? getPrismaClient();
+  const member = await prisma.dashboardMember.findUnique({
+    where: {
+      id: memberId
+    }
+  });
+
+  // 成员资料编辑只需要先定位 workspace_members 当前行；后续重复身份校验再按该成员的工作区读取同区成员。
+  return member ? mapMemberRecord(member) : undefined;
+}
+
 export async function readDashboardMembersDatabase(workspaceId: string, client?: PrismaClient): Promise<DashboardMember[]> {
   const prisma = client ?? getPrismaClient();
   const members = await prisma.dashboardMember.findMany({
