@@ -326,10 +326,10 @@
 
 ### 2026-06-25 全链路冒烟套件统一入口
 
-- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 14 个 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
+- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 15 个 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
 - 新增 package scripts：`pnpm full-chain:smoke` 默认跑核心链路，`pnpm full-chain:smoke:all` 跑全量链路，`pnpm full-chain:smoke:list` 输出用例清单。
 - 分组策略：`static` 覆盖权限、覆盖清单、依赖降级、部署静态配置和 Bug 附件 mock；`auth` 覆盖未登录 API/页面保护与真实浏览器登录页；`db` 覆盖真实 MySQL 写入/清理；`core` 将登录、浏览器、静态、CRUD、工作区身份、版本范围等高价值链路合并成日常回归入口。
-- 本轮执行：`pnpm full-chain:smoke:list` 通过；加入覆盖清单后 `pnpm exec tsx scripts/full-chain-smoke-suite.ts --group static` 通过 5/5；当前 `pnpm full-chain:smoke` 通过 11/11，用时约 128.0s，覆盖登录 25 个无 Cookie 入口、真实 Chromium 登录页/未登录跳转/移动端登录页、权限矩阵、覆盖清单防退化、依赖降级、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、工作区身份和版本范围。
+- 本轮执行：`pnpm full-chain:smoke:list` 通过；加入覆盖清单后 `pnpm exec tsx scripts/full-chain-smoke-suite.ts --group static` 通过 5/5；当前 `pnpm full-chain:smoke` 通过 12/12，用时约 139.7s，覆盖登录 25 个无 Cookie 入口、真实 Chromium 登录页/未登录跳转/移动端登录页、权限矩阵、覆盖清单防退化、依赖降级、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、通知渠道入队、工作区身份和版本范围。
 
 ### 2026-06-25 浏览器 UI 冒烟脚本化
 
@@ -342,3 +342,11 @@
 
 - 新增 `scripts/full-chain-coverage-smoke.ts` 与 `pnpm full-chain:coverage`：静态校验 `scripts/full-chain-*.ts` 是否全部纳入统一 runner、package scripts 是否指向正确入口、测试矩阵是否记录关键用例 ID 与脚本、重要 API 路由是否在矩阵中可追踪。
 - GATE-006：首次执行即捕获新脚本未写入测试计划的问题，补齐文档后该守门可避免后续新增脚本或入口“有文件但无人执行”。
+
+### 2026-06-25 通知渠道入队冒烟
+
+- 新增 `scripts/full-chain-notification-smoke.ts` 与 `pnpm full-chain:notification`：使用临时成员配置飞书、邮箱和禁用 Webhook 占位渠道，直接验证 `dashboard_side_effect_jobs` 队列协议，不创建真实业务任务、不调用飞书或 Resend 发送。
+- MEMBER-008/MEMBER-009：脚本按 `channelProvider/channelId` 拆分 `notify_owner` job；邮箱环境存在时预期飞书和邮箱各 1 条，缺 `RESEND_API_KEY` 或 `EMAIL_FROM` 时只预期飞书入队并输出邮箱降级原因。
+- OPS-004：测试 job 设置未来 `nextRunAt`，保证 MySQL fallback inline worker 不会在冒烟期间抢任务真实发送；finally 按 runId 清理测试成员和 side-effect job。
+- 覆盖清单补充：`scripts/full-chain-smoke-suite.ts` 将 notification 纳入 `core/db/all` 分组，`scripts/full-chain-coverage-smoke.ts` 额外检查 `full-chain:notification` package 入口，防止通知回归脚本失联。
+- 本轮执行：`pnpm full-chain:notification` 通过，当前环境 `RESEND_API_KEY` 与 `EMAIL_FROM` 完整，脚本验证飞书/邮箱各 1 条 queued job；`pnpm full-chain:coverage` 通过，登记脚本 15 个；`pnpm full-chain:smoke` 通过 12/12，用时约 139.7s。

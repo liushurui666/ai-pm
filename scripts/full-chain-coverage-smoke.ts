@@ -17,7 +17,8 @@ const requiredPackageScripts = [
   "full-chain:browser",
   "full-chain:smoke",
   "full-chain:smoke:all",
-  "full-chain:smoke:list"
+  "full-chain:smoke:list",
+  "full-chain:notification"
 ];
 
 const requiredMatrixIds = [
@@ -103,6 +104,10 @@ function verifyPackageScripts() {
 
     if (scriptName === "full-chain:browser") {
       return !command.includes("scripts/full-chain-browser-smoke.ts");
+    }
+
+    if (scriptName === "full-chain:notification") {
+      return !command.includes("scripts/full-chain-notification-smoke.ts");
     }
 
     return !command.includes("scripts/full-chain-smoke-suite.ts");

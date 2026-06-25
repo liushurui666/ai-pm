@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "full-chain:browser": "tsx scripts/full-chain-browser-smoke.ts",
     "full-chain:coverage": "tsx scripts/full-chain-coverage-smoke.ts",
+    "full-chain:notification": "tsx scripts/full-chain-notification-smoke.ts",
     "full-chain:smoke": "tsx scripts/full-chain-smoke-suite.ts --group core",
     "full-chain:smoke:all": "tsx scripts/full-chain-smoke-suite.ts --group all",
     "full-chain:smoke:list": "tsx scripts/full-chain-smoke-suite.ts --list",

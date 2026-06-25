@@ -86,6 +86,13 @@ const smokeCases: SmokeCase[] = [
     timeoutMs: 180_000
   },
   {
+    description: "成员飞书/邮箱通知渠道配置、按渠道拆分入队和无真实发送保护。",
+    groups: ["all", "core", "db"],
+    id: "notification",
+    script: "scripts/full-chain-notification-smoke.ts",
+    timeoutMs: 120_000
+  },
+  {
     description: "服务函数层成员、任务、Bug、需求、工作区写入与清理。",
     groups: ["all", "db"],
     id: "service",
