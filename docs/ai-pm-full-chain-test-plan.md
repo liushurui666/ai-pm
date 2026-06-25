@@ -247,3 +247,11 @@
 - OPS-004/RAG-001：动作完成后验证相关临时任务/Bug 投递 AI 索引刷新 job；无通知渠道测试成员不应产生 Dashboard 通知副作用 job，避免误发飞书/邮箱。
 - 安全边界：脚本运行前检查是否存在非本次测试的 queued/running assistant action job；如存在则停止，避免全局 worker 抢走真实用户任务。所有测试数据使用 `assistant-action-e2e-*`，finally 清理。
 - 本轮执行：run `assistant-action-e2e-1782308988186` 通过，4 个 action job 全部 `succeeded`，创建任务 2 条、索引刷新 job 5 条、通知 job 0 条；残留检查 `tasks/bugs/members/actionJobs/indexJobs/sideJobs` 均为 0。
+
+### 2026-06-25 权限矩阵与身份匹配脚本化
+
+- 新增 `pnpm exec tsx scripts/full-chain-permission-smoke.ts`：覆盖 8 个成员角色和 6 类高风险动作 `member:manage`、`bug:update/delete`、`requirement:create/update/delete` 的权限矩阵。
+- PERM-001/PERM-002：脚本验证 owner/admin 全权限，productAdmin 可管需求但不能管成员/删 Bug，productMember 可创建和编辑需求但不能删除，frontend/backend 只能编辑 Bug 状态类动作，qa 可完整编辑和删除 Bug，viewer 全拒绝。
+- AUTH-007/MEMBER-006：脚本验证禁用成员和未加入成员全部拒绝，并返回“成员已被禁用”“你还不是成员”的明确原因。
+- 身份边界：脚本验证运行时只用 Unified Auth 的 `authUserId` 匹配 `workspace_members.identities[].providerUserId`，不会因为 email/openId 碰巧相同就误授予成员权限；工作区过滤不会串到其他 workspace。
+- 本轮执行：`pnpm exec tsx scripts/full-chain-permission-smoke.ts` 通过，检查角色 8 个、动作 6 类、`emailGuessMatched=false`。
