@@ -125,6 +125,7 @@ const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
 const { useBreakpoint } = Grid;
 const feishuPeopleCacheTtlMs = 5 * 60 * 1000;
+const dashboardRefreshDebounceMs = 1800;
 
 // 周报导出在浏览器侧完成，避免为了一个 Markdown 文件额外落库或新增下载接口。
 function downloadMarkdownFile(fileName: string, content: string) {
@@ -192,6 +193,8 @@ export function ProjectManagementPlatform({
   const [weeklyReportExporting, setWeeklyReportExporting] = useState(false);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(initialData?.meta?.currentWorkspace?.id ?? initialWorkspaceId ?? "");
   const [assistantSessionSidebar, setAssistantSessionSidebar] = useState<ReactNode | null>(null);
+  const dashboardRefreshTimerRef = useRef<number | null>(null);
+  const dashboardRefreshSeqRef = useRef(0);
   const [createForm] = Form.useForm<Record<string, unknown>>();
   const [projectEditForm] = Form.useForm<Record<string, unknown>>();
   const [editForm] = Form.useForm<Record<string, unknown>>();
@@ -219,11 +222,23 @@ export function ProjectManagementPlatform({
   const routeBug = initialBugId ? data?.bugs.find((bug) => bug.id === initialBugId) ?? null : null;
 
   // 静默刷新用于校准乐观更新结果，失败时保留当前 UI 避免打断用户操作。
+  // 这类刷新通常发生在拖拽、保存后的后台同步或助手动作完成后；一次 401/网络抖动不应直接把用户踢到登录页。
   async function refreshDashboardState(workspaceId = currentWorkspaceId) {
+    const refreshSeq = dashboardRefreshSeqRef.current + 1;
+
+    dashboardRefreshSeqRef.current = refreshSeq;
+
     try {
-      const nextData = await fetchDashboardFromApi(workspaceId);
+      const nextData = await fetchDashboardFromApi(workspaceId, {
+        redirectOnUnauthorized: false
+      });
 
       if (nextData) {
+        // 慢网下多个静默刷新可能乱序返回；只允许最后一次刷新落状态，避免旧 dashboard 覆盖刚刚拖拽成功的新状态。
+        if (dashboardRefreshSeqRef.current !== refreshSeq) {
+          return;
+        }
+
         setData(nextData);
         setActiveWorkspaceId(nextData.meta?.currentWorkspace?.id ?? workspaceId ?? "");
         setLoadError("");
@@ -232,6 +247,25 @@ export function ProjectManagementPlatform({
       // Keep the optimistic UI if a silent refresh fails; the next page load will re-sync.
     }
   }
+
+  function scheduleDashboardRefresh(workspaceId = currentWorkspaceId) {
+    if (dashboardRefreshTimerRef.current) {
+      window.clearTimeout(dashboardRefreshTimerRef.current);
+    }
+
+    // 任务看板拖拽是高频交互，保存成功后只需要最终校准一次整份 dashboard；
+    // 防抖可以减少 3G/弱网下 PATCH 后连续触发 `/api/dashboard`，也避免单次 401 把静默校准放大成登录跳转。
+    dashboardRefreshTimerRef.current = window.setTimeout(() => {
+      dashboardRefreshTimerRef.current = null;
+      void refreshDashboardState(workspaceId);
+    }, dashboardRefreshDebounceMs);
+  }
+
+  useEffect(() => () => {
+    if (dashboardRefreshTimerRef.current) {
+      window.clearTimeout(dashboardRefreshTimerRef.current);
+    }
+  }, []);
 
   useEffect(() => {
     // 服务端已经预取 dashboard 时，首屏不再补打一遍 `/api/dashboard`；
@@ -706,6 +740,8 @@ export function ProjectManagementPlatform({
             ...optimisticTask
           })
         })
+      }, {
+        redirectOnUnauthorized: false
       });
       const payload = (await response.json()) as CreateRecordResult | { error?: string };
       if (!response.ok) {
@@ -719,7 +755,7 @@ export function ProjectManagementPlatform({
       const result = payload as CreateRecordResult;
 
       setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
-      void refreshDashboardState();
+      scheduleDashboardRefresh();
       showRecordResultMessage(result.message);
 
       return true;
@@ -728,7 +764,9 @@ export function ProjectManagementPlatform({
         setData(previousData);
       }
 
-      messageApi.error(error instanceof Error ? error.message : "更新任务阶段失败");
+      messageApi.error(isSessionExpiredError(error)
+        ? "登录状态暂时无法确认，已撤回本次拖拽，请稍后重试或刷新页面。"
+        : error instanceof Error ? error.message : "更新任务阶段失败");
 
       return false;
     }
@@ -788,6 +826,8 @@ export function ProjectManagementPlatform({
           id: task.id,
           values: serializeCreateValues(optimisticTask)
         })
+      }, {
+        redirectOnUnauthorized: false
       });
       const payload = (await response.json()) as CreateRecordResult | { error?: string };
       if (!response.ok) {
@@ -801,7 +841,7 @@ export function ProjectManagementPlatform({
       const result = payload as CreateRecordResult;
 
       setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
-      void refreshDashboardState();
+      scheduleDashboardRefresh();
       showRecordResultMessage(result.message);
 
       return true;
@@ -810,7 +850,9 @@ export function ProjectManagementPlatform({
         setData(previousData);
       }
 
-      messageApi.error(error instanceof Error ? error.message : "更新任务负责人失败");
+      messageApi.error(isSessionExpiredError(error)
+        ? "登录状态暂时无法确认，已撤回本次负责人变更，请稍后重试或刷新页面。"
+        : error instanceof Error ? error.message : "更新任务负责人失败");
 
       return false;
     }

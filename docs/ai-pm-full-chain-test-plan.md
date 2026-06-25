@@ -369,7 +369,8 @@
 
 - 新增 `scripts/full-chain-workbench-ui-smoke.ts` 与 `pnpm full-chain:workbench-ui`：静态守住工作台 Shell 的视图枚举、桌面 Studio 菜单、移动导航、Chat/Studio 切换、`/workbench` URL 同步和侧栏折叠。
 - SHELL-002/SHELL-004/SHELL-005/SHELL-006/SHELL-007：脚本验证左下角账号弹层关闭工作区 Select、顶部保留工作区切换、退出登录入口存在、顶部搜索可打开全局搜索抽屉、搜索覆盖项目/任务/Bug/需求版本/需求、日程抽屉覆盖里程碑/任务/Bug 且默认“只看我的”、主题切换绑定 `cycleMode`。
-- 本轮执行：`pnpm full-chain:workbench-ui` 通过 6/6，`appViewCount=9/validViewCount=9`、Studio 菜单 7 项、移动导航 7 项、搜索实体 5 类、日程来源 3 类，并守住飞书通讯录强制刷新竞态。
+- 任务拖拽弱网策略：阶段/负责人拖拽成功后不再每次立即拉 `/api/dashboard`，统一走 1800ms 防抖静默校准；静默刷新和拖拽 PATCH 的单次 401 只回滚/提示，不直接跳转 `session_expired` 登录页。
+- 本轮执行：`pnpm full-chain:workbench-ui` 通过 7/7，`appViewCount=9/validViewCount=9`、Studio 菜单 7 项、移动导航 7 项、搜索实体 5 类、日程来源 3 类，并守住飞书通讯录强制刷新竞态和任务拖拽弱网刷新策略。
 
 ### 2026-06-25 周报导出链路冒烟
 

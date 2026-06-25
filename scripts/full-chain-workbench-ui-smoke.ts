@@ -201,6 +201,28 @@ function verifyFeishuPeopleRefreshContracts() {
   };
 }
 
+function verifyTaskDragRefreshContracts() {
+  const indexText = readText(indexPath);
+  const debouncedDragRefreshCount = (indexText.match(/scheduleDashboardRefresh\(\);/g) ?? []).length;
+
+  // 任务阶段/负责人拖拽是高频弱网入口，不能每次 PATCH 成功都立刻拉整份 dashboard；
+  // 防抖刷新和软 401 能避免单次静默校准失败把用户直接踢回登录页。
+  assertSmoke(indexText.includes("const dashboardRefreshDebounceMs = 1800;"), "任务拖拽后的 dashboard 校准缺少防抖窗口。");
+  assertSmoke(indexText.includes("const dashboardRefreshTimerRef = useRef"), "任务拖拽后的 dashboard 校准缺少防抖 timer。");
+  assertSmoke(indexText.includes("const dashboardRefreshSeqRef = useRef(0);"), "静默 dashboard 刷新缺少乱序返回闸门。");
+  assertSmoke(indexText.includes("redirectOnUnauthorized: false"), "静默刷新或拖拽保存仍可能把单次 401 放大成登录跳转。");
+  assertSmoke(indexText.includes("dashboardRefreshSeqRef.current !== refreshSeq"), "静默 dashboard 刷新仍可能被慢返回旧数据覆盖。");
+  assertSmoke(debouncedDragRefreshCount >= 2, "阶段拖拽和负责人拖拽没有统一走防抖 dashboard 刷新。");
+  assertSmoke(indexText.includes("已撤回本次拖拽"), "阶段拖拽 401 缺少软失败回滚提示。");
+  assertSmoke(indexText.includes("已撤回本次负责人变更"), "负责人拖拽 401 缺少软失败回滚提示。");
+
+  return {
+    debounceMs: 1800,
+    debouncedDragRefreshCount,
+    softUnauthorized: true
+  };
+}
+
 function verifyThemeAndShellControls() {
   const indexText = readText(indexPath);
 
@@ -226,6 +248,7 @@ const results = [
   runCheck("account and workspace contracts", verifyAccountAndWorkspaceContracts),
   runCheck("search and schedule contracts", verifySearchAndScheduleContracts),
   runCheck("feishu people refresh contracts", verifyFeishuPeopleRefreshContracts),
+  runCheck("task drag refresh contracts", verifyTaskDragRefreshContracts),
   runCheck("theme and shell controls", verifyThemeAndShellControls)
 ];
 const failed = results.filter((result) => !result.ok);
