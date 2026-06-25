@@ -55,6 +55,14 @@
 | SHELL-007 | 日程抽屉 | 打开日程并切换只看我的 | 列表按日期展示，无数据时空态正常 | 浏览器 |
 | SHELL-008 | 移动端布局 | 375px 宽访问主要视图 | 无横向溢出，顶部头像入口可用 | 截图 |
 
+## 工作区管理
+
+| ID | 场景 | 操作 | 期望结果 | 证据 |
+| --- | --- | --- | --- | --- |
+| WORKSPACE-001 | 新建工作区 | 顶部工作区入口点击“新建工作区”并提交 | 创建 workspace，当前用户成为 owner，立即切换到新空间 | API + UI |
+| WORKSPACE-002 | 只读成员新建工作区 | viewer 在当前工作区打开顶部工作区入口 | “新建工作区”可用，不被当前工作区成员管理权限限制 | UI 契约 |
+| WORKSPACE-003 | 工作区重名 | 提交已有工作区名称 | 返回可读错误，不写入重复 active 工作区 | API |
+
 ## 概览与报表
 
 | ID | 场景 | 操作 | 期望结果 | 证据 |
@@ -327,10 +335,17 @@
 
 ### 2026-06-25 全链路冒烟套件统一入口
 
-- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 24 个 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
+- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 25 个 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
 - 新增 package scripts：`pnpm full-chain:smoke` 默认跑核心链路，`pnpm full-chain:smoke:all` 跑全量链路，`pnpm full-chain:smoke:list` 输出用例清单。
 - 分组策略：`static` 覆盖权限、覆盖清单、依赖降级、部署静态配置和 Bug 附件 mock；`auth` 覆盖未登录 API/页面保护与真实浏览器登录页；`db` 覆盖真实 MySQL 写入/清理；`core` 将登录、浏览器、静态、CRUD、工作区身份、版本范围等高价值链路合并成日常回归入口。
-- 本轮执行：`pnpm full-chain:coverage` 通过，登记 24 个脚本/24 个 suite 用例/15 个 package 入口；`pnpm full-chain:smoke` 通过 21/21，用时约 274.3s，覆盖登录、浏览器未登录跳转、工作台 UI、周报、AI 助手 ChatBox、飞书通讯录、权限矩阵、覆盖清单、依赖降级、需求飞书链接 AI 体检、文档拆任务、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、成员管理、通知入队、AI 索引管理员重建、工作区身份和版本范围。
+- 本轮执行：`pnpm full-chain:coverage` 通过，登记 25 个脚本/25 个 suite 用例/16 个 package 入口；`pnpm full-chain:smoke` 通过 22/22，用时约 319.5s，覆盖登录、浏览器未登录跳转、工作台 UI、工作区管理、周报、AI 助手 ChatBox、飞书通讯录、权限矩阵、覆盖清单、依赖降级、需求飞书链接 AI 体检、文档拆任务、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、成员管理、通知入队、AI 索引管理员重建、工作区身份和版本范围。
+
+### 2026-06-25 工作区管理契约冒烟
+
+- 修复：顶部工作区弹层的新建入口不再绑定当前工作区 `canManageMembers`，只要工作台数据已加载即可打开；登录保护和参数校验仍由 `/api/workspaces` 服务端负责。
+- 新增 `scripts/full-chain-workspace-management-smoke.ts` 与 `pnpm full-chain:workspace-management`：不写库，覆盖 `/api/workspaces` 登录保护、平台级创建权限、服务层重名/owner/增量写库、前端创建后切换新工作区和 `updateDashboardWithWorkspace` 本地回填。
+- WORKSPACE-001/WORKSPACE-002/WORKSPACE-003：脚本使用 viewer 权限样本验证无成员管理权限也能拿到新建入口，并检查创建成功后 workspace/member 立即进入本地状态。
+- 本轮执行：`pnpm full-chain:workspace-management` 通过 4/4，viewer 样本回填后 workspace/member 均为 2 条。
 
 ### 2026-06-25 浏览器 UI 冒烟脚本化
 

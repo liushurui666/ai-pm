@@ -23,6 +23,7 @@
     "full-chain:smoke:all": "tsx scripts/full-chain-smoke-suite.ts --group all",
     "full-chain:smoke:list": "tsx scripts/full-chain-smoke-suite.ts --list",
     "full-chain:weekly-report": "tsx scripts/full-chain-weekly-report-smoke.ts",
+    "full-chain:workspace-management": "tsx scripts/full-chain-workspace-management-smoke.ts",
     "full-chain:workbench-ui": "tsx scripts/full-chain-workbench-ui-smoke.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",

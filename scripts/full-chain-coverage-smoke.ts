@@ -28,6 +28,7 @@ const requiredPackageScripts = [
   "full-chain:notification",
   "full-chain:requirement-ai",
   "full-chain:weekly-report",
+  "full-chain:workspace-management",
   "full-chain:workbench-ui"
 ];
 
@@ -37,6 +38,7 @@ const requiredMatrixIds = [
   "AUTH-006",
   "SHELL-001",
   "SHELL-008",
+  "WORKSPACE-002",
   "OVERVIEW-003",
   "VERSION-005",
   "REQ-005",
@@ -154,6 +156,10 @@ function verifyPackageScripts() {
 
     if (scriptName === "full-chain:weekly-report") {
       return !command.includes("scripts/full-chain-weekly-report-smoke.ts");
+    }
+
+    if (scriptName === "full-chain:workspace-management") {
+      return !command.includes("scripts/full-chain-workspace-management-smoke.ts");
     }
 
     if (scriptName === "full-chain:workbench-ui") {

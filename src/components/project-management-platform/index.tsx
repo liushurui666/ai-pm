@@ -1333,7 +1333,9 @@ export function ProjectManagementPlatform({
   // 用一个渲染函数集中注入账号信息，避免两处弹层因为复制字段而出现昵称、头像或退出链接不一致。
   const renderAccountPopoverContent = (showWorkspaceControls: boolean) => (
     <AccountPopoverContent
-      canCreateWorkspace={Boolean(permissions?.canManageMembers)}
+      // 创建工作区是平台级入口，不应被当前工作区的成员管理权限限制；
+      // 只读成员也应该能新建自己的空间，真正的登录保护交给 `/api/workspaces` 服务端兜底。
+      canCreateWorkspace={Boolean(data)}
       currentWorkspace={currentWorkspace}
       logoutHref={logoutHref}
       permissionDeniedReason={permissionDeniedReason}

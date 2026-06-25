@@ -51,6 +51,13 @@ const smokeCases: SmokeCase[] = [
     timeoutMs: 60_000
   },
   {
+    description: "工作区创建入口、/api/workspaces、切换新工作区和本地状态回填契约。",
+    groups: ["all", "core", "static"],
+    id: "workspace-management",
+    script: "scripts/full-chain-workspace-management-smoke.ts",
+    timeoutMs: 60_000
+  },
+  {
     description: "概览页 AI 周报导出、个人口径、Markdown 模板、接口兜底和下载契约。",
     groups: ["all", "core", "static"],
     id: "weekly-report",
