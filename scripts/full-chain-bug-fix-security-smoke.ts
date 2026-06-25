@@ -1,4 +1,6 @@
 import { config as loadEnv } from "dotenv";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { getPrismaClient } from "@/lib/database/prisma";
 import { createMergeRequestBody, createMergeRequestTitle } from "@/lib/bug-fix-jobs/mr-template";
 import { parseAiCodeRunnerOutput } from "@/lib/bug-fix-jobs/runner";
@@ -15,6 +17,8 @@ loadEnv({ path: ".env.local", quiet: true });
 loadEnv({ path: ".env", quiet: true });
 
 const WORKSPACE_ID = process.env.AI_PM_QA_WORKSPACE_ID || "ws-default";
+const repoRoot = process.cwd();
+const projectRepositoriesRoutePath = path.join(repoRoot, "app/api/project-repositories/route.ts");
 
 // 这个脚本覆盖 Bug AI 修复里“最容易误伤生产代码”的边界：仓库选择、安全白名单、
 // Runner 输出和 MR 文案。它只使用本地/数据库内的确定性断言，不调用真实 GitHub 或 AI Runner，
@@ -23,6 +27,17 @@ function assertSmoke(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new Error(message);
   }
+}
+
+function verifyProjectRepositoriesApiContracts() {
+  const routeText = readFileSync(projectRepositoriesRoutePath, "utf8");
+
+  // 仓库配置接口只需要目标工作区和成员管理权限；如果读取整份 dashboard，
+  // 打开 AI 修复抽屉的仓库下拉和保存仓库配置都会被项目/任务/Bug/需求数据拖慢。
+  assertSmoke(!routeText.includes("getDashboardData"), "项目仓库 API 不应读取整份 dashboard。");
+  assertSmoke(routeText.includes("getWorkspaceAccessContext(session?.user, workspaceId)"), "项目仓库列表缺少轻量工作区上下文。");
+  assertSmoke(routeText.includes("getWorkspaceAccessContext(session?.user, body.workspaceId)"), "项目仓库创建缺少轻量权限上下文。");
+  assertSmoke(routeText.includes("workspaceId: accessContext.currentWorkspace.id"), "项目仓库创建没有使用轻量上下文解析后的工作区。");
 }
 
 // 仓库匹配需要依赖真实项目名称；这里读取当前工作区第一个项目，避免用假项目名导致
@@ -318,6 +333,8 @@ function verifyRunnerAndMrTemplate() {
 // 主流程刻意先清理同名 runLabel，再执行测试，finally 再清理一次；这样即使上一次脚本被中断，
 // 本轮也不会被残留仓库配置干扰，数据库连接也会显式释放，避免 tsx 进程挂住。
 async function main() {
+  verifyProjectRepositoriesApiContracts();
+
   const runLabel = `bugfix-security-e2e-${Date.now()}`;
   const prisma = getPrismaClient();
 

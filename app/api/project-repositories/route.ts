@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDashboardData } from "@/data/local-dashboard";
+import { getWorkspaceAccessContext } from "@/data/local-dashboard";
 import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 import { canPerformAction, getPermissionDeniedReason } from "@/lib/access/permissions";
 import { getSession } from "@/lib/auth/session";
@@ -22,10 +22,12 @@ export async function GET(request: NextRequest) {
 
   try {
     const workspaceId = request.nextUrl.searchParams.get("workspaceId") || undefined;
-    const data = await getDashboardData(session?.user, workspaceId);
+    // 仓库列表只依赖当前有效工作区；轻量 access context 可以复用登录/成员匹配规则，
+    // 同时避免为了一个仓库下拉读取整份 dashboard。
+    const accessContext = await getWorkspaceAccessContext(session?.user, workspaceId);
 
     return NextResponse.json({
-      repositories: await listProjectRepositories(data.meta?.currentWorkspace?.id ?? "ws-default")
+      repositories: await listProjectRepositories(accessContext.currentWorkspace.id)
     });
   } catch (error) {
     return NextResponse.json(
@@ -53,13 +55,14 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const data = await getDashboardData(session?.user, body.workspaceId);
-    const permissions = data.meta?.permissions;
+    // 仓库配置只需要成员管理权限和目标工作区，不需要项目、任务、Bug、需求等完整 dashboard。
+    const accessContext = await getWorkspaceAccessContext(session?.user, body.workspaceId);
+    const permissions = accessContext.permissions;
 
-    if (!permissions || !canPerformAction(permissions, "member:manage")) {
+    if (!canPerformAction(permissions, "member:manage")) {
       return NextResponse.json(
         {
-          error: permissions ? getPermissionDeniedReason(permissions, "member:manage") : "无仓库配置权限"
+          error: getPermissionDeniedReason(permissions, "member:manage")
         },
         {
           status: 403
@@ -68,7 +71,7 @@ export async function POST(request: NextRequest) {
     }
 
     const repository = await createProjectRepository({
-      workspaceId: data.meta?.currentWorkspace?.id ?? "ws-default",
+      workspaceId: accessContext.currentWorkspace.id,
       projectId: body.projectId,
       provider: body.provider ?? "github",
       repoFullName: body.repoFullName,
