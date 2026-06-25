@@ -10,6 +10,7 @@ type UiContractCheck = {
 const repoRoot = process.cwd();
 const platformDir = path.join(repoRoot, "src/components/project-management-platform");
 const indexPath = path.join(platformDir, "index.tsx");
+const recordsRoutePath = path.join(repoRoot, "app/api/records/route.ts");
 const constantsPath = path.join(platformDir, "constants.ts");
 const typesPath = path.join(platformDir, "types.ts");
 const sidebarPath = path.join(platformDir, "shared/workbench-sidebar/index.tsx");
@@ -203,7 +204,9 @@ function verifyFeishuPeopleRefreshContracts() {
 
 function verifyTaskDragRefreshContracts() {
   const indexText = readText(indexPath);
+  const recordsRouteText = readText(recordsRoutePath);
   const debouncedDragRefreshCount = (indexText.match(/scheduleDashboardRefresh\(\);/g) ?? []).length;
+  const quickTaskUpdateCount = (indexText.match(/__quickTaskUpdate: true/g) ?? []).length;
 
   // 任务阶段/负责人拖拽是高频弱网入口，不能每次 PATCH 成功都立刻拉整份 dashboard；
   // 防抖刷新和软 401 能避免单次静默校准失败把用户直接踢回登录页。
@@ -213,12 +216,16 @@ function verifyTaskDragRefreshContracts() {
   assertSmoke(indexText.includes("redirectOnUnauthorized: false"), "静默刷新或拖拽保存仍可能把单次 401 放大成登录跳转。");
   assertSmoke(indexText.includes("dashboardRefreshSeqRef.current !== refreshSeq"), "静默 dashboard 刷新仍可能被慢返回旧数据覆盖。");
   assertSmoke(debouncedDragRefreshCount >= 2, "阶段拖拽和负责人拖拽没有统一走防抖 dashboard 刷新。");
+  assertSmoke(quickTaskUpdateCount >= 2, "阶段拖拽和负责人拖拽没有声明任务快速更新路径。");
+  assertSmoke(recordsRouteText.includes("updateDashboardTaskRecord"), "任务拖拽 PATCH 后端没有接入轻量更新服务。");
+  assertSmoke(recordsRouteText.includes("updateValues.__quickTaskUpdate === true"), "任务拖拽 PATCH 后端没有识别快速更新标记。");
   assertSmoke(indexText.includes("已撤回本次拖拽"), "阶段拖拽 401 缺少软失败回滚提示。");
   assertSmoke(indexText.includes("已撤回本次负责人变更"), "负责人拖拽 401 缺少软失败回滚提示。");
 
   return {
     debounceMs: 1800,
     debouncedDragRefreshCount,
+    quickTaskUpdateCount,
     softUnauthorized: true
   };
 }

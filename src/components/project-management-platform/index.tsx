@@ -764,6 +764,7 @@ export function ProjectManagementPlatform({
           type: "task",
           id: task.id,
           values: serializeCreateValues({
+            __quickTaskUpdate: true,
             ...optimisticTask
           })
         })
@@ -851,7 +852,10 @@ export function ProjectManagementPlatform({
           workspaceId: currentWorkspaceId,
           type: "task",
           id: task.id,
-          values: serializeCreateValues(optimisticTask)
+          values: serializeCreateValues({
+            __quickTaskUpdate: true,
+            ...optimisticTask
+          })
         })
       }, {
         redirectOnUnauthorized: false

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createDashboardRecord, deleteDashboardRecord, getDashboardData, updateDashboardRecord } from "@/data/local-dashboard";
+import { createDashboardRecord, deleteDashboardRecord, getDashboardData, updateDashboardRecord, updateDashboardTaskRecord } from "@/data/local-dashboard";
 import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 import { canPerformAction, getPermissionDeniedReason } from "@/lib/access/permissions";
 import { safelyEnqueueRecordCleanupJob, safelyEnqueueRecordIndexJob } from "@/lib/ai/knowledge/record-indexing";
@@ -206,7 +206,15 @@ export async function PATCH(request: NextRequest) {
   }
 
   try {
-    const result = await updateDashboardRecord(body.type, body.id, updateValues, session?.user);
+    // 任务看板拖拽会高频 PATCH，只需要保存 project_tasks 当前行并返回更新后的任务；
+    // 普通任务编辑、版本联动和其他实体仍走完整 updateDashboardRecord，避免轻量路径漏掉复杂业务同步。
+    const result = body.type === "task" && updateValues.__quickTaskUpdate === true
+      ? await updateDashboardTaskRecord(
+          body.id,
+          Object.fromEntries(Object.entries(updateValues).filter(([key]) => key !== "__quickTaskUpdate")),
+          session?.user
+        )
+      : await updateDashboardRecord(body.type, body.id, updateValues, session?.user);
 
     // 更新记录后只投递轻量 index job，worker 再异步做 chunk、embedding 和 Qdrant 写入。
     await safelyEnqueueRecordIndexJob(result, "updated");

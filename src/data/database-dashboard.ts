@@ -81,6 +81,82 @@ function mapWorkspaceRecord(workspace: {
   };
 }
 
+function mapMemberRecord(member: {
+  id: string;
+  workspaceId: string;
+  name: string;
+  email: string | null;
+  avatarUrl: string | null;
+  registrationChannel: string;
+  role: string;
+  status: string;
+  identities: Prisma.JsonValue;
+  notification: Prisma.JsonValue;
+  lastActiveAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}): DashboardMember {
+  const identities = fromJsonArray<DashboardMember["identities"][number]>(member.identities);
+
+  return {
+    id: member.id,
+    workspaceId: member.workspaceId,
+    name: member.name,
+    email: toOptionalText(member.email),
+    avatarUrl: toOptionalText(member.avatarUrl),
+    registrationChannel: member.registrationChannel as DashboardMember["registrationChannel"],
+    role: member.role as DashboardMember["role"],
+    status: member.status as DashboardMember["status"],
+    identities,
+    notification: member.notification as DashboardMember["notification"],
+    lastActiveAt: toOptionalText(member.lastActiveAt),
+    createdAt: member.createdAt,
+    updatedAt: member.updatedAt
+  };
+}
+
+function mapTaskRecord(task: {
+  id: string;
+  workspaceId: string;
+  title: string;
+  stage: string;
+  owner: string;
+  ownerMemberId: string | null;
+  ownerOpenId: string | null;
+  ownerUnionId: string | null;
+  ownerUserId: string | null;
+  ownerEmail: string | null;
+  ownerAvatarUrl: string | null;
+  project: string;
+  versionId: string | null;
+  versionName: string | null;
+  priority: string;
+  startDate: string;
+  dueDate: string;
+  aiHint: string;
+}): Task {
+  return {
+    id: task.id,
+    workspaceId: task.workspaceId,
+    title: task.title,
+    stage: task.stage as Task["stage"],
+    owner: task.owner,
+    ownerMemberId: toOptionalText(task.ownerMemberId),
+    ownerOpenId: toOptionalText(task.ownerOpenId),
+    ownerUnionId: toOptionalText(task.ownerUnionId),
+    ownerUserId: toOptionalText(task.ownerUserId),
+    ownerEmail: toOptionalText(task.ownerEmail),
+    ownerAvatarUrl: toOptionalText(task.ownerAvatarUrl),
+    project: task.project,
+    versionId: toOptionalText(task.versionId),
+    versionName: toOptionalText(task.versionName),
+    priority: task.priority as Task["priority"],
+    startDate: task.startDate,
+    dueDate: task.dueDate,
+    aiHint: task.aiHint
+  };
+}
+
 // 工作区写库字段被全量同步和增量创建复用，集中组装可以保证两条路径的数据结构一致。
 function getWorkspacePayload(workspace: DashboardWorkspace) {
   return {
@@ -221,25 +297,7 @@ export async function readDashboardDatabase(
       overdueTasks: 0
     },
     workspaces,
-    members: members.map((member): DashboardMember => {
-      const identities = fromJsonArray<DashboardMember["identities"][number]>(member.identities);
-
-      return {
-        id: member.id,
-        workspaceId: member.workspaceId,
-        name: member.name,
-        email: toOptionalText(member.email),
-        avatarUrl: toOptionalText(member.avatarUrl),
-        registrationChannel: member.registrationChannel as DashboardMember["registrationChannel"],
-        role: member.role as DashboardMember["role"],
-        status: member.status as DashboardMember["status"],
-        identities,
-        notification: member.notification as DashboardMember["notification"],
-        lastActiveAt: toOptionalText(member.lastActiveAt),
-        createdAt: member.createdAt,
-        updatedAt: member.updatedAt
-      };
-    }),
+    members: members.map(mapMemberRecord),
     projects: projects.map((project): Project => ({
       id: project.id,
       workspaceId: project.workspaceId,
@@ -260,26 +318,7 @@ export async function readDashboardDatabase(
       summary: project.summary,
       milestones: fromJsonArray<ProjectMilestone>(project.milestones)
     })),
-    tasks: tasks.map((task): Task => ({
-      id: task.id,
-      workspaceId: task.workspaceId,
-      title: task.title,
-      stage: task.stage as Task["stage"],
-      owner: task.owner,
-      ownerMemberId: toOptionalText(task.ownerMemberId),
-      ownerOpenId: toOptionalText(task.ownerOpenId),
-      ownerUnionId: toOptionalText(task.ownerUnionId),
-      ownerUserId: toOptionalText(task.ownerUserId),
-      ownerEmail: toOptionalText(task.ownerEmail),
-      ownerAvatarUrl: toOptionalText(task.ownerAvatarUrl),
-      project: task.project,
-      versionId: toOptionalText(task.versionId),
-      versionName: toOptionalText(task.versionName),
-      priority: task.priority as Task["priority"],
-      startDate: task.startDate,
-      dueDate: task.dueDate,
-      aiHint: task.aiHint
-    })),
+    tasks: tasks.map(mapTaskRecord),
     risks: risks.map((risk): Risk => ({
       id: risk.id,
       workspaceId: risk.workspaceId,
@@ -431,6 +470,33 @@ export async function readDashboardWorkspacesDatabase(createSeed: () => Dashboar
   const workspaces = await prisma.workspace.findMany({ orderBy: { createdAt: "asc" } });
 
   return workspaces.map(mapWorkspaceRecord);
+}
+
+export async function readDashboardTaskDatabase(taskId: string, client?: PrismaClient): Promise<Task | undefined> {
+  const prisma = client ?? getPrismaClient();
+  const task = await prisma.projectTask.findUnique({
+    where: {
+      id: taskId
+    }
+  });
+
+  // 任务拖拽轻量更新只需要当前任务一行；找不到时交给上层返回统一的“记录不存在”业务错误。
+  return task ? mapTaskRecord(task) : undefined;
+}
+
+export async function readDashboardMembersDatabase(workspaceId: string, client?: PrismaClient): Promise<DashboardMember[]> {
+  const prisma = client ?? getPrismaClient();
+  const members = await prisma.dashboardMember.findMany({
+    where: {
+      workspaceId
+    },
+    orderBy: {
+      createdAt: "asc"
+    }
+  });
+
+  // 负责人变更通知只需要当前工作区成员身份和渠道配置，不能为了入队通知重新读取整份 dashboard。
+  return members.map(mapMemberRecord);
 }
 
 async function syncWorkspaces(prisma: DashboardPrisma, workspaces: DashboardWorkspace[]) {

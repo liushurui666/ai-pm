@@ -1,11 +1,14 @@
 import { config as loadEnv } from "dotenv";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import {
   createDashboardMember,
   createDashboardRecord,
   createDashboardWorkspace,
   deleteDashboardRecord,
   updateDashboardMember,
-  updateDashboardRecord
+  updateDashboardRecord,
+  updateDashboardTaskRecord
 } from "@/data/local-dashboard";
 import { safelyEnqueueRecordCleanupJob, safelyEnqueueRecordIndexJob } from "@/lib/ai/knowledge/record-indexing";
 import { getPrismaClient } from "@/lib/database/prisma";
@@ -15,6 +18,8 @@ loadEnv({ path: ".env.local", quiet: true });
 loadEnv({ path: ".env", quiet: true });
 
 const WORKSPACE_ID = process.env.AI_PM_QA_WORKSPACE_ID || "ws-default";
+const repoRoot = process.cwd();
+const localDashboardPath = path.join(repoRoot, "src/data/local-dashboard.ts");
 
 type CreatedRecord = {
   id: string;
@@ -29,6 +34,19 @@ function assertSmoke(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new Error(message);
   }
+}
+
+function verifyDashboardReadPerformanceContracts() {
+  const localDashboardText = readFileSync(localDashboardPath, "utf8");
+
+  // dashboard 首屏和工作区切换都会触发项目指标派生；这里必须按工作区+项目名预分组，
+  // 防止后续改动又退回每个项目重复 filter 全量任务/Bug/风险的 O(项目数 × 记录数) 读路径。
+  assertSmoke(localDashboardText.includes("function groupRecordsByProject"), "项目指标派生缺少按项目预分组函数。");
+  assertSmoke(localDashboardText.includes("const tasksByProject = groupRecordsByProject(data.tasks);"), "任务指标没有使用预分组 Map。");
+  assertSmoke(localDashboardText.includes("const bugsByProject = groupRecordsByProject(data.bugs);"), "Bug 指标没有使用预分组 Map。");
+  assertSmoke(localDashboardText.includes("const risksByProject = groupRecordsByProject(data.risks);"), "风险指标没有使用预分组 Map。");
+  assertSmoke(!localDashboardText.includes("data.tasks.filter((task) => isLinkedToProject"), "项目指标任务派生仍在重复扫描全量任务。");
+  assertSmoke(localDashboardText.includes("getProjectMetricKey(getWorkspaceId(record), projectName)"), "项目指标预分组缺少工作区隔离键。");
 }
 
 async function enqueueIndex<T extends DashboardEntityType>(
@@ -114,6 +132,8 @@ async function cleanupDirectly({
 }
 
 async function main() {
+  verifyDashboardReadPerformanceContracts();
+
   const prisma = getPrismaClient();
   const runLabel = createRunLabel();
   const createdRecords: CreatedRecord[] = [];
@@ -190,8 +210,17 @@ async function main() {
     assertSmoke(taskCreate.record.ownerMemberId === memberId, "任务负责人成员 ID 未落库");
     markStep("create task");
 
-    const taskUpdate = await updateDashboardRecord("task", taskCreate.record.id, {
+    const quickTaskUpdate = await updateDashboardTaskRecord(taskCreate.record.id, {
       ...taskCreate.record,
+      stage: "进行中"
+    });
+
+    await enqueueIndex(quickTaskUpdate, "updated");
+    assertSmoke(quickTaskUpdate.record.stage === "进行中", "任务快速阶段更新失败");
+    markStep("quick update task");
+
+    const taskUpdate = await updateDashboardRecord("task", taskCreate.record.id, {
+      ...quickTaskUpdate.record,
       stage: "评审中"
     });
 

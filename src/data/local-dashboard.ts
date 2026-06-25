@@ -5,7 +5,9 @@ import {
   deleteDashboardBugDatabase,
   deleteDashboardRequirementDatabase,
   deleteDashboardTaskDatabase,
+  readDashboardMembersDatabase,
   readDashboardDatabase,
+  readDashboardTaskDatabase,
   readDashboardWorkspacesDatabase,
   updateDashboardTaskDatabase,
   upsertDashboardBugDatabase,
@@ -92,6 +94,41 @@ function cloneSeedData(): LocalDatabase {
     ...JSON.parse(JSON.stringify(dashboardData)),
     updatedAt: new Date().toISOString()
   } as LocalDatabase;
+}
+
+function createNotificationLookupData(workspaceId: string, members: DashboardMember[]): LocalDatabase {
+  const now = new Date().toISOString();
+
+  // 任务拖拽轻量更新只需要复用 notifyOwner 的成员匹配和渠道入队逻辑；
+  // 这里构造最小 dashboard 形状，避免为了通知读取项目、任务、Bug、需求等大表。
+  return {
+    metrics: {
+      activeProjects: 0,
+      aiSavedHours: 0,
+      deliveryRate: 0,
+      overdueTasks: 0
+    },
+    projects: [],
+    tasks: [],
+    bugs: [],
+    risks: [],
+    requirementVersions: [],
+    requirements: [],
+    documents: [],
+    workspaces: [
+      {
+        id: workspaceId,
+        name: workspaceId,
+        status: "active",
+        createdAt: now,
+        updatedAt: now
+      }
+    ],
+    members,
+    repositories: [],
+    weeklyInsight: [],
+    updatedAt: now
+  };
 }
 
 function createLocalId(type: DashboardEntityType | "bugFlow" | "member" | "milestone" | "notificationChannel" | "workspace") {
@@ -1747,8 +1784,34 @@ function normalizeProjectName(value: string) {
   return value.trim().toLowerCase();
 }
 
-function isLinkedToProject(project: Project, value?: string) {
-  return Boolean(value && normalizeProjectName(project.name) === normalizeProjectName(value));
+function getProjectMetricKey(workspaceId: string, projectName: string) {
+  return `${workspaceId}:${normalizeProjectName(projectName)}`;
+}
+
+function groupRecordsByProject<T extends { project?: string; workspaceId?: string }>(records: T[]) {
+  const groupedRecords = new Map<string, T[]>();
+
+  // dashboard 读取会频繁派生项目进度、健康度和风险数；如果每个项目都全量 filter 任务/Bug/风险，
+  // 多工作区和长列表下会退化成 `项目数 × 记录数` 的重复扫描。这里按“工作区 + 项目名”预分组，
+  // 既减少单次 `/api/dashboard` CPU 成本，也避免同名项目在不同工作区之间互相污染指标。
+  for (const record of records) {
+    const projectName = asText(record.project);
+
+    if (!projectName) {
+      continue;
+    }
+
+    const metricKey = getProjectMetricKey(getWorkspaceId(record), projectName);
+    const projectRecords = groupedRecords.get(metricKey);
+
+    if (projectRecords) {
+      projectRecords.push(record);
+    } else {
+      groupedRecords.set(metricKey, [record]);
+    }
+  }
+
+  return groupedRecords;
 }
 
 function clampScore(value: number) {
@@ -1893,10 +1956,14 @@ function deriveProjectStatus(project: Project, progress: number, health: number,
 }
 
 function applyProjectMetrics(data: LocalDatabase): LocalDatabase {
+  const tasksByProject = groupRecordsByProject(data.tasks);
+  const bugsByProject = groupRecordsByProject(data.bugs);
+  const risksByProject = groupRecordsByProject(data.risks);
   const projects = data.projects.map((project) => {
-    const tasks = data.tasks.filter((task) => isLinkedToProject(project, task.project));
-    const bugs = data.bugs.filter((bug) => isLinkedToProject(project, bug.project));
-    const risks = data.risks.filter((risk) => isLinkedToProject(project, risk.project));
+    const metricKey = getProjectMetricKey(getWorkspaceId(project), project.name);
+    const tasks = tasksByProject.get(metricKey) ?? [];
+    const bugs = bugsByProject.get(metricKey) ?? [];
+    const risks = risksByProject.get(metricKey) ?? [];
     const progress = calculateProjectProgress(project, tasks);
     const health = calculateProjectHealth({ bugs, progress, project, risks, tasks });
     const riskCount = calculateProjectRiskCount({ bugs, health, progress, project, risks, tasks });
@@ -2656,6 +2723,49 @@ export async function createDashboardRecord<T extends DashboardEntityType>(
     record: savedRecord,
     persisted: true,
     message: [`已保存到 AI PM 项目管理平台。`, notifyMessage].filter(Boolean).join(" ")
+  };
+}
+
+export async function updateDashboardTaskRecord(
+  id: string,
+  values: Record<string, unknown>,
+  user?: FeishuUser
+): Promise<CreateRecordResult<"task">> {
+  const existingTask = await readDashboardTaskDatabase(id);
+
+  if (!existingTask) {
+    throw new Error("记录不存在或已被删除");
+  }
+
+  const workspaceId = getWorkspaceId(existingTask);
+  const task = normalizeCreateTask({
+    ...existingTask,
+    ...values,
+    workspaceId
+  }, id);
+  const shouldNotifyOwner = shouldNotifyOwnerUpdate("task", existingTask, task as unknown as Record<string, unknown>);
+  const notifyMessage = shouldNotifyOwner
+    ? await notifyOwner(
+        createNotificationLookupData(workspaceId, await readDashboardMembersDatabase(workspaceId)),
+        workspaceId,
+        "task",
+        {
+          ...task,
+          id,
+          flowRecordOperator: getBugFlowOperator(user, asText(values.owner, task.owner))
+        }
+      )
+    : "";
+
+  // 高频任务拖拽/转交只更新 project_tasks 当前行，不再走 updateDashboardRecord 的全 dashboard 读取和项目指标派生。
+  // 项目进度、健康度和顶部 metrics 由前端乐观更新 + 防抖 dashboard 校准补齐，保证交互优先。
+  await updateDashboardTaskDatabase(task);
+
+  return {
+    type: "task",
+    record: task,
+    persisted: true,
+    message: [`已更新任务：${task.title}。`, notifyMessage].filter(Boolean).join(" ")
   };
 }
 
