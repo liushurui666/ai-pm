@@ -326,10 +326,10 @@
 
 ### 2026-06-25 全链路冒烟套件统一入口
 
-- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 16 个 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
+- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 17 个 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
 - 新增 package scripts：`pnpm full-chain:smoke` 默认跑核心链路，`pnpm full-chain:smoke:all` 跑全量链路，`pnpm full-chain:smoke:list` 输出用例清单。
 - 分组策略：`static` 覆盖权限、覆盖清单、依赖降级、部署静态配置和 Bug 附件 mock；`auth` 覆盖未登录 API/页面保护与真实浏览器登录页；`db` 覆盖真实 MySQL 写入/清理；`core` 将登录、浏览器、静态、CRUD、工作区身份、版本范围等高价值链路合并成日常回归入口。
-- 本轮执行：`pnpm full-chain:smoke:list` 通过；加入覆盖清单后 `pnpm exec tsx scripts/full-chain-smoke-suite.ts --group static` 通过 5/5；当前 `pnpm full-chain:smoke` 通过 13/13，用时约 190.3s，覆盖登录 25 个无 Cookie 入口、真实 Chromium 登录页/未登录跳转/移动端登录页、飞书通讯录全量读取、权限矩阵、覆盖清单防退化、依赖降级、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、通知渠道入队、工作区身份和版本范围。
+- 本轮执行：`pnpm full-chain:smoke:list` 通过；加入覆盖清单后 `pnpm exec tsx scripts/full-chain-smoke-suite.ts --group static` 通过 5/5；当前 `pnpm full-chain:smoke` 通过 14/14，用时约 207.8s，覆盖登录 25 个无 Cookie 入口、真实 Chromium 登录页/未登录跳转/移动端登录页、飞书通讯录全量读取、权限矩阵、覆盖清单防退化、依赖降级、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、成员管理写入、通知渠道入队、工作区身份和版本范围。
 
 ### 2026-06-25 浏览器 UI 冒烟脚本化
 
@@ -349,6 +349,13 @@
 - MEMBER-002/MEMBER-003：脚本要求通讯录人数达到 `AI_PM_QA_FEISHU_MIN_PEOPLE`（默认 10）且无用户组读取 warning，避免添加成员下拉再次退化成只能看到少数直接授权成员。
 - 安全边界：脚本不写 AI PM 数据库、不修改飞书通讯录、不发送消息；只输出人数、邮箱/头像覆盖数和少量成员姓名样本，不输出 token 或密钥。
 - 本轮执行：`pnpm full-chain:feishu-contact` 通过，当前授权范围返回 83 人、头像 83 个、邮箱 3 个、warning 为空，搜索关键词 `11` 返回 8 人且命中探针成员；`pnpm full-chain:coverage` 通过，登记脚本 16 个；`pnpm full-chain:smoke` 通过 13/13，用时约 190.3s。
+
+### 2026-06-25 成员管理写入冒烟
+
+- 新增 `scripts/full-chain-member-management-smoke.ts` 与 `pnpm full-chain:member-management`：真实 MySQL 创建手动成员和飞书通知成员，验证角色/状态修改、邮箱/飞书通知渠道保存、Webhook 占位渠道保存和重复邮箱/open_id 拦截。
+- MEMBER-003/MEMBER-004/MEMBER-005/MEMBER-006：脚本覆盖手动成员 `registrationChannel=email`、飞书 open_id 写入 identities/notification、角色改为 qa/frontend、状态改为 disabled，以及重复成员错误文案。
+- MEMBER-008/MEMBER-009：脚本只保存通知渠道配置，不发送消息；同时对比项目、任务、Bug、需求、版本和通知 job 计数，确认成员配置仍走 `workspace_members` 单行写入，不触发全量业务表重写。
+- 本轮执行：`pnpm full-chain:member-management` 通过，临时成员 2 个均落库并清理，重复创建/更新均被拒绝；业务行计数保持 `projects=14/tasks=154/bugs=9/requirements=8/versions=7/sideEffects=5` 不变；`pnpm full-chain:coverage` 通过，登记脚本 17 个；`pnpm full-chain:smoke` 通过 14/14，用时约 207.8s。
 
 ### 2026-06-25 通知渠道入队冒烟
 

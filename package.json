@@ -11,6 +11,7 @@
     "full-chain:browser": "tsx scripts/full-chain-browser-smoke.ts",
     "full-chain:coverage": "tsx scripts/full-chain-coverage-smoke.ts",
     "full-chain:feishu-contact": "tsx scripts/full-chain-feishu-contact-smoke.ts",
+    "full-chain:member-management": "tsx scripts/full-chain-member-management-smoke.ts",
     "full-chain:notification": "tsx scripts/full-chain-notification-smoke.ts",
     "full-chain:smoke": "tsx scripts/full-chain-smoke-suite.ts --group core",
     "full-chain:smoke:all": "tsx scripts/full-chain-smoke-suite.ts --group all",

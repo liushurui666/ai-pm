@@ -93,6 +93,13 @@ const smokeCases: SmokeCase[] = [
     timeoutMs: 180_000
   },
   {
+    description: "成员手动/飞书添加、角色状态、通知渠道保存、重复身份拦截。",
+    groups: ["all", "core", "db"],
+    id: "member-management",
+    script: "scripts/full-chain-member-management-smoke.ts",
+    timeoutMs: 180_000
+  },
+  {
     description: "成员飞书/邮箱通知渠道配置、按渠道拆分入队和无真实发送保护。",
     groups: ["all", "core", "db"],
     id: "notification",
