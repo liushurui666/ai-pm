@@ -255,3 +255,11 @@
 - AUTH-007/MEMBER-006：脚本验证禁用成员和未加入成员全部拒绝，并返回“成员已被禁用”“你还不是成员”的明确原因。
 - 身份边界：脚本验证运行时只用 Unified Auth 的 `authUserId` 匹配 `workspace_members.identities[].providerUserId`，不会因为 email/openId 碰巧相同就误授予成员权限；工作区过滤不会串到其他 workspace。
 - 本轮执行：`pnpm exec tsx scripts/full-chain-permission-smoke.ts` 通过，检查角色 8 个、动作 6 类、`emailGuessMatched=false`。
+
+### 2026-06-25 外部依赖配置与本地降级冒烟
+
+- 新增 `pnpm exec tsx scripts/full-chain-dependency-fallback-smoke.ts`：只读取配置状态和执行本地 fallback，不调用真实模型、不发邮件、不上传 COS、不访问 Qdrant/Redis。
+- OPS-005：脚本验证 AI 配置解析、邮箱 Resend 必填项、COS 密钥成对配置、RAG Redis/Qdrant 缺失时仍有默认 MySQL/collection/lock 配置；密钥只输出布尔状态，不记录明文。
+- REQ-004/REQ-005：脚本验证文档拆任务 fallback 可生成前端/后端/测试任务且日期合法，需求体检 fallback 可生成验收标准、前后端测试建议、完整度分数和 warning。
+- BUG-004：脚本验证当前 COS 状态为 `configured`；真实文件上传仍需在已登录浏览器/API 场景里单独验证 COS PUT 结果。
+- 本轮执行：`pnpm exec tsx scripts/full-chain-dependency-fallback-smoke.ts` 通过；当前环境 AI/COS/Email 为 configured，Redis/Qdrant 未配置但 fallback 配置存在，文档 fallback 生成 9 条任务，需求 fallback 完整度 85。
