@@ -77,6 +77,32 @@ async function checkLoginPage() {
   );
 }
 
+async function checkLogoutRoute() {
+  const response = await fetch(createUrl("/logout"), {
+    redirect: "manual"
+  });
+  const location = response.headers.get("location") ?? "";
+  const setCookie = response.headers.get("set-cookie") ?? "";
+  const detail = {
+    clearsSessionCookie: setCookie.includes("better-auth.session_token=") && setCookie.includes("Max-Age=0"),
+    clearsSessionDataCookie: setCookie.includes("better-auth.session_data=") && setCookie.includes("Max-Age=0"),
+    location,
+    name: "logout route",
+    status: response.status
+  };
+
+  // 退出登录的核心不是页面文案，而是认证层必须清理 Better Auth 会话 Cookie 并回到站内安全地址。
+  // 这里不依赖真实 OAuth 登录态；即使当前无 Cookie，logout 也应返回清理指令，保证用户点击退出后不会残留旧会话。
+  return assertSmoke(
+    [302, 303, 307, 308].includes(response.status) &&
+      location === "/" &&
+      detail.clearsSessionCookie &&
+      detail.clearsSessionDataCookie,
+    "退出登录未按预期清理 Better Auth 会话 Cookie",
+    detail
+  );
+}
+
 async function checkApiUnauthorized(testCase: ApiCase) {
   const response = await fetch(createUrl(testCase.path), {
     body: testCase.body,
@@ -115,7 +141,8 @@ async function main() {
   const routeResults = await Promise.all([
     checkProtectedRoute("workbench route", `/workbench?view=members&workspaceId=${WORKSPACE_ID}`),
     checkProtectedRoute("bug detail route", `/bugs/bug-missing?workspaceId=${WORKSPACE_ID}`),
-    checkLoginPage()
+    checkLoginPage(),
+    checkLogoutRoute()
   ]);
   const apiCases: ApiCase[] = [
     { method: "GET", name: "dashboard", path: `/api/dashboard?workspaceId=${WORKSPACE_ID}` },

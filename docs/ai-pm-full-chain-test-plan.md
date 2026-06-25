@@ -222,9 +222,10 @@
 
 ### 2026-06-24 认证与未授权接口矩阵脚本化
 
-- 新增 `pnpm exec tsx scripts/full-chain-auth-smoke.ts`：无 Cookie 覆盖 25 个入口，包括 `/workbench`、`/bugs/{bugId}`、登录页、dashboard、members、feishu/users、project-repositories、records、workspaces、documents/analyze、requirements/analyze-link、bug-attachments、bug-fix-jobs、ai-index、assistant、weekly-report。
+- 新增 `pnpm exec tsx scripts/full-chain-auth-smoke.ts`：无 Cookie 覆盖 26 个入口，包括 `/workbench`、`/bugs/{bugId}`、登录页、退出登录、dashboard、members、feishu/users、project-repositories、records、workspaces、documents/analyze、requirements/analyze-link、bug-attachments、bug-fix-jobs、ai-index、assistant、weekly-report。
 - AUTH-001/AUTH-002：脚本验证 `/workbench?view=members&workspaceId=ws-default` 与 `/bugs/bug-missing?workspaceId=ws-default` 均返回 307，并跳转 `/login?client_id=ai-pm&redirect_uri=...`，回跳地址保留当前页面。
 - AUTH-003 前置入口：脚本验证登录页返回 200，HTML 包含飞书、Google、GitHub 登录入口；当前脚本只检查入口存在，不代替真实 OAuth 授权。
+- AUTH-008：脚本验证 `/logout` 返回 302 到站内 `/`，并下发 `better-auth.session_token` 与 `better-auth.session_data` 的 `Max-Age=0` 清理头；该检查不依赖真实 OAuth 登录态。
 - AUTH-006：脚本验证 22 个业务 API 无 Cookie 时均返回 401 且 JSON error 为 `未登录`，未出现提前解析请求体导致的 400/500。
 - 本轮回归：`pnpm exec tsx scripts/full-chain-auth-smoke.ts` 通过，`pnpm exec tsx scripts/full-chain-crud-smoke.ts` 通过，`pnpm exec tsx scripts/full-chain-service-smoke.ts` 通过；临时任务/Bug/需求/成员/工作区残留均为 0。
 - 本轮质量门禁：`git diff --check` 通过；`pnpm lint` 通过；`pnpm build` 通过。
