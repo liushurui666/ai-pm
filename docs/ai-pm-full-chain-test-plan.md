@@ -326,10 +326,10 @@
 
 ### 2026-06-25 全链路冒烟套件统一入口
 
-- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 15 个 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
+- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 16 个 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
 - 新增 package scripts：`pnpm full-chain:smoke` 默认跑核心链路，`pnpm full-chain:smoke:all` 跑全量链路，`pnpm full-chain:smoke:list` 输出用例清单。
 - 分组策略：`static` 覆盖权限、覆盖清单、依赖降级、部署静态配置和 Bug 附件 mock；`auth` 覆盖未登录 API/页面保护与真实浏览器登录页；`db` 覆盖真实 MySQL 写入/清理；`core` 将登录、浏览器、静态、CRUD、工作区身份、版本范围等高价值链路合并成日常回归入口。
-- 本轮执行：`pnpm full-chain:smoke:list` 通过；加入覆盖清单后 `pnpm exec tsx scripts/full-chain-smoke-suite.ts --group static` 通过 5/5；当前 `pnpm full-chain:smoke` 通过 12/12，用时约 139.7s，覆盖登录 25 个无 Cookie 入口、真实 Chromium 登录页/未登录跳转/移动端登录页、权限矩阵、覆盖清单防退化、依赖降级、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、通知渠道入队、工作区身份和版本范围。
+- 本轮执行：`pnpm full-chain:smoke:list` 通过；加入覆盖清单后 `pnpm exec tsx scripts/full-chain-smoke-suite.ts --group static` 通过 5/5；当前 `pnpm full-chain:smoke` 通过 13/13，用时约 190.3s，覆盖登录 25 个无 Cookie 入口、真实 Chromium 登录页/未登录跳转/移动端登录页、飞书通讯录全量读取、权限矩阵、覆盖清单防退化、依赖降级、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、通知渠道入队、工作区身份和版本范围。
 
 ### 2026-06-25 浏览器 UI 冒烟脚本化
 
@@ -342,6 +342,13 @@
 
 - 新增 `scripts/full-chain-coverage-smoke.ts` 与 `pnpm full-chain:coverage`：静态校验 `scripts/full-chain-*.ts` 是否全部纳入统一 runner、package scripts 是否指向正确入口、测试矩阵是否记录关键用例 ID 与脚本、重要 API 路由是否在矩阵中可追踪。
 - GATE-006：首次执行即捕获新脚本未写入测试计划的问题，补齐文档后该守门可避免后续新增脚本或入口“有文件但无人执行”。
+
+### 2026-06-25 飞书通讯录全量读取冒烟
+
+- 新增 `scripts/full-chain-feishu-contact-smoke.ts` 与 `pnpm full-chain:feishu-contact`：只读验证飞书通讯录授权范围、用户组/子部门展开、open_id 去重、搜索过滤和 `ou_...` 通知目标形态。
+- MEMBER-002/MEMBER-003：脚本要求通讯录人数达到 `AI_PM_QA_FEISHU_MIN_PEOPLE`（默认 10）且无用户组读取 warning，避免添加成员下拉再次退化成只能看到少数直接授权成员。
+- 安全边界：脚本不写 AI PM 数据库、不修改飞书通讯录、不发送消息；只输出人数、邮箱/头像覆盖数和少量成员姓名样本，不输出 token 或密钥。
+- 本轮执行：`pnpm full-chain:feishu-contact` 通过，当前授权范围返回 83 人、头像 83 个、邮箱 3 个、warning 为空，搜索关键词 `11` 返回 8 人且命中探针成员；`pnpm full-chain:coverage` 通过，登记脚本 16 个；`pnpm full-chain:smoke` 通过 13/13，用时约 190.3s。
 
 ### 2026-06-25 通知渠道入队冒烟
 

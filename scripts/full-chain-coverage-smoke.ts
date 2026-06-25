@@ -15,6 +15,7 @@ const testPlanPath = path.join(repoRoot, "docs/ai-pm-full-chain-test-plan.md");
 
 const requiredPackageScripts = [
   "full-chain:browser",
+  "full-chain:feishu-contact",
   "full-chain:smoke",
   "full-chain:smoke:all",
   "full-chain:smoke:list",
@@ -104,6 +105,10 @@ function verifyPackageScripts() {
 
     if (scriptName === "full-chain:browser") {
       return !command.includes("scripts/full-chain-browser-smoke.ts");
+    }
+
+    if (scriptName === "full-chain:feishu-contact") {
+      return !command.includes("scripts/full-chain-feishu-contact-smoke.ts");
     }
 
     if (scriptName === "full-chain:notification") {

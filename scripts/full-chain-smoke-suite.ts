@@ -37,6 +37,13 @@ const smokeCases: SmokeCase[] = [
     timeoutMs: 120_000
   },
   {
+    description: "飞书通讯录授权范围、子部门/用户组展开、去重和搜索过滤。",
+    groups: ["all", "core"],
+    id: "feishu-contact",
+    script: "scripts/full-chain-feishu-contact-smoke.ts",
+    timeoutMs: 120_000
+  },
+  {
     description: "权限矩阵、禁用成员、未加入成员和 Unified Auth 身份匹配。",
     groups: ["all", "core", "static"],
     id: "permission",
