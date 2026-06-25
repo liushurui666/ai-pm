@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "full-chain:auth-origin": "tsx scripts/full-chain-auth-origin-smoke.ts",
     "full-chain:browser": "tsx scripts/full-chain-browser-smoke.ts",
+    "full-chain:browser:login": "tsx scripts/capture-auth-storage-state.ts",
     "full-chain:coverage": "tsx scripts/full-chain-coverage-smoke.ts",
     "full-chain:feishu-contact": "tsx scripts/full-chain-feishu-contact-smoke.ts",
     "full-chain:member-management": "tsx scripts/full-chain-member-management-smoke.ts",

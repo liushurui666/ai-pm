@@ -7,7 +7,10 @@ loadEnv({ path: ".env", quiet: true });
 
 const BASE_URL = (process.env.AI_PM_QA_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "http://localhost:3004").replace(/\/$/, "");
 const WORKSPACE_ID = process.env.AI_PM_QA_WORKSPACE_ID || "ws-default";
-const STORAGE_STATE = process.env.AI_PM_QA_STORAGE_STATE || "";
+const DEFAULT_STORAGE_STATE = ".ai-pm/qa-auth-storage-state.json";
+// 已登录浏览器回归优先读取显式 env；如果没有 env，则复用登录采集脚本写入的默认文件。
+// 默认文件位于已忽略的 .ai-pm 目录，既能让本地日常回归自动覆盖工作台，又不会把认证 Cookie 提交进仓库。
+const STORAGE_STATE = process.env.AI_PM_QA_STORAGE_STATE || (fs.existsSync(DEFAULT_STORAGE_STATE) ? DEFAULT_STORAGE_STATE : "");
 const HEADLESS = process.env.AI_PM_QA_HEADED !== "1";
 
 type BrowserCheck = {
