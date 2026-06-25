@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDashboardData } from "@/data/local-dashboard";
+import { getDashboardBugById, getWorkspaceAccessContext } from "@/data/local-dashboard";
 import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 import { canPerformAction, getPermissionDeniedReason } from "@/lib/access/permissions";
 import { getSession } from "@/lib/auth/session";
@@ -25,12 +25,19 @@ export async function GET(request: NextRequest) {
   const workspaceId = request.nextUrl.searchParams.get("workspaceId") || undefined;
 
   try {
-    const data = await getDashboardData(session?.user, workspaceId);
+    const accessContext = await getWorkspaceAccessContext(session?.user, workspaceId);
 
     if (!bugId) {
       return NextResponse.json({
-        repositories: await listProjectRepositories(data.meta?.currentWorkspace?.id ?? "ws-default")
+        repositories: await listProjectRepositories(accessContext.currentWorkspace.id)
       });
+    }
+
+    // 读取指定 Bug 的修复任务前先用单 Bug 校验工作区归属，避免为列表请求加载完整 dashboard。
+    const bug = await getDashboardBugById(bugId);
+
+    if (!bug || bug.workspaceId !== accessContext.currentWorkspace.id) {
+      return NextResponse.json({ error: "Bug 不存在或不属于当前工作区" }, { status: 404 });
     }
 
     return NextResponse.json({
@@ -75,14 +82,14 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const data = await getDashboardData(session?.user, body.workspaceId);
-    const permissions = data.meta?.permissions;
-    const workspaceId = data.meta?.currentWorkspace?.id ?? body.workspaceId ?? "ws-default";
+    const accessContext = await getWorkspaceAccessContext(session?.user, body.workspaceId);
+    const permissions = accessContext.permissions;
+    const workspaceId = accessContext.currentWorkspace.id;
 
-    if (!permissions || !canPerformAction(permissions, "bug:update")) {
+    if (!canPerformAction(permissions, "bug:update")) {
       return NextResponse.json(
         {
-          error: permissions ? getPermissionDeniedReason(permissions, "bug:update") : "无创建 AI 修复任务权限"
+          error: getPermissionDeniedReason(permissions, "bug:update")
         },
         {
           status: 403
@@ -90,9 +97,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const bug = data.bugs.find((item) => item.id === body.bugId);
+    const bug = await getDashboardBugById(body.bugId);
 
-    if (!bug) {
+    if (!bug || bug.workspaceId !== workspaceId) {
       return NextResponse.json({ error: "Bug 不存在或不属于当前工作区" }, { status: 404 });
     }
 

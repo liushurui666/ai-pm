@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDashboardData } from "@/data/local-dashboard";
+import { getWorkspaceAccessContext } from "@/data/local-dashboard";
 import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 import { canPerformAction, getPermissionDeniedReason } from "@/lib/access/permissions";
 import { getSession } from "@/lib/auth/session";
@@ -22,13 +22,20 @@ export async function POST(
   const { jobId } = await context.params;
 
   try {
-    const data = await getDashboardData(session?.user);
-    const permissions = data.meta?.permissions;
+    const existingJob = await getBugFixJob(jobId);
 
-    if (!permissions || !canPerformAction(permissions, "bug:update")) {
+    if (!existingJob) {
+      return NextResponse.json({ error: "AI 修复任务不存在" }, { status: 404 });
+    }
+
+    // 取消任务按 job 所属工作区校验成员权限，不读取整份工作台数据。
+    const accessContext = await getWorkspaceAccessContext(session?.user, existingJob.workspaceId);
+    const permissions = accessContext.permissions;
+
+    if (!canPerformAction(permissions, "bug:update")) {
       return NextResponse.json(
         {
-          error: permissions ? getPermissionDeniedReason(permissions, "bug:update") : "无取消 AI 修复任务权限"
+          error: getPermissionDeniedReason(permissions, "bug:update")
         },
         {
           status: 403
@@ -36,9 +43,7 @@ export async function POST(
       );
     }
 
-    const existingJob = await getBugFixJob(jobId);
-
-    if (!existingJob || existingJob.workspaceId !== data.meta?.currentWorkspace?.id) {
+    if (existingJob.workspaceId !== accessContext.currentWorkspace.id) {
       return NextResponse.json({ error: "AI 修复任务不存在" }, { status: 404 });
     }
 

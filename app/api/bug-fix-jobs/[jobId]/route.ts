@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDashboardData } from "@/data/local-dashboard";
+import { getWorkspaceAccessContext } from "@/data/local-dashboard";
 import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
 import { getSession } from "@/lib/auth/session";
 import { getBugFixJob } from "@/server/repositories/bug-fix-jobs";
@@ -22,11 +22,10 @@ export async function GET(
   const workspaceId = request.nextUrl.searchParams.get("workspaceId") || undefined;
 
   try {
-    const data = await getDashboardData(session?.user, workspaceId);
-    const currentWorkspaceId = data.meta?.currentWorkspace?.id;
+    const accessContext = await getWorkspaceAccessContext(session?.user, workspaceId);
     const job = await getBugFixJob(jobId);
 
-    if (!job || job.workspaceId !== currentWorkspaceId) {
+    if (!job || job.workspaceId !== accessContext.currentWorkspace.id) {
       return NextResponse.json({ error: "AI 修复任务不存在" }, { status: 404 });
     }
 

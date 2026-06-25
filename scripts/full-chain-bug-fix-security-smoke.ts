@@ -18,6 +18,9 @@ loadEnv({ path: ".env", quiet: true });
 
 const WORKSPACE_ID = process.env.AI_PM_QA_WORKSPACE_ID || "ws-default";
 const repoRoot = process.cwd();
+const bugFixJobsRoutePath = path.join(repoRoot, "app/api/bug-fix-jobs/route.ts");
+const bugFixJobDetailRoutePath = path.join(repoRoot, "app/api/bug-fix-jobs/[jobId]/route.ts");
+const bugFixJobCancelRoutePath = path.join(repoRoot, "app/api/bug-fix-jobs/[jobId]/cancel/route.ts");
 const projectRepositoriesRoutePath = path.join(repoRoot, "app/api/project-repositories/route.ts");
 
 // 这个脚本覆盖 Bug AI 修复里“最容易误伤生产代码”的边界：仓库选择、安全白名单、
@@ -38,6 +41,21 @@ function verifyProjectRepositoriesApiContracts() {
   assertSmoke(routeText.includes("getWorkspaceAccessContext(session?.user, workspaceId)"), "项目仓库列表缺少轻量工作区上下文。");
   assertSmoke(routeText.includes("getWorkspaceAccessContext(session?.user, body.workspaceId)"), "项目仓库创建缺少轻量权限上下文。");
   assertSmoke(routeText.includes("workspaceId: accessContext.currentWorkspace.id"), "项目仓库创建没有使用轻量上下文解析后的工作区。");
+}
+
+function verifyBugFixJobsApiContracts() {
+  const routeText = readFileSync(bugFixJobsRoutePath, "utf8");
+  const detailRouteText = readFileSync(bugFixJobDetailRoutePath, "utf8");
+  const cancelRouteText = readFileSync(bugFixJobCancelRoutePath, "utf8");
+  const combinedRouteText = [routeText, detailRouteText, cancelRouteText].join("\n");
+
+  // AI 修复任务接口只需要工作区权限、单个 Bug 和 job 记录；禁止回退到完整 dashboard 读取。
+  assertSmoke(!combinedRouteText.includes("getDashboardData"), "AI 修复任务 API 不应读取整份 dashboard。");
+  assertSmoke(routeText.includes("getWorkspaceAccessContext(session?.user, workspaceId)"), "AI 修复任务列表缺少轻量工作区上下文。");
+  assertSmoke(routeText.includes("getWorkspaceAccessContext(session?.user, body.workspaceId)"), "AI 修复任务创建缺少轻量权限上下文。");
+  assertSmoke(routeText.includes("getDashboardBugById(body.bugId)"), "AI 修复任务创建应单独读取目标 Bug。");
+  assertSmoke(detailRouteText.includes("getWorkspaceAccessContext(session?.user, workspaceId)"), "AI 修复任务详情缺少轻量工作区上下文。");
+  assertSmoke(cancelRouteText.includes("getWorkspaceAccessContext(session?.user, existingJob.workspaceId)"), "AI 修复任务取消应按 job 所属工作区校验权限。");
 }
 
 // 仓库匹配需要依赖真实项目名称；这里读取当前工作区第一个项目，避免用假项目名导致
@@ -334,6 +352,7 @@ function verifyRunnerAndMrTemplate() {
 // 本轮也不会被残留仓库配置干扰，数据库连接也会显式释放，避免 tsx 进程挂住。
 async function main() {
   verifyProjectRepositoriesApiContracts();
+  verifyBugFixJobsApiContracts();
 
   const runLabel = `bugfix-security-e2e-${Date.now()}`;
   const prisma = getPrismaClient();
