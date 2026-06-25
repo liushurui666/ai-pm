@@ -223,6 +223,29 @@ function verifyTaskDragRefreshContracts() {
   };
 }
 
+function verifyWorkspaceSwitchRefreshContracts() {
+  const indexText = readText(indexPath);
+  const switchWorkspaceBlock = indexText.slice(indexText.indexOf("async function switchWorkspace"), indexText.indexOf("// 搜索结果按实体类型进入对应视图"));
+
+  // 工作区切换是弱网下最容易和 dashboard 校准互相踩踏的入口：
+  // 已加载过的工作区应先走内存缓存即时渲染，后台请求只负责校准，单次 401 不能直接把用户踢回登录页。
+  assertSmoke(indexText.includes("const workspaceDashboardCacheRef = useRef<Map<string, DashboardData>>"), "工作区切换缺少 dashboard 内存缓存。");
+  assertSmoke(indexText.includes("const workspaceSwitchSeqRef = useRef(0);"), "工作区切换缺少请求乱序闸门。");
+  assertSmoke(indexText.includes("function cacheDashboardData"), "dashboard 成功返回后没有统一写入工作区缓存。");
+  assertSmoke(switchWorkspaceBlock.includes("const cachedWorkspaceData = workspaceDashboardCacheRef.current.get(workspaceId);"), "工作区切换没有优先读取缓存数据。");
+  assertSmoke(switchWorkspaceBlock.includes("setData(cachedWorkspaceData);"), "命中缓存时没有即时切换工作区内容。");
+  assertSmoke(switchWorkspaceBlock.includes("redirectOnUnauthorized: false"), "工作区切换校准请求仍可能把单次 401 放大成登录跳转。");
+  assertSmoke(switchWorkspaceBlock.includes("workspaceSwitchSeqRef.current !== switchSeq"), "工作区切换缺少慢返回旧数据保护。");
+  assertSmoke(!switchWorkspaceBlock.includes("redirectToLogin()"), "工作区切换 401 仍会直接跳转登录页。");
+  assertSmoke(switchWorkspaceBlock.includes("登录状态暂时无法确认"), "工作区切换 401 缺少软失败提示。");
+
+  return {
+    cachedFirst: true,
+    staleRequestIgnored: true,
+    softUnauthorized: true
+  };
+}
+
 function verifyThemeAndShellControls() {
   const indexText = readText(indexPath);
 
@@ -249,6 +272,7 @@ const results = [
   runCheck("search and schedule contracts", verifySearchAndScheduleContracts),
   runCheck("feishu people refresh contracts", verifyFeishuPeopleRefreshContracts),
   runCheck("task drag refresh contracts", verifyTaskDragRefreshContracts),
+  runCheck("workspace switch refresh contracts", verifyWorkspaceSwitchRefreshContracts),
   runCheck("theme and shell controls", verifyThemeAndShellControls)
 ];
 const failed = results.filter((result) => !result.ok);

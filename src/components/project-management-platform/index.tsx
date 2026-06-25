@@ -50,7 +50,6 @@ import {
   fetchDashboardFromApi,
   fetchWithAuthRedirect,
   isSessionExpiredError,
-  redirectToLogin,
   type PeopleResponse
 } from "@/components/project-management-platform/api";
 import { createRequirementColumns } from "@/components/project-management-platform/columns/requirement-columns";
@@ -193,6 +192,11 @@ export function ProjectManagementPlatform({
   const [weeklyReportExporting, setWeeklyReportExporting] = useState(false);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(initialData?.meta?.currentWorkspace?.id ?? initialWorkspaceId ?? "");
   const [assistantSessionSidebar, setAssistantSessionSidebar] = useState<ReactNode | null>(null);
+  const initialCacheWorkspaceId = initialData?.meta?.currentWorkspace?.id ?? initialWorkspaceId ?? "";
+  const workspaceDashboardCacheRef = useRef<Map<string, DashboardData>>(
+    new Map(initialData && initialCacheWorkspaceId ? [[initialCacheWorkspaceId, initialData]] : [])
+  );
+  const workspaceSwitchSeqRef = useRef(0);
   const dashboardRefreshTimerRef = useRef<number | null>(null);
   const dashboardRefreshSeqRef = useRef(0);
   const [createForm] = Form.useForm<Record<string, unknown>>();
@@ -221,6 +225,27 @@ export function ProjectManagementPlatform({
   const contentView = activeView;
   const routeBug = initialBugId ? data?.bugs.find((bug) => bug.id === initialBugId) ?? null : null;
 
+  function cacheDashboardData(nextData: DashboardData, fallbackWorkspaceId = "") {
+    const workspaceId = nextData.meta?.currentWorkspace?.id ?? fallbackWorkspaceId;
+
+    if (workspaceId) {
+      workspaceDashboardCacheRef.current.set(workspaceId, nextData);
+    }
+
+    return workspaceId;
+  }
+
+  function replaceWorkbenchUrl(workspaceId: string, view = activeView) {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const url = new URL(window.location.href);
+    url.searchParams.set("workspaceId", workspaceId);
+    url.searchParams.set("view", view);
+    window.history.replaceState(null, "", url.toString());
+  }
+
   // 静默刷新用于校准乐观更新结果，失败时保留当前 UI 避免打断用户操作。
   // 这类刷新通常发生在拖拽、保存后的后台同步或助手动作完成后；一次 401/网络抖动不应直接把用户踢到登录页。
   async function refreshDashboardState(workspaceId = currentWorkspaceId) {
@@ -239,6 +264,7 @@ export function ProjectManagementPlatform({
           return;
         }
 
+        cacheDashboardData(nextData, workspaceId);
         setData(nextData);
         setActiveWorkspaceId(nextData.meta?.currentWorkspace?.id ?? workspaceId ?? "");
         setLoadError("");
@@ -281,6 +307,7 @@ export function ProjectManagementPlatform({
         const nextData = await fetchDashboardFromApi(initialWorkspaceId);
 
         if (mounted && nextData) {
+          cacheDashboardData(nextData, initialWorkspaceId);
           setData(nextData);
           setActiveWorkspaceId(nextData.meta?.currentWorkspace?.id ?? initialWorkspaceId ?? "");
           setLoadError("");
@@ -1517,9 +1544,8 @@ export function ProjectManagementPlatform({
     }
   }
 
-  // 工作区切换需要重置版本选择，再重新拉取该工作区的完整项目数据。
-  // 这里不能在选择值变更后直接把任何 401 都交给全局重定向：账号切换、Cookie 刷新和多接口并发时，
-  // 一次短暂失败会被多个请求放大成重复登录。切换失败时先恢复旧工作区，只有确认是会话失效才触发一次登录闸门。
+  // 工作区切换先使用本地缓存即时响应，再后台校准完整 dashboard。
+  // 单次 401/慢网失败只说明这次校准没有拿到数据，不足以证明整段会话已经失效，所以这里保留当前页面而不是硬跳登录。
   async function switchWorkspace(workspaceId: string) {
     if (!workspaceId || workspaceId === currentWorkspaceId) {
       setWorkspaceSelectOpen(false);
@@ -1528,11 +1554,23 @@ export function ProjectManagementPlatform({
     }
 
     const previousWorkspaceId = currentWorkspaceId;
+    const cachedWorkspaceData = workspaceDashboardCacheRef.current.get(workspaceId);
+    const switchSeq = workspaceSwitchSeqRef.current + 1;
 
+    workspaceSwitchSeqRef.current = switchSeq;
     setActiveWorkspaceId(workspaceId);
     setSelectedRequirementVersionId(null);
     setProjectCalendarVersionId(allProjectCalendarVersionsValue);
     setWorkspaceSelectOpen(false);
+
+    if (cachedWorkspaceData) {
+      const cachedWorkspaceId = cacheDashboardData(cachedWorkspaceData, workspaceId);
+
+      setData(cachedWorkspaceData);
+      setActiveWorkspaceId(cachedWorkspaceId);
+      setLoadError("");
+      replaceWorkbenchUrl(cachedWorkspaceId);
+    }
 
     try {
       const nextData = await fetchDashboardFromApi(workspaceId, {
@@ -1540,21 +1578,28 @@ export function ProjectManagementPlatform({
       });
 
       if (nextData) {
-        setData(nextData);
-        setLoadError("");
-
-        if (typeof window !== "undefined") {
-          const url = new URL(window.location.href);
-          url.searchParams.set("workspaceId", nextData.meta?.currentWorkspace?.id ?? workspaceId);
-          url.searchParams.set("view", activeView);
-          window.history.replaceState(null, "", url.toString());
+        if (workspaceSwitchSeqRef.current !== switchSeq) {
+          return;
         }
+
+        const nextWorkspaceId = cacheDashboardData(nextData, workspaceId);
+
+        setData(nextData);
+        setActiveWorkspaceId(nextWorkspaceId);
+        setLoadError("");
+        replaceWorkbenchUrl(nextWorkspaceId);
       }
     } catch (error) {
-      setActiveWorkspaceId(previousWorkspaceId);
+      if (workspaceSwitchSeqRef.current !== switchSeq) {
+        return;
+      }
+
+      if (!cachedWorkspaceData) {
+        setActiveWorkspaceId(previousWorkspaceId);
+      }
+
       if (isSessionExpiredError(error)) {
-        messageApi.error("登录状态已失效，请重新登录后再切换工作区。");
-        redirectToLogin();
+        messageApi.warning(cachedWorkspaceData ? "工作区数据刷新失败，已展示上次缓存数据。" : "登录状态暂时无法确认，已保留当前工作区。");
 
         return;
       }
