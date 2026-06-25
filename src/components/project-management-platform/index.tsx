@@ -276,6 +276,14 @@ export function ProjectManagementPlatform({
         peopleLoadedAt > 0 &&
         Date.now() - peopleLoadedAt < feishuPeopleCacheTtlMs;
 
+      if (options.force) {
+        // 强制刷新通常来自“添加成员/通知配置”的即时操作。先清掉旧联系人，
+        // 避免飞书授权或服务端展开逻辑刚调整后，抽屉里还短暂展示上一轮只读到的少量成员。
+        setPeople([]);
+        setPeopleError("");
+        setPeopleWarning("");
+      }
+
       // 通讯录曾经因为飞书权限/分页问题返回过少量联系人；这里保留短缓存只为避免切页反复打外部接口，
       // 添加成员或通知配置入口会强制刷新，防止旧的“部分结果”一直卡在选择框里。
       if (peopleLoading || shouldUseCache) {
