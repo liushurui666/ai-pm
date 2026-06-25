@@ -323,3 +323,10 @@
 - 发现并修复：成员页原本进入后只加载一次 `/api/feishu/users`，如果旧会话曾缓存“只返回 2 人”的部分结果，添加成员下拉会持续使用旧联系人；已改为进入成员页短缓存加载，打开“添加成员”或“通知配置”时强制刷新。
 - UI 补充：飞书联系人 Select 底部继续显示已加载人数，并新增“刷新”按钮，便于管理员在飞书授权调整或 dev server 热更新后立即重拉通讯录。
 - 本轮回归：直连通讯录脚本返回 `count=83/warning=""`；`git diff --check`、`pnpm lint`、`pnpm build` 均通过。
+
+### 2026-06-25 全链路冒烟套件统一入口
+
+- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 12 个既有 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
+- 新增 package scripts：`pnpm full-chain:smoke` 默认跑核心链路，`pnpm full-chain:smoke:all` 跑全量链路，`pnpm full-chain:smoke:list` 输出用例清单。
+- 分组策略：`static` 覆盖权限、依赖降级、部署静态配置和 Bug 附件 mock；`auth` 覆盖未登录保护；`db` 覆盖真实 MySQL 写入/清理；`core` 将登录、静态、CRUD、工作区身份、版本范围等高价值链路合并成日常回归入口。
+- 本轮执行：`pnpm full-chain:smoke:list` 通过；`pnpm exec tsx scripts/full-chain-smoke-suite.ts --group static` 通过 4/4；`pnpm full-chain:smoke` 通过 9/9，用时约 123.1s，覆盖登录 25 个无 Cookie 入口、权限矩阵、依赖降级、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、工作区身份和版本范围。
