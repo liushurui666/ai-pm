@@ -58,6 +58,13 @@ const smokeCases: SmokeCase[] = [
     timeoutMs: 60_000
   },
   {
+    description: "AI 助手 ChatBox 登录保护、流式历史清洗、工具边界、前端超时和错误净化契约。",
+    groups: ["all", "core", "static"],
+    id: "assistant-chat",
+    script: "scripts/full-chain-assistant-chat-smoke.ts",
+    timeoutMs: 60_000
+  },
+  {
     description: "飞书通讯录授权范围、子部门/用户组展开、去重和搜索过滤。",
     groups: ["all", "core"],
     id: "feishu-contact",

@@ -327,10 +327,10 @@
 
 ### 2026-06-25 全链路冒烟套件统一入口
 
-- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 22 个 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
+- 新增 `scripts/full-chain-smoke-suite.ts`，统一编排 23 个 `full-chain-*` 冒烟脚本，支持 `--group core|static|db|auth|all`、`--only id,id`、`--list` 和 `--bail`。
 - 新增 package scripts：`pnpm full-chain:smoke` 默认跑核心链路，`pnpm full-chain:smoke:all` 跑全量链路，`pnpm full-chain:smoke:list` 输出用例清单。
 - 分组策略：`static` 覆盖权限、覆盖清单、依赖降级、部署静态配置和 Bug 附件 mock；`auth` 覆盖未登录 API/页面保护与真实浏览器登录页；`db` 覆盖真实 MySQL 写入/清理；`core` 将登录、浏览器、静态、CRUD、工作区身份、版本范围等高价值链路合并成日常回归入口。
-- 本轮执行：`pnpm full-chain:coverage` 通过，登记 22 个脚本/22 个 suite 用例/13 个 package 入口；`pnpm full-chain:smoke` 通过 19/19，用时约 215.4s，覆盖登录、浏览器未登录跳转、工作台 UI、周报、飞书通讯录、权限矩阵、覆盖清单、依赖降级、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、成员管理、通知入队、AI 索引管理员重建、工作区身份、版本范围和需求飞书链接 AI 体检。
+- 本轮执行：`pnpm full-chain:coverage` 通过，登记 23 个脚本/23 个 suite 用例/14 个 package 入口；`pnpm full-chain:smoke` 通过 20/20，用时约 215.6s，覆盖登录、浏览器未登录跳转、工作台 UI、周报、AI 助手 ChatBox、飞书通讯录、权限矩阵、覆盖清单、依赖降级、需求飞书链接 AI 体检、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、成员管理、通知入队、AI 索引管理员重建、工作区身份和版本范围。
 
 ### 2026-06-25 浏览器 UI 冒烟脚本化
 
@@ -365,6 +365,14 @@
 - RAG-004：脚本验证管理员重建扫描从未入索引的历史业务数据，投递 `version/requirement/task/bug` 四类 `index_entity` job；带 `documentLink` 的需求额外投递 `sync_feishu`，已有飞书 source 投递 `rebuild_source`。
 - RAG-005：脚本静态校验 `/api/ai-index/status` 与 `/api/ai-index/rebuild` 都保留 `getSession` 登录保护、`member:manage` 管理员权限校验，状态接口统计 source/job，重建接口走 Mastra workflow 并记录 `authUserId`。
 - 本轮执行：`pnpm full-chain:ai-index-admin` 通过 2/2，临时 workspace 重建入队 6 条：`index_entity=4`、`sync_feishu=1`、`rebuild_source=1`，finally 级联清理临时工作区和队列数据。
+
+### 2026-06-25 AI 助手 ChatBox 契约冒烟
+
+- 新增 `scripts/full-chain-assistant-chat-smoke.ts` 与 `pnpm full-chain:assistant-chat`：不访问真实模型，覆盖 `/api/assistant`、模型列表、服务端流式运行时、tools/prompt、前端 ChatBox transport/session 和错误净化。
+- AI-001/AI-002：脚本静态守住主接口登录保护、模型未配置 503、`toUIMessageStreamResponse` 错误净化、`getDashboardData(session?.user, workspaceId)` 数据读取和同源 Cookie/origin 透传。
+- AI-003/AI-004/AI-005：脚本验证前端保留 110s SSE 超时、非 2xx JSON 错误解析、stream cleanup、workspace+session 隔离、regenerate 裁剪、停止生成、模型下拉、输入 300 字限制和 SSR 安全会话。
+- AI-007/AI-008/AI-009/AI-012：脚本验证服务端历史只保留文本并截断 16 条、忽略旧 tool 残留、修复 JSON 外壳、首步强制批量创建/归属/完成/关闭工具、tools/prompt 禁止泄露内部工具和 API 路径。
+- 本轮执行：`pnpm full-chain:assistant-chat` 通过 5/5，覆盖 route、stream、tools/prompt、frontend 和 error sanitizer；错误净化检查 8 类输入。
 
 ### 2026-06-25 需求飞书链接 AI 体检冒烟
 
