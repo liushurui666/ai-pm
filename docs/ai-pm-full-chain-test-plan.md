@@ -292,3 +292,15 @@
 - 数据清理：所有仓库测试数据使用 `bugfix-security-e2e-*` runLabel，finally 只按本轮 `repoFullName` 清理，避免误删真实生产仓库配置。
 - 本轮执行：脚本退出码 0；项目仓库匹配到项目 `1.4`，安全边界错误文案均符合预期。
 - 本轮回归：`pnpm exec tsx scripts/full-chain-bug-fix-security-smoke.ts`、`pnpm exec tsx scripts/full-chain-infra-smoke.ts`、`git diff --check`、`pnpm lint`、`pnpm build` 均通过。
+
+### 2026-06-25 工作区与登录身份归并冒烟
+
+- 新增 `pnpm exec tsx scripts/full-chain-workspace-identity-smoke.ts`：使用真实 MySQL 创建临时工作区和成员，调用 `getDashboardData(user, workspaceId)` 模拟登录后的业务身份同步；不依赖真实 OAuth Cookie，不触碰真实业务工作区。
+- OPS-001/AUTH-003：脚本验证空工作区首次登录会创建当前成员并授予 `owner`，成员身份写入 `workspace_members.identities[].providerUserId=auth_...`，并持久化到当前工作区。
+- MEMBER-007：脚本验证新成员首次访问写入 `lastActiveAt`，5 分钟内再次访问不刷新，手动回拨到 6 分钟前后再次访问会刷新，确认最近活跃节流生效。
+- MEMBER-003/AUTH-003：脚本验证已有唯一邮箱成员会被 GitHub 登录身份归并，不创建重复成员，并补齐 SDK `authUserId`，`registrationChannel` 更新为确认的 OAuth 来源。
+- AUTH-003/MEMBER-003 历史兼容：脚本构造飞书历史 `ou_...` 成员和重复 `authUserId` 成员，验证登录时优先桥接唯一历史飞书成员、保留原角色、过滤 `ou_...@feishu.local` 占位邮箱，并从重复成员移除同一个 SDK `authUserId`。
+- 数据清理：所有临时工作区/成员使用 `workspace-identity-e2e-*` runLabel，finally 删除工作区并依赖外键级联清理成员；残留检查 `workspaces=0/members=0`。
+- 发现并修复：首次 `pnpm build` 发现脚本直接访问可选 `DashboardData.meta` 导致 TypeScript 失败；已加入 `getRequiredCurrentMember` 显式断言，运行期错误也会更准确。
+- 本轮执行：`pnpm exec tsx scripts/full-chain-workspace-identity-smoke.ts` 通过，覆盖 owner 创建、邮箱归并、飞书历史桥接三个场景。
+- 本轮回归：`pnpm exec tsx scripts/full-chain-workspace-identity-smoke.ts`、残留检查、`git diff --check`、`pnpm lint`、`pnpm build` 均通过。
