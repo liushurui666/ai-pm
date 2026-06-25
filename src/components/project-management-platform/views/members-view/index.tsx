@@ -82,6 +82,36 @@ function getPersonSearchText(person: FeishuPerson) {
   return [person.name, person.enName, person.email, person.openId, person.userId].filter(Boolean).join(" ");
 }
 
+// 飞书下拉是“先全量加载，再前端过滤”的交互；统一清洗搜索词，避免大小写或前后空格让匹配数和 Select 实际过滤不一致。
+function getNormalizedPersonSearchKeyword(value: string) {
+  return value.trim().toLowerCase();
+}
+
+// 判断联系人是否命中当前输入，供 Select 过滤和底部匹配计数共用；
+// 这样用户看到的“当前匹配 X 位”和真正可选的列表不会各算各的。
+function isFeishuPersonMatchedBySearch(person: FeishuPerson, searchValue: string) {
+  const keyword = getNormalizedPersonSearchKeyword(searchValue);
+
+  if (!keyword) {
+    return true;
+  }
+
+  return getPersonSearchText(person).toLowerCase().includes(keyword);
+}
+
+// 添加成员和通知配置都会使用同一批飞书联系人；匹配数量用于说明当前只是搜索结果少，不是接口少返回。
+function getMatchedFeishuPeopleCount(people: FeishuPerson[], searchValue: string) {
+  return people.filter((person) => isFeishuPersonMatchedBySearch(person, searchValue)).length;
+}
+
+// Ant Design Select 的 optionFilterProp 在自定义 option 字段上容易被后续改造打断；
+// 显式 filterOption 可以把姓名、英文名、邮箱、open_id、user_id 的搜索边界固定下来。
+function isFeishuOptionMatchedBySearch(input: string, searchText: unknown) {
+  const keyword = getNormalizedPersonSearchKeyword(input);
+
+  return !keyword || String(searchText ?? "").toLowerCase().includes(keyword);
+}
+
 // 飞书联系人下拉会先加载完整授权范围，再由 Select 本地搜索过滤；
 // 这里把“已加载人数”和“搜索无匹配”直接展示出来，避免用户把过滤结果误判为通讯录只同步了一两个人。
 function getFeishuPeopleNotFoundContent(people: FeishuPerson[], peopleLoading: boolean) {
@@ -94,7 +124,7 @@ function getFeishuPeopleNotFoundContent(people: FeishuPerson[], peopleLoading: b
 
 // 飞书联系人是先由服务端聚合完整授权范围，再交给 Select 做本地搜索；
 // 常驻状态文案可以把“全量已加载多少人”和“当前搜索只命中几人”区分开，避免用户误以为接口只返回了一条数据。
-function getFeishuPeopleStatusText(people: FeishuPerson[], peopleLoading: boolean, peopleError: string, peopleWarning: string) {
+function getFeishuPeopleStatusText(people: FeishuPerson[], peopleLoading: boolean, peopleError: string, peopleWarning: string, searchValue = "") {
   if (peopleLoading) {
     return "正在同步飞书通讯录...";
   }
@@ -104,6 +134,13 @@ function getFeishuPeopleStatusText(people: FeishuPerson[], peopleLoading: boolea
   }
 
   if (people.length) {
+    const keyword = getNormalizedPersonSearchKeyword(searchValue);
+    const matchedCount = getMatchedFeishuPeopleCount(people, searchValue);
+
+    if (keyword) {
+      return `已同步 ${people.length} 位联系人，当前搜索匹配 ${matchedCount} 位`;
+    }
+
     return peopleWarning
       ? `已同步 ${people.length} 位联系人，但飞书返回了部分授权提示`
       : `已同步 ${people.length} 位联系人，可输入姓名、邮箱或 open_id 搜索`;
@@ -116,8 +153,12 @@ function renderFeishuPeoplePopup(
   menu: ReactElement,
   people: FeishuPerson[],
   peopleLoading: boolean,
+  searchValue: string,
   onReloadPeople: () => void
 ) {
+  const keyword = getNormalizedPersonSearchKeyword(searchValue);
+  const matchedCount = getMatchedFeishuPeopleCount(people, searchValue);
+
   return (
     <div className="member-feishu-select-popup">
       {menu}
@@ -126,7 +167,9 @@ function renderFeishuPeoplePopup(
           {peopleLoading
             ? "正在同步飞书通讯录..."
             : people.length
-              ? `已加载 ${people.length} 位联系人，输入内容会在这些联系人内过滤`
+              ? keyword
+                ? `已加载 ${people.length} 位联系人，当前匹配 ${matchedCount} 位`
+                : `已加载 ${people.length} 位联系人，输入内容会在这些联系人内过滤`
               : "未加载到飞书联系人，可先手动填写成员信息"}
         </Text>
         <Button
@@ -251,6 +294,8 @@ function MemberIdentityFields({
   peopleWarning: string;
   onReloadPeople: () => void;
 }) {
+  const [feishuSearchValue, setFeishuSearchValue] = useState("");
+
   return (
     <>
       <Form.Item label="从飞书通讯录选择" name="feishuOpenId">
@@ -262,7 +307,10 @@ function MemberIdentityFields({
           notFoundContent={getFeishuPeopleNotFoundContent(people, peopleLoading)}
           placeholder="可选，用于绑定飞书通知"
           optionFilterProp="searchText"
-          popupRender={(menu) => renderFeishuPeoplePopup(menu, people, peopleLoading, onReloadPeople)}
+          searchValue={feishuSearchValue}
+          filterOption={(input, option) => isFeishuOptionMatchedBySearch(input, option?.searchText)}
+          onSearch={setFeishuSearchValue}
+          popupRender={(menu) => renderFeishuPeoplePopup(menu, people, peopleLoading, feishuSearchValue, onReloadPeople)}
           options={people.map((person) => ({
             value: person.openId,
             label: `${person.name}${person.email ? ` · ${person.email}` : ""}`,
@@ -282,11 +330,14 @@ function MemberIdentityFields({
               avatarUrl: person?.avatarUrl ?? form.getFieldValue("avatarUrl"),
               feishuEnabled: Boolean(value)
             });
+
+            // 选择联系人后清空搜索词，下一次展开时展示全量列表，避免保留上一次过滤词造成“只剩一个人”的错觉。
+            setFeishuSearchValue("");
           }}
         />
       </Form.Item>
       <Text className="member-feishu-status" type={peopleError || peopleWarning ? "warning" : "secondary"}>
-        {getFeishuPeopleStatusText(people, peopleLoading, peopleError, peopleWarning)}
+        {getFeishuPeopleStatusText(people, peopleLoading, peopleError, peopleWarning, feishuSearchValue)}
       </Text>
       {peopleError ? (
       <Alert
@@ -390,6 +441,7 @@ function NotificationChannelItem({
 }) {
   const provider = Form.useWatch(["channels", field.name, "provider"], form) as MemberNotificationChannelProvider | undefined;
   const currentProvider = provider ?? "feishu";
+  const [feishuSearchValue, setFeishuSearchValue] = useState("");
 
   return (
     <div className="member-channel-item">
@@ -448,7 +500,10 @@ function NotificationChannelItem({
               notFoundContent={getFeishuPeopleNotFoundContent(people, peopleLoading)}
               placeholder="选择要通知的飞书账号"
               optionFilterProp="searchText"
-              popupRender={(menu) => renderFeishuPeoplePopup(menu, people, peopleLoading, onReloadPeople)}
+              searchValue={feishuSearchValue}
+              filterOption={(input, option) => isFeishuOptionMatchedBySearch(input, option?.searchText)}
+              onSearch={setFeishuSearchValue}
+              popupRender={(menu) => renderFeishuPeoplePopup(menu, people, peopleLoading, feishuSearchValue, onReloadPeople)}
               options={people.map((person) => ({
                 value: person.openId,
                 label: `${person.name}${person.email ? ` · ${person.email}` : ""}`,
@@ -468,9 +523,15 @@ function NotificationChannelItem({
                   feishuUserId: person?.userId ?? ""
                 };
                 form.setFieldsValue({ channels });
+
+                // 通知配置弹窗可能连续给多名成员绑定飞书账号；选中后恢复全量联系人列表，避免上一次搜索词影响下一次选择。
+                setFeishuSearchValue("");
               }}
             />
           </Form.Item>
+          <Text className="member-feishu-status" type={peopleError || peopleWarning ? "warning" : "secondary"}>
+            {getFeishuPeopleStatusText(people, peopleLoading, peopleError, peopleWarning, feishuSearchValue)}
+          </Text>
           <Form.Item name={[field.name, "target"]} hidden>
             <Input />
           </Form.Item>

@@ -1,6 +1,7 @@
 import { config as loadEnv } from "dotenv";
 import { createMySqlIndexQueue } from "@/lib/ai/knowledge/mysql-index-queue";
 import { createMySqlDashboardSideEffectQueue } from "@/lib/dashboard-side-effects/mysql-queue";
+import { createNotificationPayload } from "@/lib/dashboard-side-effects/worker";
 import { getPrismaClient } from "@/lib/database/prisma";
 import {
   addBugFixJobCheck,
@@ -196,20 +197,29 @@ async function smokeDashboardSideEffectQueue(runLabel: string) {
   const queue = createMySqlDashboardSideEffectQueue();
   const workerId = `codex-side-effect-${runLabel}`;
   const entityId = createLocalId("infra-side-effect", runLabel);
-  const dedupeKey = `${WORKSPACE_ID}:infra:${entityId}:refresh_project_metrics:${runLabel}`;
+  const dedupeKey = `${WORKSPACE_ID}:infra:${entityId}:notify_owner:${runLabel}`;
   const futureRunAt = new Date(Date.now() + 60 * 60_000);
   const enqueued = await queue.enqueue({
     workspaceId: WORKSPACE_ID,
-    entityType: "infra_smoke",
+    entityType: "task",
     entityId,
-    jobType: "refresh_project_metrics",
+    jobType: "notify_owner",
     dedupeKey,
     nextRunAt: futureRunAt,
     priority: 1_000_000,
-    payload: {
-      source: "full-chain-infra-smoke",
-      runLabel
-    }
+    // 这里的目标不是测试真实通知发送，而是测试生产已实现的 Dashboard 副作用队列协议。
+    // 使用 notify_owner 可以避开 schema 里预留但 worker 尚未实现的 job 类型；nextRunAt 先放到未来，
+    // 等 inline worker 扫过空队列后再手动领取，确保不会误触发飞书或邮箱发送。
+    payload: createNotificationPayload({
+      targetIdentities: [`codex-infra-${runLabel}`],
+      notificationScene: "taskAssigned",
+      ownerName: `Codex 基础设施冒烟 ${runLabel}`,
+      cardTitle: "Codex 基础设施冒烟",
+      cardText: "这是一条仅用于验证队列协议的测试任务，不应真实发送。",
+      view: "tasks",
+      channelProvider: "feishu",
+      channelId: `codex-infra-${runLabel}`
+    })
   });
 
   assertSmoke(enqueued.id, "Dashboard 副作用队列入队未返回任务 ID");
@@ -246,8 +256,8 @@ async function smokeDashboardSideEffectQueue(runLabel: string) {
     });
   }
   assertSmoke(claimed?.id === enqueued.id, "Dashboard 副作用队列未能领取刚入队的测试任务");
-  assertSmoke(claimed.jobType === "refresh_project_metrics", "Dashboard 副作用队列任务类型读取异常");
-  assertSmoke(claimed.payload.source === "full-chain-infra-smoke", "Dashboard 副作用队列 payload 读取异常");
+  assertSmoke(claimed.jobType === "notify_owner", "Dashboard 副作用队列任务类型读取异常");
+  assertSmoke(claimed.payload.ownerName === `Codex 基础设施冒烟 ${runLabel}`, "Dashboard 副作用队列 payload 读取异常");
 
   await queue.fail(claimed.id, "Codex infra smoke retry check", {
     retryAt: new Date(Date.now() - 1000)

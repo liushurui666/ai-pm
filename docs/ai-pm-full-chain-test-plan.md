@@ -331,6 +331,7 @@
 - MEMBER-002：直连 `listFeishuPeopleWithDiagnostics("")` 复核当前飞书授权范围返回 83 位联系人且无 warning，说明飞书权限、用户组和子部门展开链路正常。
 - 发现并修复：成员页原本进入后只加载一次 `/api/feishu/users`，如果旧会话曾缓存“只返回 2 人”的部分结果，添加成员下拉会持续使用旧联系人；已改为进入成员页短缓存加载，打开“添加成员”或“通知配置”时强制刷新。
 - UI 补充：飞书联系人 Select 底部继续显示已加载人数，并新增“刷新”按钮，便于管理员在飞书授权调整或 dev server 热更新后立即重拉通讯录。
+- UI 复核：添加成员和通知配置里的飞书 Select 改为受控搜索；输入过滤词时同时显示“已同步总人数 + 当前搜索匹配人数”，选中后清空搜索词，避免把当前过滤结果误判为接口只取到少量成员。
 - 本轮回归：直连通讯录脚本返回 `count=83/warning=""`；`git diff --check`、`pnpm lint`、`pnpm build` 均通过。
 
 ### 2026-06-25 全链路冒烟套件统一入口
@@ -339,6 +340,8 @@
 - 新增 package scripts：`pnpm full-chain:smoke` 默认跑核心链路，`pnpm full-chain:smoke:all` 跑全量链路，`pnpm full-chain:smoke:list` 输出用例清单。
 - 分组策略：`static` 覆盖权限、覆盖清单、依赖降级、部署静态配置和 Bug 附件 mock；`auth` 覆盖未登录 API/页面保护与真实浏览器登录页；`db` 覆盖真实 MySQL 写入/清理；`core` 将登录、浏览器、静态、CRUD、工作区身份、版本范围等高价值链路合并成日常回归入口。
 - 本轮执行：`pnpm full-chain:coverage` 通过，登记 25 个脚本/25 个 suite 用例/16 个 package 入口；`pnpm full-chain:smoke` 通过 22/22，用时约 319.5s，覆盖登录、浏览器未登录跳转、工作台 UI、工作区管理、周报、AI 助手 ChatBox、飞书通讯录、权限矩阵、覆盖清单、依赖降级、需求飞书链接 AI 体检、文档拆任务、部署配置、Bug 附件 mock、Bug 修复安全边界、CRUD、成员管理、通知入队、AI 索引管理员重建、工作区身份和版本范围。
+- 全量复核：`pnpm full-chain:smoke:all` 已通过 25/25，用时约 509.3s；`browser` 用例因本机未设置 `AI_PM_QA_STORAGE_STATE` 仍只覆盖登录页、未登录跳转和移动端登录页，已登录工作台 8 个一级视图需要人工 OAuth storageState 后再跑。
+- 发现并修复：`infra` 冒烟原先使用 schema 预留但 worker 尚未实现的 `refresh_project_metrics`，会被 inline worker 标记失败；已改用生产已实现的 `notify_owner` 队列协议，并保持未来 `nextRunAt` 防止真实飞书/邮箱发送。
 
 ### 2026-06-25 工作区管理契约冒烟
 

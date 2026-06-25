@@ -189,6 +189,10 @@ function verifyFeishuPeopleRefreshContracts() {
   assertSmoke(membersText.includes("setDrawerOpen(true);"), "添加成员入口没有在通讯录刷新后打开表单。");
   assertSmoke(membersText.includes("getFeishuPeopleStatusText"), "添加成员表单缺少常驻通讯录同步状态提示。");
   assertSmoke(membersText.includes("已加载 ${people.length} 位联系人"), "飞书联系人下拉缺少已加载人数提示。");
+  // 飞书接口可能已经返回 83 人，但 Select 搜索框只展示当前过滤命中的少数人；
+  // 必须显式展示“总数 + 当前匹配数”，否则用户会误以为添加成员没有取全通讯录。
+  assertSmoke(membersText.includes("当前搜索匹配 ${matchedCount} 位"), "飞书联系人搜索缺少当前匹配人数提示。");
+  assertSmoke(membersText.includes("searchValue={feishuSearchValue}"), "飞书联系人搜索缺少受控 searchValue，旧搜索词可能残留。");
 
   return {
     forceBypassesLoading: true,
