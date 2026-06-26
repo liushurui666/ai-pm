@@ -86,22 +86,16 @@ export const aiPmLoginPageComponent: HostedAuthLoginPageComponent = ({ model }) 
 
     <section class="login-main">
       <section class="login-hero" aria-label="AI PM 登录介绍">
-        <div class="login-orbit" aria-hidden="true">
-          <div class="login-orbit-ring"></div>
-          <div class="login-pulse"></div>
-          <div class="login-node node-plan"><strong>需求规划</strong><span>版本目标同步</span></div>
-          <div class="login-node node-risk"><strong>风险预警</strong><span>交付健康监控</span></div>
-          <div class="login-node node-bug"><strong>Bug 修复</strong><span>AI 辅助 MR</span></div>
-          <div class="login-node node-ship"><strong>任务交付</strong><span>负责人闭环</span></div>
-        </div>
         <div class="login-copy">
           <div class="login-kicker">AI 项目作战室</div>
           <h1>用 AI 驱动项目交付</h1>
-          <p>统一项目、需求、版本、任务、风险与 Bug 管理。登录后系统会完成身份校验、权限控制、负责人匹配和机器人通知，让团队在同一个工作台里推进交付。</p>
-          <div class="login-signals" aria-label="平台能力">
-            <div class="login-signal"><strong>版本</strong><span>从需求池到发布节奏统一跟踪</span></div>
-            <div class="login-signal"><strong>任务</strong><span>看板流转、负责人和延期信号实时归集</span></div>
-            <div class="login-signal"><strong>Bug</strong><span>复现材料、AI 修复和 MR 流程闭环</span></div>
+          <p>把需求、版本、任务、风险与 Bug 收束到同一个交付工作台。登录后 AI PM 会完成身份校验、权限控制、负责人匹配和机器人通知。</p>
+          <div class="login-flow" aria-label="交付链路">
+            <span>需求</span>
+            <span>版本</span>
+            <span>任务</span>
+            <span>Bug</span>
+            <span>MR</span>
           </div>
         </div>
       </section>
