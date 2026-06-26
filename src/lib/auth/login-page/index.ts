@@ -54,6 +54,110 @@ function renderLoginError(error?: string) {
   return error ? `<div class="login-error">${escapeHtml(error)}</div>` : "";
 }
 
+function renderLoginMotionScript() {
+  // Hosted Auth 登录页不经过 Next 客户端 bundle，这里只放一个轻量原生 canvas 动效。
+  // 动效只负责营造 ActiveTheory 类似的空间流动感，不参与登录状态、OAuth state 或跳转逻辑，避免视觉层影响认证安全链路。
+  return `<script>
+(() => {
+  const canvas = document.querySelector("[data-login-orbit]");
+  const shell = document.querySelector(".login-shell");
+  if (!canvas || !shell || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+  const context = canvas.getContext("2d", { alpha: true });
+  if (!context) return;
+
+  const pointer = { x: 0, y: 0, tx: 0, ty: 0 };
+  const particles = [];
+  let width = 0;
+  let height = 0;
+  let ratio = 1;
+  let frame = 0;
+
+  const resize = () => {
+    const rect = shell.getBoundingClientRect();
+    width = Math.max(1, rect.width);
+    height = Math.max(1, rect.height);
+    ratio = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.floor(width * ratio);
+    canvas.height = Math.floor(height * ratio);
+    canvas.style.width = width + "px";
+    canvas.style.height = height + "px";
+    context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    particles.length = 0;
+    const amount = width < 760 ? 54 : 96;
+    for (let index = 0; index < amount; index += 1) {
+      particles.push({
+        angle: Math.random() * Math.PI * 2,
+        radius: 90 + Math.random() * Math.min(width, height) * 0.48,
+        speed: 0.0014 + Math.random() * 0.0026,
+        size: 0.7 + Math.random() * 1.9,
+        drift: Math.random() * Math.PI * 2
+      });
+    }
+  };
+
+  const movePointer = (event) => {
+    pointer.tx = (event.clientX / Math.max(width, 1) - 0.5) * 2;
+    pointer.ty = (event.clientY / Math.max(height, 1) - 0.5) * 2;
+  };
+
+  const draw = () => {
+    frame += 1;
+    pointer.x += (pointer.tx - pointer.x) * 0.045;
+    pointer.y += (pointer.ty - pointer.y) * 0.045;
+    context.clearRect(0, 0, width, height);
+
+    const centerX = width * (0.43 + pointer.x * 0.018);
+    const centerY = height * (0.5 + pointer.y * 0.018);
+    const points = [];
+
+    particles.forEach((particle, index) => {
+      particle.angle += particle.speed;
+      const wave = Math.sin(frame * 0.012 + particle.drift) * 28;
+      const orbitX = Math.cos(particle.angle) * (particle.radius + wave);
+      const orbitY = Math.sin(particle.angle * 0.62) * (particle.radius * 0.32 + wave * 0.3);
+      const x = centerX + orbitX + pointer.x * 24;
+      const y = centerY + orbitY + Math.sin(frame * 0.01 + index) * 10 + pointer.y * 18;
+      points.push({ x, y, size: particle.size });
+    });
+
+    for (let index = 0; index < points.length; index += 1) {
+      const point = points[index];
+      for (let nextIndex = index + 1; nextIndex < points.length; nextIndex += 1) {
+        const next = points[nextIndex];
+        const dx = point.x - next.x;
+        const dy = point.y - next.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance < 118) {
+          context.strokeStyle = "rgba(104, 236, 222, " + (0.12 * (1 - distance / 118)) + ")";
+          context.lineWidth = 1;
+          context.beginPath();
+          context.moveTo(point.x, point.y);
+          context.lineTo(next.x, next.y);
+          context.stroke();
+        }
+      }
+    }
+
+    points.forEach((point, index) => {
+      const pulse = 0.6 + Math.sin(frame * 0.04 + index) * 0.28;
+      context.fillStyle = "rgba(116, 245, 226, " + (0.34 + pulse * 0.18) + ")";
+      context.beginPath();
+      context.arc(point.x, point.y, point.size + pulse, 0, Math.PI * 2);
+      context.fill();
+    });
+
+    requestAnimationFrame(draw);
+  };
+
+  window.addEventListener("resize", resize);
+  window.addEventListener("pointermove", movePointer, { passive: true });
+  resize();
+  draw();
+})();
+</script>`;
+}
+
 export const aiPmLoginPageComponent: HostedAuthLoginPageComponent = ({ model }) => {
   // 登录页是认证系统的公开入口，只负责展示品牌首屏并把 provider 链接交还给 SDK。
   // OAuth state、redirect_uri 白名单、Cookie 和回调仍由 Unified Auth 黑盒处理，避免视觉改版影响登录安全链路。
@@ -68,6 +172,7 @@ export const aiPmLoginPageComponent: HostedAuthLoginPageComponent = ({ model }) 
 </head>
 <body>
   <main class="login-shell">
+    <canvas class="login-orbit-canvas" data-login-orbit aria-hidden="true"></canvas>
     <header class="login-topbar">
       <div class="login-brand" aria-label="AI PM">
         <div class="login-mark" aria-hidden="true">
@@ -86,10 +191,29 @@ export const aiPmLoginPageComponent: HostedAuthLoginPageComponent = ({ model }) 
 
     <section class="login-main">
       <section class="login-hero" aria-label="AI PM 登录介绍">
+        <div class="login-stage" aria-hidden="true">
+          <div class="login-stage-core">
+            <div class="login-core-ring login-core-ring-a"></div>
+            <div class="login-core-ring login-core-ring-b"></div>
+            <div class="login-core-pulse"></div>
+            <div class="login-core-label">AI PM</div>
+          </div>
+          <div class="login-signal login-signal-left">
+            <strong>版本发布</strong>
+            <span>需求同步 · 任务拆解 · MR 跟进</span>
+          </div>
+          <div class="login-signal login-signal-right">
+            <strong>Bug 修复</strong>
+            <span>AI 归因 · 负责人匹配 · 通知闭环</span>
+          </div>
+          <div class="login-terminal">
+            <span></span><span></span><span></span>
+          </div>
+        </div>
         <div class="login-copy">
-          <div class="login-kicker">AI 项目作战室</div>
-          <h1>用 AI 驱动项目交付</h1>
-          <p>把需求、版本、任务、风险与 Bug 收束到同一个交付工作台。登录后 AI PM 会完成身份校验、权限控制、负责人匹配和机器人通知。</p>
+          <div class="login-kicker">AI 项目交付中枢</div>
+          <h1>让项目流动起来</h1>
+          <p>统一需求、版本、任务、风险、Bug 与 MR 信号。登录后系统完成身份校验、权限控制、负责人匹配和机器人通知。</p>
           <div class="login-flow" aria-label="交付链路">
             <span>需求</span>
             <span>版本</span>
@@ -110,6 +234,7 @@ export const aiPmLoginPageComponent: HostedAuthLoginPageComponent = ({ model }) 
       </section>
     </section>
   </main>
+  ${renderLoginMotionScript()}
 </body>
 </html>`;
 };
