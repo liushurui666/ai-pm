@@ -1,26 +1,14 @@
 import {
-  createHostedAuthLoginPageComponent,
   createHostedAuthRouteHandlers,
 } from "@rc-tool/unified-auth-hosted-service";
 import { auth } from "@/lib/auth/server";
 import { unifiedAuthConfig } from "@/lib/auth/config";
+import { aiPmLoginPageComponent } from "@/lib/auth/login-page";
 import {
   getRequestOriginFromRequest,
   normalizeRequestOrigin,
   resolveTrustedRequestOrigin,
 } from "@/lib/auth/request-origin";
-
-const aiPmLoginPageComponent = createHostedAuthLoginPageComponent({
-  backgroundImageUrl: "https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=1800&q=80",
-  brandLabel: "AI 项目管理平台",
-  brandName: "AI PM",
-  heroDescription: "登录后系统会使用统一身份完成访问控制、负责人选择和机器人通知；项目、任务、风险与 Bug 数据仍由 AI PM 站内持久化管理。",
-  heroTitle: "用企业账号安全登录",
-  panelDescription: "请选择企业认证方式进入 AI PM。认证、回调和会话由 Unified Auth SDK 黑盒处理。",
-  panelTitle: "统一登录",
-  primaryProvider: "feishu",
-  statusText: "AI PM Unified Auth"
-});
 
 const aiPmAppOrigin = (unifiedAuthConfig.app?.origin ?? "http://localhost:3004").replace(/\/$/, "");
 const aiPmAllowedRedirectPaths = [
