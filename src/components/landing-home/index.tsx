@@ -7,7 +7,6 @@ import {
   BugOutlined,
   CodeOutlined,
   DashboardOutlined,
-  FireOutlined,
   LoginOutlined,
   RadarChartOutlined,
   SafetyCertificateOutlined,
@@ -110,6 +109,20 @@ const storyScenes: StoryScene[] = [
 const THREE_PANEL_WIDTH = 760;
 const THREE_PANEL_HEIGHT = 430;
 
+function drawRoundedRect(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
+  context.beginPath();
+  context.moveTo(x + radius, y);
+  context.lineTo(x + width - radius, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + radius);
+  context.lineTo(x + width, y + height - radius);
+  context.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  context.lineTo(x + radius, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - radius);
+  context.lineTo(x, y + radius);
+  context.quadraticCurveTo(x, y, x + radius, y);
+  context.closePath();
+}
+
 function createPanelTexture(scene: StoryScene) {
   const canvas = document.createElement("canvas");
   canvas.width = 1024;
@@ -120,46 +133,70 @@ function createPanelTexture(scene: StoryScene) {
     return new THREE.CanvasTexture(canvas);
   }
 
-  // WebGL 卡片文字用 canvas texture 一次性绘制，运行时只更新 3D 位置，避免每帧操作 DOM 造成卡顿。
-  const gradient = context.createLinearGradient(0, 0, canvas.width, canvas.height);
-  gradient.addColorStop(0, "rgba(7,18,32,0.92)");
-  gradient.addColorStop(0.52, "rgba(13,37,56,0.78)");
-  gradient.addColorStop(1, "rgba(2,8,16,0.94)");
+  // 玻璃板纹理只保留少量识别信息，让 WebGL 装置成为主角，避免重新变成“故事进度页”。
+  const gradient = context.createRadialGradient(520, 250, 60, 520, 250, 760);
+  gradient.addColorStop(0, "rgba(218,245,246,0.4)");
+  gradient.addColorStop(0.35, "rgba(70,108,116,0.42)");
+  gradient.addColorStop(1, "rgba(6,20,23,0.7)");
   context.fillStyle = gradient;
-  context.fillRect(0, 0, canvas.width, canvas.height);
+  drawRoundedRect(context, 24, 24, canvas.width - 48, canvas.height - 48, 54);
+  context.fill();
 
-  context.strokeStyle = scene.accent;
-  context.globalAlpha = 0.55;
-  context.lineWidth = 3;
-  context.strokeRect(24, 24, canvas.width - 48, canvas.height - 48);
+  context.save();
+  drawRoundedRect(context, 24, 24, canvas.width - 48, canvas.height - 48, 54);
+  context.clip();
 
-  context.globalAlpha = 0.24;
-  for (let index = 0; index < 16; index += 1) {
-    context.beginPath();
-    context.moveTo(24, 96 + index * 24);
-    context.lineTo(canvas.width - 24, 96 + index * 18);
-    context.stroke();
+  for (let index = 0; index < 120; index += 1) {
+    const x = Math.sin(index * 91.7) * 520 + 520;
+    const y = Math.cos(index * 48.2) * 290 + 290;
+    const radius = 26 + (index % 7) * 13;
+    const blot = context.createRadialGradient(x, y, 0, x, y, radius);
+    blot.addColorStop(0, `${scene.accent}66`);
+    blot.addColorStop(0.46, "rgba(255,255,255,0.08)");
+    blot.addColorStop(1, "rgba(255,255,255,0)");
+    context.fillStyle = blot;
+    context.fillRect(x - radius, y - radius, radius * 2, radius * 2);
   }
 
+  context.globalAlpha = 0.18;
+  context.strokeStyle = "#ffffff";
+  context.lineWidth = 2;
+  for (let index = 0; index < 11; index += 1) {
+    context.beginPath();
+    context.moveTo(64, 96 + index * 38);
+    context.bezierCurveTo(250, 78 + index * 28, 650, 138 + index * 22, 960, 82 + index * 36);
+    context.stroke();
+  }
+  context.restore();
+
+  context.strokeStyle = scene.accent;
+  context.globalAlpha = 0.42;
+  context.lineWidth = 5;
+  drawRoundedRect(context, 26, 26, canvas.width - 52, canvas.height - 52, 54);
+  context.stroke();
+
   context.globalAlpha = 1;
-  context.fillStyle = scene.accent;
-  context.font = "700 30px monospace";
-  context.fillText(`AI PM / ${scene.index}`, 60, 82);
-
-  context.fillStyle = "rgba(255,255,255,0.88)";
-  context.font = "900 76px monospace";
-  const titleParts = scene.title.split(" ");
-  context.fillText(titleParts.slice(0, 2).join(" "), 60, 224);
-  context.fillText(titleParts.slice(2).join(" ") || scene.label, 60, 310);
-
-  context.fillStyle = "rgba(232,246,255,0.72)";
-  context.font = "600 30px sans-serif";
-  context.fillText(scene.metric, 62, 382);
-
   context.fillStyle = "rgba(255,255,255,0.52)";
-  context.font = "500 22px sans-serif";
+  context.font = "600 26px monospace";
+  context.textAlign = "center";
+  context.fillText("AI PM", canvas.width / 2, 180);
+
+  context.fillStyle = "rgba(255,255,255,0.92)";
+  context.shadowColor = scene.accent;
+  context.shadowBlur = 26;
+  context.font = "900 64px monospace";
+  context.fillText(scene.label.toUpperCase(), canvas.width / 2, 286);
+
+  context.shadowBlur = 0;
+  context.fillStyle = "rgba(232,246,255,0.58)";
+  context.font = "600 28px sans-serif";
+  context.fillText(scene.metric, canvas.width / 2, 352);
+
+  context.textAlign = "left";
+  context.fillStyle = "rgba(255,255,255,0.42)";
+  context.font = "500 20px monospace";
   scene.signals.forEach((signal, index) => {
-    context.fillText(`-> ${signal}`, 64, 442 + index * 34);
+    context.fillText(`// ${signal}`, 76 + index * 250, 494);
   });
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -180,7 +217,6 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
   const { cycleMode, effectiveTheme, mode: themeMode } = useThemePreference();
 
   const activeScene = storyScenes[activeIndex];
-  const nextScene = storyScenes[(activeIndex + 1) % storyScenes.length];
   const primaryLabel = isAuthenticated ? "进入工作台" : "登录并进入工作台";
 
   const sceneStyle = useMemo(
@@ -316,7 +352,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     pointLight.position.set(-2.6, 2.8, 4);
     scene.add(pointLight);
 
-    const particleCount = 2600;
+    const particleCount = 3200;
     const particlePositions = new Float32Array(particleCount * 3);
     const particleColors = new Float32Array(particleCount * 3);
     const baseColors = storyScenes.map((sceneItem) => new THREE.Color(sceneItem.accent));
@@ -363,6 +399,159 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     });
     const particles = new THREE.Points(particleGeometry, particleMaterial);
     stage.add(particles);
+
+    const pillarGroup = new THREE.Group();
+    pillarGroup.position.set(1.16, -0.06, -0.42);
+    stage.add(pillarGroup);
+
+    // 参考 Active Theory /work 的视觉重点不是显式进度条，而是中心光柱本身；
+    // 这里用柱体、纵向线框和上升粒子组成一个“交付能量核”，滚轮只轻微改变色相和卡片位置。
+    const pillarShellGeometry = new THREE.CylinderGeometry(0.72, 0.72, 4.9, 96, 1, true);
+    const pillarShellMaterial = new THREE.MeshBasicMaterial({
+      blending: THREE.AdditiveBlending,
+      color: 0x6fffe2,
+      depthWrite: false,
+      opacity: 0.14,
+      side: THREE.DoubleSide,
+      transparent: true,
+    });
+    const pillarShell = new THREE.Mesh(pillarShellGeometry, pillarShellMaterial);
+    pillarGroup.add(pillarShell);
+
+    const pillarCoreGeometry = new THREE.CylinderGeometry(0.18, 0.3, 5.8, 64, 1, true);
+    const pillarCoreMaterial = new THREE.MeshBasicMaterial({
+      blending: THREE.AdditiveBlending,
+      color: 0x7fffe2,
+      depthWrite: false,
+      opacity: 0.34,
+      side: THREE.DoubleSide,
+      transparent: true,
+    });
+    const pillarCore = new THREE.Mesh(pillarCoreGeometry, pillarCoreMaterial);
+    pillarGroup.add(pillarCore);
+
+    const organicPalette = ["#7ffff0", "#b787ff", "#3fb4ff", "#ffd37a"];
+    const organicMeshes = Array.from({ length: 11 }, (_, chunkIndex) => {
+      const geometry = new THREE.IcosahedronGeometry(0.44 + (chunkIndex % 3) * 0.09, 2);
+      const position = geometry.attributes.position as THREE.BufferAttribute;
+      for (let vertexIndex = 0; vertexIndex < position.count; vertexIndex += 1) {
+        const x = position.getX(vertexIndex);
+        const y = position.getY(vertexIndex);
+        const z = position.getZ(vertexIndex);
+        const warp = 1 + Math.sin(x * 6.7 + chunkIndex) * 0.16 + Math.cos(z * 5.3 + y * 2.1) * 0.12;
+        position.setXYZ(vertexIndex, x * warp, y * (0.86 + Math.sin(chunkIndex) * 0.14), z * warp);
+      }
+      position.needsUpdate = true;
+      geometry.computeVertexNormals();
+
+      const material = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(organicPalette[chunkIndex % organicPalette.length]),
+        emissive: new THREE.Color(organicPalette[(chunkIndex + 1) % organicPalette.length]).multiplyScalar(0.18),
+        metalness: 0.86,
+        opacity: 0.72,
+        roughness: 0.18,
+        transparent: true,
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      const y = -2.7 + chunkIndex * 0.54;
+      mesh.position.set(Math.sin(chunkIndex * 1.28) * 0.18, y, Math.cos(chunkIndex * 1.11) * 0.16);
+      mesh.rotation.set(chunkIndex * 0.42, chunkIndex * 0.68, chunkIndex * 0.31);
+      mesh.scale.set(1.2, 0.72 + (chunkIndex % 2) * 0.18, 0.92);
+      pillarGroup.add(mesh);
+      return mesh;
+    });
+
+    const spikeMaterial = new THREE.MeshStandardMaterial({
+      color: 0xbffff7,
+      emissive: 0x163f50,
+      metalness: 0.72,
+      opacity: 0.56,
+      roughness: 0.24,
+      transparent: true,
+    });
+    const spikeMeshes = Array.from({ length: 22 }, (_, spikeIndex) => {
+      const geometry = new THREE.ConeGeometry(0.09 + (spikeIndex % 3) * 0.025, 0.48 + (spikeIndex % 4) * 0.08, 8);
+      const mesh = new THREE.Mesh(geometry, spikeMaterial);
+      const angle = spikeIndex * 1.72;
+      const radius = 0.42 + (spikeIndex % 5) * 0.045;
+      mesh.position.set(Math.cos(angle) * radius, -2.36 + (spikeIndex % 11) * 0.48, Math.sin(angle) * radius);
+      mesh.rotation.set(Math.PI / 2 + Math.sin(angle) * 0.54, 0, -angle);
+      pillarGroup.add(mesh);
+      return mesh;
+    });
+
+    const pillarLineVertices: number[] = [];
+    for (let lineIndex = 0; lineIndex < 72; lineIndex += 1) {
+      const angle = (lineIndex / 72) * Math.PI * 2;
+      const radius = 0.74 + Math.sin(lineIndex * 1.7) * 0.025;
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+      pillarLineVertices.push(x, -2.55, z, x * 0.9, 2.55, z * 0.9);
+    }
+    const pillarLineGeometry = new THREE.BufferGeometry();
+    pillarLineGeometry.setAttribute("position", new THREE.Float32BufferAttribute(pillarLineVertices, 3));
+    const pillarLineMaterial = new THREE.LineBasicMaterial({
+      blending: THREE.AdditiveBlending,
+      color: 0x98fff0,
+      depthWrite: false,
+      opacity: 0.26,
+      transparent: true,
+    });
+    const pillarLines = new THREE.LineSegments(pillarLineGeometry, pillarLineMaterial);
+    pillarGroup.add(pillarLines);
+
+    const ringMeshes = Array.from({ length: 9 }, (_, ringIndex) => {
+      const ringGeometry = new THREE.TorusGeometry(0.78 + ringIndex * 0.026, 0.006, 8, 128);
+      const ringMaterial = new THREE.MeshBasicMaterial({
+        blending: THREE.AdditiveBlending,
+        color: 0x6fffe2,
+        depthWrite: false,
+        opacity: 0.3,
+        transparent: true,
+      });
+      const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+      ring.rotation.x = Math.PI / 2;
+      ring.position.y = -2.2 + ringIndex * 0.54;
+      pillarGroup.add(ring);
+      return ring;
+    });
+
+    const columnParticleCount = 1800;
+    const columnParticlePositions = new Float32Array(columnParticleCount * 3);
+    const columnParticleSeeds = new Float32Array(columnParticleCount * 4);
+    const columnParticleColors = new Float32Array(columnParticleCount * 3);
+    for (let index = 0; index < columnParticleCount; index += 1) {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = 0.54 + Math.random() * 1.1;
+      const heightSeed = Math.random();
+      columnParticleSeeds[index * 4] = angle;
+      columnParticleSeeds[index * 4 + 1] = radius;
+      columnParticleSeeds[index * 4 + 2] = heightSeed;
+      columnParticleSeeds[index * 4 + 3] = 0.55 + Math.random() * 1.35;
+      columnParticlePositions[index * 3] = Math.cos(angle) * radius;
+      columnParticlePositions[index * 3 + 1] = heightSeed * 5.2 - 2.6;
+      columnParticlePositions[index * 3 + 2] = Math.sin(angle) * radius;
+
+      const color = baseColors[index % baseColors.length].clone().lerp(new THREE.Color("#ffffff"), 0.25 + Math.random() * 0.28);
+      columnParticleColors[index * 3] = color.r;
+      columnParticleColors[index * 3 + 1] = color.g;
+      columnParticleColors[index * 3 + 2] = color.b;
+    }
+    const columnParticleGeometry = new THREE.BufferGeometry();
+    columnParticleGeometry.setAttribute("position", new THREE.BufferAttribute(columnParticlePositions, 3));
+    columnParticleGeometry.setAttribute("color", new THREE.BufferAttribute(columnParticleColors, 3));
+    const columnParticleMaterial = new THREE.PointsMaterial({
+      alphaTest: 0.02,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      map: particleMaterial.map,
+      opacity: 0.86,
+      size: 0.043,
+      transparent: true,
+      vertexColors: true,
+    });
+    const columnParticles = new THREE.Points(columnParticleGeometry, columnParticleMaterial);
+    pillarGroup.add(columnParticles);
 
     const panelMeshes = storyScenes.map((sceneItem, index) => {
       const geometry = new THREE.PlaneGeometry(THREE_PANEL_WIDTH / 260, THREE_PANEL_HEIGHT / 260, 12, 8);
@@ -419,21 +608,59 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       pointLight.color.lerp(activeColor, 0.035);
       spineMaterial.color.lerp(activeColor, 0.025);
       spineMaterial.emissive.lerp(activeColor.clone().multiplyScalar(0.18), 0.025);
+      pillarShellMaterial.color.lerp(activeColor, 0.03);
+      pillarCoreMaterial.color.lerp(activeColor, 0.03);
+      pillarLineMaterial.color.lerp(activeColor.clone().lerp(new THREE.Color("#ffffff"), 0.28), 0.03);
+      spikeMaterial.color.lerp(activeColor.clone().lerp(new THREE.Color("#ffffff"), 0.46), 0.025);
+      ringMeshes.forEach((ring, ringIndex) => {
+        const material = ring.material as THREE.MeshBasicMaterial;
+        material.color.lerp(activeColor, 0.03);
+        material.opacity = 0.16 + Math.sin(time * 1.12 + ringIndex) * 0.04 + ringIndex * 0.012;
+        ring.rotation.z += 0.002 + ringIndex * 0.0003;
+      });
 
       stage.rotation.y += 0.0022;
       particles.rotation.y -= 0.0009;
       particles.rotation.z = Math.sin(time * 0.18) * 0.06;
       spine.rotation.x += 0.003;
       spine.rotation.y += 0.006;
+      pillarGroup.rotation.y -= 0.0034;
+      pillarShell.scale.x = 1 + Math.sin(time * 1.3) * 0.035;
+      pillarShell.scale.z = 1 + Math.cos(time * 1.1) * 0.035;
+      pillarCore.scale.x = 1 + Math.sin(time * 1.9) * 0.09;
+      pillarCore.scale.z = 1 + Math.sin(time * 1.9) * 0.09;
+      pillarLines.rotation.y += 0.0048;
+      organicMeshes.forEach((mesh, chunkIndex) => {
+        const material = mesh.material as THREE.MeshStandardMaterial;
+        const paletteColor = new THREE.Color(organicPalette[(chunkIndex + activeIndexRef.current) % organicPalette.length]);
+        material.color.lerp(paletteColor.lerp(activeColor, 0.34), 0.025);
+        material.emissive.lerp(paletteColor.multiplyScalar(0.2), 0.025);
+        mesh.rotation.x += 0.0018 + chunkIndex * 0.0001;
+        mesh.rotation.y -= 0.0028;
+        mesh.position.x = Math.sin(time * 0.65 + chunkIndex * 1.28) * 0.2;
+        mesh.position.z = Math.cos(time * 0.7 + chunkIndex * 1.11) * 0.18;
+      });
+      spikeMeshes.forEach((mesh, spikeIndex) => {
+        mesh.rotation.z -= 0.002 + spikeIndex * 0.00006;
+      });
+
+      const columnPositions = columnParticleGeometry.attributes.position as THREE.BufferAttribute;
+      for (let index = 0; index < columnParticleCount; index += 1) {
+        const angle = columnParticleSeeds[index * 4] + time * columnParticleSeeds[index * 4 + 3] * 0.42;
+        const radius = columnParticleSeeds[index * 4 + 1] + Math.sin(time * 1.6 + index) * 0.035;
+        const y = (((columnParticleSeeds[index * 4 + 2] + time * 0.062 * columnParticleSeeds[index * 4 + 3]) % 1) * 5.4) - 2.7;
+        columnPositions.setXYZ(index, Math.cos(angle) * radius, y, Math.sin(angle) * radius);
+      }
+      columnPositions.needsUpdate = true;
 
       panelMeshes.forEach((mesh, index) => {
         const offset = getOffset(index);
         const absOffset = Math.abs(offset);
-        const targetX = offset * 2.56;
-        const targetY = Math.sin(time * 0.74 + index * 0.86) * 0.24 - absOffset * 0.07;
-        const targetZ = -absOffset * 1.34 + (offset === 0 ? 1.18 : -0.58);
-        const targetScale = offset === 0 ? 1.28 : 0.86 - absOffset * 0.09;
-        const targetOpacity = offset === 0 ? 0.92 : Math.max(0.15, 0.36 - absOffset * 0.06);
+        const targetX = 1.26 + offset * 0.78;
+        const targetY = Math.sin(time * 0.74 + index * 0.86) * 0.18 - absOffset * 0.08;
+        const targetZ = -absOffset * 1.5 + (offset === 0 ? 0.84 : -0.72);
+        const targetScale = offset === 0 ? 0.95 : 0.68 - absOffset * 0.08;
+        const targetOpacity = offset === 0 ? 0.72 : Math.max(0.06, 0.2 - absOffset * 0.04);
 
         mesh.position.x += (targetX - mesh.position.x) * 0.065;
         mesh.position.y += (targetY - mesh.position.y) * 0.065;
@@ -461,6 +688,26 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       particleGeometry.dispose();
       particleMaterial.map?.dispose();
       particleMaterial.dispose();
+      pillarShellGeometry.dispose();
+      pillarShellMaterial.dispose();
+      pillarCoreGeometry.dispose();
+      pillarCoreMaterial.dispose();
+      pillarLineGeometry.dispose();
+      pillarLineMaterial.dispose();
+      organicMeshes.forEach((mesh) => {
+        mesh.geometry.dispose();
+        (mesh.material as THREE.MeshStandardMaterial).dispose();
+      });
+      spikeMeshes.forEach((mesh) => {
+        mesh.geometry.dispose();
+      });
+      spikeMaterial.dispose();
+      ringMeshes.forEach((ring) => {
+        ring.geometry.dispose();
+        (ring.material as THREE.MeshBasicMaterial).dispose();
+      });
+      columnParticleGeometry.dispose();
+      columnParticleMaterial.dispose();
       spineGeometry.dispose();
       spineMaterial.dispose();
       panelMeshes.forEach((mesh) => {
@@ -520,8 +767,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         </div>
       </header>
 
-      <aside className="landing-story-filter" aria-label="故事分镜筛选">
-        <span>WHAT ARE YOU LOOKING FOR?</span>
+      <aside className="landing-story-filter" aria-label="场景信号">
+        <span>SIGNAL FIELD</span>
         {storyScenes.map((sceneItem, index) => (
           <button
             aria-pressed={activeIndex === index}
@@ -530,12 +777,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
             onClick={() => goToScene(index)}
             type="button"
           >
-            {"->"} {sceneItem.category}
+            {sceneItem.category}
           </button>
         ))}
-        <a className="landing-story-filter__ask" href={primaryHref}>
-          ASK AI PM ANYTHING...
-        </a>
       </aside>
 
       <section className="landing-story-copy" aria-live="polite">
@@ -563,40 +807,18 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
       <section className="landing-story-console" aria-label="当前分镜状态">
         <div>
-          <span>NOW PLAYING</span>
+          <span>SYSTEM SIGNAL</span>
           <strong>{activeScene.metric}</strong>
         </div>
         <ul>
           {activeScene.signals.map((signal) => (
-            <li key={signal}>
-              <FireOutlined />
-              {signal}
-            </li>
+            <li key={signal}>{signal}</li>
           ))}
         </ul>
       </section>
 
       <footer className="landing-story-footer">
-        <div className="landing-story-counter">
-          <span>{String(activeIndex + 1).padStart(2, "0")}</span>
-          <i />
-          <span>{String(storyScenes.length).padStart(2, "0")}</span>
-        </div>
-        <div className="landing-story-progress" aria-hidden="true">
-          {storyScenes.map((sceneItem, index) => (
-            <button
-              aria-label={`切换到 ${sceneItem.label}`}
-              className={activeIndex === index ? "is-active" : undefined}
-              key={sceneItem.key}
-              onClick={() => goToScene(index)}
-              type="button"
-            />
-          ))}
-        </div>
-        <div className="landing-story-next">
-          <span>NEXT</span>
-          <strong>{nextScene.label}</strong>
-        </div>
+        <span>WHEEL / TOUCH TO SHIFT THE FIELD</span>
       </footer>
     </main>
   );
