@@ -58,6 +58,7 @@ function renderFloatingCard(
   variant: "blue" | "green" | "gold" = "green",
 ) {
   // 漂浮项目卡片按参考图手写为 DOM：标题、状态、任务/Bug/成员指标和头像点阵都可独立响应缩放。
+  // 卡片的循环镜头感交给 CSS keyframes 处理，避免 JS 每帧读写 DOM 影响 OAuth 登录页的稳定性。
   return `
     <article class="login-project-card ${className}">
       <div class="login-project-card-head">
