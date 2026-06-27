@@ -93,8 +93,8 @@ function renderLoginError(error?: string) {
 }
 
 function renderMotionScript() {
-  // 顶级登录视觉拆成两个独立画布：Three.js 负责 3D 粒子星云，2D canvas 负责水波纹折射。
-  // 动效只处理视觉，不读取 Cookie、不发请求到业务接口、不干预认证按钮点击，降低 Hosted Auth 页面风险。
+  // 顶级登录视觉拆成两个独立画布：Three.js 负责 3D 粒子空间，2D canvas 负责液态光场。
+  // 这里刻意不做真实表单联动或业务请求，避免 Hosted Auth 页面视觉升级影响 OAuth state、回跳和 Cookie 处理。
   return `<script>
 (() => {
   const threeCanvas = document.querySelector("[data-login-three]");
@@ -135,41 +135,81 @@ function renderMotionScript() {
     if (!context) return;
     let frame = 0;
 
-    const drawRipple = () => {
+    const drawLiquidField = () => {
       frame += 1;
       pointer.x += (pointer.tx - pointer.x) * 0.045;
       pointer.y += (pointer.ty - pointer.y) * 0.045;
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
       context.clearRect(0, 0, width, height);
-      const centerX = width * (0.47 + pointer.x * 0.03);
-      const centerY = height * (0.68 + pointer.y * 0.025);
+      context.globalCompositeOperation = "lighter";
+      const centerX = width * (0.53 + pointer.x * 0.035);
+      const centerY = height * (0.69 + pointer.y * 0.025);
+      const sceneWidth = Math.min(width, 1440);
 
-      for (let ring = 0; ring < 11; ring += 1) {
-        const progress = ((frame * 0.008 + ring / 11) % 1);
-        const radiusX = width * (0.08 + progress * 0.34);
-        const radiusY = radiusX * 0.28;
-        const alpha = (1 - progress) * 0.23;
+      for (let band = 0; band < 20; band += 1) {
+        const bandOffset = band / 20;
+        const radiusX = sceneWidth * (0.18 + bandOffset * 0.34);
+        const radiusY = radiusX * (0.18 + bandOffset * 0.04);
+        const phase = frame * 0.012 + band * 0.42;
         context.beginPath();
-        context.ellipse(centerX, centerY, radiusX, radiusY, -0.07, 0, Math.PI * 2);
-        context.strokeStyle = "rgba(104, 245, 226, " + alpha + ")";
-        context.lineWidth = 1 + progress * 2.4;
-        context.shadowBlur = 28;
-        context.shadowColor = "rgba(82, 235, 255, " + alpha + ")";
+        for (let step = 0; step <= 150; step += 1) {
+          const progress = step / 150;
+          const angle = -Math.PI * 1.05 + progress * Math.PI * 2.1;
+          const wave = Math.sin(progress * 10 + phase) * sceneWidth * 0.008 + Math.cos(progress * 17 - phase * 0.7) * sceneWidth * 0.004;
+          const x = centerX + Math.cos(angle) * (radiusX + wave) + Math.sin(phase * 0.7 + progress * 3.5) * 8;
+          const y = centerY + Math.sin(angle) * (radiusY + wave * 0.32) + Math.cos(phase + progress * 4.2) * 5;
+          if (step === 0) {
+            context.moveTo(x, y);
+          } else {
+            context.lineTo(x, y);
+          }
+        }
+        const alpha = Math.max(0.025, 0.13 - bandOffset * 0.08);
+        context.strokeStyle = band % 3 === 0
+          ? "rgba(122, 255, 232, " + alpha + ")"
+          : "rgba(72, 170, 255, " + (alpha * 0.72) + ")";
+        context.lineWidth = 0.7 + bandOffset * 1.2;
+        context.shadowBlur = 16;
+        context.shadowColor = "rgba(84, 232, 255, " + (alpha * 1.7) + ")";
         context.stroke();
       }
 
-      const gradient = context.createRadialGradient(centerX, centerY, 8, centerX, centerY, width * 0.24);
-      gradient.addColorStop(0, "rgba(130, 249, 230, 0.42)");
-      gradient.addColorStop(0.38, "rgba(42, 176, 255, 0.2)");
+      for (let ribbon = 0; ribbon < 5; ribbon += 1) {
+        const y = centerY - sceneWidth * 0.055 + ribbon * sceneWidth * 0.027;
+        const phase = frame * 0.018 + ribbon * 1.15;
+        const gradient = context.createLinearGradient(centerX - sceneWidth * 0.32, y, centerX + sceneWidth * 0.28, y);
+        gradient.addColorStop(0, "rgba(72, 195, 255, 0)");
+        gradient.addColorStop(0.42, "rgba(111, 255, 224, 0.12)");
+        gradient.addColorStop(0.58, "rgba(68, 156, 255, 0.08)");
+        gradient.addColorStop(1, "rgba(72, 195, 255, 0)");
+        context.beginPath();
+        context.moveTo(centerX - sceneWidth * 0.34, y);
+        for (let step = 0; step <= 72; step += 1) {
+          const progress = step / 72;
+          const x = centerX - sceneWidth * 0.34 + progress * sceneWidth * 0.68;
+          const nextY = y + Math.sin(progress * Math.PI * 2.4 + phase) * (10 + ribbon * 2) + pointer.y * 7;
+          context.lineTo(x, nextY);
+        }
+        context.strokeStyle = gradient;
+        context.lineWidth = 12 - ribbon * 1.4;
+        context.shadowBlur = 26;
+        context.shadowColor = "rgba(80, 235, 255, 0.12)";
+        context.stroke();
+      }
+
+      const gradient = context.createRadialGradient(centerX, centerY, 10, centerX, centerY, sceneWidth * 0.27);
+      gradient.addColorStop(0, "rgba(111, 255, 222, 0.22)");
+      gradient.addColorStop(0.36, "rgba(42, 176, 255, 0.08)");
       gradient.addColorStop(1, "rgba(6, 12, 24, 0)");
       context.fillStyle = gradient;
       context.beginPath();
-      context.ellipse(centerX, centerY, width * 0.25, width * 0.08, -0.06, 0, Math.PI * 2);
+      context.ellipse(centerX, centerY, sceneWidth * 0.28, sceneWidth * 0.075, -0.04, 0, Math.PI * 2);
       context.fill();
+      context.globalCompositeOperation = "source-over";
 
-      requestAnimationFrame(drawRipple);
+      requestAnimationFrame(drawLiquidField);
     };
-    drawRipple();
+    drawLiquidField();
   };
 
   const startFallbackParticles = () => {
@@ -217,45 +257,63 @@ function renderMotionScript() {
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 100);
       camera.position.set(0, 0.25, 4.8);
+      const field = new THREE.Group();
+      scene.add(field);
 
-      const count = 1600;
+      const spriteCanvas = document.createElement("canvas");
+      spriteCanvas.width = 64;
+      spriteCanvas.height = 64;
+      const spriteContext = spriteCanvas.getContext("2d");
+      if (spriteContext) {
+        const spriteGradient = spriteContext.createRadialGradient(32, 32, 0, 32, 32, 32);
+        spriteGradient.addColorStop(0, "rgba(210,255,252,0.95)");
+        spriteGradient.addColorStop(0.32, "rgba(112,244,225,0.62)");
+        spriteGradient.addColorStop(1, "rgba(112,244,225,0)");
+        spriteContext.fillStyle = spriteGradient;
+        spriteContext.fillRect(0, 0, 64, 64);
+      }
+      const particleTexture = new THREE.CanvasTexture(spriteCanvas);
+
+      const count = 1850;
       const positions = new Float32Array(count * 3);
       const colors = new Float32Array(count * 3);
       for (let index = 0; index < count; index += 1) {
-        const radius = 0.5 + Math.random() * 2.55;
+        const radius = 0.45 + Math.random() * 3.1;
         const angle = Math.random() * Math.PI * 2;
-        const heightBand = (Math.random() - 0.5) * 1.85;
+        const heightBand = (Math.random() - 0.5) * 2.05;
         positions[index * 3] = Math.cos(angle) * radius;
         positions[index * 3 + 1] = heightBand + Math.sin(radius * 2.2) * 0.18;
-        positions[index * 3 + 2] = Math.sin(angle) * radius;
-        colors[index * 3] = 0.25 + Math.random() * 0.25;
-        colors[index * 3 + 1] = 0.72 + Math.random() * 0.26;
-        colors[index * 3 + 2] = 0.85 + Math.random() * 0.15;
+        positions[index * 3 + 2] = Math.sin(angle) * radius + (Math.random() - 0.5) * 0.72;
+        colors[index * 3] = 0.22 + Math.random() * 0.2;
+        colors[index * 3 + 1] = 0.78 + Math.random() * 0.2;
+        colors[index * 3 + 2] = 0.82 + Math.random() * 0.18;
       }
 
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
       geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
       const material = new THREE.PointsMaterial({
-        size: 0.022,
+        size: 0.045,
+        map: particleTexture,
         transparent: true,
-        opacity: 0.78,
+        opacity: 0.62,
         vertexColors: true,
         depthWrite: false,
+        alphaTest: 0.02,
         blending: THREE.AdditiveBlending
       });
       const cloud = new THREE.Points(geometry, material);
-      scene.add(cloud);
+      field.add(cloud);
 
       const ringGeometry = new THREE.TorusGeometry(1.72, 0.006, 8, 180);
-      const ringMaterial = new THREE.MeshBasicMaterial({ color: 0x68f5dd, transparent: true, opacity: 0.28 });
-      const rings = [0, 1, 2].map((_, index) => {
+      const ringMaterial = new THREE.MeshBasicMaterial({ color: 0x68f5dd, transparent: true, opacity: 0.18 });
+      const rings = [0, 1, 2, 3].map((_, index) => {
         const ring = new THREE.Mesh(ringGeometry, ringMaterial.clone());
         ring.rotation.x = Math.PI * 0.62;
         ring.rotation.z = index * 0.42;
-        ring.scale.setScalar(1 + index * 0.26);
-        ring.material.opacity = 0.24 - index * 0.045;
-        scene.add(ring);
+        ring.scale.setScalar(1 + index * 0.32);
+        ring.material.opacity = 0.18 - index * 0.025;
+        field.add(ring);
         return ring;
       });
 
@@ -270,13 +328,15 @@ function renderMotionScript() {
       const animate = () => {
         pointer.x += (pointer.tx - pointer.x) * 0.035;
         pointer.y += (pointer.ty - pointer.y) * 0.035;
-        cloud.rotation.y += 0.0018;
-        cloud.rotation.x = -0.12 + pointer.y * 0.05;
-        cloud.position.x = pointer.x * 0.08;
+        field.rotation.y += 0.0024;
+        field.rotation.x = -0.08 + pointer.y * 0.075;
+        field.position.x = pointer.x * 0.12;
+        field.position.y = pointer.y * 0.035;
+        cloud.rotation.z += 0.0008;
         rings.forEach((ring, index) => {
-          ring.rotation.z += 0.0025 + index * 0.001;
-          ring.position.x = pointer.x * 0.05;
-          ring.position.y = -0.66 + pointer.y * 0.04;
+          ring.rotation.z += 0.003 + index * 0.0012;
+          ring.position.x = pointer.x * 0.08;
+          ring.position.y = -0.66 + pointer.y * 0.055;
         });
         renderer.render(scene, camera);
         requestAnimationFrame(animate);
