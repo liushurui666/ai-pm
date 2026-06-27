@@ -86,7 +86,9 @@ function renderFeature(icon: string, title: string, description: string) {
 }
 
 function renderLoginError(error?: string) {
-  return error ? `<span class="login-session-error" role="alert">${escapeHtml(error)}</span>` : "";
+  // 正常 OAuth 登录不需要用户填写任何“会话信息”；只有 Auth Service 明确返回错误时，
+  // 才显示一条解释性提示，避免把错误态伪装成可输入表单。
+  return error ? `<div class="login-error" role="alert">${escapeHtml(error)}</div>` : "";
 }
 
 function renderMotionScript() {
@@ -255,9 +257,7 @@ export const aiPmLoginPageComponent: HostedAuthLoginPageComponent = ({ model }) 
         <div class="login-panel-kicker">AI PM 统一登录</div>
         <h2 id="login-title">统一登录</h2>
         <p>请选择企业认证方式进入 AI PM，认证、回调和会话由 Unified Auth SDK 黑盒处理。</p>
-        <div class="login-session-field" aria-hidden="${model.error ? "false" : "true"}">
-          <span>${model.error ? renderLoginError(model.error) : "请输入会话信息"}</span>
-        </div>
+        ${renderLoginError(model.error)}
         ${renderLoginProviders(model.providers)}
         <div class="login-footer">client_id: ${escapeHtml(model.clientId)}</div>
       </section>
