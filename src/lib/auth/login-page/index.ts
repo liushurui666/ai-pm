@@ -92,92 +92,202 @@ function renderLoginError(error?: string) {
 }
 
 function renderMotionScript() {
-  // 参考图的复杂空间感用轻量 canvas 手写：星点、连接线和流动轨迹都在本页即时绘制。
-  // 脚本只处理视觉动效，不读取 Cookie、不发请求、不干预认证按钮点击，降低 Hosted Auth 页面风险。
+  // 顶级登录视觉拆成两个独立画布：Three.js 负责 3D 粒子星云，2D canvas 负责水波纹折射。
+  // 动效只处理视觉，不读取 Cookie、不发请求到业务接口、不干预认证按钮点击，降低 Hosted Auth 页面风险。
   return `<script>
 (() => {
-  const canvas = document.querySelector("[data-login-space]");
+  const threeCanvas = document.querySelector("[data-login-three]");
+  const rippleCanvas = document.querySelector("[data-login-ripple]");
   const shell = document.querySelector(".login-shell");
-  if (!canvas || !shell || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (!shell || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
-  const context = canvas.getContext("2d", { alpha: true });
-  if (!context) return;
-
-  const stars = [];
-  const stream = [];
   let width = 0;
   let height = 0;
   let ratio = 1;
-  let frame = 0;
+  const pointer = { x: 0, y: 0, tx: 0, ty: 0 };
 
   const resize = () => {
     const rect = shell.getBoundingClientRect();
     width = Math.max(1, rect.width);
     height = Math.max(1, rect.height);
     ratio = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = Math.floor(width * ratio);
-    canvas.height = Math.floor(height * ratio);
-    canvas.style.width = width + "px";
-    canvas.style.height = height + "px";
-    context.setTransform(ratio, 0, 0, ratio, 0, 0);
-    stars.length = 0;
-    stream.length = 0;
-    const starCount = width < 760 ? 90 : 190;
-    for (let index = 0; index < starCount; index += 1) {
-      stars.push({
-        x: Math.random() * width,
-        y: Math.random() * height * 0.85,
-        size: Math.random() * 1.7 + 0.35,
-        alpha: Math.random() * 0.52 + 0.12,
-        speed: Math.random() * 0.16 + 0.03
-      });
-    }
-    for (let index = 0; index < 68; index += 1) {
-      stream.push({
-        offset: Math.random(),
-        lane: Math.random(),
-        speed: Math.random() * 0.0018 + 0.001,
-        size: Math.random() * 2.2 + 0.8
-      });
+    if (rippleCanvas) {
+      rippleCanvas.width = Math.floor(width * ratio);
+      rippleCanvas.height = Math.floor(height * ratio);
+      rippleCanvas.style.width = width + "px";
+      rippleCanvas.style.height = height + "px";
     }
   };
 
-  const draw = () => {
-    frame += 1;
-    context.clearRect(0, 0, width, height);
-
-    stars.forEach((star) => {
-      star.y += star.speed;
-      if (star.y > height * 0.88) star.y = Math.random() * 60;
-      const pulse = Math.sin(frame * 0.025 + star.x) * 0.16;
-      context.fillStyle = "rgba(168, 231, 255, " + Math.max(0, star.alpha + pulse) + ")";
-      context.beginPath();
-      context.arc(star.x, star.y, star.size, 0, Math.PI * 2);
-      context.fill();
-    });
-
-    const originX = width * 0.47;
-    const originY = height * 0.72;
-    stream.forEach((point, index) => {
-      point.offset = (point.offset + point.speed) % 1;
-      const t = point.offset;
-      const direction = index % 2 === 0 ? 1 : -1;
-      const radius = width * (0.12 + point.lane * 0.24);
-      const angle = -Math.PI * 0.9 + t * Math.PI * 1.65 * direction;
-      const x = originX + Math.cos(angle) * radius;
-      const y = originY + Math.sin(angle) * radius * 0.34 - t * height * 0.2;
-      context.fillStyle = "rgba(102, 244, 218, " + (0.14 + t * 0.44) + ")";
-      context.beginPath();
-      context.arc(x, y, point.size, 0, Math.PI * 2);
-      context.fill();
-    });
-
-    requestAnimationFrame(draw);
+  const trackPointer = (event) => {
+    pointer.tx = (event.clientX / Math.max(width, 1) - 0.5) * 2;
+    pointer.ty = (event.clientY / Math.max(height, 1) - 0.5) * 2;
   };
 
   window.addEventListener("resize", resize);
+  window.addEventListener("pointermove", trackPointer, { passive: true });
   resize();
-  draw();
+
+  const startRipple = () => {
+    if (!rippleCanvas) return;
+    const context = rippleCanvas.getContext("2d", { alpha: true });
+    if (!context) return;
+    let frame = 0;
+
+    const drawRipple = () => {
+      frame += 1;
+      pointer.x += (pointer.tx - pointer.x) * 0.045;
+      pointer.y += (pointer.ty - pointer.y) * 0.045;
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      context.clearRect(0, 0, width, height);
+      const centerX = width * (0.47 + pointer.x * 0.03);
+      const centerY = height * (0.68 + pointer.y * 0.025);
+
+      for (let ring = 0; ring < 11; ring += 1) {
+        const progress = ((frame * 0.008 + ring / 11) % 1);
+        const radiusX = width * (0.08 + progress * 0.34);
+        const radiusY = radiusX * 0.28;
+        const alpha = (1 - progress) * 0.23;
+        context.beginPath();
+        context.ellipse(centerX, centerY, radiusX, radiusY, -0.07, 0, Math.PI * 2);
+        context.strokeStyle = "rgba(104, 245, 226, " + alpha + ")";
+        context.lineWidth = 1 + progress * 2.4;
+        context.shadowBlur = 28;
+        context.shadowColor = "rgba(82, 235, 255, " + alpha + ")";
+        context.stroke();
+      }
+
+      const gradient = context.createRadialGradient(centerX, centerY, 8, centerX, centerY, width * 0.24);
+      gradient.addColorStop(0, "rgba(130, 249, 230, 0.42)");
+      gradient.addColorStop(0.38, "rgba(42, 176, 255, 0.2)");
+      gradient.addColorStop(1, "rgba(6, 12, 24, 0)");
+      context.fillStyle = gradient;
+      context.beginPath();
+      context.ellipse(centerX, centerY, width * 0.25, width * 0.08, -0.06, 0, Math.PI * 2);
+      context.fill();
+
+      requestAnimationFrame(drawRipple);
+    };
+    drawRipple();
+  };
+
+  const startFallbackParticles = () => {
+    if (!threeCanvas) return;
+    const context = threeCanvas.getContext("2d", { alpha: true });
+    if (!context) return;
+    const particles = Array.from({ length: 520 }, () => ({
+      x: (Math.random() - 0.5) * 2.4,
+      y: (Math.random() - 0.5) * 1.5,
+      z: Math.random() * 2.2 + 0.25,
+      size: Math.random() * 1.8 + 0.7
+    }));
+    let frame = 0;
+    const drawFallback = () => {
+      frame += 1;
+      threeCanvas.width = Math.floor(width * ratio);
+      threeCanvas.height = Math.floor(height * ratio);
+      threeCanvas.style.width = width + "px";
+      threeCanvas.style.height = height + "px";
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      context.clearRect(0, 0, width, height);
+      particles.forEach((particle, index) => {
+        const angle = frame * 0.003 + index * 0.011;
+        const x3 = particle.x * Math.cos(angle) - particle.z * Math.sin(angle) * 0.3;
+        const z3 = particle.z + particle.x * Math.sin(angle) * 0.28;
+        const scale = 1 / Math.max(0.3, z3);
+        const x = width * 0.5 + x3 * width * 0.32 * scale + pointer.x * 18;
+        const y = height * 0.5 + particle.y * height * 0.38 * scale + pointer.y * 12;
+        context.fillStyle = "rgba(118, 244, 232, " + Math.min(0.82, 0.18 + scale * 0.18) + ")";
+        context.beginPath();
+        context.arc(x, y, particle.size * scale, 0, Math.PI * 2);
+        context.fill();
+      });
+      requestAnimationFrame(drawFallback);
+    };
+    drawFallback();
+  };
+
+  const startThreeParticles = async () => {
+    if (!threeCanvas) return startFallbackParticles();
+    try {
+      const THREE = await import("https://unpkg.com/three@0.164.1/build/three.module.js");
+      const renderer = new THREE.WebGLRenderer({ canvas: threeCanvas, alpha: true, antialias: true, powerPreference: "high-performance" });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 100);
+      camera.position.set(0, 0.25, 4.8);
+
+      const count = 1600;
+      const positions = new Float32Array(count * 3);
+      const colors = new Float32Array(count * 3);
+      for (let index = 0; index < count; index += 1) {
+        const radius = 0.5 + Math.random() * 2.55;
+        const angle = Math.random() * Math.PI * 2;
+        const heightBand = (Math.random() - 0.5) * 1.85;
+        positions[index * 3] = Math.cos(angle) * radius;
+        positions[index * 3 + 1] = heightBand + Math.sin(radius * 2.2) * 0.18;
+        positions[index * 3 + 2] = Math.sin(angle) * radius;
+        colors[index * 3] = 0.25 + Math.random() * 0.25;
+        colors[index * 3 + 1] = 0.72 + Math.random() * 0.26;
+        colors[index * 3 + 2] = 0.85 + Math.random() * 0.15;
+      }
+
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+      const material = new THREE.PointsMaterial({
+        size: 0.022,
+        transparent: true,
+        opacity: 0.78,
+        vertexColors: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      });
+      const cloud = new THREE.Points(geometry, material);
+      scene.add(cloud);
+
+      const ringGeometry = new THREE.TorusGeometry(1.72, 0.006, 8, 180);
+      const ringMaterial = new THREE.MeshBasicMaterial({ color: 0x68f5dd, transparent: true, opacity: 0.28 });
+      const rings = [0, 1, 2].map((_, index) => {
+        const ring = new THREE.Mesh(ringGeometry, ringMaterial.clone());
+        ring.rotation.x = Math.PI * 0.62;
+        ring.rotation.z = index * 0.42;
+        ring.scale.setScalar(1 + index * 0.26);
+        ring.material.opacity = 0.24 - index * 0.045;
+        scene.add(ring);
+        return ring;
+      });
+
+      const resizeThree = () => {
+        renderer.setSize(width, height, false);
+        camera.aspect = width / Math.max(height, 1);
+        camera.updateProjectionMatrix();
+      };
+      resizeThree();
+      window.addEventListener("resize", resizeThree);
+
+      const animate = () => {
+        pointer.x += (pointer.tx - pointer.x) * 0.035;
+        pointer.y += (pointer.ty - pointer.y) * 0.035;
+        cloud.rotation.y += 0.0018;
+        cloud.rotation.x = -0.12 + pointer.y * 0.05;
+        cloud.position.x = pointer.x * 0.08;
+        rings.forEach((ring, index) => {
+          ring.rotation.z += 0.0025 + index * 0.001;
+          ring.position.x = pointer.x * 0.05;
+          ring.position.y = -0.66 + pointer.y * 0.04;
+        });
+        renderer.render(scene, camera);
+        requestAnimationFrame(animate);
+      };
+      animate();
+    } catch (error) {
+      startFallbackParticles();
+    }
+  };
+
+  startRipple();
+  startThreeParticles();
 })();
 </script>`;
 }
@@ -202,7 +312,8 @@ export const aiPmLoginPageComponent: HostedAuthLoginPageComponent = ({ model }) 
 </head>
 <body>
   <main class="login-shell">
-    <canvas class="login-space-canvas" data-login-space aria-hidden="true"></canvas>
+    <canvas class="login-three-canvas" data-login-three aria-hidden="true"></canvas>
+    <canvas class="login-ripple-canvas" data-login-ripple aria-hidden="true"></canvas>
     <header class="login-topbar">
       <div class="login-brand" aria-label="AI PM">
         <div class="login-mark" aria-hidden="true">
