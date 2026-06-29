@@ -1454,6 +1454,30 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       material.transparent = true;
       return material;
     };
+    const makeSourceProfileMaterial = (accentIndex: number, opacity = 0.52) => {
+      const material = oilBaseMaterial.clone();
+      // 这层专门复刻参考视频里那根规整侧向骨柱的主剪影。
+      // 它不使用 alphaMap，否则挤出面的边缘会被程序纹理随机吃掉，无法形成“整柱”轮廓。
+      material.alphaMap = null;
+      material.bumpScale = 0.068;
+      material.clearcoat = 0.74;
+      material.clearcoatRoughness = 0.38;
+      material.color = new THREE.Color("#05080b");
+      material.depthWrite = false;
+      material.emissive = new THREE.Color(organicPalette[accentIndex % organicPalette.length]);
+      material.emissiveIntensity = 0.052 + (accentIndex % 4) * 0.01;
+      material.envMapIntensity = 0.98;
+      material.metalness = 0.035;
+      material.opacity = opacity;
+      material.roughness = 0.5;
+      material.sheen = 0.68;
+      material.side = THREE.DoubleSide;
+      material.specularIntensity = 0.58;
+      material.thickness = 1.24;
+      material.transmission = 0.04;
+      material.transparent = true;
+      return material;
+    };
     const cavityGeometry = new THREE.SphereGeometry(0.18, 24, 12);
     const cavityMaterial = new THREE.MeshPhysicalMaterial({
       clearcoat: 0.28,
@@ -1648,21 +1672,21 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
       // 这条主柱负责对齐参考视频的侧向脊柱轮廓：节距更大，主骨块偏扁，侧突基本统一向左伸出。
       // 参考不是正面均匀串珠，若继续左右交替会显得像装饰柱而不是录屏里的脊柱雕塑。
-      const body = new THREE.Mesh(createVertebraBodyGeometry(stackIndex + 96), makeReferenceSpineMaterial(stackIndex, 0.82));
+      const body = new THREE.Mesh(createVertebraBodyGeometry(stackIndex + 96), makeReferenceSpineMaterial(stackIndex, 0.54));
       body.position.set(0.08, 0, 0.02);
       body.rotation.set(0.02 * Math.sin(phase), 0.08, -0.02 * Math.cos(phase));
       body.scale.set(1.22 + (stackIndex % 3) * 0.035, 0.92, 0.74);
       body.renderOrder = 5;
       group.add(body);
 
-      const lobeA = new THREE.Mesh(createOrganicLobeGeometry(stackIndex + 140), makeReferenceSpineMaterial(stackIndex + 2, 0.74));
+      const lobeA = new THREE.Mesh(createOrganicLobeGeometry(stackIndex + 140), makeReferenceSpineMaterial(stackIndex + 2, 0.58));
       lobeA.position.set(-0.62 * side + Math.sin(phase) * 0.035, -0.06, 0.02);
       lobeA.rotation.set(0.24, 0.2 * side, 0.34 * side);
-      lobeA.scale.set(1.08, 0.36, 0.34);
+      lobeA.scale.set(1.26, 0.34, 0.32);
       lobeA.renderOrder = 5;
       group.add(lobeA);
 
-      const lobeB = new THREE.Mesh(createOrganicLobeGeometry(stackIndex + 168), makeReferenceSpineMaterial(stackIndex + 3, 0.66));
+      const lobeB = new THREE.Mesh(createOrganicLobeGeometry(stackIndex + 168), makeReferenceSpineMaterial(stackIndex + 3, 0.38));
       lobeB.position.set(-0.38 * side + Math.cos(phase) * 0.03, -0.2, -0.16);
       lobeB.rotation.set(-0.1, -0.08 * side, 0.12 * side);
       lobeB.scale.set(0.62, 0.26, 0.28);
@@ -1683,6 +1707,111 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       cavityMeshes.push(mouth);
       referenceStackSegments.push({ body, group, lobeA, lobeB, mouth, phase, y });
       return group;
+    });
+
+    const sourceProfileSegments: Array<{
+      basePosition: THREE.Vector3;
+      baseRotation: THREE.Euler;
+      baseScale: THREE.Vector3;
+      group: THREE.Group;
+      hook: THREE.Mesh;
+      notch: THREE.Mesh;
+      phase: number;
+      plate: THREE.Mesh;
+      tooth: THREE.Mesh;
+    }> = [];
+    const sourceProfileConfigs = Array.from({ length: 9 }, (_, segmentIndex) => {
+      const phase = segmentIndex * 0.74;
+      const y = 2.18 - segmentIndex * 0.56;
+      const isOuter = segmentIndex % 2 === 0;
+      return {
+        accent: 96 + segmentIndex,
+        phase,
+        position: new THREE.Vector3(0.08 + Math.sin(phase) * 0.025, y, 0.82 + Math.cos(phase) * 0.025),
+        rotation: new THREE.Euler(0.1 + Math.sin(phase) * 0.018, -0.08 + Math.cos(phase) * 0.025, -0.025 + Math.sin(phase) * 0.02),
+        scale: new THREE.Vector3(isOuter ? 0.98 : 0.88, 0.82 + (segmentIndex % 3) * 0.025, 1),
+      };
+    });
+    const sourceProfilePlatePoints: Array<[number, number]> = [
+      [-0.34, 0.16],
+      [-0.1, 0.3],
+      [0.28, 0.26],
+      [0.5, 0.1],
+      [0.48, -0.08],
+      [0.24, -0.22],
+      [-0.08, -0.26],
+      [-0.38, -0.12],
+    ];
+    const sourceProfileHookPoints: Array<[number, number]> = [
+      [-0.52, 0.04],
+      [-0.32, 0.14],
+      [-0.06, 0.08],
+      [0.02, -0.04],
+      [-0.18, -0.16],
+      [-0.48, -0.14],
+      [-0.62, -0.02],
+    ];
+    const sourceProfileToothPoints: Array<[number, number]> = [
+      [-0.26, 0.06],
+      [-0.04, 0.12],
+      [0.16, 0.04],
+      [0.12, -0.08],
+      [-0.1, -0.14],
+      [-0.3, -0.05],
+    ];
+
+    sourceProfileConfigs.forEach((config, segmentIndex) => {
+      const group = new THREE.Group();
+      group.position.copy(config.position);
+      group.rotation.copy(config.rotation);
+      group.scale.copy(config.scale);
+      pillarGroup.add(group);
+
+      // 参考视频里的柱体是“一个整体侧影被故事卡片切开”，不是每节独立朝不同方向浮动。
+      // 这里用统一朝向的挤出骨片叠成整柱主轮廓，旧随机骨节只做背后的暗体积。
+      const plate = new THREE.Mesh(createReferenceSpineShardGeometry(sourceProfilePlatePoints, 0.09), makeSourceProfileMaterial(config.accent, 0.58));
+      plate.position.set(0.08, 0, 0.02);
+      plate.rotation.set(0.02, -0.04, segmentIndex % 2 === 0 ? 0.02 : -0.015);
+      plate.renderOrder = 6;
+      group.add(plate);
+
+      const hook = new THREE.Mesh(createReferenceSpineShardGeometry(sourceProfileHookPoints, 0.074), makeSourceProfileMaterial(config.accent + 2, 0.44));
+      hook.position.set(-0.12, -0.04, 0.05);
+      hook.rotation.set(0.06, -0.02, -0.08);
+      hook.scale.set(0.72, 0.66, 1);
+      hook.renderOrder = 6;
+      group.add(hook);
+
+      const tooth = new THREE.Mesh(createReferenceSpineShardGeometry(sourceProfileToothPoints, 0.052), makeSourceProfileMaterial(config.accent + 4, 0.34));
+      tooth.position.set(0.08, -0.28, 0.08);
+      tooth.rotation.set(0.04, -0.06, -0.18);
+      tooth.scale.set(0.52, 0.58, 1);
+      tooth.renderOrder = 5;
+      group.add(tooth);
+
+      const notch = new THREE.Mesh(cavityGeometry, deepCavityMaterial.clone());
+      const notchMaterial = notch.material as THREE.MeshPhysicalMaterial;
+      notchMaterial.depthWrite = false;
+      notchMaterial.opacity = 0.62;
+      notch.position.set(-0.03, 0.03, 0.12);
+      notch.rotation.set(0.12, -0.08, segmentIndex % 2 === 0 ? -0.18 : 0.14);
+      notch.scale.set(0.54, 0.12, 0.045);
+      notch.renderOrder = 7;
+      group.add(notch);
+
+      [plate, hook, tooth].forEach((mesh) => organicMeshes.push(mesh));
+      cavityMeshes.push(notch);
+      sourceProfileSegments.push({
+        basePosition: config.position.clone(),
+        baseRotation: config.rotation.clone(),
+        baseScale: config.scale.clone(),
+        group,
+        hook,
+        notch,
+        phase: config.phase,
+        plate,
+        tooth,
+      });
     });
 
     const exposedHeroShapes = [
@@ -1956,11 +2085,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       material.clearcoat = 0.58;
       material.depthTest = false;
       material.depthWrite = false;
-      material.emissiveIntensity = 0.082;
-      material.envMapIntensity = 1.04;
-      material.opacity = 0.92;
+      material.emissiveIntensity = 0.058;
+      material.envMapIntensity = 0.86;
+      material.opacity = 0.68;
       material.roughness = 0.56;
-      material.specularIntensity = 0.5;
+      material.specularIntensity = 0.38;
       material.transparent = true;
       mesh.position.copy(config.position);
       mesh.rotation.copy(config.rotation);
@@ -2466,6 +2595,34 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           material.emissive.lerp(paletteColor.multiplyScalar(0.078 + Math.sin(time * 0.64 + segment.phase + meshIndex) * 0.018), 0.03);
           material.envMapIntensity = 1.18 + Math.sin(time * 0.3 + segment.phase) * 0.12 + Math.min(0.24, Math.abs(scrollImpulse) * 0.08);
         });
+      });
+      sourceProfileSegments.forEach((segment, segmentIndex) => {
+        const localPulse = Math.sin(time * 0.28 + segment.phase);
+        const impulseLean = Math.max(-0.18, Math.min(0.18, scrollImpulse * 0.028));
+
+        // 源帧柱体默认几乎不漂移，只保留油膜呼吸；滚动时由 pillarGroup 的大旋转负责整体换面。
+        // 这里的微动只让单节在同一根柱子里有轻微折光，避免重新变成旧版那种“各飘各的碎片”。
+        segment.group.position.x = segment.basePosition.x + Math.sin(storyOrbit * 0.38 + segment.phase) * 0.018 + impulseLean;
+        segment.group.position.y = segment.basePosition.y + localPulse * 0.006;
+        segment.group.position.z = segment.basePosition.z + Math.cos(time * 0.22 + segment.phase) * 0.008;
+        segment.group.rotation.x = segment.baseRotation.x + Math.sin(storyOrbit * 0.28 + segment.phase) * 0.012 + scrollImpulse * 0.006;
+        segment.group.rotation.y = segment.baseRotation.y + storyOrbit * 0.045 + Math.sin(time * 0.16 + segment.phase) * 0.008;
+        segment.group.rotation.z = segment.baseRotation.z + Math.sin(time * 0.18 + segment.phase) * 0.01 + scrollImpulse * 0.01;
+        segment.group.scale.set(
+          segment.baseScale.x * (1 + localPulse * 0.006),
+          segment.baseScale.y * (1 - localPulse * 0.005),
+          segment.baseScale.z
+        );
+
+        [segment.plate, segment.hook, segment.tooth].forEach((mesh, meshIndex) => {
+          const material = mesh.material as THREE.MeshPhysicalMaterial;
+          const paletteColor = new THREE.Color(organicPalette[(segmentIndex + meshIndex + activeIndexRef.current) % organicPalette.length]);
+          material.emissive.lerp(paletteColor.multiplyScalar(0.054 + Math.sin(time * 0.5 + segment.phase + meshIndex) * 0.012), 0.035);
+          material.envMapIntensity = 0.84 + Math.sin(time * 0.25 + segment.phase) * 0.08 + Math.min(0.18, Math.abs(scrollImpulse) * 0.06);
+        });
+
+        const notchMaterial = segment.notch.material as THREE.MeshPhysicalMaterial;
+        notchMaterial.opacity = 0.52 + Math.sin(time * 0.44 + segment.phase) * 0.05;
       });
       spineFlecks.forEach((item, fleckIndex) => {
         const pulse = 0.62 + Math.sin(time * 1.2 + item.phase) * 0.3 + Math.min(0.32, Math.abs(scrollImpulse) * 0.1);

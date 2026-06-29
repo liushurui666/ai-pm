@@ -4,52 +4,51 @@
 - extracted reference overview: `/tmp/ai-pm-reference-video/four-frames.jpg`
 - extracted precise reference frame: `/tmp/ai-pm-reference-video/precise/ref-stage-045.png`
 - extracted precise reference spine crop: `/tmp/ai-pm-reference-video/precise/ref-spine-045.png`
-- implementation default screenshot: `/tmp/ai-pm-exact-spine/default-v52.png`
-- implementation scroll impulse screenshot: `/tmp/ai-pm-exact-spine/impulse-v52.png`
-- implementation settled screenshot: `/tmp/ai-pm-exact-spine/settled-v52.png`
-- implementation mobile screenshot: `/tmp/ai-pm-exact-spine/mobile-v52.png`
-- same-frame comparison evidence: `/tmp/ai-pm-exact-spine/ref-default-compare-v51.png`, `/tmp/ai-pm-exact-spine/spine-compare-v51.png`
+- implementation default screenshot: `/tmp/ai-pm-exact-spine/default-v55.png`
+- implementation scroll impulse screenshot: `/tmp/ai-pm-exact-spine/impulse-v55.png`
+- implementation settled screenshot: `/tmp/ai-pm-exact-spine/settled-v55.png`
+- implementation mobile screenshot: `/tmp/ai-pm-exact-spine/mobile-v55.png`
+- same-subject comparison evidence: `/tmp/ai-pm-exact-spine/spine-compare-v55.png`
 - viewport: 1280x720 desktop evidence, 390x844 mobile evidence
 - state: unauthenticated landing page; default static frame plus one story-advance interaction
-- final result: blocked for exact-source fidelity, improved for scroll-coupled motion and regular side-spine silhouette
+- final result: blocked for exact-source fidelity, improved for scroll-coupled motion and a darker, more regular side-spine silhouette
 
 ## Findings
 
 - [P1] 柱体仍不能声明为和参考视频完全一模一样
   Location: `src/components/landing-home/index.tsx` Three.js spine geometry/material.
-  Evidence: `/tmp/ai-pm-exact-spine/default-v52.png` and `/tmp/ai-pm-exact-spine/impulse-v52.png` show the column now moves with the story transition and reads more like a side-profile spine than v48. The reference crop still has more authored vertebra geometry: flatter right-side masses, smoother left protrusions, and more source-specific oil-film fleck placement.
-  Impact: the user explicitly requires no visible difference from the mp4 reference, so strict QA remains blocked.
-  Fix: replace more of the procedural stack with a dedicated frame-matched modeled mesh or a more specific custom geometry generator for the visible vertebra silhouettes.
+  Evidence: `/tmp/ai-pm-exact-spine/spine-compare-v55.png` compares the reference crop, default v55 crop, and scroll-impulse v55 crop. v55 removes the v53 flat-blade artifact and gives the column a darker, more coherent side-spine silhouette, but the reference still has a more authored vertebra mesh with smoother protrusion roots, more accurate occlusion beside the glass card, and stronger embedded oil-film texture.
+  Impact: the user explicitly requires no visible difference from the mp4 reference, so strict Product Design QA remains blocked.
+  Fix: replace the remaining procedural vertebra generator with a modeled or more source-frame-specific geometry layer, or obtain/author a matching 3D asset instead of approximating the form with generated meshes.
 
 - [P1] 光影粒子方向 improved but source-level material complexity is still missing
-  Location: `makeReferenceSpineMaterial`, `spineFlecks`, and `columnParticleCount` in `src/components/landing-home/index.tsx`.
-  Evidence: v52 adds 118 local oil-fleck sprites and a deeper wet-glass material, which improves small cyan/purple highlights. The reference still has higher-frequency noisy iridescence embedded inside the surface, not just additive highlights above it.
-  Impact: the surface now feels less flat, but it is not yet the same production-grade refraction/shader look.
-  Fix: add a real shader pass or a denser material texture pipeline that breaks highlights inside the mesh surface rather than only on sprite layers.
+  Location: `makeSourceProfileMaterial`, `makeReferenceSpineMaterial`, `spineFlecks`, and `columnParticleCount` in `src/components/landing-home/index.tsx`.
+  Evidence: v55 keeps local oil-fleck sprites and wet-glass materials, and the scroll state shows stronger purple/cyan surface movement. The reference still has higher-frequency noisy iridescence embedded inside the mesh surface rather than highlights that mainly sit above it.
+  Impact: the surface now feels less flat and less like a simple particle field, but it is not yet the same production-grade refraction/shader look.
+  Fix: add a dedicated shader/material pass for internal oil-film breakup and per-surface noise, not only sprite flecks.
 
-- [P2] 旧随机骨节层 no longer dominates the silhouette
-  Location: `vertebraSegments` and `spineTendons` in `src/components/landing-home/index.tsx`.
-  Evidence: v52 lowers old random segment opacity and hides the old tube tendons that appeared as straight black rods in v51. The impulse frame now exposes the main side-spine stack more clearly.
-  Impact: this moves the shape closer to the reference, but exact silhouette matching remains open.
-  Fix: continue reducing non-reference layers if they create artifacts during future passes.
+- [P2] v53 flat-blade silhouette was corrected
+  Location: `sourceProfileSegments` and `makeSourceProfileMaterial` in `src/components/landing-home/index.tsx`.
+  Evidence: v55 scales the side-profile layer down, darkens its reflection/emissive response, rounds the source-profile points, and moves the layer away from the clipped top edge. `/tmp/ai-pm-exact-spine/default-v55.png` no longer has the oversized blue blade row from v53.
+  Impact: the column reads more like an integrated spine than a flat decorative sawtooth layer.
+  Fix: keep future silhouette work focused on rounded vertebra geometry rather than large planar shards.
 
 - [P2] 滚动联动 behavior remains correct
   Location: wheel/key story progression and animation loop in `src/components/landing-home/index.tsx`.
-  Evidence: `/tmp/ai-pm-exact-spine/impulse-v52.png` shows the pillar and carousel moving together; `/tmp/ai-pm-exact-spine/settled-v52.png` shows the next story state retaining pillar alignment.
-  Impact: the interaction part of the user's request is still satisfied.
+  Evidence: `/tmp/ai-pm-exact-spine/impulse-v55.png` and `/tmp/ai-pm-exact-spine/settled-v55.png` show the pillar and carousel moving together; default remains visually still except for glow, smoke, flecks, and material breathing.
+  Impact: the interaction part of the user's request is satisfied.
   Fix: only tune timing further if exact mp4 easing becomes the next blocker.
 
-## Patches Made In V52
+## Patches Made In V55
 
-- Re-shaped the main spine from 12 small alternating beads into 10 larger side-profile vertebra segments with consistent left protrusions.
-- Deepened the reference spine material: darker base color, stronger clearcoat/specular response, higher environment reflection, and tighter roughness.
-- Added 118 local oil-fleck sprites attached to the pillar, with scroll-reactive opacity and stretch for sharper cyan/purple/red-gold micro highlights.
-- Reduced the legacy random vertebra layer to a low-opacity background volume so it no longer competes with the main silhouette.
-- Hid the old tube tendon layer after comparison showed it rendered as straight black rods not present in the reference.
-- Verified desktop default, desktop story impulse, desktop settled state, and 390x844 mobile layout.
+- Added a darker source-profile geometry layer that follows the whole pillar and scroll orbit, then tuned it down after v53 showed an oversized flat-blade artifact.
+- Rebalanced the main side spine: stronger rounded left protrusions, less overpowering top shard material, and legacy random geometry kept as low-opacity volume.
+- Preserved the story-carousel coupling so scroll impulse rotates the pillar and cards together, while default state remains mostly static.
+- Captured desktop default, desktop scroll impulse, desktop settled state, 390x844 mobile layout, and a side-by-side comparison image.
 
 ## Implementation Checklist
 
-- Keep v52 screenshots as the current evidence baseline.
+- v55 evidence is now the current baseline.
+- `CI=true corepack pnpm lint` passed.
+- `CI=true corepack pnpm build` passed.
 - Do not mark Product Design QA passed until the visible vertebra silhouette and embedded oil-film/refraction match the reference at source-frame level.
-- Preserve the v52 behavior where default is static, while scroll/story navigation moves the whole center installation.
