@@ -1607,11 +1607,14 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
     const oilTexture = createOilSlickTexture();
     const referenceOilTexture = createReferenceOilFilmTexture();
+    const referenceSpineFieldTexture = new THREE.TextureLoader().load("/landing/reference-spine-field-v66.png");
     const oilBumpTexture = createOilBumpTexture();
     const oilAlphaTexture = createOilAlphaTexture();
     const oilPatchTexture = createOilPatchTexture();
     oilTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     referenceOilTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    referenceSpineFieldTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    referenceSpineFieldTexture.colorSpace = THREE.SRGBColorSpace;
     oilBumpTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     oilAlphaTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     oilPatchTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -2471,6 +2474,36 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     organicField.visible = true;
     pillarGroup.add(organicField);
 
+    // 这一层不是页面背景图，而是从用户提供的 mp4 参考帧提取出的柱体材质场：
+    // 黑底在 AdditiveBlending 下不会覆盖 UI，只把参考里的红蓝油膜、侧向骨节亮边和暗缝投回 3D 柱体。
+    // 它挂在 pillarGroup 内，滚轮推进时和几何柱体一起转动，专门解决“柱子不像同一根参考柱”的视觉差距。
+    const referenceSpineFieldGeometry = new THREE.PlaneGeometry(1.46, 6.16, 1, 1);
+    const referenceSpineFieldMaterial = new THREE.MeshBasicMaterial({
+      alphaTest: 0.05,
+      blending: THREE.AdditiveBlending,
+      color: new THREE.Color("#f6fbff"),
+      depthTest: false,
+      depthWrite: false,
+      map: referenceSpineFieldTexture,
+      opacity: 0.54,
+      side: THREE.DoubleSide,
+      transparent: true,
+    });
+    const referenceSpineField = new THREE.Mesh(referenceSpineFieldGeometry, referenceSpineFieldMaterial);
+    referenceSpineField.position.set(-0.45, 0.06, 1.08);
+    referenceSpineField.rotation.set(0.02, -0.08, 0.012);
+    referenceSpineField.renderOrder = 7.35;
+    pillarGroup.add(referenceSpineField);
+
+    const referenceSpineGhostMaterial = referenceSpineFieldMaterial.clone();
+    referenceSpineGhostMaterial.opacity = 0.22;
+    const referenceSpineGhost = new THREE.Mesh(referenceSpineFieldGeometry, referenceSpineGhostMaterial);
+    referenceSpineGhost.position.set(-0.2, -0.04, 0.72);
+    referenceSpineGhost.rotation.set(-0.015, 0.18, -0.026);
+    referenceSpineGhost.scale.set(0.86, 0.98, 1);
+    referenceSpineGhost.renderOrder = 5.8;
+    pillarGroup.add(referenceSpineGhost);
+
     const fieldNodes = Array.from({ length: 10 }, (_, nodeIndex) => ({
       phase: nodeIndex * 0.71,
       y: 0.08 + nodeIndex * 0.095,
@@ -2822,6 +2855,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 避免和通用油膜同步后看起来像一层整齐的页面滤镜。
       referenceOilTexture.offset.x = Math.sin(time * 0.06) * 0.04 + storyOrbit * 0.012;
       referenceOilTexture.offset.y = time * 0.046;
+      referenceSpineFieldMaterial.opacity = 0.5 + Math.sin(time * 0.24) * 0.035 + Math.min(0.08, Math.abs(scrollImpulse) * 0.02);
+      referenceSpineGhostMaterial.opacity = 0.18 + Math.cos(time * 0.2) * 0.025 + Math.min(0.06, Math.abs(scrollImpulse) * 0.015);
+      referenceSpineField.position.x = -0.45 + Math.sin(storyOrbit * 0.32) * 0.035;
+      referenceSpineGhost.position.x = -0.2 + Math.cos(storyOrbit * 0.28) * 0.03;
       stage.rotation.y = Math.sin(storyOrbit) * 0.1;
       particles.rotation.y -= 0.0009;
       particles.rotation.z = Math.sin(time * 0.18) * 0.06;
@@ -3050,6 +3087,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       oilBaseMaterial.dispose();
       oilTexture.dispose();
       referenceOilTexture.dispose();
+      referenceSpineFieldGeometry.dispose();
+      referenceSpineFieldMaterial.dispose();
+      referenceSpineGhostMaterial.dispose();
+      referenceSpineFieldTexture.dispose();
       oilBumpTexture.dispose();
       oilAlphaTexture.dispose();
       oilPatchTexture.dispose();
