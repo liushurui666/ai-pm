@@ -1609,6 +1609,19 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const referenceOilTexture = createReferenceOilFilmTexture();
     const referenceSpineFieldTexture = new THREE.TextureLoader().load("/landing/reference-spine-field-wide-v67.png");
     const referenceSpineRimTexture = new THREE.TextureLoader().load("/landing/reference-spine-rim-wide-v67.png");
+    // 参考视频里的柱体默认并不是推进故事线，而是有细密的油膜/粒子呼吸。
+    // 这里把用户提供 mp4 中同一柱体的短裁切做成 VideoTexture，只作为微弱动态材质层叠加到柱体组内；
+    // 这样不会把整张网页截图当背景，也能避免单帧贴图看起来“死”和“不跟视频一个级别”。
+    const referenceSpineMotionVideo = document.createElement("video");
+    referenceSpineMotionVideo.autoplay = true;
+    referenceSpineMotionVideo.loop = true;
+    referenceSpineMotionVideo.muted = true;
+    referenceSpineMotionVideo.playsInline = true;
+    referenceSpineMotionVideo.preload = "auto";
+    referenceSpineMotionVideo.src = "/landing/reference-spine-motion-v68.mp4";
+    referenceSpineMotionVideo.playbackRate = 0.62;
+    void referenceSpineMotionVideo.play().catch(() => undefined);
+    const referenceSpineMotionTexture = new THREE.VideoTexture(referenceSpineMotionVideo);
     const oilBumpTexture = createOilBumpTexture();
     const oilAlphaTexture = createOilAlphaTexture();
     const oilPatchTexture = createOilPatchTexture();
@@ -1618,6 +1631,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     referenceSpineFieldTexture.colorSpace = THREE.SRGBColorSpace;
     referenceSpineRimTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     referenceSpineRimTexture.colorSpace = THREE.SRGBColorSpace;
+    referenceSpineMotionTexture.colorSpace = THREE.SRGBColorSpace;
+    referenceSpineMotionTexture.generateMipmaps = false;
+    referenceSpineMotionTexture.magFilter = THREE.LinearFilter;
+    referenceSpineMotionTexture.minFilter = THREE.LinearFilter;
     oilBumpTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     oilAlphaTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     oilPatchTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -2507,6 +2524,25 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     referenceSpineGhost.renderOrder = 5.8;
     pillarGroup.add(referenceSpineGhost);
 
+    // 动态短循环来自同一段参考 mp4 的柱体裁切，只提供源视频级的细碎高光和玻璃遮挡微动。
+    // 透明叠加层跟静态参考场共用同一几何尺寸，保证滚轮推进时作为柱体的一部分整体旋转，而不是贴在屏幕上的视频。
+    const referenceSpineMotionMaterial = new THREE.MeshBasicMaterial({
+      alphaTest: 0.02,
+      blending: THREE.AdditiveBlending,
+      color: new THREE.Color("#effcff"),
+      depthTest: false,
+      depthWrite: false,
+      map: referenceSpineMotionTexture,
+      opacity: 0.16,
+      side: THREE.DoubleSide,
+      transparent: true,
+    });
+    const referenceSpineMotion = new THREE.Mesh(referenceSpineFieldGeometry, referenceSpineMotionMaterial);
+    referenceSpineMotion.position.set(-0.57, 0.06, 1.18);
+    referenceSpineMotion.rotation.set(0.018, -0.074, 0.012);
+    referenceSpineMotion.renderOrder = 7.48;
+    pillarGroup.add(referenceSpineMotion);
+
     // 第二张参考贴图只保留彩色骨节棱线。它比通用粒子更接近原视频里的规则柱体轮廓，
     // 但仍作为随柱体旋转的材质层存在，避免把整张参考图硬贴成静态背景。
     const referenceSpineRimMaterial = new THREE.MeshBasicMaterial({
@@ -2879,9 +2915,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceOilTexture.offset.y = time * 0.046;
       referenceSpineFieldMaterial.opacity = 0.42 + Math.sin(time * 0.2) * 0.026 + Math.min(0.07, Math.abs(scrollImpulse) * 0.018);
       referenceSpineGhostMaterial.opacity = 0.13 + Math.cos(time * 0.18) * 0.018 + Math.min(0.045, Math.abs(scrollImpulse) * 0.012);
+      referenceSpineMotionMaterial.opacity = 0.13 + Math.sin(time * 0.31 + 0.4) * 0.018 + Math.min(0.055, Math.abs(scrollImpulse) * 0.015);
       referenceSpineRimMaterial.opacity = 0.26 + Math.sin(time * 0.22 + 0.9) * 0.032 + Math.min(0.08, Math.abs(scrollImpulse) * 0.02);
       referenceSpineField.position.x = -0.56 + Math.sin(storyOrbit * 0.32) * 0.028;
       referenceSpineGhost.position.x = -0.28 + Math.cos(storyOrbit * 0.28) * 0.024;
+      referenceSpineMotion.position.x = -0.57 + Math.sin(storyOrbit * 0.36 + 0.08) * 0.027;
       referenceSpineRim.position.x = -0.58 + Math.sin(storyOrbit * 0.34 + 0.18) * 0.026;
       stage.rotation.y = Math.sin(storyOrbit) * 0.1;
       particles.rotation.y -= 0.0009;
@@ -3114,8 +3152,13 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceSpineFieldGeometry.dispose();
       referenceSpineFieldMaterial.dispose();
       referenceSpineGhostMaterial.dispose();
+      referenceSpineMotionMaterial.dispose();
       referenceSpineRimMaterial.dispose();
       referenceSpineFieldTexture.dispose();
+      referenceSpineMotionTexture.dispose();
+      referenceSpineMotionVideo.pause();
+      referenceSpineMotionVideo.removeAttribute("src");
+      referenceSpineMotionVideo.load();
       referenceSpineRimTexture.dispose();
       oilBumpTexture.dispose();
       oilAlphaTexture.dispose();
