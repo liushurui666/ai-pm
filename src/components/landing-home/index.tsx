@@ -431,6 +431,107 @@ function createOilSlickTexture() {
   return texture;
 }
 
+function createReferenceOilFilmTexture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 1024;
+  const context = canvas.getContext("2d");
+
+  if (context) {
+    const baseGradient = context.createRadialGradient(560, 420, 80, 512, 512, 760);
+    baseGradient.addColorStop(0, "#10151a");
+    baseGradient.addColorStop(0.28, "#06080d");
+    baseGradient.addColorStop(0.58, "#111018");
+    baseGradient.addColorStop(0.82, "#07090d");
+    baseGradient.addColorStop(1, "#17110f");
+    context.fillStyle = baseGradient;
+    context.fillRect(0, 0, 1024, 1024);
+
+    const palette = ["#65eaff", "#5d8bff", "#8d70ff", "#f167d7", "#ff4f5d", "#e3b45a", "#f6fbff"];
+
+    // 参考 mp4 的柱体表面不是外部粒子，而是“嵌在湿润材质内部”的高频彩色碎光。
+    // 这张纹理专门给参考柱体层使用：先铺暗底，再用大量短小椭圆和细划痕做内嵌油膜，
+    // 比通用 oilTexture 更脏、更碎、更接近截图里的蓝紫/红金颗粒。
+    context.globalCompositeOperation = "screen";
+    for (let index = 0; index < 520; index += 1) {
+      const color = palette[index % palette.length];
+      const x = 64 + ((Math.sin(index * 43.71) + 1) / 2) * 896;
+      const y = 52 + ((Math.cos(index * 37.13) + 1) / 2) * 920;
+      const radius = 4 + (index % 12) * 2.45;
+      const fleck = context.createRadialGradient(0, 0, 0, 0, 0, radius);
+      fleck.addColorStop(0, `${color}c8`);
+      fleck.addColorStop(0.28, `${color}68`);
+      fleck.addColorStop(0.74, `${color}16`);
+      fleck.addColorStop(1, `${color}00`);
+      context.save();
+      context.translate(x, y);
+      context.rotate(Math.sin(index * 11.17) * Math.PI);
+      context.scale(0.36 + (index % 4) * 0.14, 1.48 + (index % 6) * 0.28);
+      context.fillStyle = fleck;
+      context.fillRect(-radius, -radius, radius * 2, radius * 2);
+      context.restore();
+    }
+
+    for (let bandIndex = 0; bandIndex < 16; bandIndex += 1) {
+      const centerX = 220 + ((Math.sin(bandIndex * 5.17) + 1) / 2) * 590;
+      const centerY = 72 + bandIndex * 58 + Math.sin(bandIndex * 1.9) * 26;
+      const bandColor = palette[(bandIndex * 3) % palette.length];
+      const band = context.createLinearGradient(centerX - 110, centerY - 56, centerX + 104, centerY + 72);
+      band.addColorStop(0, `${bandColor}00`);
+      band.addColorStop(0.24, `${bandColor}56`);
+      band.addColorStop(0.48, "#ffffff3a");
+      band.addColorStop(0.72, `${bandColor}28`);
+      band.addColorStop(1, `${bandColor}00`);
+      context.save();
+      context.translate(centerX, centerY);
+      context.rotate(-0.55 + Math.sin(bandIndex * 1.31) * 0.72);
+      context.scale(0.62 + (bandIndex % 3) * 0.16, 0.18 + (bandIndex % 4) * 0.045);
+      context.fillStyle = band;
+      context.fillRect(-126, -76, 252, 152);
+      context.restore();
+    }
+
+    context.globalAlpha = 0.22;
+    context.lineWidth = 1.4;
+    for (let index = 0; index < 132; index += 1) {
+      const color = palette[(index + 2) % palette.length];
+      const x = ((Math.sin(index * 27.91) + 1) / 2) * 1024;
+      const y = ((Math.cos(index * 19.67) + 1) / 2) * 1024;
+      const length = 34 + (index % 10) * 13;
+      context.save();
+      context.translate(x, y);
+      context.rotate(Math.sin(index * 5.23) * Math.PI);
+      context.strokeStyle = color;
+      context.beginPath();
+      context.moveTo(-length * 0.5, Math.sin(index) * 6);
+      context.bezierCurveTo(-length * 0.1, -10, length * 0.28, 12, length * 0.55, Math.cos(index) * 5);
+      context.stroke();
+      context.restore();
+    }
+    context.globalAlpha = 1;
+
+    context.globalCompositeOperation = "multiply";
+    for (let index = 0; index < 148; index += 1) {
+      const x = 70 + ((Math.sin(index * 16.61) + 1) / 2) * 884;
+      const y = 70 + ((Math.cos(index * 29.37) + 1) / 2) * 884;
+      const radius = 24 + (index % 8) * 13;
+      const pore = context.createRadialGradient(x, y, 0, x, y, radius);
+      pore.addColorStop(0, "rgba(0,0,0,0.54)");
+      pore.addColorStop(0.42, "rgba(0,0,0,0.2)");
+      pore.addColorStop(1, "rgba(0,0,0,0)");
+      context.fillStyle = pore;
+      context.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+    }
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(1.1, 1.72);
+  return texture;
+}
+
 function createOilBumpTexture() {
   const canvas = document.createElement("canvas");
   canvas.width = 512;
@@ -1505,10 +1606,12 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     pillarGroup.add(pillarCore);
 
     const oilTexture = createOilSlickTexture();
+    const referenceOilTexture = createReferenceOilFilmTexture();
     const oilBumpTexture = createOilBumpTexture();
     const oilAlphaTexture = createOilAlphaTexture();
     const oilPatchTexture = createOilPatchTexture();
     oilTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    referenceOilTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     oilBumpTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     oilAlphaTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     oilPatchTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -1574,18 +1677,20 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 主柱必须像参考录屏那样“暗体里透出油膜”，不能继续用随机碎片的轻薄透明度。
       // 这里单独加重环境反射、clearcoat 和局部自发光，让规则骨节在默认静止帧里也有可读光影。
       material.alphaMap = null;
-      material.bumpScale = 0.076;
-      material.clearcoat = 0.86;
-      material.clearcoatRoughness = 0.34;
+      material.bumpScale = 0.112;
+      material.clearcoat = 0.92;
+      material.clearcoatRoughness = 0.28;
       material.color = new THREE.Color("#080d10");
       material.emissive = new THREE.Color(organicPalette[accentIndex % organicPalette.length]);
-      material.emissiveIntensity = 0.102 + (accentIndex % 3) * 0.014;
-      material.envMapIntensity = 1.68;
+      material.emissiveMap = referenceOilTexture;
+      material.emissiveIntensity = 0.136 + (accentIndex % 3) * 0.018;
+      material.envMapIntensity = 1.96;
+      material.map = referenceOilTexture;
       material.metalness = 0.02;
       material.opacity = opacity;
-      material.roughness = 0.38;
-      material.sheen = 0.82;
-      material.specularIntensity = 0.96;
+      material.roughness = 0.32;
+      material.sheen = 0.88;
+      material.specularIntensity = 1.08;
       material.thickness = 1.12;
       material.transmission = 0.08;
       material.transparent = true;
@@ -1597,20 +1702,22 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // v55 的挤出多边形虽然能补形，但默认帧会露出平面切片；
       // 这里改回圆润湿润的 mesh 材质，让补形层只像骨体，不像贴片。
       material.alphaMap = null;
-      material.bumpScale = 0.068;
+      material.bumpScale = 0.124;
       material.clearcoat = 0.94;
-      material.clearcoatRoughness = 0.26;
-      material.color = new THREE.Color("#05080b");
+      material.clearcoatRoughness = 0.22;
+      material.color = new THREE.Color("#030609");
       material.depthWrite = false;
       material.emissive = new THREE.Color(organicPalette[accentIndex % organicPalette.length]);
-      material.emissiveIntensity = 0.096 + (accentIndex % 4) * 0.014;
-      material.envMapIntensity = 1.74;
+      material.emissiveMap = referenceOilTexture;
+      material.emissiveIntensity = 0.15 + (accentIndex % 4) * 0.018;
+      material.envMapIntensity = 2.12;
+      material.map = referenceOilTexture;
       material.metalness = 0.026;
       material.opacity = opacity;
-      material.roughness = 0.3;
-      material.sheen = 0.88;
+      material.roughness = 0.24;
+      material.sheen = 0.92;
       material.side = THREE.DoubleSide;
-      material.specularIntensity = 1.08;
+      material.specularIntensity = 1.18;
       material.thickness = 1.34;
       material.transmission = 0.07;
       material.transparent = true;
@@ -1810,21 +1917,21 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
       // 这条主柱负责对齐参考视频的侧向脊柱轮廓：节距更大，主骨块偏扁，侧突基本统一向左伸出。
       // 参考不是正面均匀串珠，若继续左右交替会显得像装饰柱而不是录屏里的脊柱雕塑。
-      const body = new THREE.Mesh(createReferenceVertebraCoreGeometry(stackIndex + 96), makeReferenceSpineMaterial(stackIndex, 0.4));
+      const body = new THREE.Mesh(createReferenceVertebraCoreGeometry(stackIndex + 96), makeReferenceSpineMaterial(stackIndex, 0.28));
       body.position.set(0.08, 0, 0.02);
       body.rotation.set(0.02 * Math.sin(phase), 0.08, -0.02 * Math.cos(phase));
       body.scale.set(1.22 + (stackIndex % 3) * 0.035, 0.92, 0.74);
       body.renderOrder = 5;
       group.add(body);
 
-      const lobeA = new THREE.Mesh(createReferenceProcessGeometry(stackIndex + 140), makeReferenceSpineMaterial(stackIndex + 2, 0.5));
+      const lobeA = new THREE.Mesh(createReferenceProcessGeometry(stackIndex + 140), makeReferenceSpineMaterial(stackIndex + 2, 0.34));
       lobeA.position.set(-0.5 * side + Math.sin(phase) * 0.035, -0.06, 0.02);
       lobeA.rotation.set(0.18, 0.16 * side, 0.28 * side);
       lobeA.scale.set(0.88, 0.72, 0.58);
       lobeA.renderOrder = 5;
       group.add(lobeA);
 
-      const lobeB = new THREE.Mesh(createReferenceProcessGeometry(stackIndex + 168), makeReferenceSpineMaterial(stackIndex + 3, 0.24));
+      const lobeB = new THREE.Mesh(createReferenceProcessGeometry(stackIndex + 168), makeReferenceSpineMaterial(stackIndex + 3, 0.16));
       lobeB.position.set(-0.28 * side + Math.cos(phase) * 0.03, -0.2, -0.16);
       lobeB.rotation.set(-0.1, -0.08 * side, 0.12 * side);
       lobeB.scale.set(0.42, 0.48, 0.42);
@@ -1852,22 +1959,24 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       baseRotation: THREE.Euler;
       baseScale: THREE.Vector3;
       group: THREE.Group;
+      processBlade: THREE.Mesh;
       lowerProcess: THREE.Mesh;
       notch: THREE.Mesh;
       phase: number;
+      processRoot: THREE.Mesh;
       sideBody: THREE.Mesh;
       sideProcess: THREE.Mesh;
     }> = [];
-    const sourceProfileConfigs = Array.from({ length: 8 }, (_, segmentIndex) => {
+    const sourceProfileConfigs = Array.from({ length: 10 }, (_, segmentIndex) => {
       const phase = segmentIndex * 0.74;
-      const y = 2.46 - segmentIndex * 0.68;
+      const y = 2.48 - segmentIndex * 0.56;
       const isOuter = segmentIndex % 2 === 0;
       return {
         accent: 96 + segmentIndex,
         phase,
-        position: new THREE.Vector3(0.02 + Math.sin(phase) * 0.018, y, 0.74 + Math.cos(phase) * 0.026),
-        rotation: new THREE.Euler(0.08 + Math.sin(phase) * 0.018, 0.02 + Math.cos(phase) * 0.02, -0.018 + Math.sin(phase) * 0.018),
-        scale: new THREE.Vector3(isOuter ? 0.9 : 0.82, 0.88 + (segmentIndex % 3) * 0.025, 0.92),
+        position: new THREE.Vector3(-0.06 + Math.sin(phase) * 0.014, y, 0.84 + Math.cos(phase) * 0.022),
+        rotation: new THREE.Euler(0.07 + Math.sin(phase) * 0.014, -0.02 + Math.cos(phase) * 0.016, -0.012 + Math.sin(phase) * 0.014),
+        scale: new THREE.Vector3(isOuter ? 0.84 : 0.78, 0.82 + (segmentIndex % 3) * 0.018, 0.88),
       };
     });
 
@@ -1877,25 +1986,80 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       group.rotation.copy(config.rotation);
       group.scale.copy(config.scale);
       pillarGroup.add(group);
+      const edgeFade = segmentIndex <= 1 ? 0.56 : segmentIndex >= sourceProfileConfigs.length - 2 ? 0.68 : 1;
 
       // 参考视频里的柱体是“一个整体侧影被故事卡片切开”，不是每节独立朝不同方向浮动。
       // v58 继续把参考层从“随机骨节”收敛成专用规则骨块：
       // 主体用更平滑的椎骨核心，横突用圆钝 club 形扫掠体，避免默认帧出现鱼鳞状尖刺。
-      const sideBody = new THREE.Mesh(createReferenceVertebraCoreGeometry(config.accent + 220), makeSourceProfileMaterial(config.accent, 0.72));
+      const sideBody = new THREE.Mesh(createReferenceVertebraCoreGeometry(config.accent + 220), makeSourceProfileMaterial(config.accent, 0.78 * edgeFade));
+      const sideBodyMaterial = sideBody.material as THREE.MeshPhysicalMaterial;
+      sideBodyMaterial.envMapIntensity *= edgeFade;
+      sideBodyMaterial.specularIntensity *= edgeFade;
       sideBody.position.set(0.16, 0.02, 0.0);
       sideBody.rotation.set(0.02, 0.16, segmentIndex % 2 === 0 ? 0.02 : -0.02);
-      sideBody.scale.set(1.04, 0.66, 0.58);
+      sideBody.scale.set(0.98, 0.58, 0.54);
       sideBody.renderOrder = 6;
       group.add(sideBody);
 
-      const sideProcess = new THREE.Mesh(createReferenceProcessGeometry(config.accent + 240), makeSourceProfileMaterial(config.accent + 2, 0.72));
+      // 参考里横突不是从主柱边缘硬插出来，而是有一段湿润的根部团块把主体和侧突糊在一起。
+      // 这块小骨根专门解决 v59 仍然偏“程序化拼接”的问题，让侧突根部更像同一块扫描/雕塑模型。
+      const processRoot = new THREE.Mesh(createReferenceVertebraCoreGeometry(config.accent + 280), makeSourceProfileMaterial(config.accent + 1, 0.68 * edgeFade));
+      const processRootMaterial = processRoot.material as THREE.MeshPhysicalMaterial;
+      processRootMaterial.envMapIntensity *= edgeFade;
+      processRootMaterial.specularIntensity *= edgeFade;
+      processRoot.position.set(-0.16, -0.02, 0.02);
+      processRoot.rotation.set(0.02, 0.1, segmentIndex % 2 === 0 ? 0.08 : -0.06);
+      processRoot.scale.set(0.68, 0.42, 0.36);
+      processRoot.renderOrder = 6.5;
+      group.add(processRoot);
+
+      const sideProcess = new THREE.Mesh(createReferenceProcessGeometry(config.accent + 240), makeSourceProfileMaterial(config.accent + 2, 0.7 * edgeFade));
+      const sideProcessMaterial = sideProcess.material as THREE.MeshPhysicalMaterial;
+      sideProcessMaterial.envMapIntensity *= edgeFade;
+      sideProcessMaterial.specularIntensity *= edgeFade;
       sideProcess.position.set(-0.42, -0.04, 0.04);
-      sideProcess.rotation.set(0.06, 0.22, 0.08);
-      sideProcess.scale.set(0.96, 1.04, 0.78);
+      sideProcess.rotation.set(0.06, 0.2, 0.08);
+      sideProcess.scale.set(0.84, 0.96, 0.72);
       sideProcess.renderOrder = 7;
       group.add(sideProcess);
 
-      const lowerProcess = new THREE.Mesh(createReferenceProcessGeometry(config.accent + 260), makeSourceProfileMaterial(config.accent + 4, 0.46));
+      // 参考柱体的边缘有扫描资产一样的片状硬轮廓；纯圆管横突会变成“蓝紫串珠”。
+      // 这层扁平骨片贴在横突外侧，只负责远景剪影和红蓝折光，不能替代主体体积。
+      const processBlade = new THREE.Mesh(
+        createReferenceSpineShardGeometry(
+          [
+            [-0.36, 0.1],
+            [-0.08, 0.24],
+            [0.28, 0.14],
+            [0.34, -0.06],
+            [0.08, -0.2],
+            [-0.34, -0.12],
+          ],
+          0.045
+        ),
+        makeSourceProfileMaterial(config.accent + 3, 0.42)
+      );
+      const processBladeMaterial = processBlade.material as THREE.MeshPhysicalMaterial;
+      // 扁平骨片只应该提供参考里的暗色硬剪影；如果沿用高 clearcoat/envMap，
+      // 顶部会出现白色多边形高光，反而暴露程序化贴片感。
+      processBladeMaterial.clearcoat = 0.38;
+      processBladeMaterial.clearcoatRoughness = 0.68;
+      processBladeMaterial.color = new THREE.Color("#020407");
+      processBladeMaterial.emissiveIntensity = 0.052;
+      processBladeMaterial.envMapIntensity = 0.66;
+      processBladeMaterial.opacity = (segmentIndex <= 1 ? 0.14 : 0.32) * edgeFade;
+      processBladeMaterial.roughness = 0.68;
+      processBladeMaterial.specularIntensity = 0.34;
+      processBlade.position.set(-0.5, -0.02, 0.1);
+      processBlade.rotation.set(0.12, -0.04, segmentIndex % 2 === 0 ? 0.22 : -0.08);
+      processBlade.scale.set(0.74, 0.66, 1);
+      processBlade.renderOrder = 7.5;
+      group.add(processBlade);
+
+      const lowerProcess = new THREE.Mesh(createReferenceProcessGeometry(config.accent + 260), makeSourceProfileMaterial(config.accent + 4, 0.46 * edgeFade));
+      const lowerProcessMaterial = lowerProcess.material as THREE.MeshPhysicalMaterial;
+      lowerProcessMaterial.envMapIntensity *= edgeFade;
+      lowerProcessMaterial.specularIntensity *= edgeFade;
       lowerProcess.position.set(-0.22, -0.24, -0.04);
       lowerProcess.rotation.set(-0.06, -0.06, -0.14);
       lowerProcess.scale.set(0.46, 0.64, 0.44);
@@ -1912,16 +2076,18 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       notch.renderOrder = 7;
       group.add(notch);
 
-      [sideBody, sideProcess, lowerProcess].forEach((mesh) => organicMeshes.push(mesh));
+      [sideBody, processRoot, sideProcess, processBlade, lowerProcess].forEach((mesh) => organicMeshes.push(mesh));
       cavityMeshes.push(notch);
       sourceProfileSegments.push({
         basePosition: config.position.clone(),
         baseRotation: config.rotation.clone(),
         baseScale: config.scale.clone(),
         group,
+        processBlade,
         lowerProcess,
         notch,
         phase: config.phase,
+        processRoot,
         sideBody,
         sideProcess,
       });
@@ -2296,7 +2462,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     fieldMaterial.bumpMap = oilTexture;
     fieldMaterial.bumpScale = 0.035;
     fieldMaterial.depthWrite = false;
-    fieldMaterial.opacity = 0.034;
+    fieldMaterial.opacity = 0.02;
     fieldMaterial.transparent = true;
     const organicField = new MarchingCubes(46, fieldMaterial, true, true, 120000);
     organicField.isolation = 66;
@@ -2463,25 +2629,26 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const columnParticles = new THREE.Points(columnParticleGeometry, columnParticleMaterial);
     pillarGroup.add(columnParticles);
 
-    const fleckTextures = organicPalette.map((color) => createGlowTexture(color));
-    const spineFlecks = Array.from({ length: 164 }, (_, fleckIndex) => {
+    const fleckPalette = ["#6ff0ff", "#5d8bff", "#9b72ff", "#f16bdc", "#ff5c68", "#e0b261", "#f8fbff"];
+    const fleckTextures = fleckPalette.map((color) => createGlowTexture(color));
+    const spineFlecks = Array.from({ length: 236 }, (_, fleckIndex) => {
       const texture = fleckTextures[fleckIndex % fleckTextures.length];
       const material = new THREE.SpriteMaterial({
         blending: THREE.AdditiveBlending,
         depthTest: false,
         depthWrite: false,
         map: texture,
-        opacity: 0.095 + (fleckIndex % 5) * 0.018,
+        opacity: 0.082 + (fleckIndex % 5) * 0.014,
         rotation: Math.sin(fleckIndex * 1.9) * Math.PI,
         transparent: true,
       });
       const sprite = new THREE.Sprite(material);
-      const lane = fleckIndex % 9;
+      const lane = fleckIndex % 11;
       const y = -2.86 + ((fleckIndex * 0.31) % 5.78);
-      const side = lane < 6 ? -1 : 1;
-      const x = (side < 0 ? -0.34 : 0.12) + Math.sin(fleckIndex * 1.37) * 0.18;
-      const z = 0.74 + Math.cos(fleckIndex * 0.91) * 0.13;
-      const scale = 0.025 + (fleckIndex % 6) * 0.006;
+      const side = lane < 8 ? -1 : 1;
+      const x = (side < 0 ? -0.46 : 0.08) + Math.sin(fleckIndex * 1.37) * 0.16;
+      const z = 0.82 + Math.cos(fleckIndex * 0.91) * 0.1;
+      const scale = 0.018 + (fleckIndex % 7) * 0.005;
 
       // 参考柱体表面有很多贴在骨块上的高频青紫/红金碎光，不是空间里均匀漂浮的大粒子。
       // 这些 sprite 挂在柱体本地坐标里，只做极短的椭圆闪片，补足材质贴图在远景里不够锐的问题。
@@ -2490,7 +2657,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       sprite.renderOrder = 9;
       pillarGroup.add(sprite);
       return {
-        baseOpacity: 0.095 + (fleckIndex % 5) * 0.018,
+        baseOpacity: 0.082 + (fleckIndex % 5) * 0.014,
         basePosition: sprite.position.clone(),
         baseScale: sprite.scale.clone(),
         material,
@@ -2651,6 +2818,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
       oilTexture.offset.x = Math.sin(time * 0.045) * 0.035;
       oilTexture.offset.y = time * 0.032;
+      // 参考柱体的油膜颗粒会有很慢的内向漂移；专用贴图单独滚动，
+      // 避免和通用油膜同步后看起来像一层整齐的页面滤镜。
+      referenceOilTexture.offset.x = Math.sin(time * 0.06) * 0.04 + storyOrbit * 0.012;
+      referenceOilTexture.offset.y = time * 0.046;
       stage.rotation.y = Math.sin(storyOrbit) * 0.1;
       particles.rotation.y -= 0.0009;
       particles.rotation.z = Math.sin(time * 0.18) * 0.06;
@@ -2729,11 +2900,12 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           segment.baseScale.z
         );
 
-        [segment.sideBody, segment.sideProcess, segment.lowerProcess].forEach((mesh, meshIndex) => {
+        const edgeFade = segmentIndex <= 1 ? 0.56 : segmentIndex >= sourceProfileSegments.length - 2 ? 0.68 : 1;
+        [segment.sideBody, segment.processRoot, segment.sideProcess, segment.processBlade, segment.lowerProcess].forEach((mesh, meshIndex) => {
           const material = mesh.material as THREE.MeshPhysicalMaterial;
           const paletteColor = new THREE.Color(organicPalette[(segmentIndex + meshIndex + activeIndexRef.current) % organicPalette.length]);
-          material.emissive.lerp(paletteColor.multiplyScalar(0.074 + Math.sin(time * 0.5 + segment.phase + meshIndex) * 0.014), 0.035);
-          material.envMapIntensity = 1.58 + Math.sin(time * 0.25 + segment.phase) * 0.16 + Math.min(0.28, Math.abs(scrollImpulse) * 0.08);
+          material.emissive.lerp(paletteColor.multiplyScalar((0.102 + Math.sin(time * 0.5 + segment.phase + meshIndex) * 0.022) * edgeFade), 0.035);
+          material.envMapIntensity = (1.86 + Math.sin(time * 0.25 + segment.phase) * 0.2 + Math.min(0.34, Math.abs(scrollImpulse) * 0.08)) * edgeFade;
         });
 
         const notchMaterial = segment.notch.material as THREE.MeshPhysicalMaterial;
@@ -2877,6 +3049,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       topCavityMaterial.dispose();
       oilBaseMaterial.dispose();
       oilTexture.dispose();
+      referenceOilTexture.dispose();
       oilBumpTexture.dispose();
       oilAlphaTexture.dispose();
       oilPatchTexture.dispose();
