@@ -762,6 +762,31 @@ function createBoneChipGeometry(seed: number) {
   return geometry;
 }
 
+function createReferenceSpineShardGeometry(points: Array<[number, number]>, depth = 0.07) {
+  const shape = new THREE.Shape();
+  points.forEach(([x, y], pointIndex) => {
+    if (pointIndex === 0) {
+      shape.moveTo(x, y);
+      return;
+    }
+
+    shape.lineTo(x, y);
+  });
+  shape.closePath();
+
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    bevelEnabled: true,
+    bevelSegments: 3,
+    bevelSize: 0.014,
+    bevelThickness: depth * 0.22,
+    curveSegments: 18,
+    depth,
+  });
+  geometry.center();
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 function drawRoundedRect(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
   context.beginPath();
   context.moveTo(x + radius, y);
@@ -893,6 +918,10 @@ function createPanelTexture(scene: StoryScene) {
     { color: "#f88bd6", x: 540, y: 206, radius: 66, sx: 0.9, sy: 0.58 },
     { color: "#76f6ec", x: 672, y: 230, radius: 44, sx: 0.72, sy: 0.42 },
     { color: "#e2bf73", x: 616, y: 330, radius: 58, sx: 1.1, sy: 0.52 },
+    { color: "#9bf8ff", x: 540, y: 122, radius: 42, sx: 1.45, sy: 0.36 },
+    { color: "#c69aff", x: 498, y: 172, radius: 48, sx: 0.62, sy: 0.5 },
+    { color: "#ff95de", x: 604, y: 196, radius: 42, sx: 0.88, sy: 0.42 },
+    { color: "#f0c36f", x: 632, y: 244, radius: 38, sx: 1.2, sy: 0.34 },
   ].forEach((fragment, fragmentIndex) => {
     // 参考画面里玻璃屏的色斑是几团可辨认的油膜折射，不是平均铺开的粒子。
     // 这里用更少、更大的局部色块压过均匀纹理，让面板投影向参考帧的“脏玻璃”质感靠拢。
@@ -909,6 +938,27 @@ function createPanelTexture(scene: StoryScene) {
     context.fillRect(-fragment.radius, -fragment.radius, fragment.radius * 2, fragment.radius * 2);
     context.restore();
   });
+  context.globalCompositeOperation = "multiply";
+  [
+    { x: 520, y: 132, radius: 54, sx: 0.8, sy: 0.42 },
+    { x: 472, y: 222, radius: 62, sx: 0.58, sy: 0.78 },
+    { x: 608, y: 292, radius: 48, sx: 0.62, sy: 0.5 },
+  ].forEach((shadow, shadowIndex) => {
+    // 参考玻璃里亮斑旁边都有不规则暗污，能让油膜折射像真实脏玻璃。
+    // 只加在中心投影区，避免整张主卡变脏导致 AI PM 标题不可读。
+    const occlusion = context.createRadialGradient(0, 0, 0, 0, 0, shadow.radius);
+    occlusion.addColorStop(0, "rgba(0,0,0,0.26)");
+    occlusion.addColorStop(0.42, "rgba(0,0,0,0.1)");
+    occlusion.addColorStop(1, "rgba(0,0,0,0)");
+    context.save();
+    context.translate(shadow.x, shadow.y);
+    context.rotate(-0.42 + shadowIndex * 0.28);
+    context.scale(shadow.sx, shadow.sy);
+    context.fillStyle = occlusion;
+    context.fillRect(-shadow.radius, -shadow.radius, shadow.radius * 2, shadow.radius * 2);
+    context.restore();
+  });
+  context.globalCompositeOperation = "screen";
   for (let index = 0; index < 12; index += 1) {
     const color = index % 4 === 0 ? "#72e9ff" : index % 4 === 1 ? "#bf82ff" : index % 4 === 2 ? "#ff8dda" : "#e5c27b";
     const x = 470 + Math.sin(index * 2.4) * 116;
@@ -1363,6 +1413,21 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       material.color = new THREE.Color("#24302f");
       return material;
     };
+    const makeCrownMaterial = (accentIndex: number) => {
+      const material = oilBaseMaterial.clone();
+      // 参考顶部骨片要承担明确剪影，不能继续套用主体 alphaMap；
+      // 主体 alphaMap 会按旧椎骨 UV 把新挤出面吃得过透明，导致轮廓读不出来。
+      material.alphaMap = null;
+      material.color = new THREE.Color("#2a3231");
+      material.emissive = new THREE.Color(organicPalette[accentIndex % organicPalette.length]);
+      material.emissiveIntensity = 0.078;
+      material.envMapIntensity = 1.16;
+      material.opacity = 0.86;
+      material.roughness = 0.5;
+      material.specularIntensity = 0.56;
+      material.transparent = true;
+      return material;
+    };
     const cavityGeometry = new THREE.SphereGeometry(0.18, 24, 12);
     const cavityMaterial = new THREE.MeshPhysicalMaterial({
       clearcoat: 0.28,
@@ -1507,7 +1572,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     });
 
     const exposedHeroShapes = [
-      { accent: 18, position: new THREE.Vector3(-0.04, 2.28, 0.3), rotation: new THREE.Euler(0.18, -0.28, 0.08), scale: new THREE.Vector3(1.88, 1.05, 1.34) },
+      { accent: 18, position: new THREE.Vector3(-0.04, 2.3, 0.2), rotation: new THREE.Euler(0.14, -0.12, 0.02), scale: new THREE.Vector3(1.12, 1.02, 0.9) },
       { accent: 22, position: new THREE.Vector3(0.02, -2.34, 0.28), rotation: new THREE.Euler(-0.12, 0.22, -0.1), scale: new THREE.Vector3(1.78, 0.9, 1.22) },
     ];
     exposedHeroShapes.forEach((config, shapeIndex) => {
@@ -1517,6 +1582,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       const heroMaterial = heroShape.material as THREE.MeshPhysicalMaterial;
       heroMaterial.emissiveIntensity = 0.064;
       heroMaterial.envMapIntensity = 0.66;
+      if (shapeIndex === 0) {
+        heroMaterial.depthWrite = false;
+        heroMaterial.opacity = 0.44;
+      }
       heroMaterial.specularIntensity = 0.3;
       heroShape.position.copy(config.position);
       heroShape.rotation.copy(config.rotation);
@@ -1526,22 +1595,26 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       organicMeshes.push(heroShape);
 
       const heroMouth = new THREE.Mesh(cavityGeometry, deepCavityMaterial);
-      heroMouth.position.set(config.position.x + (shapeIndex === 0 ? 0.08 : -0.04), config.position.y + (shapeIndex === 0 ? 0.06 : -0.02), config.position.z + (shapeIndex === 0 ? 0.44 : 0.28));
-      heroMouth.rotation.set(0.2, shapeIndex === 0 ? -0.2 : 0.24, shapeIndex === 0 ? 0.06 : -0.08);
-      heroMouth.scale.set(shapeIndex === 0 ? 1.62 : 1.0, shapeIndex === 0 ? 0.5 : 0.34, 0.08);
+      heroMouth.position.set(config.position.x + (shapeIndex === 0 ? 0.0 : -0.04), config.position.y + (shapeIndex === 0 ? -0.02 : -0.02), config.position.z + (shapeIndex === 0 ? 0.48 : 0.28));
+      heroMouth.rotation.set(0.18, shapeIndex === 0 ? -0.16 : 0.24, shapeIndex === 0 ? 0.02 : -0.08);
+      heroMouth.scale.set(shapeIndex === 0 ? 0.58 : 1.0, shapeIndex === 0 ? 1.18 : 0.34, 0.08);
       pillarGroup.add(heroMouth);
       cavityMeshes.push(heroMouth);
     });
 
     [
-      { accent: 31, position: new THREE.Vector3(-0.78, 2.28, 0.42), rotation: new THREE.Euler(0.28, 0.34, 0.72), scale: new THREE.Vector3(1.24, 0.74, 0.58) },
-      { accent: 32, position: new THREE.Vector3(0.72, 2.22, 0.36), rotation: new THREE.Euler(0.2, -0.44, -0.78), scale: new THREE.Vector3(1.08, 0.68, 0.52) },
+      { accent: 31, position: new THREE.Vector3(-0.56, 2.2, 0.38), rotation: new THREE.Euler(0.28, 0.34, 0.5), scale: new THREE.Vector3(0.78, 0.46, 0.36) },
+      { accent: 32, position: new THREE.Vector3(0.62, 2.14, 0.54), rotation: new THREE.Euler(0.12, -0.22, -0.06), scale: new THREE.Vector3(0.92, 0.32, 0.32) },
       { accent: 33, position: new THREE.Vector3(-0.64, -2.36, 0.38), rotation: new THREE.Euler(-0.18, 0.42, 0.62), scale: new THREE.Vector3(1.02, 0.62, 0.48) },
     ].forEach((config) => {
       const wing = new THREE.Mesh(createOrganicLobeGeometry(config.accent), makeOilMaterial(config.accent));
       const wingMaterial = wing.material as THREE.MeshPhysicalMaterial;
       wingMaterial.emissiveIntensity = 0.052;
       wingMaterial.envMapIntensity = 0.6;
+      if (config.accent !== 33) {
+        wingMaterial.depthWrite = false;
+        wingMaterial.opacity = 0.42;
+      }
       wing.position.copy(config.position);
       wing.rotation.copy(config.rotation);
       wing.scale.copy(config.scale);
@@ -1550,9 +1623,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     });
 
     [
-      { position: new THREE.Vector3(-0.34, 2.34, 0.68), rotation: new THREE.Euler(0.14, 0.18, -0.18), scale: new THREE.Vector3(0.58, 0.18, 0.05) },
-      { position: new THREE.Vector3(0.28, 2.12, 0.7), rotation: new THREE.Euler(0.2, -0.18, 0.18), scale: new THREE.Vector3(0.52, 0.16, 0.05) },
-      { position: new THREE.Vector3(-0.14, 1.98, 0.68), rotation: new THREE.Euler(0.22, 0.08, -0.12), scale: new THREE.Vector3(0.42, 0.14, 0.04) },
+      { position: new THREE.Vector3(-0.28, 2.42, 0.58), rotation: new THREE.Euler(0.12, 0.18, -0.16), scale: new THREE.Vector3(0.42, 0.12, 0.04) },
+      { position: new THREE.Vector3(0.22, 2.16, 0.6), rotation: new THREE.Euler(0.18, -0.2, 0.16), scale: new THREE.Vector3(0.36, 0.12, 0.04) },
+      { position: new THREE.Vector3(-0.06, 1.98, 0.62), rotation: new THREE.Euler(0.22, 0.08, -0.12), scale: new THREE.Vector3(0.34, 0.1, 0.035) },
     ].forEach((config) => {
       // 参考柱体上方最有辨识度的是“黑色中空洞”，不是单纯暗色材质。
       // 黑洞必须藏在油膜体块里，不能像单独贴上去的黑色碎片；因此用压扁椭球埋到前侧深处。
@@ -1566,9 +1639,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     });
 
     [
-      { accent: 41, position: new THREE.Vector3(0.92, 2.24, 0.82), rotation: new THREE.Euler(0.16, -0.34, -0.08), scale: new THREE.Vector3(1.58, 0.46, 0.44) },
-      { accent: 42, position: new THREE.Vector3(-0.66, 2.14, 0.76), rotation: new THREE.Euler(0.2, 0.44, 0.42), scale: new THREE.Vector3(1.12, 0.44, 0.38) },
-      { accent: 43, position: new THREE.Vector3(0.06, 1.96, 0.94), rotation: new THREE.Euler(0.42, -0.08, 0.02), scale: new THREE.Vector3(0.54, 0.58, 0.4) },
+      { accent: 41, position: new THREE.Vector3(0.76, 2.12, 0.78), rotation: new THREE.Euler(0.1, -0.18, -0.02), scale: new THREE.Vector3(0.9, 0.24, 0.28) },
+      { accent: 42, position: new THREE.Vector3(-0.54, 2.08, 0.62), rotation: new THREE.Euler(0.2, 0.44, 0.42), scale: new THREE.Vector3(0.72, 0.28, 0.28) },
+      { accent: 43, position: new THREE.Vector3(0.02, 2.0, 0.9), rotation: new THREE.Euler(0.42, -0.08, 0.02), scale: new THREE.Vector3(0.32, 0.42, 0.28) },
     ].forEach((config) => {
       // 右侧长骨片和下方小凸起决定参考图的上缘剪影；
       // 这里用真实 mesh 增加横向尖片，避免上方露出段继续像一团圆滑黑块。
@@ -1576,6 +1649,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       const finMaterial = fin.material as THREE.MeshPhysicalMaterial;
       finMaterial.emissiveIntensity = 0.06;
       finMaterial.envMapIntensity = 0.68;
+      finMaterial.depthWrite = false;
+      finMaterial.opacity = 0.42;
       fin.position.copy(config.position);
       fin.rotation.copy(config.rotation);
       fin.scale.copy(config.scale);
@@ -1584,8 +1659,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     });
 
     [
-      { accent: 44, position: new THREE.Vector3(0.08, 2.03, 1.02), rotation: new THREE.Euler(0.28, -0.08, 0.12), scale: new THREE.Vector3(0.52, 0.58, 0.44) },
-      { accent: 45, position: new THREE.Vector3(-0.34, 2.34, 1.0), rotation: new THREE.Euler(0.36, 0.16, -0.22), scale: new THREE.Vector3(0.42, 0.46, 0.34) },
+      { accent: 44, position: new THREE.Vector3(0.0, 2.02, 1.08), rotation: new THREE.Euler(0.28, -0.08, 0.12), scale: new THREE.Vector3(0.36, 0.56, 0.36) },
+      { accent: 45, position: new THREE.Vector3(-0.28, 2.3, 1.02), rotation: new THREE.Euler(0.36, 0.16, -0.22), scale: new THREE.Vector3(0.34, 0.38, 0.3) },
+      { accent: 46, position: new THREE.Vector3(0.36, 2.38, 1.0), rotation: new THREE.Euler(0.24, -0.18, 0.18), scale: new THREE.Vector3(0.28, 0.32, 0.26) },
     ].forEach((config) => {
       // 参考洞口下沿有几颗高亮的蓝紫/青色油膜结节，能把黑洞从一团黑色里“抠”出来。
       // 这里补两个前景小骨点，位置跟随柱体旋转，默认只做微弱光晕，不承担故事文案。
@@ -1599,6 +1675,124 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       bead.renderOrder = 10;
       pillarGroup.add(bead);
       organicMeshes.push(bead);
+    });
+
+    const topCavityMaterial = deepCavityMaterial.clone();
+    topCavityMaterial.color = new THREE.Color("#010204");
+    topCavityMaterial.depthTest = false;
+    topCavityMaterial.depthWrite = false;
+    topCavityMaterial.emissive = new THREE.Color("#02080e");
+    topCavityMaterial.emissiveIntensity = 0.018;
+    topCavityMaterial.opacity = 0.88;
+    const topCavity = new THREE.Mesh(cavityGeometry, topCavityMaterial);
+    topCavity.position.set(0.02, 2.54, 1.44);
+    topCavity.rotation.set(0.18, -0.05, -0.04);
+    topCavity.scale.set(0.54, 1.72, 0.08);
+    topCavity.renderOrder = 18;
+    pillarGroup.add(topCavity);
+    cavityMeshes.push(topCavity);
+
+    const referenceCrownPieces: Array<{ basePosition: THREE.Vector3; baseRotation: THREE.Euler; baseScale: THREE.Vector3; mesh: THREE.Mesh; phase: number }> = [];
+    const referenceCrownConfigs = [
+      {
+        accent: 71,
+        position: new THREE.Vector3(-0.08, 2.72, 1.36),
+        rotation: new THREE.Euler(0.2, -0.12, 0.04),
+        scale: new THREE.Vector3(1.18, 1.0, 1),
+        points: [
+          [-0.34, 0.46],
+          [-0.04, 0.62],
+          [0.3, 0.52],
+          [0.38, 0.18],
+          [0.18, -0.02],
+          [-0.14, -0.08],
+          [-0.38, 0.12],
+        ],
+      },
+      {
+        accent: 72,
+        position: new THREE.Vector3(-0.42, 2.38, 1.38),
+        rotation: new THREE.Euler(0.24, 0.16, -0.22),
+        scale: new THREE.Vector3(0.94, 0.9, 1),
+        points: [
+          [-0.38, 0.18],
+          [-0.08, 0.34],
+          [0.22, 0.22],
+          [0.16, -0.06],
+          [-0.08, -0.22],
+          [-0.42, -0.12],
+        ],
+      },
+      {
+        accent: 73,
+        position: new THREE.Vector3(0.5, 2.34, 1.42),
+        rotation: new THREE.Euler(0.16, -0.22, -0.04),
+        scale: new THREE.Vector3(1.18, 0.76, 1),
+        points: [
+          [-0.34, 0.1],
+          [0.24, 0.24],
+          [0.56, 0.1],
+          [0.42, -0.1],
+          [0.02, -0.2],
+          [-0.36, -0.12],
+        ],
+      },
+      {
+        accent: 74,
+        position: new THREE.Vector3(-0.04, 2.08, 1.46),
+        rotation: new THREE.Euler(0.34, -0.08, 0.08),
+        scale: new THREE.Vector3(0.76, 0.82, 1),
+        points: [
+          [-0.22, 0.16],
+          [0.04, 0.26],
+          [0.24, 0.02],
+          [0.08, -0.28],
+          [-0.2, -0.22],
+          [-0.34, -0.02],
+        ],
+      },
+      {
+        accent: 75,
+        position: new THREE.Vector3(0.22, 2.66, 1.48),
+        rotation: new THREE.Euler(0.2, -0.18, 0.28),
+        scale: new THREE.Vector3(0.58, 0.64, 1),
+        points: [
+          [-0.2, 0.18],
+          [0.02, 0.36],
+          [0.24, 0.18],
+          [0.18, -0.12],
+          [-0.04, -0.22],
+          [-0.24, -0.04],
+        ],
+      },
+    ];
+    referenceCrownConfigs.forEach((config, pieceIndex) => {
+      // 参考里的顶部轮廓有明确的中轴和少量规则骨片；
+      // 这组挤出面负责复刻那种“脏玻璃包着骨片”的主剪影，避免旧随机碎片继续抢形。
+      const mesh = new THREE.Mesh(createReferenceSpineShardGeometry(config.points as Array<[number, number]>), makeCrownMaterial(config.accent));
+      const material = mesh.material as THREE.MeshPhysicalMaterial;
+      material.clearcoat = 0.58;
+      material.depthTest = false;
+      material.depthWrite = false;
+      material.emissiveIntensity = 0.082;
+      material.envMapIntensity = 1.04;
+      material.opacity = 0.92;
+      material.roughness = 0.56;
+      material.specularIntensity = 0.5;
+      material.transparent = true;
+      mesh.position.copy(config.position);
+      mesh.rotation.copy(config.rotation);
+      mesh.scale.copy(config.scale);
+      mesh.renderOrder = 16 + pieceIndex;
+      pillarGroup.add(mesh);
+      organicMeshes.push(mesh);
+      referenceCrownPieces.push({
+        basePosition: config.position.clone(),
+        baseRotation: config.rotation.clone(),
+        baseScale: config.scale.clone(),
+        mesh,
+        phase: pieceIndex * 0.73,
+      });
     });
 
     // 参考视频里的柱体不是只有硬几何边界，玻璃屏前后会看到一层随柱体走的烟熏油膜。
@@ -1713,12 +1907,13 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     };
 
     const surfaceOilPatches = [
-      { opacity: 0.66, phase: 0.2, position: new THREE.Vector3(-0.26, 2.28, 0.72), rotation: -0.42, scaleX: 0.96, scaleY: 0.58 },
-      { opacity: 0.58, phase: 1.1, position: new THREE.Vector3(0.3, 2.05, 0.68), rotation: 0.34, scaleX: 0.82, scaleY: 0.52 },
-      { opacity: 0.46, phase: 2.3, position: new THREE.Vector3(0.02, 1.7, 0.7), rotation: -0.12, scaleX: 0.7, scaleY: 0.44 },
+      { opacity: 0.78, phase: 0.2, position: new THREE.Vector3(-0.16, 2.48, 0.86), rotation: -0.36, scaleX: 0.88, scaleY: 0.46 },
+      { opacity: 0.68, phase: 1.1, position: new THREE.Vector3(0.34, 2.22, 0.98), rotation: 0.18, scaleX: 0.72, scaleY: 0.34 },
+      { opacity: 0.54, phase: 2.3, position: new THREE.Vector3(-0.04, 1.88, 0.96), rotation: -0.1, scaleX: 0.62, scaleY: 0.4 },
       { opacity: 0.42, phase: 3.1, position: new THREE.Vector3(-0.22, -2.02, 0.64), rotation: 0.18, scaleX: 0.72, scaleY: 0.46 },
       { opacity: 0.5, phase: 4.0, position: new THREE.Vector3(0.26, -2.38, 0.62), rotation: -0.32, scaleX: 0.82, scaleY: 0.48 },
-      { opacity: 0.36, phase: 5.2, position: new THREE.Vector3(0.44, 2.56, 0.58), rotation: 0.58, scaleX: 0.58, scaleY: 0.36 },
+      { opacity: 0.6, phase: 5.2, position: new THREE.Vector3(0.52, 2.5, 0.78), rotation: 0.48, scaleX: 0.56, scaleY: 0.3 },
+      { opacity: 0.48, phase: 6.0, position: new THREE.Vector3(-0.5, 2.12, 0.84), rotation: -0.62, scaleX: 0.44, scaleY: 0.34 },
     ].map((config) => {
       const material = new THREE.SpriteMaterial({
         blending: THREE.AdditiveBlending,
@@ -2041,6 +2236,20 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         item.sprite.position.z = item.position.z + Math.cos(time * 0.2 + patchIndex) * 0.025;
         item.sprite.scale.set(item.scaleX * (0.94 + pulse * 0.1), item.scaleY * (0.96 + pulse * 0.08), 1);
       });
+      referenceCrownPieces.forEach((item, pieceIndex) => {
+        const material = item.mesh.material as THREE.MeshPhysicalMaterial;
+        const slowPulse = Math.sin(time * 0.32 + item.phase);
+        item.mesh.position.y = item.basePosition.y + slowPulse * 0.012 + scrollImpulse * 0.012 * Math.sin(item.phase + pieceIndex);
+        item.mesh.position.z = item.basePosition.z + Math.cos(time * 0.26 + item.phase) * 0.01;
+        item.mesh.rotation.y = item.baseRotation.y + Math.sin(time * 0.2 + item.phase) * 0.018 + storyOrbit * 0.018;
+        item.mesh.rotation.z = item.baseRotation.z + Math.sin(time * 0.24 + item.phase) * 0.018 + scrollImpulse * 0.014;
+        item.mesh.scale.set(
+          item.baseScale.x * (1 + slowPulse * 0.012),
+          item.baseScale.y * (1 - slowPulse * 0.008),
+          item.baseScale.z
+        );
+        material.emissiveIntensity = 0.068 + Math.sin(time * 0.58 + item.phase) * 0.016;
+      });
       oilGlints.forEach((item) => {
         const material = item.sprite.material as THREE.SpriteMaterial;
         const pulse = 0.62 + Math.sin(time * 1.05 + item.phase) * 0.28;
@@ -2138,6 +2347,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       cavityGeometry.dispose();
       cavityMaterial.dispose();
       deepCavityMaterial.dispose();
+      topCavityMaterial.dispose();
       oilBaseMaterial.dispose();
       oilTexture.dispose();
       oilBumpTexture.dispose();
