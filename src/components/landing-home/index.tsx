@@ -577,9 +577,9 @@ function createPanelTexture(scene: StoryScene) {
   // 参考录屏里的主卡不是明亮 SaaS 玻璃，而是带暖灰油膜的烟熏屏；
   // 这里降低白雾和冷色占比，让柱体能像从卡片后方穿过，同时保留可读标题。
   const gradient = context.createRadialGradient(520, 250, 70, 520, 250, 780);
-  gradient.addColorStop(0, "rgba(142,134,112,0.62)");
-  gradient.addColorStop(0.4, "rgba(58,64,60,0.74)");
-  gradient.addColorStop(1, "rgba(7,10,14,0.95)");
+  gradient.addColorStop(0, "rgba(142,134,112,0.7)");
+  gradient.addColorStop(0.4, "rgba(58,64,60,0.8)");
+  gradient.addColorStop(1, "rgba(7,10,14,0.97)");
   context.fillStyle = gradient;
   drawRoundedRect(context, 24, 24, canvas.width - 48, canvas.height - 48, 54);
   context.fill();
@@ -991,12 +991,14 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
     const organicPalette = ["#52f4ff", "#ad83ff", "#ff69d4", "#65ffd2", "#ffd36a"];
     const organicMeshes: THREE.Mesh[] = [];
-    const vertebraSegments = Array.from({ length: 11 }, (_, chunkIndex) => {
+    const vertebraSegments = Array.from({ length: 9 }, (_, chunkIndex) => {
       const group = new THREE.Group();
-      const baseY = -2.75 + chunkIndex * 0.55;
-      const phase = chunkIndex * 0.79;
-      group.position.set(Math.sin(phase) * 0.04, baseY, Math.cos(phase * 0.8) * 0.035);
-      group.rotation.set(0.04 * Math.sin(phase), (chunkIndex % 2 === 0 ? -0.12 : 0.12) + phase * 0.07, 0.05 * Math.cos(phase));
+      const baseY = -2.64 + chunkIndex * 0.66;
+      const phase = chunkIndex * 0.91;
+      const massVariation = 1 + Math.sin(phase * 1.37) * 0.12;
+      const sideBias = chunkIndex % 2 === 0 ? 1 : -1;
+      group.position.set(Math.sin(phase) * 0.045, baseY, Math.cos(phase * 0.8) * 0.04);
+      group.rotation.set(0.05 * Math.sin(phase), sideBias * 0.13 + phase * 0.065, 0.06 * Math.cos(phase));
       pillarGroup.add(group);
 
       const meshes: THREE.Mesh[] = [];
@@ -1009,47 +1011,47 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       };
 
       const body = new THREE.Mesh(createVertebraBodyGeometry(chunkIndex), makeMaterial(chunkIndex));
-      body.scale.set(0.9 + (chunkIndex % 2) * 0.022, 1.0, 0.92 + (chunkIndex % 2) * 0.04);
+      body.scale.set((0.98 + (chunkIndex % 2) * 0.035) * massVariation, 1.22, (1.0 + (chunkIndex % 2) * 0.035) * (1.02 - Math.sin(phase) * 0.04));
       group.add(body);
       meshes.push(body);
 
       const leftProcess = new THREE.Mesh(createOrganicLobeGeometry(chunkIndex + 12), makeMaterial(chunkIndex + 1));
-      leftProcess.position.set(-0.39, -0.03, -0.14);
-      leftProcess.rotation.set(0.2 + Math.sin(phase) * 0.08, 0.28, 0.44);
-      leftProcess.scale.set(0.72, 0.86, 0.64);
+      leftProcess.position.set(-0.42 * massVariation, -0.04, -0.12 - Math.sin(phase) * 0.04);
+      leftProcess.rotation.set(0.24 + Math.sin(phase) * 0.1, 0.24 + sideBias * 0.08, 0.54 + Math.cos(phase) * 0.1);
+      leftProcess.scale.set(0.82 * massVariation, 0.98, 0.68);
       group.add(leftProcess);
       meshes.push(leftProcess);
 
       const rightProcess = new THREE.Mesh(createOrganicLobeGeometry(chunkIndex + 24), makeMaterial(chunkIndex + 2));
-      rightProcess.position.set(0.38, 0.025, 0.16);
-      rightProcess.rotation.set(-0.18 + Math.cos(phase) * 0.08, -0.32, -0.38);
-      rightProcess.scale.set(0.66, 0.78, 0.58);
+      rightProcess.position.set(0.38 * (2 - massVariation), 0.03, 0.14 + Math.cos(phase) * 0.04);
+      rightProcess.rotation.set(-0.2 + Math.cos(phase) * 0.1, -0.28 + sideBias * 0.06, -0.5 + Math.sin(phase) * 0.08);
+      rightProcess.scale.set(0.72 * (2 - massVariation), 0.9, 0.62);
       group.add(rightProcess);
       meshes.push(rightProcess);
 
       const rearSpike = new THREE.Mesh(createOrganicLobeGeometry(chunkIndex + 36), makeMaterial(chunkIndex + 3));
-      rearSpike.position.set(Math.sin(phase) * 0.024, -0.015, -0.38);
-      rearSpike.rotation.set(0.08 * Math.sin(phase), Math.PI / 2 + 0.12, 0.14 * Math.cos(phase));
-      rearSpike.scale.set(0.86, 0.72, 0.5);
+      rearSpike.position.set(Math.sin(phase) * 0.03, -0.02, -0.42);
+      rearSpike.rotation.set(0.1 * Math.sin(phase), Math.PI / 2 + 0.14 + sideBias * 0.05, 0.16 * Math.cos(phase));
+      rearSpike.scale.set(0.98, 0.8, 0.54);
       group.add(rearSpike);
       meshes.push(rearSpike);
 
       const lowerKnuckle = new THREE.Mesh(createOrganicLobeGeometry(chunkIndex + 48), makeMaterial(chunkIndex + 4));
-      lowerKnuckle.position.set(-0.2 + Math.sin(phase) * 0.035, -0.13, 0.3);
-      lowerKnuckle.rotation.set(0.32, -0.28, 0.42);
-      lowerKnuckle.scale.set(0.42, 0.56, 0.38);
+      lowerKnuckle.position.set(-0.18 * sideBias + Math.sin(phase) * 0.035, -0.17, 0.28);
+      lowerKnuckle.rotation.set(0.36, -0.28 * sideBias, 0.48 * sideBias);
+      lowerKnuckle.scale.set(0.46, 0.62, 0.42);
       group.add(lowerKnuckle);
       meshes.push(lowerKnuckle);
 
       const upperKnuckle = new THREE.Mesh(createOrganicLobeGeometry(chunkIndex + 60), makeMaterial(chunkIndex + 5));
-      upperKnuckle.position.set(0.24 + Math.cos(phase) * 0.035, 0.12, -0.28);
-      upperKnuckle.rotation.set(-0.24, 0.2, -0.34);
-      upperKnuckle.scale.set(0.4, 0.5, 0.36);
+      upperKnuckle.position.set(0.2 * sideBias + Math.cos(phase) * 0.035, 0.16, -0.26);
+      upperKnuckle.rotation.set(-0.28, 0.2 * sideBias, -0.42 * sideBias);
+      upperKnuckle.scale.set(0.44, 0.58, 0.4);
       group.add(upperKnuckle);
       meshes.push(upperKnuckle);
 
       meshes.forEach((mesh) => organicMeshes.push(mesh));
-      return { baseY, group, meshes, phase };
+      return { baseY, group, massVariation, meshes, phase, sideBias };
     });
     vertebraSegments.forEach((segment) => {
       segment.group.visible = true;
@@ -1131,10 +1133,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       });
       const sprite = new THREE.Sprite(material);
       const segmentIndex = glintIndex % vertebraSegments.length;
+      const segment = vertebraSegments[segmentIndex];
       const angle = glintIndex * 2.21;
       sprite.position.set(
         Math.cos(angle) * (0.46 + (glintIndex % 4) * 0.06),
-        -2.42 + segmentIndex * 0.6 + Math.sin(angle) * 0.1,
+        segment.baseY + Math.sin(angle) * 0.12,
         Math.sin(angle) * 0.26 - 0.42
       );
       const scale = 0.2 + (glintIndex % 6) * 0.035;
@@ -1236,7 +1239,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       mesh.position.set(Math.sin(initialAngle) * 2.92 - 0.08, 0.02 - initialAbsOffset * 0.08, Math.cos(initialAngle) * 1.26 - 0.06 - initialAbsOffset * 0.2);
       mesh.rotation.set(initialOffset === 0 ? -0.018 : 0.018 * Math.sign(initialOffset), -initialAngle * 0.9 - 0.04, 0);
       mesh.scale.set(initialScale, initialScale, 1);
-      material.opacity = initialOffset === 0 ? 0.82 : Math.max(0.1, 0.42 - initialAbsOffset * 0.12);
+      material.opacity = initialOffset === 0 ? 0.88 : Math.max(0.1, 0.4 - initialAbsOffset * 0.12);
       mesh.renderOrder = initialOffset === 0 ? 8 : Math.max(1, 5 - initialAbsOffset);
       mesh.userData.index = index;
       stage.add(mesh);
@@ -1382,13 +1385,13 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         link.rotation.z = 0.1 * Math.sin(linkIndex + storyOrbit);
       });
       vertebraSegments.forEach((segment, segmentIndex) => {
-        segment.group.position.x = Math.sin(segment.phase + storyOrbit * 0.56) * 0.05;
+        segment.group.position.x = Math.sin(segment.phase + storyOrbit * 0.56) * 0.055;
         segment.group.position.y = segment.baseY;
-        segment.group.position.z = Math.cos(segment.phase * 0.8 + storyOrbit * 0.5) * 0.05;
-        segment.group.rotation.x = 0.04 * Math.sin(segment.phase + storyOrbit * 0.42);
-        segment.group.rotation.y = (segmentIndex % 2 === 0 ? -0.1 : 0.1) + segment.phase * 0.065 + storyOrbit * 0.34;
-        segment.group.rotation.z = 0.05 * Math.cos(segment.phase + storyOrbit * 0.38);
-        segment.group.scale.setScalar(1);
+        segment.group.position.z = Math.cos(segment.phase * 0.8 + storyOrbit * 0.5) * 0.055;
+        segment.group.rotation.x = 0.052 * Math.sin(segment.phase + storyOrbit * 0.42);
+        segment.group.rotation.y = segment.sideBias * 0.13 + segment.phase * 0.06 + storyOrbit * 0.42;
+        segment.group.rotation.z = 0.065 * Math.cos(segment.phase + storyOrbit * 0.38);
+        segment.group.scale.setScalar(segment.massVariation);
 
         segment.meshes.forEach((mesh, meshIndex) => {
           const material = mesh.material as THREE.MeshPhysicalMaterial;
@@ -1421,7 +1424,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const targetY = 0.02 - absOffset * 0.08;
         const targetZ = Math.cos(carouselAngle) * 1.26 - 0.06 - absOffset * 0.2;
         const targetScale = offset === 0 ? 1.12 : Math.max(0.54, 0.82 - absOffset * 0.12);
-        const targetOpacity = offset === 0 ? 0.82 : Math.max(0.1, 0.42 - absOffset * 0.12);
+        const targetOpacity = offset === 0 ? 0.88 : Math.max(0.1, 0.4 - absOffset * 0.12);
 
         mesh.position.x += (targetX - mesh.position.x) * 0.065;
         mesh.position.y += (targetY - mesh.position.y) * 0.065;
