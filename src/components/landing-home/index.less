@@ -7,9 +7,9 @@
   min-height: 680px;
   overflow: hidden;
   background:
-    radial-gradient(circle at 72% 18%, color-mix(in srgb, var(--scene-accent) 13%, transparent), transparent 25rem),
-    radial-gradient(circle at 0% 100%, rgba(71, 48, 126, 0.26), transparent 34rem),
-    linear-gradient(118deg, #020405 0%, #061112 54%, #071f1c 100%);
+    radial-gradient(circle at 68% 18%, color-mix(in srgb, var(--scene-accent) 7%, transparent), transparent 25rem),
+    radial-gradient(circle at 0% 100%, rgba(72, 46, 122, 0.22), transparent 34rem),
+    linear-gradient(118deg, #020304 0%, #050a0c 54%, #071411 100%);
   color: #f7fbff;
   outline: none;
   isolation: isolate;
@@ -33,8 +33,8 @@
   background:
     linear-gradient(90deg, rgba(0, 0, 0, 0.76), rgba(0, 0, 0, 0.26) 35%, rgba(0, 0, 0, 0.34) 76%, rgba(0, 0, 0, 0.58)),
     url("/landing/oil-spine-hero.png") center / cover no-repeat;
-  opacity: 0.34;
-  filter: blur(3px) saturate(0.95) contrast(0.88);
+  opacity: 0.2;
+  filter: blur(5px) saturate(0.82) contrast(0.8);
   transform: scale(1.035);
   transform-origin: 58% 48%;
   animation: landing-oil-hero-drift 16s ease-in-out infinite alternate;
@@ -49,7 +49,7 @@
 }
 
 .landing-story-hero-asset::before {
-  opacity: 0.2;
+  opacity: 0.14;
   background:
     radial-gradient(circle at 54% 45%, color-mix(in srgb, var(--scene-accent) 32%, transparent), transparent 18rem),
     linear-gradient(110deg, transparent 20%, rgba(176, 244, 255, 0.11) 44%, transparent 62%);
@@ -58,7 +58,7 @@
 }
 
 .landing-story-hero-asset::after {
-  opacity: 0.68;
+  opacity: 0.76;
   background:
     radial-gradient(circle at 60% 48%, transparent 0 18rem, rgba(1, 5, 9, 0.2) 34rem, rgba(0, 0, 0, 0.82) 76rem),
     linear-gradient(180deg, rgba(0, 0, 0, 0.34), transparent 32%, rgba(0, 0, 0, 0.5));
@@ -83,7 +83,7 @@
 .landing-story-noise {
   z-index: 3;
   pointer-events: none;
-  opacity: 0.24;
+  opacity: 0.14;
   background-image:
     linear-gradient(rgba(144, 246, 255, 0.035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(144, 246, 255, 0.03) 1px, transparent 1px),
