@@ -1057,6 +1057,34 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       segment.group.visible = true;
     });
 
+    // 参考图里的柱体不是孤立骨块堆叠，而是有暗色油膜中轴把椎骨串在一起。
+    // 这里用几条轻微扭动的 TubeGeometry 做“脊柱韧带”，减少节与节之间的断裂感；
+    // 它们挂在 pillarGroup 上，所以滚轮推进时会和椎骨、玻璃卡片一起换面。
+    const tendonMaterial = oilBaseMaterial.clone();
+    tendonMaterial.color = new THREE.Color("#030508");
+    tendonMaterial.emissive = new THREE.Color("#56f4ff");
+    tendonMaterial.emissiveIntensity = 0.022;
+    tendonMaterial.envMapIntensity = 1.45;
+    tendonMaterial.opacity = 0.48;
+    tendonMaterial.roughness = 0.44;
+    tendonMaterial.transparent = true;
+    const spineTendons = Array.from({ length: 4 }, (_, tendonIndex) => {
+      const angleOffset = tendonIndex * Math.PI * 0.5 + 0.28;
+      const radius = tendonIndex % 2 === 0 ? 0.15 : 0.24;
+      const points = Array.from({ length: 9 }, (_, pointIndex) => {
+        const progress = pointIndex / 8;
+        const y = -3.0 + progress * 5.95;
+        const twist = angleOffset + progress * Math.PI * 1.15 + Math.sin(progress * Math.PI * 3 + tendonIndex) * 0.18;
+        return new THREE.Vector3(Math.cos(twist) * radius, y, Math.sin(twist) * radius - 0.18);
+      });
+      const curve = new THREE.CatmullRomCurve3(points);
+      const geometry = new THREE.TubeGeometry(curve, 96, tendonIndex % 2 === 0 ? 0.026 : 0.02, 10, false);
+      const tendon = new THREE.Mesh(geometry, tendonMaterial.clone());
+      tendon.renderOrder = 2;
+      pillarGroup.add(tendon);
+      return tendon;
+    });
+
     const chainGeometry = new THREE.TorusGeometry(0.16, 0.036, 14, 36);
     const chainMaterial = oilBaseMaterial.clone();
     chainMaterial.color = new THREE.Color("#05070c");
@@ -1380,6 +1408,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       pillarCore.scale.x = 1 + Math.sin(time * 1.9) * 0.09;
       pillarCore.scale.z = 1 + Math.sin(time * 1.9) * 0.09;
       pillarLines.rotation.y += 0.0048;
+      spineTendons.forEach((tendon, tendonIndex) => {
+        const material = tendon.material as THREE.MeshPhysicalMaterial;
+        material.emissiveIntensity = 0.018 + Math.sin(time * 0.76 + tendonIndex) * 0.008;
+        tendon.rotation.y = Math.sin(time * 0.18 + tendonIndex) * 0.045;
+      });
       chainLinks.forEach((link, linkIndex) => {
         link.position.x = -0.72 + Math.sin(linkIndex * 0.64 + storyOrbit) * 0.035;
         link.rotation.z = 0.1 * Math.sin(linkIndex + storyOrbit);
@@ -1474,6 +1507,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         mesh.geometry.dispose();
         (mesh.material as THREE.MeshPhysicalMaterial).dispose();
       });
+      spineTendons.forEach((tendon) => {
+        tendon.geometry.dispose();
+        (tendon.material as THREE.Material).dispose();
+      });
+      tendonMaterial.dispose();
       chainGeometry.dispose();
       chainMaterial.dispose();
       organicField.geometry.dispose();
