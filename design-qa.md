@@ -4,57 +4,59 @@
 - extracted reference overview: `/tmp/ai-pm-reference-video/four-frames.jpg`
 - extracted precise reference frame: `/tmp/ai-pm-reference-video/precise/ref-stage-045.png`
 - extracted precise reference spine crop: `/tmp/ai-pm-reference-video/precise/ref-spine-045.png`
-- implementation default screenshot: `/tmp/ai-pm-exact-spine/default-v70.png`
-- implementation idle motion screenshots: `/tmp/ai-pm-exact-spine/idle-a-v70.png`, `/tmp/ai-pm-exact-spine/idle-b-v70.png`
-- implementation scroll impulse screenshot: `/tmp/ai-pm-exact-spine/impulse-v70.png`
-- implementation settled screenshot: `/tmp/ai-pm-exact-spine/settled-v70.png`
-- implementation mobile screenshot: `/tmp/ai-pm-exact-spine/mobile-v70.png`
-- same-subject comparison evidence: `/tmp/ai-pm-exact-spine/spine-compare-v70.png`
+- implementation default screenshot: `/tmp/ai-pm-exact-spine/default-v72.png`
+- implementation idle motion screenshots: `/tmp/ai-pm-exact-spine/idle-a-v72.png`, `/tmp/ai-pm-exact-spine/idle-b-v72.png`
+- implementation scroll impulse screenshot: `/tmp/ai-pm-exact-spine/impulse-v72.png`
+- implementation settled screenshot: `/tmp/ai-pm-exact-spine/settled-v72.png`
+- implementation mobile screenshot: `/tmp/ai-pm-exact-spine/mobile-v72.png`
+- same-subject comparison evidence: `/tmp/ai-pm-exact-spine/spine-compare-v72.png`
 - focused material texture evidence: `/Users/liushurui/Desktop/workspace/Ai实战/ai-pm/public/landing/reference-spine-field-wide-v67.png`
 - focused rim texture evidence: `/Users/liushurui/Desktop/workspace/Ai实战/ai-pm/public/landing/reference-spine-rim-wide-v67.png`
 - focused motion texture evidence: `/Users/liushurui/Desktop/workspace/Ai实战/ai-pm/public/landing/reference-spine-motion-v68.mp4`
 - viewport: 1280x720 desktop evidence, 390x844 mobile evidence
 - state: unauthenticated landing page; default idle light/motion frame pair plus one story-advance interaction
 - final result: blocked
-- blocker: exact-source fidelity is still not proven; v70 keys the source-cropped VideoTexture through a brightness/saturation shader and weights the left spine subject more heavily, but the live page still cannot be certified as source-identical to the mp4's authored geometry/refraction.
+- blocker: exact-source fidelity is still not proven; v72 adds a dedicated left-subject VideoTexture shader layer and lowers procedural spine opacity, but the live page still cannot be certified as source-identical to the mp4's authored geometry/refraction.
 
 ## Findings
 
 - [P1] 柱体仍不能声明为和参考视频完全一模一样
   Location: `src/components/landing-home/index.tsx` Three.js spine geometry/material.
-  Evidence: `/tmp/ai-pm-exact-spine/spine-compare-v70.png` compares the reference crop, default v70 crop, and scroll-impulse v70 crop. v70 keeps the continuous 10-segment side silhouette, the wide reference field, and the colored rim layer, then runs `reference-spine-motion-v68.mp4` through a muted VideoTexture shader mounted inside `pillarGroup`. The shader suppresses low-luma rectangular panel artifacts and emphasizes the source clip's left-side spine highlights, but the reference still has authored/scanned vertebra topology and true internal refraction that the procedural mesh plus reference-derived planes/video cannot fully prove as source-identical.
+  Evidence: `/tmp/ai-pm-exact-spine/spine-compare-v72.png` compares the reference crop, default v72 crop, and scroll-impulse v72 crop. v72 keeps the continuous 10-segment side silhouette, the wide reference field, and the colored rim layer, then adds a second `referenceSpineSubject` shader that samples only the left spine-heavy region of `reference-spine-motion-v68.mp4`. This makes the visible pillar carry more of the source clip's red/blue oil-film body, but the reference still has authored/scanned vertebra topology and true internal refraction that the procedural mesh plus reference-derived planes/video cannot fully prove as source-identical.
   Impact: the user explicitly requires no visible difference from the mp4 reference, so strict Product Design QA remains blocked.
   Fix: use or author a matching 3D vertebra asset/shader pass; procedural geometry can approximate the direction but cannot guarantee source-identical topology and refraction.
 
 - [P1] 光影材质更接近参考，但仍未达到源级内部折射
   Location: `referenceSpineField`, `referenceSpineMotion`, `referenceSpineRim`, `makeSourceProfileMaterial`, `makeReferenceSpineMaterial`, `spineFlecks`, and `surfaceOilPatches` in `src/components/landing-home/index.tsx`.
-  Evidence: v70 uses a 0.5s, 344x736 source-cropped mp4 as an additive `VideoTexture` sampled by `ShaderMaterial`, with `/tmp/ai-pm-exact-spine/idle-a-v70.png` and `/tmp/ai-pm-exact-spine/idle-b-v70.png` showing idle oil-film/highlight variation while the story card does not auto-advance. The reference still looks like colored flecks are embedded inside a wet translucent mesh, while the implementation reads as procedural geometry with calibrated luminous layers and a video material pass.
+  Evidence: v72 uses a 0.5s, 344x736 source-cropped mp4 as both a general additive `VideoTexture` and a left-subject `ShaderMaterial`, with `/tmp/ai-pm-exact-spine/idle-a-v72.png` and `/tmp/ai-pm-exact-spine/idle-b-v72.png` showing idle oil-film/highlight variation while the story card does not auto-advance. The reference still looks like colored flecks are embedded inside a wet translucent mesh, while the implementation now reads as a stronger source-video pillar layer blended with procedural geometry.
   Impact: the page has a better premium 3D direction, but it does not yet match the Active Theory material depth.
   Fix: build a custom shader that uses the reference material field as emissive, alpha, normal, and depth cues, or replace the procedural stack with a source-matched GLTF and authored material maps.
 
 - [P2] 侧影更规整，但仍不是源视频级雕塑
   Location: `sourceProfileSegments` and `processBlade` in `src/components/landing-home/index.tsx`.
-  Evidence: `/tmp/ai-pm-exact-spine/default-v70.png` shows the visible column no longer reads as several disconnected blue-purple beads; the wide reference field and source-weighted motion shader keep more of the original regular vertebra outline and wet material movement. The reference still has sharper authored vertebra transitions and physically richer card-side refraction.
+  Evidence: `/tmp/ai-pm-exact-spine/default-v72.png` shows the visible column no longer reads as several disconnected blue-purple beads; the new source-subject shader adds more of the original red/blue oil-film body while the procedural source-profile segments are lowered in opacity. The reference still has sharper authored vertebra transitions and physically richer card-side refraction.
   Impact: the page moves closer to the requested central-column direction without reintroducing the v58 needle spike regression.
   Fix: replace the procedural side-profile meshes with a source-matched GLTF or custom deformed geometry if exactness remains mandatory.
 
 - [P2] 滚动联动 remains correct
   Location: wheel/key story progression and animation loop in `src/components/landing-home/index.tsx`.
-  Evidence: `/tmp/ai-pm-exact-spine/impulse-v70.png` and `/tmp/ai-pm-exact-spine/settled-v70.png` show the pillar, wide reference material field, motion video shader layer, rim layer, and carousel moving together; default remains visually still except for glow, smoke, flecks, and material/video breathing.
+  Evidence: `/tmp/ai-pm-exact-spine/impulse-v72.png` and `/tmp/ai-pm-exact-spine/settled-v72.png` show the pillar, wide reference material field, motion video shader layer, source-subject shader layer, rim layer, and carousel moving together; default remains visually still except for glow, smoke, flecks, and material/video breathing.
   Impact: the interaction part of the request is still satisfied.
   Fix: only tune timing further if exact mp4 easing becomes the next blocker.
 
-## Patches Made In V70
+## Patches Made In V72
 
 - Extracted `public/landing/reference-spine-motion-v68.mp4` from the user-provided mp4 as a 0.5s muted 344x736 pillar-only loop, deliberately recropped to avoid bringing in the source site's left glass-panel vertical line.
 - Replaced the v68 `MeshBasicMaterial` motion layer with a brightness/saturation-keyed `THREE.ShaderMaterial`, so the mp4 contributes oil-film highlights and colored rim particles instead of a flat dark rectangle.
 - Weighted the shader toward the source clip's left-side spine subject and dimmed the right-side foreground panel area, keeping the pillar more prominent without duplicating the big glass card.
+- Added `referenceSpineSubject`, a narrower 3D mesh that samples only the mp4 crop's left spine-heavy UV range, skips the hard left crop edge, and uses stronger edge feathering to reduce visible video-plane borders.
+- Lowered procedural source-profile mesh opacities so the source-video pillar body can lead the silhouette instead of sitting behind generated vertebra blocks.
 - Kept the v67 wide static field and colored rim field, then raised source-field, rim, and motion uniform opacity slightly so default state has more visible oil-film motion without auto-advancing the story.
 - Captured desktop default, desktop idle A/B, desktop scroll impulse, desktop settled state, 390x844 mobile layout, and a side-by-side comparison image.
 
 ## Implementation Checklist
 
-- v70 evidence is now the current baseline.
+- v72 evidence is now the current baseline.
 - Browser verification used the Codex in-app browser on `http://localhost:3004/`; desktop default, desktop idle A/B, desktop scroll impulse, desktop settled, mobile 390x844, and console checks passed with no warning/error logs.
 - Mobile 390x844 has no horizontal overflow (`scrollWidth: 390`, `innerWidth: 390`) and one active canvas.
 - `git diff --check` passed.

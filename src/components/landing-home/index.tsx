@@ -2014,7 +2014,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 参考视频里的柱体是“一个整体侧影被故事卡片切开”，不是每节独立朝不同方向浮动。
       // v58 继续把参考层从“随机骨节”收敛成专用规则骨块：
       // 主体用更平滑的椎骨核心，横突用圆钝 club 形扫掠体，避免默认帧出现鱼鳞状尖刺。
-      const sideBody = new THREE.Mesh(createReferenceVertebraCoreGeometry(config.accent + 220), makeSourceProfileMaterial(config.accent, 0.78 * edgeFade));
+      const sideBody = new THREE.Mesh(createReferenceVertebraCoreGeometry(config.accent + 220), makeSourceProfileMaterial(config.accent, 0.56 * edgeFade));
       const sideBodyMaterial = sideBody.material as THREE.MeshPhysicalMaterial;
       sideBodyMaterial.envMapIntensity *= edgeFade;
       sideBodyMaterial.specularIntensity *= edgeFade;
@@ -2026,7 +2026,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
       // 参考里横突不是从主柱边缘硬插出来，而是有一段湿润的根部团块把主体和侧突糊在一起。
       // 这块小骨根专门解决 v59 仍然偏“程序化拼接”的问题，让侧突根部更像同一块扫描/雕塑模型。
-      const processRoot = new THREE.Mesh(createReferenceVertebraCoreGeometry(config.accent + 280), makeSourceProfileMaterial(config.accent + 1, 0.68 * edgeFade));
+      const processRoot = new THREE.Mesh(createReferenceVertebraCoreGeometry(config.accent + 280), makeSourceProfileMaterial(config.accent + 1, 0.48 * edgeFade));
       const processRootMaterial = processRoot.material as THREE.MeshPhysicalMaterial;
       processRootMaterial.envMapIntensity *= edgeFade;
       processRootMaterial.specularIntensity *= edgeFade;
@@ -2036,7 +2036,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       processRoot.renderOrder = 6.5;
       group.add(processRoot);
 
-      const sideProcess = new THREE.Mesh(createReferenceProcessGeometry(config.accent + 240), makeSourceProfileMaterial(config.accent + 2, 0.7 * edgeFade));
+      const sideProcess = new THREE.Mesh(createReferenceProcessGeometry(config.accent + 240), makeSourceProfileMaterial(config.accent + 2, 0.5 * edgeFade));
       const sideProcessMaterial = sideProcess.material as THREE.MeshPhysicalMaterial;
       sideProcessMaterial.envMapIntensity *= edgeFade;
       sideProcessMaterial.specularIntensity *= edgeFade;
@@ -2070,7 +2070,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       processBladeMaterial.color = new THREE.Color("#020407");
       processBladeMaterial.emissiveIntensity = 0.052;
       processBladeMaterial.envMapIntensity = 0.66;
-      processBladeMaterial.opacity = (segmentIndex <= 1 ? 0.14 : 0.32) * edgeFade;
+      processBladeMaterial.opacity = (segmentIndex <= 1 ? 0.1 : 0.22) * edgeFade;
       processBladeMaterial.roughness = 0.68;
       processBladeMaterial.specularIntensity = 0.34;
       processBlade.position.set(-0.5, -0.02, 0.1);
@@ -2079,7 +2079,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       processBlade.renderOrder = 7.5;
       group.add(processBlade);
 
-      const lowerProcess = new THREE.Mesh(createReferenceProcessGeometry(config.accent + 260), makeSourceProfileMaterial(config.accent + 4, 0.46 * edgeFade));
+      const lowerProcess = new THREE.Mesh(createReferenceProcessGeometry(config.accent + 260), makeSourceProfileMaterial(config.accent + 4, 0.32 * edgeFade));
       const lowerProcessMaterial = lowerProcess.material as THREE.MeshPhysicalMaterial;
       lowerProcessMaterial.envMapIntensity *= edgeFade;
       lowerProcessMaterial.specularIntensity *= edgeFade;
@@ -2577,6 +2577,61 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     referenceSpineMotion.renderOrder = 7.48;
     pillarGroup.add(referenceSpineMotion);
 
+    // 这层是 v71 的关键：不再把整段裁切视频平均铺满，而是只采样 mp4 左侧真实柱体主体区域。
+    // 它仍然是 pillarGroup 里的 3D mesh，滚轮推进时会和柱体整体旋转；但视觉主形来自源视频柱子，
+    // 从而减少“程序化骨节 + 一层光效”的割裂感，更接近用户要求的同一根规整油膜柱体。
+    const referenceSpineSubjectGeometry = new THREE.PlaneGeometry(1.36, 6.22, 1, 1);
+    const referenceSpineSubjectMaterial = new THREE.ShaderMaterial({
+      blending: THREE.AdditiveBlending,
+      depthTest: false,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      transparent: true,
+      uniforms: {
+        uMap: { value: referenceSpineMotionTexture },
+        uOpacity: { value: 0.42 },
+        uTime: { value: 0 },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D uMap;
+        uniform float uOpacity;
+        uniform float uTime;
+        varying vec2 vUv;
+
+        void main() {
+          vec2 sourceUv = vec2(mix(0.045, 0.58, vUv.x), vUv.y);
+          vec4 video = texture2D(uMap, sourceUv);
+          float maxChannel = max(max(video.r, video.g), video.b);
+          float minChannel = min(min(video.r, video.g), video.b);
+          float saturation = maxChannel - minChannel;
+          float luma = dot(video.rgb, vec3(0.2126, 0.7152, 0.0722));
+          float chromaMatte = smoothstep(0.026, 0.15, saturation);
+          float lumaMatte = smoothstep(0.045, 0.3, luma);
+          float edgeFade = smoothstep(0.035, 0.18, vUv.x) * smoothstep(0.995, 0.8, vUv.x);
+          float verticalFade = smoothstep(0.01, 0.09, vUv.y) * smoothstep(1.0, 0.88, vUv.y);
+          float rightPanelCull = 1.0 - smoothstep(0.46, 0.58, sourceUv.x) * 0.72;
+          float scanPulse = 0.94 + sin(uTime * 0.7 + vUv.y * 12.0) * 0.06;
+          float alpha = max(chromaMatte, lumaMatte * 0.58) * edgeFade * verticalFade * rightPanelCull * scanPulse * uOpacity;
+          vec3 color = pow(video.rgb, vec3(0.78)) * vec3(1.06, 1.12, 1.22);
+
+          gl_FragColor = vec4(color, alpha);
+        }
+      `,
+    });
+    const referenceSpineSubject = new THREE.Mesh(referenceSpineSubjectGeometry, referenceSpineSubjectMaterial);
+    referenceSpineSubject.position.set(-0.86, 0.08, 1.34);
+    referenceSpineSubject.rotation.set(0.016, -0.078, 0.012);
+    referenceSpineSubject.renderOrder = 7.62;
+    pillarGroup.add(referenceSpineSubject);
+
     // 第二张参考贴图只保留彩色骨节棱线。它比通用粒子更接近原视频里的规则柱体轮廓，
     // 但仍作为随柱体旋转的材质层存在，避免把整张参考图硬贴成静态背景。
     const referenceSpineRimMaterial = new THREE.MeshBasicMaterial({
@@ -2951,10 +3006,13 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceSpineGhostMaterial.opacity = 0.13 + Math.cos(time * 0.18) * 0.018 + Math.min(0.045, Math.abs(scrollImpulse) * 0.012);
       referenceSpineMotionMaterial.uniforms.uTime.value = time;
       referenceSpineMotionMaterial.uniforms.uOpacity.value = 0.22 + Math.sin(time * 0.31 + 0.4) * 0.026 + Math.min(0.08, Math.abs(scrollImpulse) * 0.022);
+      referenceSpineSubjectMaterial.uniforms.uTime.value = time;
+      referenceSpineSubjectMaterial.uniforms.uOpacity.value = 0.42 + Math.sin(time * 0.26 + 0.7) * 0.03 + Math.min(0.085, Math.abs(scrollImpulse) * 0.022);
       referenceSpineRimMaterial.opacity = 0.3 + Math.sin(time * 0.22 + 0.9) * 0.035 + Math.min(0.09, Math.abs(scrollImpulse) * 0.022);
       referenceSpineField.position.x = -0.56 + Math.sin(storyOrbit * 0.32) * 0.028;
       referenceSpineGhost.position.x = -0.28 + Math.cos(storyOrbit * 0.28) * 0.024;
       referenceSpineMotion.position.x = -0.57 + Math.sin(storyOrbit * 0.36 + 0.08) * 0.027;
+      referenceSpineSubject.position.x = -0.86 + Math.sin(storyOrbit * 0.38 + 0.1) * 0.024;
       referenceSpineRim.position.x = -0.58 + Math.sin(storyOrbit * 0.34 + 0.18) * 0.026;
       stage.rotation.y = Math.sin(storyOrbit) * 0.1;
       particles.rotation.y -= 0.0009;
@@ -3185,9 +3243,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       oilTexture.dispose();
       referenceOilTexture.dispose();
       referenceSpineFieldGeometry.dispose();
+      referenceSpineSubjectGeometry.dispose();
       referenceSpineFieldMaterial.dispose();
       referenceSpineGhostMaterial.dispose();
       referenceSpineMotionMaterial.dispose();
+      referenceSpineSubjectMaterial.dispose();
       referenceSpineRimMaterial.dispose();
       referenceSpineFieldTexture.dispose();
       referenceSpineMotionTexture.dispose();
