@@ -283,7 +283,7 @@ function createOilSlickTexture() {
     context.fillStyle = baseGradient;
     context.fillRect(0, 0, 1024, 1024);
 
-    const slickColors = ["#67e8ff", "#9276ff", "#e35dff", "#ff72c8", "#d5a25a"];
+    const slickColors = ["#58d9ff", "#8269ff", "#d35cff", "#f05eb9", "#c48a46"];
     context.globalCompositeOperation = "screen";
     for (let index = 0; index < 150; index += 1) {
       const color = slickColors[index % slickColors.length];
@@ -294,9 +294,9 @@ function createOilSlickTexture() {
       const rotation = Math.sin(index * 4.19) * Math.PI;
       const gradient = context.createRadialGradient(0, 0, 0, 0, 0, radiusX);
 
-      gradient.addColorStop(0, `${color}92`);
-      gradient.addColorStop(0.28, `${color}46`);
-      gradient.addColorStop(0.72, `${color}14`);
+      gradient.addColorStop(0, `${color}7c`);
+      gradient.addColorStop(0.28, `${color}3a`);
+      gradient.addColorStop(0.72, `${color}10`);
       gradient.addColorStop(1, `${color}00`);
 
       context.save();
@@ -308,9 +308,9 @@ function createOilSlickTexture() {
       context.restore();
     }
 
-    context.globalAlpha = 0.09;
-    context.lineWidth = 3;
-    for (let index = 0; index < 38; index += 1) {
+    context.globalAlpha = 0.045;
+    context.lineWidth = 2;
+    for (let index = 0; index < 28; index += 1) {
       const y = 80 + index * 24 + Math.sin(index * 1.7) * 18;
       context.strokeStyle = slickColors[(index + 2) % slickColors.length];
       context.beginPath();
@@ -431,7 +431,7 @@ function createVertebraBodyGeometry(segmentIndex: number) {
     const yNorm = v * 2 - 1;
     const vertical = Math.abs(yNorm);
     const waist = 1 - vertical * vertical * 0.3;
-    const lip = Math.exp(-Math.pow((vertical - 0.62) / 0.15, 2)) * 0.18;
+    const lip = Math.exp(-Math.pow((vertical - 0.6) / 0.16, 2)) * 0.24;
     const organicOffset = Math.sin(phase + yNorm * 2.4) * 0.01;
 
     for (let column = 0; column <= radialSegments; column += 1) {
@@ -442,17 +442,17 @@ function createVertebraBodyGeometry(segmentIndex: number) {
         (Math.exp(-Math.pow(angleDistance(theta, 0) / 0.32, 2)) +
           Math.exp(-Math.pow(angleDistance(theta, Math.PI) / 0.32, 2)) * 0.88) *
         processEnvelope *
-        0.2;
-      const rearProcess = Math.exp(-Math.pow(angleDistance(theta, -Math.PI / 2) / 0.38, 2)) * Math.exp(-Math.pow((yNorm + 0.02) / 0.64, 2)) * 0.3;
-      const frontNotch = -Math.exp(-Math.pow(angleDistance(theta, Math.PI / 2) / 0.42, 2)) * Math.exp(-Math.pow(yNorm / 0.76, 2)) * 0.15;
-      const topBottomBite = -Math.exp(-Math.pow(angleDistance(theta, Math.PI / 2) / 0.7, 2)) * Math.exp(-Math.pow((vertical - 0.78) / 0.18, 2)) * 0.065;
-      const boneFacets = Math.sin(theta * 3.0 + phase) * 0.032 + Math.sin(theta * 6.0 + yNorm * 4.2 + phase) * 0.02;
-      const fineRipple = Math.sin(theta * 13.0 + phase) * 0.01 + Math.sin(yNorm * 14.0 + theta * 1.7 + phase) * 0.01;
+        0.28;
+      const rearProcess = Math.exp(-Math.pow(angleDistance(theta, -Math.PI / 2) / 0.38, 2)) * Math.exp(-Math.pow((yNorm + 0.02) / 0.64, 2)) * 0.42;
+      const frontNotch = -Math.exp(-Math.pow(angleDistance(theta, Math.PI / 2) / 0.42, 2)) * Math.exp(-Math.pow(yNorm / 0.76, 2)) * 0.23;
+      const topBottomBite = -Math.exp(-Math.pow(angleDistance(theta, Math.PI / 2) / 0.7, 2)) * Math.exp(-Math.pow((vertical - 0.78) / 0.18, 2)) * 0.09;
+      const boneFacets = Math.sin(theta * 3.0 + phase) * 0.044 + Math.sin(theta * 6.0 + yNorm * 4.2 + phase) * 0.028;
+      const fineRipple = Math.sin(theta * 13.0 + phase) * 0.014 + Math.sin(yNorm * 14.0 + theta * 1.7 + phase) * 0.014;
       const radiusX = (0.34 * waist + lip + sideProcess + topBottomBite + boneFacets + fineRipple) * (1 + (segmentIndex % 2) * 0.008);
       const radiusZ = 0.29 * waist + lip * 0.34 + rearProcess + frontNotch + topBottomBite + boneFacets * 0.5 + fineRipple * 0.4;
       const x = Math.cos(theta) * radiusX;
       const z = Math.sin(theta) * radiusZ;
-      const y = yNorm * 0.29 + organicOffset + Math.sin(theta * 3 + phase) * 0.014 * (1 - vertical);
+      const y = yNorm * 0.31 + organicOffset + Math.sin(theta * 3 + phase) * 0.018 * (1 - vertical);
 
       positions.push(x, y, z);
       uvs.push(u, v);
@@ -577,10 +577,10 @@ function createPanelTexture(scene: StoryScene) {
   // 参考录屏里的主卡不是明亮 SaaS 玻璃，而是带暖灰油膜的烟熏屏；
   // 这里降低白雾和冷色占比，让柱体能像从卡片后方穿过，同时保留可读标题。
   const gradient = context.createRadialGradient(610, 338, 120, 540, 288, 860);
-  gradient.addColorStop(0, "rgba(128,113,86,0.74)");
-  gradient.addColorStop(0.34, "rgba(86,82,68,0.8)");
-  gradient.addColorStop(0.64, "rgba(40,45,43,0.88)");
-  gradient.addColorStop(1, "rgba(8,10,13,0.98)");
+  gradient.addColorStop(0, "rgba(134,118,88,0.9)");
+  gradient.addColorStop(0.34, "rgba(88,83,68,0.92)");
+  gradient.addColorStop(0.64, "rgba(38,43,41,0.96)");
+  gradient.addColorStop(1, "rgba(8,10,13,1)");
   context.fillStyle = gradient;
   drawRoundedRect(context, 24, 24, canvas.width - 48, canvas.height - 48, 54);
   context.fill();
@@ -594,8 +594,8 @@ function createPanelTexture(scene: StoryScene) {
     const y = Math.cos(index * 48.2) * 286 + 322;
     const radius = 28 + (index % 8) * 15;
     const blot = context.createRadialGradient(x, y, 0, x, y, radius);
-    blot.addColorStop(0, index % 3 === 0 ? "rgba(220,126,255,0.1)" : "rgba(111,231,255,0.09)");
-    blot.addColorStop(0.42, "rgba(238,224,190,0.08)");
+    blot.addColorStop(0, index % 3 === 0 ? "rgba(220,126,255,0.07)" : "rgba(111,231,255,0.06)");
+    blot.addColorStop(0.42, "rgba(238,224,190,0.06)");
     blot.addColorStop(1, "rgba(255,255,255,0)");
     context.fillStyle = blot;
     context.fillRect(x - radius, y - radius, radius * 2, radius * 2);
@@ -608,7 +608,7 @@ function createPanelTexture(scene: StoryScene) {
   spineReflection.addColorStop(0.68, "rgba(239,191,146,0.14)");
   spineReflection.addColorStop(1, "rgba(148,107,255,0)");
   context.fillStyle = spineReflection;
-  context.globalAlpha = 0.5;
+  context.globalAlpha = 0.32;
   context.fillRect(390, 26, 250, canvas.height - 52);
 
   context.globalAlpha = 0.06;
@@ -1002,11 +1002,24 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
     const organicPalette = ["#6ee7ff", "#8e73ff", "#db5cff", "#ff6fc6", "#d7a261"];
     const organicMeshes: THREE.Mesh[] = [];
-    const vertebraSegments = Array.from({ length: 11 }, (_, chunkIndex) => {
+    const cavityGeometry = new THREE.SphereGeometry(0.18, 24, 12);
+    const cavityMaterial = new THREE.MeshPhysicalMaterial({
+      clearcoat: 0.4,
+      color: new THREE.Color("#000104"),
+      emissive: new THREE.Color("#01020a"),
+      emissiveIntensity: 0.01,
+      envMapIntensity: 0.35,
+      metalness: 0.2,
+      opacity: 0.68,
+      roughness: 0.82,
+      transparent: true,
+    });
+    const cavityMeshes: THREE.Mesh[] = [];
+    const vertebraSegments = Array.from({ length: 8 }, (_, chunkIndex) => {
       const group = new THREE.Group();
-      const baseY = -2.9 + chunkIndex * 0.58;
+      const baseY = -2.72 + chunkIndex * 0.78;
       const phase = chunkIndex * 0.91;
-      const massVariation = 1 + Math.sin(phase * 1.37) * 0.07;
+      const massVariation = 1 + Math.sin(phase * 1.37) * 0.1;
       const sideBias = chunkIndex % 2 === 0 ? 1 : -1;
       group.position.set(Math.sin(phase) * 0.032, baseY, Math.cos(phase * 0.8) * 0.03);
       group.rotation.set(0.035 * Math.sin(phase), sideBias * 0.08 + phase * 0.045, 0.04 * Math.cos(phase));
@@ -1022,21 +1035,21 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       };
 
       const body = new THREE.Mesh(createVertebraBodyGeometry(chunkIndex), makeMaterial(chunkIndex));
-      body.scale.set((0.88 + (chunkIndex % 2) * 0.025) * massVariation, 1.1, (0.94 + (chunkIndex % 2) * 0.03) * (1.02 - Math.sin(phase) * 0.03));
+      body.scale.set((1.02 + (chunkIndex % 2) * 0.03) * massVariation, 1.26, (1.08 + (chunkIndex % 2) * 0.035) * (1.02 - Math.sin(phase) * 0.03));
       group.add(body);
       meshes.push(body);
 
       const leftProcess = new THREE.Mesh(createOrganicLobeGeometry(chunkIndex + 12), makeMaterial(chunkIndex + 1));
-      leftProcess.position.set(-0.46 * massVariation, -0.035, -0.1 - Math.sin(phase) * 0.03);
-      leftProcess.rotation.set(0.22 + Math.sin(phase) * 0.07, 0.2 + sideBias * 0.06, 0.5 + Math.cos(phase) * 0.08);
-      leftProcess.scale.set(0.86 * massVariation, 0.82, 0.58);
+      leftProcess.position.set(-0.55 * massVariation, -0.035, -0.08 - Math.sin(phase) * 0.03);
+      leftProcess.rotation.set(0.22 + Math.sin(phase) * 0.07, 0.24 + sideBias * 0.08, 0.54 + Math.cos(phase) * 0.08);
+      leftProcess.scale.set(1.0 * massVariation, 0.86, 0.62);
       group.add(leftProcess);
       meshes.push(leftProcess);
 
       const rightProcess = new THREE.Mesh(createOrganicLobeGeometry(chunkIndex + 24), makeMaterial(chunkIndex + 2));
-      rightProcess.position.set(0.44 * (2 - massVariation), 0.025, 0.12 + Math.cos(phase) * 0.03);
-      rightProcess.rotation.set(-0.18 + Math.cos(phase) * 0.07, -0.24 + sideBias * 0.05, -0.48 + Math.sin(phase) * 0.06);
-      rightProcess.scale.set(0.78 * (2 - massVariation), 0.78, 0.54);
+      rightProcess.position.set(0.52 * (2 - massVariation), 0.025, 0.14 + Math.cos(phase) * 0.03);
+      rightProcess.rotation.set(-0.18 + Math.cos(phase) * 0.07, -0.28 + sideBias * 0.07, -0.54 + Math.sin(phase) * 0.06);
+      rightProcess.scale.set(0.92 * (2 - massVariation), 0.82, 0.58);
       group.add(rightProcess);
       meshes.push(rightProcess);
 
@@ -1061,6 +1074,22 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       group.add(upperKnuckle);
       meshes.push(upperKnuckle);
 
+      // 参考柱体的“高级感”很大一部分来自黑色凹洞和油膜边缘，而不是纯亮面块。
+      // 不做布尔切割，改用压扁的暗色椭球贴在骨节前侧，形成从当前视角可读的凹陷阴影。
+      for (let cavityIndex = 0; cavityIndex < 2; cavityIndex += 1) {
+        const cavity = new THREE.Mesh(cavityGeometry, cavityMaterial);
+        const cavityPhase = phase + cavityIndex * 1.6;
+        cavity.position.set(
+          (cavityIndex === 0 ? -0.12 : 0.14) * sideBias + Math.sin(cavityPhase) * 0.035,
+          -0.04 + cavityIndex * 0.12,
+          0.29 + Math.cos(cavityPhase) * 0.03
+        );
+        cavity.rotation.set(0.28 + Math.sin(cavityPhase) * 0.1, sideBias * 0.38, Math.cos(cavityPhase) * 0.5);
+        cavity.scale.set(0.72 + cavityIndex * 0.18, 0.36 + cavityIndex * 0.08, 0.15);
+        group.add(cavity);
+        cavityMeshes.push(cavity);
+      }
+
       meshes.forEach((mesh) => organicMeshes.push(mesh));
       return { baseY, group, massVariation, meshes, phase, sideBias };
     });
@@ -1082,9 +1111,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const spineTendons = Array.from({ length: 5 }, (_, tendonIndex) => {
       const angleOffset = tendonIndex * Math.PI * 0.5 + 0.28;
       const radius = tendonIndex % 2 === 0 ? 0.12 : 0.22;
-      const points = Array.from({ length: 11 }, (_, pointIndex) => {
-        const progress = pointIndex / 10;
-        const y = -3.22 + progress * 6.44;
+      const points = Array.from({ length: 8 }, (_, pointIndex) => {
+        const progress = pointIndex / 7;
+        const y = -3.08 + progress * 6.16;
         const twist = angleOffset + progress * Math.PI * 1.15 + Math.sin(progress * Math.PI * 3 + tendonIndex) * 0.18;
         return new THREE.Vector3(Math.cos(twist) * radius, y, Math.sin(twist) * radius - 0.18);
       });
@@ -1130,9 +1159,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     organicField.visible = true;
     pillarGroup.add(organicField);
 
-    const fieldNodes = Array.from({ length: 9 }, (_, nodeIndex) => ({
+    const fieldNodes = Array.from({ length: 8 }, (_, nodeIndex) => ({
       phase: nodeIndex * 0.71,
-      y: 0.1 + nodeIndex * 0.101,
+      y: 0.12 + nodeIndex * 0.11,
     }));
 
     const updateOrganicField = (time: number, activeColor: THREE.Color) => {
@@ -1532,6 +1561,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         material.map?.dispose();
         material.dispose();
       });
+      cavityGeometry.dispose();
+      cavityMaterial.dispose();
       oilBaseMaterial.dispose();
       oilTexture.dispose();
       oilBumpTexture.dispose();
