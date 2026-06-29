@@ -1,52 +1,46 @@
 # Landing 3D Spine Design QA
 
-- source visual truth path: `/tmp/ai-pm-video-reference/frame-02.png`
-- implementation screenshot path: `/tmp/ai-pm-exact-spine/default-v44.png`
-- viewport: 1920x1080 desktop, 390x844 mobile
-- state: unauthenticated landing page default frame; scroll state captured after one wheel gesture
-- full-view comparison evidence: `/tmp/ai-pm-exact-spine/crop-compare-v44.png`
-- focused region comparison evidence: `/tmp/ai-pm-exact-spine/top-vertebra-compare-v44.png`, `/tmp/ai-pm-exact-spine/panel-projection-compare-v44.png`, `/tmp/ai-pm-exact-spine/motion-strip-v44.png`
-- final result: blocked
+- source visual truth path: `/Users/liushurui/Library/Application Support/LarkShell/screenshot/20260629120942_rec_.mp4`
+- extracted reference evidence: `/tmp/ai-pm-reference-video/four-frames.jpg`
+- implementation default screenshot: `/tmp/ai-pm-exact-spine/default-v48.png`
+- implementation scroll impulse screenshot: `/tmp/ai-pm-exact-spine/impulse-v48.png`
+- implementation settled screenshot: `/tmp/ai-pm-exact-spine/settled-v48.png`
+- implementation mobile screenshot: `/tmp/ai-pm-exact-spine/mobile-v48.png`
+- viewport: 1280x720 desktop evidence, 390x844 mobile evidence
+- state: unauthenticated landing page; default static frame plus one story-advance interaction
+- final result: blocked for exact-source fidelity, improved for requested motion behavior
 
 ## Findings
 
-- [P1] 顶部柱体仍未达到参考视频的一模一样
+- [P1] 柱体仍不能声明为和参考视频完全一模一样
   Location: `src/components/landing-home/index.tsx` Three.js spine geometry/material.
-  Evidence: `/tmp/ai-pm-exact-spine/top-vertebra-compare-v44.png` shows the implementation now keeps the pillar scroll-coupled and uses an additional reference crown layer, but the visible top still reads as a darker purple faceted mass. The source has a more legible vertical black hollow, sharper cyan/purple/gold oil-film fragments, and a cleaner right-side fin.
-  Impact: the user explicitly requires the pillar to match the video exactly, so this remains blocking.
-  Fix: continue with a source-frame-specific sculpting pass or a real custom modeled asset for the upper vertebra silhouette, rather than relying only on procedural lobe geometry.
+  Evidence: `/tmp/ai-pm-exact-spine/default-v48.png` and `/tmp/ai-pm-exact-spine/impulse-v48.png` show a more continuous, regular, glossy center spine than v44/v46. The scroll impulse frame now exposes the full pillar through the card orbit, closer to the reference. It still differs from the source mp4 in exact vertebra silhouette, oil-film fleck placement, and glass-refraction micro detail.
+  Impact: the user explicitly asked for no visible difference from the reference pillar, so strict QA remains blocked.
+  Fix: use a dedicated modeled-in-code mesh or imported authored 3D asset matched against source frames if exact silhouette is mandatory.
 
-- [P1] 玻璃屏投影接近方向但物理质感仍不足
-  Location: `createPanelTexture` in `src/components/landing-home/index.tsx`.
-  Evidence: `/tmp/ai-pm-exact-spine/panel-projection-compare-v44.png` shows warmer dirty-glass bloom and darker pores, but the source projection has sharper irregular islands, more local contrast, and less symmetrical center haze.
-  Impact: the foreground card still reads as a procedural approximation next to the reference capture.
-  Fix: add stronger nonuniform oil-film masks and localized bright/dark breakup while preserving AI PM copy readability.
+- [P1] 粒子/光影质感已增强，但还不是参考级复杂度
+  Location: `columnParticleCount`, `createVolumetricParticleMaterial`, and oil materials in `src/components/landing-home/index.tsx`.
+  Evidence: v48 increases the local column particle field and gives the main spine a darker wet-glass material, but the reference has richer sub-surface shimmer, sharper bright speckles, and stronger color separation.
+  Impact: the effect reads more premium than the prior build, but still not Active Theory production fidelity.
+  Fix: add a second layer of small high-frequency spark/fleck particles and a purpose-built noise/refraction shader pass.
 
-- [P2] 滚动联动已可见，但 easing 仍未逐帧匹配
-  Location: wheel/touch handlers and animation loop in `src/components/landing-home/index.tsx`.
-  Evidence: `/tmp/ai-pm-exact-spine/motion-strip-v44.png` shows the pillar rotates/translates with the story cards on wheel impulse and settles into the next state. The reference mp4 still has a different camera easing curve, card orbit radius, and pillar yaw timing.
-  Impact: the requested “滚动时柱子也跟随滚动” behavior is now satisfied at interaction level, but not exact-video fidelity.
-  Fix: tune wheel impulse decay, carousel radius, and pillar yaw against the mp4 frame strip.
+- [P2] 滚动联动行为 now satisfies the requested interaction direction
+  Location: animation loop in `src/components/landing-home/index.tsx`.
+  Evidence: `/tmp/ai-pm-exact-spine/impulse-v48.png` shows the pillar moving/rotating into the center while the story cards rotate around it; `/tmp/ai-pm-exact-spine/settled-v48.png` shows the next story card settled with the pillar still aligned to the story state.
+  Impact: this addresses the specific regression where the cards moved but the pillar felt static.
+  Fix: continue tuning easing only if the user wants mp4-frame timing, not just the interaction model.
 
-## Required Fidelity Surfaces
+## Patches Made In V48
 
-- Fonts and typography: AI PM product copy remains product-specific; typography is not the blocker for this pillar-focused request.
-- Spacing and layout rhythm: desktop and mobile v44 captures show no new horizontal overflow; nav, hero copy, CTA, and glass card remain usable.
-- Colors and visual tokens: v44 keeps the darker Active Theory-inspired palette and adds stronger smoky/oil-film treatment, but top-column highlights are still less vivid and less naturally placed than the source.
-- Image quality and asset fidelity: the implementation remains procedural Three.js geometry/material/texture as requested. It is not a copied screenshot, but the custom procedural result still falls short of the visual target.
-- Copy and content: AI PM labels remain intentionally different from the source portfolio page.
-
-## Patches Made Since Previous QA Pass
-
-- Added a custom `createReferenceSpineShardGeometry` extrusion helper for source-like top crown pieces.
-- Reduced the old exposed top lobe/fin opacity so it no longer fully dominates the silhouette.
-- Added a forward vertical top cavity and top crown pieces with an alpha-map-free oil material so the intended shape can render more reliably.
-- Added additional dirty-glass projection fragments and localized dark pores to the main panel texture.
-- Preserved scroll-coupled pillar/card movement and captured desktop default, scroll impulse, scroll settled, and mobile screenshots for v44.
+- Added a separate reference spine material tuned for dark wet-glass, stronger clearcoat, iridescence, and oil-film reflection.
+- Added a 12-segment regular main spine stack with fixed vertical rhythm, alternating side lobes, and per-segment dark cavities.
+- Reduced the old exposed top random segment weight so it becomes background volume instead of the primary silhouette.
+- Moved the default carousel card to reveal the pillar edge, then increased story-orbit translation and yaw so the pillar visibly follows story navigation.
+- Increased local column particles from 980 to 1380 and raised their global opacity for a stronger light-dust field.
+- Verified desktop default, desktop story impulse, desktop settled state, and 390x844 mobile layout.
 
 ## Implementation Checklist
 
-- Keep v44 screenshots as the current evidence baseline.
-- Do not mark Product Design QA passed until the upper pillar silhouette and panel refraction no longer have P1 differences.
-- Consider replacing the top procedural lobe stack with a dedicated modeled/modeled-in-code asset if exact silhouette matching remains mandatory.
-- Preserve current scroll-coupled motion behavior while continuing the pillar fidelity pass.
+- Keep v48 screenshots as the current evidence baseline.
+- Do not mark Product Design QA passed until the pillar silhouette, material flecks, and refraction match the reference at source-frame level.
+- Preserve the v48 behavior where default is static, while scroll/story navigation moves the whole center installation.

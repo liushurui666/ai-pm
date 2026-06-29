@@ -1418,13 +1418,39 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 参考顶部骨片要承担明确剪影，不能继续套用主体 alphaMap；
       // 主体 alphaMap 会按旧椎骨 UV 把新挤出面吃得过透明，导致轮廓读不出来。
       material.alphaMap = null;
+      material.blending = THREE.AdditiveBlending;
       material.color = new THREE.Color("#2a3231");
+      material.depthTest = false;
+      material.depthWrite = false;
       material.emissive = new THREE.Color(organicPalette[accentIndex % organicPalette.length]);
-      material.emissiveIntensity = 0.078;
-      material.envMapIntensity = 1.16;
-      material.opacity = 0.86;
-      material.roughness = 0.5;
-      material.specularIntensity = 0.56;
+      material.emissiveIntensity = 0.22;
+      material.envMapIntensity = 1.42;
+      material.opacity = 0.92;
+      material.roughness = 0.44;
+      material.side = THREE.DoubleSide;
+      material.specularIntensity = 0.72;
+      material.transparent = true;
+      return material;
+    };
+    const makeReferenceSpineMaterial = (accentIndex: number, opacity = 0.82) => {
+      const material = oilBaseMaterial.clone();
+      // 主柱必须像参考录屏那样“暗体里透出油膜”，不能继续用随机碎片的轻薄透明度。
+      // 这里单独加重环境反射、clearcoat 和局部自发光，让规则骨节在默认静止帧里也有可读光影。
+      material.alphaMap = null;
+      material.bumpScale = 0.076;
+      material.clearcoat = 0.72;
+      material.clearcoatRoughness = 0.44;
+      material.color = new THREE.Color("#11191a");
+      material.emissive = new THREE.Color(organicPalette[accentIndex % organicPalette.length]);
+      material.emissiveIntensity = 0.078 + (accentIndex % 3) * 0.012;
+      material.envMapIntensity = 1.35;
+      material.metalness = 0.02;
+      material.opacity = opacity;
+      material.roughness = 0.48;
+      material.sheen = 0.72;
+      material.specularIntensity = 0.78;
+      material.thickness = 1.12;
+      material.transmission = 0.12;
       material.transparent = true;
       return material;
     };
@@ -1459,14 +1485,20 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       const phase = chunkIndex * 0.91;
       const massVariation = 0.98 + Math.sin(phase * 1.37) * 0.045;
       const sideBias = chunkIndex % 2 === 0 ? 1 : -1;
+      const isTopExposedSegment = chunkIndex >= 6;
+      const isBottomExposedSegment = chunkIndex <= 1;
       group.position.set(Math.sin(phase) * 0.026, baseY, Math.cos(phase * 0.8) * 0.026);
       group.rotation.set(0.028 * Math.sin(phase), sideBias * 0.06 + phase * 0.04, 0.034 * Math.cos(phase));
       pillarGroup.add(group);
 
       const meshes: THREE.Mesh[] = [];
-      const exposedScale = chunkIndex >= 6 || chunkIndex <= 1 ? 1.18 : 1;
+      const exposedScale = isTopExposedSegment ? 0.78 : isBottomExposedSegment ? 1.18 : 1;
       const body = new THREE.Mesh(createVertebraBodyGeometry(chunkIndex), makeOilMaterial(chunkIndex));
-      body.scale.set((1.08 + (chunkIndex % 2) * 0.028) * massVariation * exposedScale, chunkIndex >= 6 || chunkIndex <= 1 ? 1.28 : 1.38, (1.0 + (chunkIndex % 2) * 0.032) * (1.02 - Math.sin(phase) * 0.018) * exposedScale);
+      body.scale.set(
+        (1.08 + (chunkIndex % 2) * 0.028) * massVariation * exposedScale,
+        isTopExposedSegment ? 0.98 : isBottomExposedSegment ? 1.28 : 1.38,
+        (1.0 + (chunkIndex % 2) * 0.032) * (1.02 - Math.sin(phase) * 0.018) * exposedScale
+      );
       group.add(body);
       meshes.push(body);
 
@@ -1564,11 +1596,79 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         cavityMeshes.push(shadowMouth);
       }
 
+      if (isTopExposedSegment) {
+        // 参考图顶部不是一大团厚重紫黑体块，而是少量骨片围绕黑腔展开；
+        // 旧随机骨节保留为背后的体积阴影，但必须降权，否则前景参考骨片再怎么加都会被吞掉。
+        meshes.forEach((mesh, meshIndex) => {
+          const material = mesh.material as THREE.MeshPhysicalMaterial;
+          material.depthWrite = false;
+          material.emissiveIntensity *= 0.55;
+          material.opacity = meshIndex === 0 ? 0.34 : 0.24;
+          material.transparent = true;
+        });
+      }
+
       meshes.forEach((mesh) => organicMeshes.push(mesh));
       return { baseY, group, massVariation, meshes, phase, sideBias };
     });
     vertebraSegments.forEach((segment) => {
       segment.group.visible = true;
+    });
+
+    const referenceStackSegments: Array<{
+      body: THREE.Mesh;
+      group: THREE.Group;
+      lobeA: THREE.Mesh;
+      lobeB: THREE.Mesh;
+      mouth: THREE.Mesh;
+      phase: number;
+      y: number;
+    }> = [];
+    Array.from({ length: 12 }, (_, stackIndex) => {
+      const group = new THREE.Group();
+      const phase = stackIndex * 0.58;
+      const y = -3.02 + stackIndex * 0.55;
+      const side = stackIndex % 2 === 0 ? 1 : -1;
+      group.position.set(Math.sin(phase) * 0.026, y, 0.46 + Math.cos(phase) * 0.016);
+      group.rotation.set(0.05 * Math.sin(phase), side * 0.08, 0.03 * Math.cos(phase));
+      group.scale.set(0.96, 1.02, 0.9);
+      pillarGroup.add(group);
+
+      // 这条主柱负责对齐参考视频的规则脊柱轮廓：中轴连续、骨节间距固定、侧翼只做轻微交替。
+      // 旧随机骨节仍在背后提供体积暗部，但第一眼必须读到这条更规整的骨架。
+      const body = new THREE.Mesh(createVertebraBodyGeometry(stackIndex + 96), makeReferenceSpineMaterial(stackIndex, 0.86));
+      body.scale.set(0.92 + (stackIndex % 3) * 0.025, 1.02, 0.82);
+      body.renderOrder = 5;
+      group.add(body);
+
+      const lobeA = new THREE.Mesh(createOrganicLobeGeometry(stackIndex + 140), makeReferenceSpineMaterial(stackIndex + 2, 0.72));
+      lobeA.position.set(-0.44 * side, 0.02, 0.02);
+      lobeA.rotation.set(0.18, 0.16 * side, 0.72 * side);
+      lobeA.scale.set(0.72, 0.42, 0.36);
+      lobeA.renderOrder = 5;
+      group.add(lobeA);
+
+      const lobeB = new THREE.Mesh(createOrganicLobeGeometry(stackIndex + 168), makeReferenceSpineMaterial(stackIndex + 3, 0.66));
+      lobeB.position.set(0.34 * side, -0.03, -0.18);
+      lobeB.rotation.set(-0.14, -0.22 * side, -0.48 * side);
+      lobeB.scale.set(0.52, 0.32, 0.3);
+      lobeB.renderOrder = 4;
+      group.add(lobeB);
+
+      const mouth = new THREE.Mesh(cavityGeometry, deepCavityMaterial.clone());
+      const mouthMaterial = mouth.material as THREE.MeshPhysicalMaterial;
+      mouthMaterial.depthWrite = false;
+      mouthMaterial.opacity = 0.52;
+      mouth.position.set(0.04 * side, 0.02, 0.36);
+      mouth.rotation.set(0.18, 0.16 * side, 0.22 * side);
+      mouth.scale.set(0.54, 0.18, 0.055);
+      mouth.renderOrder = 6;
+      group.add(mouth);
+
+      [body, lobeA, lobeB].forEach((mesh) => organicMeshes.push(mesh));
+      cavityMeshes.push(mouth);
+      referenceStackSegments.push({ body, group, lobeA, lobeB, mouth, phase, y });
+      return group;
     });
 
     const exposedHeroShapes = [
@@ -1685,20 +1785,88 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     topCavityMaterial.emissiveIntensity = 0.018;
     topCavityMaterial.opacity = 0.88;
     const topCavity = new THREE.Mesh(cavityGeometry, topCavityMaterial);
-    topCavity.position.set(0.02, 2.54, 1.44);
+    topCavity.position.set(0.02, 2.52, 1.64);
     topCavity.rotation.set(0.18, -0.05, -0.04);
-    topCavity.scale.set(0.54, 1.72, 0.08);
-    topCavity.renderOrder = 18;
+    topCavity.scale.set(0.58, 1.86, 0.08);
+    topCavity.renderOrder = 42;
     pillarGroup.add(topCavity);
     cavityMeshes.push(topCavity);
+
+    const topCavitySlitMaterial = new THREE.MeshBasicMaterial({
+      color: 0x020508,
+      depthTest: false,
+      depthWrite: false,
+      opacity: 0.38,
+      side: THREE.DoubleSide,
+      transparent: true,
+    });
+    const topCavitySlit = new THREE.Mesh(
+      createReferenceSpineShardGeometry(
+        [
+          [-0.1, 0.44],
+          [0.12, 0.38],
+          [0.16, 0.08],
+          [0.1, -0.34],
+          [-0.04, -0.46],
+          [-0.16, -0.26],
+          [-0.14, 0.22],
+        ],
+        0.035
+      ),
+      topCavitySlitMaterial
+    );
+    topCavitySlit.position.set(-0.02, 2.48, 1.78);
+    topCavitySlit.rotation.set(0.2, -0.04, -0.04);
+    topCavitySlit.scale.set(0.46, 0.6, 1);
+    topCavitySlit.renderOrder = 48;
+    pillarGroup.add(topCavitySlit);
+    organicMeshes.push(topCavitySlit);
+
+    const cavityRimConfigs = [
+      { color: "#7df2ff", opacity: 0.48, position: new THREE.Vector3(-0.16, 2.18, 1.82), rotation: -0.28, scale: new THREE.Vector3(0.2, 0.1, 1) },
+      { color: "#cf8cff", opacity: 0.44, position: new THREE.Vector3(0.16, 2.26, 1.84), rotation: 0.22, scale: new THREE.Vector3(0.22, 0.09, 1) },
+      { color: "#f0a6dc", opacity: 0.38, position: new THREE.Vector3(-0.26, 2.56, 1.82), rotation: -0.52, scale: new THREE.Vector3(0.18, 0.08, 1) },
+    ];
+    cavityRimConfigs.forEach((config, rimIndex) => {
+      // 参考黑腔下沿有几处非常亮的青紫油膜点，黑洞是否“像”很依赖这些边缘光。
+      // 这里用同一套挤出骨片几何做小油膜结节，仍跟随柱体整体滚动和旋转。
+      const rim = new THREE.Mesh(
+        createReferenceSpineShardGeometry(
+          [
+            [-0.24, 0.1],
+            [-0.04, 0.22],
+            [0.24, 0.12],
+            [0.28, -0.08],
+            [0.02, -0.2],
+            [-0.26, -0.08],
+          ],
+          0.025
+        ),
+        new THREE.MeshBasicMaterial({
+          blending: THREE.AdditiveBlending,
+          color: config.color,
+          depthTest: false,
+          depthWrite: false,
+          opacity: config.opacity,
+          side: THREE.DoubleSide,
+          transparent: true,
+        })
+      );
+      rim.position.copy(config.position);
+      rim.rotation.set(0.18, -0.06 + rimIndex * 0.04, config.rotation);
+      rim.scale.copy(config.scale);
+      rim.renderOrder = 49 + rimIndex;
+      pillarGroup.add(rim);
+      organicMeshes.push(rim);
+    });
 
     const referenceCrownPieces: Array<{ basePosition: THREE.Vector3; baseRotation: THREE.Euler; baseScale: THREE.Vector3; mesh: THREE.Mesh; phase: number }> = [];
     const referenceCrownConfigs = [
       {
         accent: 71,
-        position: new THREE.Vector3(-0.08, 2.72, 1.36),
+        position: new THREE.Vector3(-0.1, 2.72, 1.72),
         rotation: new THREE.Euler(0.2, -0.12, 0.04),
-        scale: new THREE.Vector3(1.18, 1.0, 1),
+        scale: new THREE.Vector3(1.64, 1.18, 1),
         points: [
           [-0.34, 0.46],
           [-0.04, 0.62],
@@ -1711,9 +1879,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       },
       {
         accent: 72,
-        position: new THREE.Vector3(-0.42, 2.38, 1.38),
+        position: new THREE.Vector3(-0.48, 2.38, 1.74),
         rotation: new THREE.Euler(0.24, 0.16, -0.22),
-        scale: new THREE.Vector3(0.94, 0.9, 1),
+        scale: new THREE.Vector3(1.28, 0.96, 1),
         points: [
           [-0.38, 0.18],
           [-0.08, 0.34],
@@ -1725,9 +1893,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       },
       {
         accent: 73,
-        position: new THREE.Vector3(0.5, 2.34, 1.42),
-        rotation: new THREE.Euler(0.16, -0.22, -0.04),
-        scale: new THREE.Vector3(1.18, 0.76, 1),
+        position: new THREE.Vector3(0.56, 2.34, 1.78),
+        rotation: new THREE.Euler(0.16, -0.18, -0.02),
+        scale: new THREE.Vector3(1.72, 0.8, 1),
         points: [
           [-0.34, 0.1],
           [0.24, 0.24],
@@ -1739,9 +1907,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       },
       {
         accent: 74,
-        position: new THREE.Vector3(-0.04, 2.08, 1.46),
+        position: new THREE.Vector3(-0.04, 2.08, 1.76),
         rotation: new THREE.Euler(0.34, -0.08, 0.08),
-        scale: new THREE.Vector3(0.76, 0.82, 1),
+        scale: new THREE.Vector3(0.9, 0.92, 1),
         points: [
           [-0.22, 0.16],
           [0.04, 0.26],
@@ -1753,9 +1921,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       },
       {
         accent: 75,
-        position: new THREE.Vector3(0.22, 2.66, 1.48),
+        position: new THREE.Vector3(0.26, 2.64, 1.82),
         rotation: new THREE.Euler(0.2, -0.18, 0.28),
-        scale: new THREE.Vector3(0.58, 0.64, 1),
+        scale: new THREE.Vector3(0.72, 0.72, 1),
         points: [
           [-0.2, 0.18],
           [0.02, 0.36],
@@ -1783,7 +1951,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       mesh.position.copy(config.position);
       mesh.rotation.copy(config.rotation);
       mesh.scale.copy(config.scale);
-      mesh.renderOrder = 16 + pieceIndex;
+      mesh.renderOrder = 34 + pieceIndex;
       pillarGroup.add(mesh);
       organicMeshes.push(mesh);
       referenceCrownPieces.push({
@@ -1997,7 +2165,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       return ring;
     });
 
-    const columnParticleCount = 980;
+    const columnParticleCount = 1380;
     const columnParticlePositions = new Float32Array(columnParticleCount * 3);
     const columnParticleSeeds = new Float32Array(columnParticleCount * 4);
     const columnParticleColors = new Float32Array(columnParticleCount * 3);
@@ -2006,7 +2174,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const columnParticlePhases = new Float32Array(columnParticleCount);
     for (let index = 0; index < columnParticleCount; index += 1) {
       const angle = Math.random() * Math.PI * 2;
-      const radius = 0.22 + Math.pow(Math.random(), 2.05) * 0.86;
+      const radius = 0.18 + Math.pow(Math.random(), 2.05) * 1.0;
       const heightSeed = Math.random();
       columnParticleSeeds[index * 4] = angle;
       columnParticleSeeds[index * 4 + 1] = radius;
@@ -2020,8 +2188,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       columnParticleColors[index * 3] = color.r;
       columnParticleColors[index * 3 + 1] = color.g;
       columnParticleColors[index * 3 + 2] = color.b;
-      columnParticleSizes[index] = 1.6 + Math.pow(Math.random(), 2.0) * 6.4;
-      columnParticleAlphas[index] = 0.045 + Math.random() * 0.18;
+      columnParticleSizes[index] = 1.4 + Math.pow(Math.random(), 2.0) * 5.8;
+      columnParticleAlphas[index] = 0.058 + Math.random() * 0.2;
       columnParticlePhases[index] = Math.random() * Math.PI * 2;
     }
     const columnParticleGeometry = new THREE.BufferGeometry();
@@ -2030,7 +2198,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     columnParticleGeometry.setAttribute("aSize", new THREE.BufferAttribute(columnParticleSizes, 1));
     columnParticleGeometry.setAttribute("aAlpha", new THREE.BufferAttribute(columnParticleAlphas, 1));
     columnParticleGeometry.setAttribute("aPhase", new THREE.BufferAttribute(columnParticlePhases, 1));
-    const columnParticleMaterial = createVolumetricParticleMaterial(0.42);
+    const columnParticleMaterial = createVolumetricParticleMaterial(0.56);
     const columnParticles = new THREE.Points(columnParticleGeometry, columnParticleMaterial);
     pillarGroup.add(columnParticles);
 
@@ -2049,7 +2217,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       const initialAbsOffset = Math.abs(initialOffset);
       const initialAngle = initialOffset * 1.02;
       const initialScale = initialOffset === 0 ? 1.14 : Math.max(0.52, 0.78 - initialAbsOffset * 0.12);
-      mesh.position.set(Math.sin(initialAngle) * 2.72 - 0.5, 0.04 - initialAbsOffset * 0.08, Math.cos(initialAngle) * 1.18 - 0.04 - initialAbsOffset * 0.22);
+      mesh.position.set(Math.sin(initialAngle) * 2.86 + 0.26, 0.04 - initialAbsOffset * 0.08, Math.cos(initialAngle) * 1.18 - 0.04 - initialAbsOffset * 0.22);
       mesh.rotation.set(initialOffset === 0 ? -0.018 : 0.018 * Math.sign(initialOffset), -initialAngle * 0.9 - 0.04, 0);
       mesh.scale.set(initialScale, initialScale, 1);
       material.opacity = initialOffset === 0 ? 0.975 : Math.max(0.06, 0.2 - initialAbsOffset * 0.075);
@@ -2137,7 +2305,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       const scrollImpulse = scrollImpulseRef.current;
       scrollImpulseRef.current += (0 - scrollImpulseRef.current) * 0.052;
       const motionProgress = visualProgress + scrollImpulse * 0.58;
-      const storyOrbit = motionProgress * 1.42 + scrollImpulse * 0.48;
+      const storyOrbit = motionProgress * 1.68 + scrollImpulse * 0.62;
       particleMaterial.uniforms.uTime.value = time;
       columnParticleMaterial.uniforms.uTime.value = time;
       liquidColumnMaterial.uniforms.uTime.value = time;
@@ -2194,10 +2362,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       liquidColumn.scale.z = 1 + Math.cos(time * 0.48) * 0.035;
       spine.rotation.x += 0.003;
       spine.rotation.y += 0.006;
-      pillarGroup.position.x = -0.1 + Math.sin(storyOrbit) * 0.55 + scrollImpulse * 0.12;
-      pillarGroup.position.z = -0.38 + Math.cos(storyOrbit) * 0.24;
-      pillarGroup.rotation.y = -0.04 - storyOrbit * 1.72;
-      pillarGroup.rotation.x = Math.sin(storyOrbit * 0.72) * 0.16 + scrollImpulse * 0.08;
+      pillarGroup.position.x = -0.98 + Math.sin(storyOrbit) * 1.06 + scrollImpulse * 0.24;
+      pillarGroup.position.z = -0.34 + Math.cos(storyOrbit) * 0.34;
+      pillarGroup.rotation.y = -0.14 - storyOrbit * 2.62;
+      pillarGroup.rotation.x = Math.sin(storyOrbit * 0.72) * 0.24 + scrollImpulse * 0.14;
       pillarShell.scale.x = 1 + Math.sin(time * 1.3) * 0.035;
       pillarShell.scale.z = 1 + Math.cos(time * 1.1) * 0.035;
       pillarCore.scale.x = 1 + Math.sin(time * 1.9) * 0.09;
@@ -2226,6 +2394,24 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           const paletteColor = new THREE.Color(organicPalette[(segmentIndex + meshIndex + activeIndexRef.current) % organicPalette.length]);
           material.color.lerp(new THREE.Color("#24302f").lerp(paletteColor, 0.045), 0.02);
           material.emissive.lerp(paletteColor.multiplyScalar(0.042 + Math.sin(time * 0.7 + meshIndex) * 0.01), 0.025);
+        });
+      });
+      referenceStackSegments.forEach((segment, segmentIndex) => {
+        const pulse = Math.sin(time * 0.42 + segment.phase) * 0.018;
+        const stackDrift = Math.sin(storyOrbit * 0.52 + segment.phase) * 0.034;
+        segment.group.position.x = stackDrift;
+        segment.group.position.y = segment.y + pulse;
+        segment.group.position.z = 0.47 + Math.cos(segment.phase + storyOrbit * 0.6) * 0.035;
+        segment.group.rotation.x = Math.sin(segment.phase + storyOrbit * 0.54) * 0.055 + scrollImpulse * 0.012;
+        segment.group.rotation.y = (segmentIndex % 2 === 0 ? 0.08 : -0.08) + storyOrbit * 0.32;
+        segment.group.rotation.z = Math.cos(segment.phase + storyOrbit * 0.44) * 0.035;
+        segment.group.scale.set(0.96 + pulse * 0.8, 1.02 - pulse * 0.45, 0.9 + pulse * 0.5);
+
+        [segment.body, segment.lobeA, segment.lobeB].forEach((mesh, meshIndex) => {
+          const material = mesh.material as THREE.MeshPhysicalMaterial;
+          const paletteColor = new THREE.Color(organicPalette[(segmentIndex + meshIndex + activeIndexRef.current) % organicPalette.length]);
+          material.emissive.lerp(paletteColor.multiplyScalar(0.078 + Math.sin(time * 0.64 + segment.phase + meshIndex) * 0.018), 0.03);
+          material.envMapIntensity = 1.18 + Math.sin(time * 0.3 + segment.phase) * 0.12 + Math.min(0.24, Math.abs(scrollImpulse) * 0.08);
         });
       });
       surfaceOilPatches.forEach((item, patchIndex) => {
@@ -2270,7 +2456,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const offset = getVisualOffset(index, motionProgress);
         const absOffset = Math.abs(offset);
         const carouselAngle = offset * 1.02;
-        const targetX = Math.sin(carouselAngle) * 2.72 - 0.54;
+        const targetX = Math.sin(carouselAngle) * 2.86 + 0.26;
         const targetY = 0.04 - absOffset * 0.08;
         const targetZ = Math.cos(carouselAngle) * 1.18 - 0.04 - absOffset * 0.22;
         const targetScale = offset === 0 ? 1.14 : Math.max(0.52, 0.78 - absOffset * 0.12);
