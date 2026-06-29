@@ -107,8 +107,8 @@ const storyScenes: StoryScene[] = [
   },
 ];
 
-const THREE_PANEL_WIDTH = 760;
-const THREE_PANEL_HEIGHT = 430;
+const THREE_PANEL_WIDTH = 920;
+const THREE_PANEL_HEIGHT = 520;
 
 const particleVertexShader = `
   attribute float aSize;
@@ -324,7 +324,89 @@ function createOilSlickTexture() {
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(1.08, 1.2);
+  texture.repeat.set(2.8, 3.4);
+  return texture;
+}
+
+function createOilBumpTexture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const context = canvas.getContext("2d");
+
+  if (context) {
+    context.fillStyle = "#808080";
+    context.fillRect(0, 0, 512, 512);
+    context.globalCompositeOperation = "overlay";
+
+    // 参考图里的柱体不是镜面塑料，而是有微小凹凸和湿润颗粒；
+    // 这里用程序化灰度纹理作为 bumpMap，避免为了质感引入不可控的外部贴图。
+    for (let index = 0; index < 760; index += 1) {
+      const x = ((Math.sin(index * 18.91) + 1) / 2) * 512;
+      const y = ((Math.cos(index * 27.17) + 1) / 2) * 512;
+      const length = 10 + (index % 11) * 4;
+      const alpha = 0.05 + (index % 5) * 0.025;
+      context.save();
+      context.translate(x, y);
+      context.rotate(Math.sin(index * 9.13) * Math.PI);
+      context.strokeStyle = index % 3 === 0 ? `rgba(255,255,255,${alpha})` : `rgba(0,0,0,${alpha})`;
+      context.lineWidth = 1 + (index % 4) * 0.6;
+      context.beginPath();
+      context.moveTo(-length, Math.sin(index) * 4);
+      context.bezierCurveTo(-length * 0.2, -8, length * 0.35, 9, length, Math.cos(index) * 4);
+      context.stroke();
+      context.restore();
+    }
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(4.4, 5.2);
+  return texture;
+}
+
+function createDarkStudioEnvironment() {
+  const faces = [
+    ["#03070a", "#37f0ff"],
+    ["#04050a", "#b46dff"],
+    ["#05070a", "#ffffff"],
+    ["#03070a", "#ff7ad8"],
+    ["#020407", "#55ffe1"],
+    ["#030409", "#ffc66d"],
+  ];
+  const canvases = faces.map(([baseColor, lightColor], faceIndex) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 256;
+    canvas.height = 256;
+    const context = canvas.getContext("2d");
+
+    if (context) {
+      context.fillStyle = baseColor;
+      context.fillRect(0, 0, 256, 256);
+      const gradient = context.createLinearGradient(faceIndex % 2 ? 0 : 256, 0, faceIndex % 2 ? 256 : 0, 256);
+      gradient.addColorStop(0, `${lightColor}00`);
+      gradient.addColorStop(0.46, `${lightColor}44`);
+      gradient.addColorStop(0.54, `${lightColor}d8`);
+      gradient.addColorStop(0.62, `${lightColor}32`);
+      gradient.addColorStop(1, `${lightColor}00`);
+      context.fillStyle = gradient;
+      context.fillRect(0, 0, 256, 256);
+
+      const bloom = context.createRadialGradient(128, 128, 0, 128, 128, 122);
+      bloom.addColorStop(0, `${lightColor}55`);
+      bloom.addColorStop(0.38, `${lightColor}1d`);
+      bloom.addColorStop(1, `${lightColor}00`);
+      context.fillStyle = bloom;
+      context.fillRect(0, 0, 256, 256);
+    }
+
+    return canvas;
+  });
+  const texture = new THREE.CubeTexture(canvases);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.needsUpdate = true;
   return texture;
 }
 
@@ -348,9 +430,9 @@ function createVertebraBodyGeometry(segmentIndex: number) {
     const v = row / heightSegments;
     const yNorm = v * 2 - 1;
     const vertical = Math.abs(yNorm);
-    const waist = 1 - vertical * vertical * 0.28;
-    const lip = Math.exp(-Math.pow((vertical - 0.72) / 0.18, 2)) * 0.17;
-    const organicOffset = Math.sin(phase + yNorm * 3.2) * 0.016;
+    const waist = 1 - vertical * vertical * 0.22;
+    const lip = Math.exp(-Math.pow((vertical - 0.66) / 0.23, 2)) * 0.095;
+    const organicOffset = Math.sin(phase + yNorm * 3.2) * 0.024;
 
     for (let column = 0; column <= radialSegments; column += 1) {
       const u = column / radialSegments;
@@ -359,15 +441,16 @@ function createVertebraBodyGeometry(segmentIndex: number) {
         (Math.exp(-Math.pow(angleDistance(theta, 0) / 0.42, 2)) +
           Math.exp(-Math.pow(angleDistance(theta, Math.PI) / 0.46, 2)) * 0.78) *
         Math.exp(-Math.pow(yNorm / 0.68, 2)) *
-        0.22;
-      const rearProcess = Math.exp(-Math.pow(angleDistance(theta, -Math.PI / 2) / 0.5, 2)) * Math.exp(-Math.pow((yNorm + 0.04) / 0.76, 2)) * 0.2;
-      const frontNotch = -Math.exp(-Math.pow(angleDistance(theta, Math.PI / 2) / 0.44, 2)) * Math.exp(-Math.pow(yNorm / 0.7, 2)) * 0.055;
-      const fineRipple = Math.sin(theta * 5.4 + phase) * 0.028 + Math.sin(yNorm * 8.2 + theta * 2.1 + phase) * 0.018;
-      const radiusX = (0.45 * waist + lip + sideProcess + fineRipple) * (1 + (segmentIndex % 3) * 0.025);
-      const radiusZ = 0.34 * waist + lip * 0.52 + rearProcess + frontNotch + fineRipple * 0.42;
+        0.26;
+      const rearProcess = Math.exp(-Math.pow(angleDistance(theta, -Math.PI / 2) / 0.48, 2)) * Math.exp(-Math.pow((yNorm + 0.04) / 0.76, 2)) * 0.24;
+      const frontNotch = -Math.exp(-Math.pow(angleDistance(theta, Math.PI / 2) / 0.42, 2)) * Math.exp(-Math.pow(yNorm / 0.7, 2)) * 0.09;
+      const boneFacets = Math.sin(theta * 3.1 + phase) * 0.034 + Math.sin(theta * 7.7 + yNorm * 6.2 + phase) * 0.022;
+      const fineRipple = Math.sin(theta * 13.4 + phase) * 0.012 + Math.sin(yNorm * 17.2 + theta * 2.1 + phase) * 0.014;
+      const radiusX = (0.43 * waist + lip + sideProcess + boneFacets + fineRipple) * (1 + (segmentIndex % 3) * 0.025);
+      const radiusZ = 0.32 * waist + lip * 0.42 + rearProcess + frontNotch + boneFacets * 0.72 + fineRipple * 0.5;
       const x = Math.cos(theta) * radiusX;
       const z = Math.sin(theta) * radiusZ;
-      const y = yNorm * 0.27 + organicOffset + Math.sin(theta * 3 + phase) * 0.012 * (1 - vertical);
+      const y = yNorm * 0.32 + organicOffset + Math.sin(theta * 3 + phase) * 0.02 * (1 - vertical);
 
       positions.push(x, y, z);
       uvs.push(u, v);
@@ -383,10 +466,10 @@ function createVertebraBodyGeometry(segmentIndex: number) {
   }
 
   const bottomCenterIndex = positions.length / 3;
-  positions.push(0, -0.285 + Math.sin(phase) * 0.008, 0);
+  positions.push(0, -0.335 + Math.sin(phase) * 0.008, 0);
   uvs.push(0.5, 0);
   const topCenterIndex = positions.length / 3;
-  positions.push(0, 0.285 + Math.cos(phase) * 0.008, 0);
+  positions.push(0, 0.335 + Math.cos(phase) * 0.008, 0);
   uvs.push(0.5, 1);
   for (let column = 0; column < radialSegments; column += 1) {
     indices.push(bottomCenterIndex, column + 1, column);
@@ -447,9 +530,9 @@ function createPanelTexture(scene: StoryScene) {
 
   // 玻璃板纹理只保留少量识别信息，让 WebGL 装置成为主角，避免重新变成“故事进度页”。
   const gradient = context.createRadialGradient(520, 250, 70, 520, 250, 780);
-  gradient.addColorStop(0, "rgba(230,250,248,0.5)");
-  gradient.addColorStop(0.34, "rgba(82,125,132,0.48)");
-  gradient.addColorStop(1, "rgba(4,12,17,0.84)");
+  gradient.addColorStop(0, "rgba(214,238,236,0.34)");
+  gradient.addColorStop(0.34, "rgba(68,105,112,0.38)");
+  gradient.addColorStop(1, "rgba(4,12,17,0.8)");
   context.fillStyle = gradient;
   drawRoundedRect(context, 24, 24, canvas.width - 48, canvas.height - 48, 54);
   context.fill();
@@ -463,14 +546,14 @@ function createPanelTexture(scene: StoryScene) {
     const y = Math.cos(index * 48.2) * 290 + 290;
     const radius = 26 + (index % 7) * 13;
     const blot = context.createRadialGradient(x, y, 0, x, y, radius);
-    blot.addColorStop(0, `${scene.accent}7a`);
-    blot.addColorStop(0.46, "rgba(255,255,255,0.11)");
+    blot.addColorStop(0, `${scene.accent}6a`);
+    blot.addColorStop(0.46, "rgba(255,255,255,0.08)");
     blot.addColorStop(1, "rgba(255,255,255,0)");
     context.fillStyle = blot;
     context.fillRect(x - radius, y - radius, radius * 2, radius * 2);
   }
 
-  context.globalAlpha = 0.24;
+  context.globalAlpha = 0.2;
   context.strokeStyle = "#ffffff";
   context.lineWidth = 2;
   for (let index = 0; index < 11; index += 1) {
@@ -482,27 +565,27 @@ function createPanelTexture(scene: StoryScene) {
   context.restore();
 
   context.strokeStyle = scene.accent;
-  context.globalAlpha = 0.62;
+  context.globalAlpha = 0.54;
   context.lineWidth = 6;
   drawRoundedRect(context, 26, 26, canvas.width - 52, canvas.height - 52, 54);
   context.stroke();
 
   context.globalAlpha = 1;
-  context.fillStyle = "rgba(255,255,255,0.72)";
-  context.font = "700 28px monospace";
+  context.fillStyle = "rgba(255,255,255,0.62)";
+  context.font = "700 24px monospace";
   context.textAlign = "center";
   context.fillText("AI PM", canvas.width / 2, 180);
 
   context.fillStyle = "rgba(255,255,255,0.98)";
   context.shadowColor = scene.accent;
   context.shadowBlur = 34;
-  context.font = "900 70px monospace";
-  context.fillText(scene.label.toUpperCase(), canvas.width / 2, 286);
+  context.font = "900 68px monospace";
+  context.fillText("DELIVERY OS", canvas.width / 2, 286);
 
   context.shadowBlur = 0;
   context.fillStyle = "rgba(232,246,255,0.74)";
   context.font = "700 28px sans-serif";
-  context.fillText(scene.metric, canvas.width / 2, 352);
+  context.fillText(scene.label.toUpperCase(), canvas.width / 2, 352);
 
   context.textAlign = "left";
   context.fillStyle = "rgba(255,255,255,0.56)";
@@ -651,27 +734,29 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.18;
+    renderer.toneMappingExposure = 1.04;
 
     const scene = new THREE.Scene();
+    const environmentTexture = createDarkStudioEnvironment();
+    scene.environment = environmentTexture;
     const camera = new THREE.PerspectiveCamera(44, 1, 0.1, 100);
     camera.position.set(0, 0.2, 7.2);
 
     const stage = new THREE.Group();
     scene.add(stage);
 
-    const ambient = new THREE.AmbientLight(0xffffff, 0.65);
+    const ambient = new THREE.AmbientLight(0xffffff, 0.24);
     scene.add(ambient);
 
-    const pointLight = new THREE.PointLight(0x7fffe2, 3.2, 20);
+    const pointLight = new THREE.PointLight(0x7fffe2, 3.9, 20);
     pointLight.position.set(-2.6, 2.8, 4);
     scene.add(pointLight);
 
-    const magentaLight = new THREE.PointLight(0xb787ff, 4.8, 12);
+    const magentaLight = new THREE.PointLight(0xb787ff, 5.4, 12);
     magentaLight.position.set(1.8, 1.8, 2.6);
     scene.add(magentaLight);
 
-    const cyanLight = new THREE.PointLight(0x54eaff, 5.2, 14);
+    const cyanLight = new THREE.PointLight(0x54eaff, 5.4, 14);
     cyanLight.position.set(-0.9, -0.6, 3.2);
     scene.add(cyanLight);
 
@@ -679,13 +764,13 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     goldLight.position.set(2.4, -1.9, 2.1);
     scene.add(goldLight);
 
-    const rimLight = new THREE.SpotLight(0x89f7ff, 8.2, 10, Math.PI * 0.24, 0.72, 1.1);
+    const rimLight = new THREE.SpotLight(0x89f7ff, 10.4, 10, Math.PI * 0.24, 0.72, 1.1);
     rimLight.position.set(-2.7, 2.2, 3.5);
     rimLight.target.position.set(1.05, 0, -0.45);
     scene.add(rimLight);
     scene.add(rimLight.target);
 
-    const purpleRimLight = new THREE.SpotLight(0xff7cd8, 5.6, 9, Math.PI * 0.28, 0.78, 1.15);
+    const purpleRimLight = new THREE.SpotLight(0xff7cd8, 7.1, 9, Math.PI * 0.28, 0.78, 1.15);
     purpleRimLight.position.set(3.2, -0.2, 3.2);
     purpleRimLight.target.position.set(1.0, -0.1, -0.5);
     scene.add(purpleRimLight);
@@ -728,7 +813,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     stage.add(particles);
 
     const pillarGroup = new THREE.Group();
-    pillarGroup.position.set(1.08, -0.04, 0.16);
+    pillarGroup.position.set(0.5, -0.04, 0.12);
     pillarGroup.rotation.y = 0.12;
     pillarGroup.scale.set(1.36, 1.2, 1.18);
     stage.add(pillarGroup);
@@ -824,22 +909,29 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     pillarGroup.add(pillarCore);
 
     const oilTexture = createOilSlickTexture();
+    const oilBumpTexture = createOilBumpTexture();
+    oilTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    oilBumpTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     const oilBaseMaterial = new THREE.MeshPhysicalMaterial({
+      bumpMap: oilBumpTexture,
+      bumpScale: 0.11,
       clearcoat: 1,
-      clearcoatRoughness: 0.045,
-      color: new THREE.Color("#070a10"),
+      clearcoatRoughness: 0.24,
+      color: new THREE.Color("#05070b"),
       emissive: new THREE.Color("#9ae8ff"),
-      emissiveIntensity: 0.055,
+      emissiveIntensity: 0.18,
       emissiveMap: oilTexture,
+      envMapIntensity: 2.2,
       iridescence: 1,
       iridescenceIOR: 1.78,
-      iridescenceThicknessRange: [180, 1150],
+      iridescenceThicknessRange: [90, 1450],
       map: oilTexture,
-      metalness: 0.86,
-      roughness: 0.11,
+      metalness: 0.34,
+      roughness: 0.42,
+      roughnessMap: oilBumpTexture,
       sheen: 0.55,
       sheenColor: new THREE.Color("#9dfff2"),
-      sheenRoughness: 0.18,
+      sheenRoughness: 0.24,
       specularColor: new THREE.Color("#b8f6ff"),
       specularIntensity: 1,
     });
@@ -858,13 +950,13 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       const makeMaterial = (accentIndex: number) => {
         const material = oilBaseMaterial.clone();
         material.emissive = new THREE.Color(organicPalette[accentIndex % organicPalette.length]);
-        material.emissiveIntensity = 0.045 + (accentIndex % 4) * 0.008;
-        material.color = new THREE.Color("#080b10");
+        material.emissiveIntensity = 0.14 + (accentIndex % 4) * 0.014;
+        material.color = new THREE.Color("#05070b");
         return material;
       };
 
       const body = new THREE.Mesh(createVertebraBodyGeometry(chunkIndex), makeMaterial(chunkIndex));
-      body.scale.set(1.08 + (chunkIndex % 3) * 0.035, 1.0, 1.02 + (chunkIndex % 2) * 0.06);
+      body.scale.set(1.12 + (chunkIndex % 3) * 0.04, 1.08, 1.06 + (chunkIndex % 2) * 0.08);
       group.add(body);
       meshes.push(body);
 
@@ -908,21 +1000,38 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       segment.group.visible = true;
     });
 
+    const chainGeometry = new THREE.TorusGeometry(0.16, 0.036, 14, 36);
+    const chainMaterial = oilBaseMaterial.clone();
+    chainMaterial.color = new THREE.Color("#05070c");
+    chainMaterial.emissive = new THREE.Color("#5fe7ff");
+    chainMaterial.emissiveIntensity = 0.035;
+    chainMaterial.envMapIntensity = 1.2;
+    chainMaterial.opacity = 0.52;
+    chainMaterial.transparent = true;
+    const chainLinks = Array.from({ length: 13 }, (_, linkIndex) => {
+      const link = new THREE.Mesh(chainGeometry, chainMaterial);
+      link.position.set(-0.94 + Math.sin(linkIndex * 0.64) * 0.025, -2.8 + linkIndex * 0.24, -0.82);
+      link.rotation.set(Math.PI / 2, linkIndex % 2 === 0 ? 0.18 : Math.PI / 2 + 0.18, 0.1 * Math.sin(linkIndex));
+      link.scale.set(0.64, 1.08, 0.64);
+      pillarGroup.add(link);
+      return link;
+    });
+
     const fieldMaterial = oilBaseMaterial.clone();
     fieldMaterial.color = new THREE.Color("#05080d");
     fieldMaterial.emissive = new THREE.Color("#7dfff0");
-    fieldMaterial.emissiveIntensity = 0.035;
+    fieldMaterial.emissiveIntensity = 0.025;
     fieldMaterial.vertexColors = true;
     fieldMaterial.bumpMap = oilTexture;
     fieldMaterial.bumpScale = 0.035;
     fieldMaterial.depthWrite = false;
-    fieldMaterial.opacity = 0.32;
+    fieldMaterial.opacity = 0.14;
     fieldMaterial.transparent = true;
     const organicField = new MarchingCubes(46, fieldMaterial, true, true, 120000);
     organicField.isolation = 62;
     organicField.position.set(0.02, 0, 0.02);
     organicField.scale.set(1.42, 2.68, 0.86);
-    organicField.visible = true;
+    organicField.visible = false;
     pillarGroup.add(organicField);
 
     const fieldNodes = Array.from({ length: 9 }, (_, nodeIndex) => ({
@@ -1055,17 +1164,17 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     pillarGroup.add(columnParticles);
 
     const panelMeshes = storyScenes.map((sceneItem, index) => {
-      const geometry = new THREE.PlaneGeometry(THREE_PANEL_WIDTH / 260, THREE_PANEL_HEIGHT / 260, 12, 8);
+      const geometry = new THREE.PlaneGeometry(THREE_PANEL_WIDTH / 245, THREE_PANEL_HEIGHT / 245, 12, 8);
       const material = new THREE.MeshBasicMaterial({
         depthTest: false,
         depthWrite: false,
         map: createPanelTexture(sceneItem),
-        opacity: 0.9,
+        opacity: 0.72,
         side: THREE.DoubleSide,
         transparent: true,
       });
       const mesh = new THREE.Mesh(geometry, material);
-      mesh.renderOrder = 5;
+      mesh.renderOrder = 3;
       mesh.userData.index = index;
       stage.add(mesh);
       return mesh;
@@ -1153,7 +1262,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
       oilTexture.offset.x = Math.sin(time * 0.045) * 0.035;
       oilTexture.offset.y = time * 0.032;
-      stage.rotation.y += 0.0022;
+      stage.rotation.y = Math.sin(time * 0.11) * 0.035;
       particles.rotation.y -= 0.0009;
       particles.rotation.z = Math.sin(time * 0.18) * 0.06;
       liquidColumn.rotation.y = Math.sin(time * 0.2) * 0.18;
@@ -1168,6 +1277,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       pillarCore.scale.x = 1 + Math.sin(time * 1.9) * 0.09;
       pillarCore.scale.z = 1 + Math.sin(time * 1.9) * 0.09;
       pillarLines.rotation.y += 0.0048;
+      chainLinks.forEach((link, linkIndex) => {
+        link.position.x = -0.72 + Math.sin(linkIndex * 0.64 + time * 0.28) * 0.045;
+        link.rotation.z = 0.1 * Math.sin(linkIndex + time * 0.52);
+      });
       vertebraSegments.forEach((segment, segmentIndex) => {
         const float = Math.sin(time * 0.58 + segment.phase) * 0.068;
         const breath = 1 + Math.sin(time * 0.82 + segment.phase) * 0.035;
@@ -1182,8 +1295,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         segment.meshes.forEach((mesh, meshIndex) => {
           const material = mesh.material as THREE.MeshPhysicalMaterial;
           const paletteColor = new THREE.Color(organicPalette[(segmentIndex + meshIndex + activeIndexRef.current) % organicPalette.length]);
-          material.color.lerp(new THREE.Color("#070b11").lerp(paletteColor, 0.045), 0.02);
-          material.emissive.lerp(paletteColor.multiplyScalar(0.052 + Math.sin(time * 0.7 + meshIndex) * 0.018), 0.025);
+          material.color.lerp(new THREE.Color("#111821").lerp(paletteColor, 0.08), 0.02);
+          material.emissive.lerp(paletteColor.multiplyScalar(0.09 + Math.sin(time * 0.7 + meshIndex) * 0.024), 0.025);
         });
       });
       oilGlints.forEach((item) => {
@@ -1205,19 +1318,21 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       panelMeshes.forEach((mesh, index) => {
         const offset = getOffset(index);
         const absOffset = Math.abs(offset);
-        const targetX = 0.9 + offset * 0.86;
-        const targetY = Math.sin(time * 0.74 + index * 0.86) * 0.2 - absOffset * 0.09;
-        const targetZ = -absOffset * 1.48 + (offset === 0 ? 0.98 : -0.68);
-        const targetScale = offset === 0 ? 1.06 : 0.72 - absOffset * 0.08;
-        const targetOpacity = offset === 0 ? 0.9 : Math.max(0.08, 0.28 - absOffset * 0.04);
+        const direction = Math.sign(offset);
+        const targetX = offset === 0 ? -0.06 : direction * 0.64 + offset * 2.12;
+        const targetY = (offset === 0 ? 0.08 : -0.08) + Math.sin(time * 0.5 + index * 0.86) * (offset === 0 ? 0.08 : 0.12) - absOffset * 0.08;
+        const targetZ = offset === 0 ? 1.32 : -0.98 - absOffset * 0.92;
+        const targetScale = offset === 0 ? 1.48 : Math.max(0.5, 0.78 - absOffset * 0.1);
+        const targetOpacity = offset === 0 ? 0.78 : Math.max(0.08, 0.36 - absOffset * 0.1);
 
         mesh.position.x += (targetX - mesh.position.x) * 0.065;
         mesh.position.y += (targetY - mesh.position.y) * 0.065;
         mesh.position.z += (targetZ - mesh.position.z) * 0.065;
-        mesh.rotation.y += ((-offset * 0.32) - mesh.rotation.y) * 0.075;
-        mesh.rotation.x += ((offset === 0 ? -0.04 : 0.06 * offset) - mesh.rotation.x) * 0.075;
+        mesh.rotation.y += ((offset === 0 ? -0.04 : -direction * (0.46 + absOffset * 0.08)) - mesh.rotation.y) * 0.075;
+        mesh.rotation.x += ((offset === 0 ? -0.018 : 0.035 * direction) - mesh.rotation.x) * 0.075;
         mesh.scale.x += (targetScale - mesh.scale.x) * 0.07;
         mesh.scale.y += (targetScale - mesh.scale.y) * 0.07;
+        mesh.renderOrder = offset === 0 ? 8 : 2;
 
         const material = mesh.material as THREE.MeshBasicMaterial;
         material.opacity += (targetOpacity - material.opacity) * 0.08;
@@ -1233,6 +1348,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     return () => {
       window.removeEventListener("resize", resize);
       window.cancelAnimationFrame(animationFrame);
+      environmentTexture.dispose();
       renderer.dispose();
       particleGeometry.dispose();
       particleMaterial.dispose();
@@ -1257,6 +1373,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         mesh.geometry.dispose();
         (mesh.material as THREE.MeshPhysicalMaterial).dispose();
       });
+      chainGeometry.dispose();
+      chainMaterial.dispose();
       organicField.geometry.dispose();
       fieldMaterial.dispose();
       oilGlints.forEach((item) => {
@@ -1266,6 +1384,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       });
       oilBaseMaterial.dispose();
       oilTexture.dispose();
+      oilBumpTexture.dispose();
       ringMeshes.forEach((ring) => {
         ring.geometry.dispose();
         (ring.material as THREE.MeshBasicMaterial).dispose();

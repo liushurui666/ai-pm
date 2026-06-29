@@ -7,9 +7,9 @@
   min-height: 680px;
   overflow: hidden;
   background:
-    radial-gradient(circle at 78% 18%, color-mix(in srgb, var(--scene-accent) 18%, transparent), transparent 24rem),
-    radial-gradient(circle at 0% 100%, rgba(103, 65, 180, 0.34), transparent 34rem),
-    linear-gradient(118deg, #020507 0%, #071717 52%, #092c26 100%);
+    radial-gradient(circle at 72% 18%, color-mix(in srgb, var(--scene-accent) 13%, transparent), transparent 25rem),
+    radial-gradient(circle at 0% 100%, rgba(71, 48, 126, 0.26), transparent 34rem),
+    linear-gradient(118deg, #020405 0%, #061112 54%, #071f1c 100%);
   color: #f7fbff;
   outline: none;
   isolation: isolate;
@@ -34,7 +34,7 @@
     linear-gradient(90deg, rgba(0, 0, 0, 0.76), rgba(0, 0, 0, 0.26) 35%, rgba(0, 0, 0, 0.34) 76%, rgba(0, 0, 0, 0.58)),
     url("/landing/oil-spine-hero.png") center / cover no-repeat;
   opacity: 0.34;
-  filter: blur(3.5px) saturate(0.8) contrast(0.82);
+  filter: blur(3px) saturate(0.95) contrast(0.88);
   transform: scale(1.035);
   transform-origin: 58% 48%;
   animation: landing-oil-hero-drift 16s ease-in-out infinite alternate;
@@ -60,8 +60,8 @@
 .landing-story-hero-asset::after {
   opacity: 0.68;
   background:
-    radial-gradient(circle at 62% 50%, transparent 0 17rem, rgba(1, 5, 9, 0.24) 32rem, rgba(0, 0, 0, 0.78) 76rem),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.28), transparent 32%, rgba(0, 0, 0, 0.44));
+    radial-gradient(circle at 60% 48%, transparent 0 18rem, rgba(1, 5, 9, 0.2) 34rem, rgba(0, 0, 0, 0.82) 76rem),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.34), transparent 32%, rgba(0, 0, 0, 0.5));
 }
 
 .landing-story-canvas {
@@ -258,7 +258,7 @@
   left: clamp(20px, 3.8vw, 70px);
   top: 55%;
   bottom: auto;
-  display: grid;
+  display: none;
   width: min(230px, 22vw);
   gap: 12px;
   opacity: 0.48;
@@ -310,8 +310,8 @@
 
 .landing-story-copy {
   left: clamp(24px, 4vw, 72px);
-  bottom: 32px;
-  width: min(450px, 34vw);
+  bottom: 30px;
+  width: min(380px, 28vw);
   transform: none;
   pointer-events: none;
 }
@@ -320,7 +320,7 @@
   display: inline-flex;
   align-items: center;
   gap: 9px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   color: color-mix(in srgb, var(--scene-accent) 82%, #ffffff);
   font-size: 12px;
   font-weight: 900;
@@ -331,31 +331,31 @@
   margin: 0;
   max-width: 520px;
   color: #ffffff;
-  font-size: clamp(24px, 2.2vw, 38px);
+  font-size: clamp(22px, 1.8vw, 30px);
   line-height: 1.04;
   letter-spacing: 0;
   text-shadow: 0 16px 70px rgba(0, 0, 0, 0.62);
 }
 
 .landing-story-copy p {
-  max-width: 390px;
-  margin: 10px 0 0;
+  max-width: 340px;
+  margin: 8px 0 0;
   color: rgba(235, 244, 255, 0.62);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1.56;
 }
 
 .landing-story-copy__kicker {
   color: #ffffff !important;
-  font-size: 14px !important;
+  font-size: 13px !important;
 }
 
 .landing-story-copy__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  margin-top: 18px;
+  margin-top: 16px;
   pointer-events: auto;
 }
 
@@ -363,11 +363,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 48px;
+  min-height: 44px;
   gap: 9px;
   border: 1px solid rgba(225, 238, 255, 0.2);
   border-radius: 999px;
-  padding: 0 18px;
+  padding: 0 16px;
   background: rgba(4, 12, 22, 0.54);
   color: #ffffff;
   font-size: 14px;
@@ -516,7 +516,7 @@
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .landing-home--story {
     height: 100dvh;
     min-height: 640px;
@@ -546,7 +546,7 @@
 
   .landing-story-canvas {
     height: 100%;
-    opacity: 0.24;
+    opacity: 0.16;
   }
 
   .landing-story-hero-asset {
@@ -558,7 +558,7 @@
     position: absolute;
     top: auto;
     left: 18px;
-    bottom: 162px;
+    bottom: 146px;
     width: calc(100% - 36px);
     margin: 0;
     transform: none;
@@ -570,12 +570,12 @@
   }
 
   .landing-story-copy h1 {
-    font-size: clamp(28px, 9vw, 44px);
+    font-size: clamp(28px, 8.5vw, 42px);
   }
 
   .landing-story-copy p {
-    font-size: 14px;
-    line-height: 1.6;
+    font-size: 13px;
+    line-height: 1.55;
   }
 
   .landing-story-copy__actions {
