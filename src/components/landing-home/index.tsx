@@ -285,12 +285,12 @@ function createOilSlickTexture() {
 
     const slickColors = ["#55f4ff", "#8d7cff", "#ff69d4", "#64ffd8", "#ffc55c"];
     context.globalCompositeOperation = "screen";
-    for (let index = 0; index < 90; index += 1) {
+    for (let index = 0; index < 150; index += 1) {
       const color = slickColors[index % slickColors.length];
       const x = 120 + ((Math.sin(index * 39.37) + 1) / 2) * 820;
       const y = 80 + ((Math.cos(index * 21.17) + 1) / 2) * 880;
-      const radiusX = 54 + (index % 9) * 18;
-      const radiusY = 18 + (index % 7) * 10;
+      const radiusX = 28 + (index % 9) * 13;
+      const radiusY = 12 + (index % 7) * 7;
       const rotation = Math.sin(index * 4.19) * Math.PI;
       const gradient = context.createRadialGradient(0, 0, 0, 0, 0, radiusX);
 
@@ -308,7 +308,7 @@ function createOilSlickTexture() {
       context.restore();
     }
 
-    context.globalAlpha = 0.32;
+    context.globalAlpha = 0.12;
     context.lineWidth = 3;
     for (let index = 0; index < 38; index += 1) {
       const y = 80 + index * 24 + Math.sin(index * 1.7) * 18;
@@ -387,15 +387,15 @@ function createDarkStudioEnvironment() {
       context.fillRect(0, 0, 256, 256);
       const gradient = context.createLinearGradient(faceIndex % 2 ? 0 : 256, 0, faceIndex % 2 ? 256 : 0, 256);
       gradient.addColorStop(0, `${lightColor}00`);
-      gradient.addColorStop(0.46, `${lightColor}44`);
-      gradient.addColorStop(0.54, `${lightColor}d8`);
-      gradient.addColorStop(0.62, `${lightColor}32`);
+      gradient.addColorStop(0.46, `${lightColor}2a`);
+      gradient.addColorStop(0.54, `${lightColor}90`);
+      gradient.addColorStop(0.62, `${lightColor}20`);
       gradient.addColorStop(1, `${lightColor}00`);
       context.fillStyle = gradient;
       context.fillRect(0, 0, 256, 256);
 
       const bloom = context.createRadialGradient(128, 128, 0, 128, 128, 122);
-      bloom.addColorStop(0, `${lightColor}55`);
+      bloom.addColorStop(0, `${lightColor}3f`);
       bloom.addColorStop(0.38, `${lightColor}1d`);
       bloom.addColorStop(1, `${lightColor}00`);
       context.fillStyle = bloom;
@@ -430,27 +430,28 @@ function createVertebraBodyGeometry(segmentIndex: number) {
     const v = row / heightSegments;
     const yNorm = v * 2 - 1;
     const vertical = Math.abs(yNorm);
-    const waist = 1 - vertical * vertical * 0.22;
-    const lip = Math.exp(-Math.pow((vertical - 0.66) / 0.23, 2)) * 0.095;
-    const organicOffset = Math.sin(phase + yNorm * 3.2) * 0.024;
+    const waist = 1 - vertical * vertical * 0.18;
+    const lip = Math.exp(-Math.pow((vertical - 0.64) / 0.2, 2)) * 0.07;
+    const organicOffset = Math.sin(phase + yNorm * 2.4) * 0.008;
 
     for (let column = 0; column <= radialSegments; column += 1) {
       const u = column / radialSegments;
       const theta = u * Math.PI * 2;
+      const processEnvelope = Math.exp(-Math.pow(yNorm / 0.72, 2));
       const sideProcess =
-        (Math.exp(-Math.pow(angleDistance(theta, 0) / 0.42, 2)) +
-          Math.exp(-Math.pow(angleDistance(theta, Math.PI) / 0.46, 2)) * 0.78) *
-        Math.exp(-Math.pow(yNorm / 0.68, 2)) *
-        0.26;
-      const rearProcess = Math.exp(-Math.pow(angleDistance(theta, -Math.PI / 2) / 0.48, 2)) * Math.exp(-Math.pow((yNorm + 0.04) / 0.76, 2)) * 0.24;
-      const frontNotch = -Math.exp(-Math.pow(angleDistance(theta, Math.PI / 2) / 0.42, 2)) * Math.exp(-Math.pow(yNorm / 0.7, 2)) * 0.09;
-      const boneFacets = Math.sin(theta * 3.1 + phase) * 0.034 + Math.sin(theta * 7.7 + yNorm * 6.2 + phase) * 0.022;
-      const fineRipple = Math.sin(theta * 13.4 + phase) * 0.012 + Math.sin(yNorm * 17.2 + theta * 2.1 + phase) * 0.014;
-      const radiusX = (0.43 * waist + lip + sideProcess + boneFacets + fineRipple) * (1 + (segmentIndex % 3) * 0.025);
-      const radiusZ = 0.32 * waist + lip * 0.42 + rearProcess + frontNotch + boneFacets * 0.72 + fineRipple * 0.5;
+        (Math.exp(-Math.pow(angleDistance(theta, 0) / 0.36, 2)) +
+          Math.exp(-Math.pow(angleDistance(theta, Math.PI) / 0.36, 2)) * 0.95) *
+        processEnvelope *
+        0.18;
+      const rearProcess = Math.exp(-Math.pow(angleDistance(theta, -Math.PI / 2) / 0.44, 2)) * Math.exp(-Math.pow((yNorm + 0.02) / 0.72, 2)) * 0.2;
+      const frontNotch = -Math.exp(-Math.pow(angleDistance(theta, Math.PI / 2) / 0.48, 2)) * Math.exp(-Math.pow(yNorm / 0.82, 2)) * 0.055;
+      const boneFacets = Math.sin(theta * 3.0 + phase) * 0.014 + Math.sin(theta * 6.0 + yNorm * 4.2 + phase) * 0.01;
+      const fineRipple = Math.sin(theta * 11.0 + phase) * 0.006 + Math.sin(yNorm * 12.0 + theta * 1.7 + phase) * 0.007;
+      const radiusX = (0.42 * waist + lip + sideProcess + boneFacets + fineRipple) * (1 + (segmentIndex % 2) * 0.012);
+      const radiusZ = 0.31 * waist + lip * 0.38 + rearProcess + frontNotch + boneFacets * 0.42 + fineRipple * 0.35;
       const x = Math.cos(theta) * radiusX;
       const z = Math.sin(theta) * radiusZ;
-      const y = yNorm * 0.32 + organicOffset + Math.sin(theta * 3 + phase) * 0.02 * (1 - vertical);
+      const y = yNorm * 0.31 + organicOffset + Math.sin(theta * 3 + phase) * 0.006 * (1 - vertical);
 
       positions.push(x, y, z);
       uvs.push(u, v);
@@ -530,9 +531,9 @@ function createPanelTexture(scene: StoryScene) {
 
   // 玻璃板纹理只保留少量识别信息，让 WebGL 装置成为主角，避免重新变成“故事进度页”。
   const gradient = context.createRadialGradient(520, 250, 70, 520, 250, 780);
-  gradient.addColorStop(0, "rgba(214,238,236,0.34)");
-  gradient.addColorStop(0.34, "rgba(68,105,112,0.38)");
-  gradient.addColorStop(1, "rgba(4,12,17,0.8)");
+  gradient.addColorStop(0, "rgba(172,196,190,0.7)");
+  gradient.addColorStop(0.34, "rgba(62,82,82,0.72)");
+  gradient.addColorStop(1, "rgba(7,12,16,0.94)");
   context.fillStyle = gradient;
   drawRoundedRect(context, 24, 24, canvas.width - 48, canvas.height - 48, 54);
   context.fill();
@@ -541,19 +542,19 @@ function createPanelTexture(scene: StoryScene) {
   drawRoundedRect(context, 24, 24, canvas.width - 48, canvas.height - 48, 54);
   context.clip();
 
-  for (let index = 0; index < 120; index += 1) {
+  for (let index = 0; index < 190; index += 1) {
     const x = Math.sin(index * 91.7) * 520 + 520;
     const y = Math.cos(index * 48.2) * 290 + 290;
     const radius = 26 + (index % 7) * 13;
     const blot = context.createRadialGradient(x, y, 0, x, y, radius);
-    blot.addColorStop(0, `${scene.accent}6a`);
-    blot.addColorStop(0.46, "rgba(255,255,255,0.08)");
+    blot.addColorStop(0, `${scene.accent}78`);
+    blot.addColorStop(0.46, "rgba(255,255,255,0.1)");
     blot.addColorStop(1, "rgba(255,255,255,0)");
     context.fillStyle = blot;
     context.fillRect(x - radius, y - radius, radius * 2, radius * 2);
   }
 
-  context.globalAlpha = 0.2;
+  context.globalAlpha = 0.09;
   context.strokeStyle = "#ffffff";
   context.lineWidth = 2;
   for (let index = 0; index < 11; index += 1) {
@@ -565,13 +566,13 @@ function createPanelTexture(scene: StoryScene) {
   context.restore();
 
   context.strokeStyle = scene.accent;
-  context.globalAlpha = 0.54;
-  context.lineWidth = 6;
+  context.globalAlpha = 0.68;
+  context.lineWidth = 8;
   drawRoundedRect(context, 26, 26, canvas.width - 52, canvas.height - 52, 54);
   context.stroke();
 
   context.globalAlpha = 1;
-  context.fillStyle = "rgba(255,255,255,0.62)";
+  context.fillStyle = "rgba(255,255,255,0.72)";
   context.font = "700 24px monospace";
   context.textAlign = "center";
   context.fillText("AI PM", canvas.width / 2, 180);
@@ -579,13 +580,13 @@ function createPanelTexture(scene: StoryScene) {
   context.fillStyle = "rgba(255,255,255,0.98)";
   context.shadowColor = scene.accent;
   context.shadowBlur = 34;
-  context.font = "900 68px monospace";
-  context.fillText("DELIVERY OS", canvas.width / 2, 286);
+  context.font = "900 64px monospace";
+  context.fillText(scene.label.toUpperCase(), canvas.width / 2, 286);
 
   context.shadowBlur = 0;
   context.fillStyle = "rgba(232,246,255,0.74)";
   context.font = "700 28px sans-serif";
-  context.fillText(scene.label.toUpperCase(), canvas.width / 2, 352);
+  context.fillText(scene.metric.toUpperCase(), canvas.width / 2, 352);
 
   context.textAlign = "left";
   context.fillStyle = "rgba(255,255,255,0.56)";
@@ -776,7 +777,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     scene.add(purpleRimLight);
     scene.add(purpleRimLight.target);
 
-    const particleCount = 3100;
+    const particleCount = 4300;
     const particlePositions = new Float32Array(particleCount * 3);
     const particleColors = new Float32Array(particleCount * 3);
     const particleSizes = new Float32Array(particleCount);
@@ -785,20 +786,20 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const baseColors = storyScenes.map((sceneItem) => new THREE.Color(sceneItem.accent));
 
     for (let index = 0; index < particleCount; index += 1) {
-      const isLocalCloud = Math.random() < 0.72;
-      const radius = isLocalCloud ? 0.46 + Math.pow(Math.random(), 1.9) * 2.6 : 2.6 + Math.random() * 4.6;
+      const isLocalCloud = Math.random() < 0.82;
+      const radius = isLocalCloud ? 0.38 + Math.pow(Math.random(), 2.2) * 1.95 : 2.4 + Math.random() * 4.2;
       const angle = Math.random() * Math.PI * 2;
-      const depth = (Math.random() - 0.5) * (isLocalCloud ? 1.6 : 5.4);
-      particlePositions[index * 3] = (isLocalCloud ? 1.12 : 0) + Math.cos(angle) * radius;
-      particlePositions[index * 3 + 1] = (Math.random() - 0.5) * (isLocalCloud ? 5.4 : 4.8) + Math.sin(radius) * 0.2;
-      particlePositions[index * 3 + 2] = (isLocalCloud ? -0.36 : 0) + Math.sin(angle) * radius + depth;
+      const depth = (Math.random() - 0.5) * (isLocalCloud ? 1.2 : 5.2);
+      particlePositions[index * 3] = (isLocalCloud ? 0.58 : 0) + Math.cos(angle) * radius;
+      particlePositions[index * 3 + 1] = (Math.random() - 0.5) * (isLocalCloud ? 5.8 : 4.8) + Math.sin(radius) * 0.2;
+      particlePositions[index * 3 + 2] = (isLocalCloud ? -0.16 : 0) + Math.sin(angle) * radius + depth;
 
       const color = baseColors[index % baseColors.length].clone().lerp(new THREE.Color("#ffffff"), isLocalCloud ? 0.28 + Math.random() * 0.4 : Math.random() * 0.16);
       particleColors[index * 3] = color.r;
       particleColors[index * 3 + 1] = color.g;
       particleColors[index * 3 + 2] = color.b;
-      particleSizes[index] = isLocalCloud ? 2 + Math.pow(Math.random(), 2.4) * 8.5 : 1.2 + Math.random() * 2.4;
-      particleAlphas[index] = isLocalCloud ? 0.04 + Math.random() * 0.22 : 0.02 + Math.random() * 0.065;
+      particleSizes[index] = isLocalCloud ? 2.8 + Math.pow(Math.random(), 2.2) * 11 : 1.2 + Math.random() * 2.2;
+      particleAlphas[index] = isLocalCloud ? 0.07 + Math.random() * 0.3 : 0.018 + Math.random() * 0.06;
       particlePhases[index] = Math.random() * Math.PI * 2;
     }
 
@@ -808,14 +809,14 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     particleGeometry.setAttribute("aSize", new THREE.BufferAttribute(particleSizes, 1));
     particleGeometry.setAttribute("aAlpha", new THREE.BufferAttribute(particleAlphas, 1));
     particleGeometry.setAttribute("aPhase", new THREE.BufferAttribute(particlePhases, 1));
-    const particleMaterial = createVolumetricParticleMaterial(0.38);
+    const particleMaterial = createVolumetricParticleMaterial(0.52);
     const particles = new THREE.Points(particleGeometry, particleMaterial);
     stage.add(particles);
 
     const pillarGroup = new THREE.Group();
-    pillarGroup.position.set(0.5, -0.04, 0.12);
-    pillarGroup.rotation.y = 0.12;
-    pillarGroup.scale.set(1.36, 1.2, 1.18);
+    pillarGroup.position.set(0.48, -0.04, 0.06);
+    pillarGroup.rotation.y = 0.1;
+    pillarGroup.scale.set(1.32, 1.22, 1.12);
     stage.add(pillarGroup);
 
     const liquidColumnGeometry = new THREE.CylinderGeometry(0.5, 0.46, 5.8, 128, 72, true);
@@ -914,82 +915,82 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     oilBumpTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     const oilBaseMaterial = new THREE.MeshPhysicalMaterial({
       bumpMap: oilBumpTexture,
-      bumpScale: 0.11,
+      bumpScale: 0.085,
       clearcoat: 1,
-      clearcoatRoughness: 0.24,
-      color: new THREE.Color("#05070b"),
+      clearcoatRoughness: 0.34,
+      color: new THREE.Color("#06080c"),
       emissive: new THREE.Color("#9ae8ff"),
-      emissiveIntensity: 0.18,
+      emissiveIntensity: 0.11,
       emissiveMap: oilTexture,
-      envMapIntensity: 2.2,
+      envMapIntensity: 1.45,
       iridescence: 1,
       iridescenceIOR: 1.78,
       iridescenceThicknessRange: [90, 1450],
       map: oilTexture,
-      metalness: 0.34,
-      roughness: 0.42,
+      metalness: 0.28,
+      roughness: 0.54,
       roughnessMap: oilBumpTexture,
       sheen: 0.55,
       sheenColor: new THREE.Color("#9dfff2"),
-      sheenRoughness: 0.24,
+      sheenRoughness: 0.36,
       specularColor: new THREE.Color("#b8f6ff"),
       specularIntensity: 1,
     });
 
     const organicPalette = ["#52f4ff", "#ad83ff", "#ff69d4", "#65ffd2", "#ffd36a"];
     const organicMeshes: THREE.Mesh[] = [];
-    const vertebraSegments = Array.from({ length: 9 }, (_, chunkIndex) => {
+    const vertebraSegments = Array.from({ length: 11 }, (_, chunkIndex) => {
       const group = new THREE.Group();
-      const baseY = -2.42 + chunkIndex * 0.6;
+      const baseY = -2.75 + chunkIndex * 0.55;
       const phase = chunkIndex * 0.79;
-      group.position.set(Math.sin(phase) * 0.1, baseY, Math.cos(phase * 0.8) * 0.08);
-      group.rotation.set(0.08 * Math.sin(phase), phase * 0.18, 0.1 * Math.cos(phase));
+      group.position.set(Math.sin(phase) * 0.025, baseY, Math.cos(phase * 0.8) * 0.025);
+      group.rotation.set(0.025 * Math.sin(phase), (chunkIndex % 2 === 0 ? -0.06 : 0.06) + phase * 0.035, 0.03 * Math.cos(phase));
       pillarGroup.add(group);
 
       const meshes: THREE.Mesh[] = [];
       const makeMaterial = (accentIndex: number) => {
         const material = oilBaseMaterial.clone();
         material.emissive = new THREE.Color(organicPalette[accentIndex % organicPalette.length]);
-        material.emissiveIntensity = 0.14 + (accentIndex % 4) * 0.014;
-        material.color = new THREE.Color("#05070b");
+        material.emissiveIntensity = 0.09 + (accentIndex % 4) * 0.01;
+        material.color = new THREE.Color("#06080c");
         return material;
       };
 
       const body = new THREE.Mesh(createVertebraBodyGeometry(chunkIndex), makeMaterial(chunkIndex));
-      body.scale.set(1.12 + (chunkIndex % 3) * 0.04, 1.08, 1.06 + (chunkIndex % 2) * 0.08);
+      body.scale.set(1.05 + (chunkIndex % 2) * 0.018, 1.03, 1.02 + (chunkIndex % 2) * 0.035);
       group.add(body);
       meshes.push(body);
 
       const leftProcess = new THREE.Mesh(createOrganicLobeGeometry(chunkIndex + 12), makeMaterial(chunkIndex + 1));
-      leftProcess.position.set(-0.62, -0.04, -0.2);
-      leftProcess.rotation.set(0.3 + Math.sin(phase) * 0.12, 0.42, 0.18);
-      leftProcess.scale.set(1.52, 0.42, 0.82);
+      leftProcess.position.set(-0.54, -0.02, -0.16);
+      leftProcess.rotation.set(0.22 + Math.sin(phase) * 0.04, 0.34, 0.12);
+      leftProcess.scale.set(1.18, 0.34, 0.68);
       group.add(leftProcess);
       meshes.push(leftProcess);
 
       const rightProcess = new THREE.Mesh(createOrganicLobeGeometry(chunkIndex + 24), makeMaterial(chunkIndex + 2));
-      rightProcess.position.set(0.58, 0.02, 0.24);
-      rightProcess.rotation.set(-0.28 + Math.cos(phase) * 0.14, -0.38, -0.2);
-      rightProcess.scale.set(1.35, 0.4, 0.78);
+      rightProcess.position.set(0.52, 0.02, 0.18);
+      rightProcess.rotation.set(-0.2 + Math.cos(phase) * 0.04, -0.32, -0.12);
+      rightProcess.scale.set(1.08, 0.32, 0.64);
       group.add(rightProcess);
       meshes.push(rightProcess);
 
       const rearSpike = new THREE.Mesh(createOrganicLobeGeometry(chunkIndex + 36), makeMaterial(chunkIndex + 3));
-      rearSpike.position.set(Math.sin(phase) * 0.06, -0.04, -0.62);
-      rearSpike.rotation.set(Math.PI / 2 + 0.16 * Math.sin(phase), 0.18, 0.18 * Math.cos(phase));
-      rearSpike.scale.set(0.62, 0.42, 1.72);
+      rearSpike.position.set(Math.sin(phase) * 0.025, -0.03, -0.54);
+      rearSpike.rotation.set(Math.PI / 2 + 0.06 * Math.sin(phase), 0.12, 0.08 * Math.cos(phase));
+      rearSpike.scale.set(0.5, 0.34, 1.28);
       group.add(rearSpike);
       meshes.push(rearSpike);
 
       const lowerKnuckle = new THREE.Mesh(createOrganicLobeGeometry(chunkIndex + 48), makeMaterial(chunkIndex + 4));
-      lowerKnuckle.position.set(-0.18 + Math.sin(phase) * 0.08, -0.13, 0.32);
-      lowerKnuckle.scale.set(0.62, 0.34, 0.54);
+      lowerKnuckle.position.set(-0.14 + Math.sin(phase) * 0.025, -0.12, 0.28);
+      lowerKnuckle.scale.set(0.48, 0.28, 0.42);
       group.add(lowerKnuckle);
       meshes.push(lowerKnuckle);
 
       const upperKnuckle = new THREE.Mesh(createOrganicLobeGeometry(chunkIndex + 60), makeMaterial(chunkIndex + 5));
-      upperKnuckle.position.set(0.26 + Math.cos(phase) * 0.06, 0.14, -0.3);
-      upperKnuckle.scale.set(0.55, 0.32, 0.5);
+      upperKnuckle.position.set(0.2 + Math.cos(phase) * 0.025, 0.12, -0.26);
+      upperKnuckle.scale.set(0.44, 0.26, 0.4);
       group.add(upperKnuckle);
       meshes.push(upperKnuckle);
 
@@ -1126,7 +1127,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       return ring;
     });
 
-    const columnParticleCount = 760;
+    const columnParticleCount = 1350;
     const columnParticlePositions = new Float32Array(columnParticleCount * 3);
     const columnParticleSeeds = new Float32Array(columnParticleCount * 4);
     const columnParticleColors = new Float32Array(columnParticleCount * 3);
@@ -1135,7 +1136,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const columnParticlePhases = new Float32Array(columnParticleCount);
     for (let index = 0; index < columnParticleCount; index += 1) {
       const angle = Math.random() * Math.PI * 2;
-      const radius = 0.32 + Math.pow(Math.random(), 1.6) * 1.28;
+      const radius = 0.28 + Math.pow(Math.random(), 1.9) * 1.05;
       const heightSeed = Math.random();
       columnParticleSeeds[index * 4] = angle;
       columnParticleSeeds[index * 4 + 1] = radius;
@@ -1145,12 +1146,12 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       columnParticlePositions[index * 3 + 1] = heightSeed * 5.2 - 2.6;
       columnParticlePositions[index * 3 + 2] = Math.sin(angle) * radius;
 
-      const color = baseColors[index % baseColors.length].clone().lerp(new THREE.Color("#ffffff"), 0.25 + Math.random() * 0.28);
+      const color = baseColors[index % baseColors.length].clone().lerp(new THREE.Color("#ffffff"), 0.32 + Math.random() * 0.38);
       columnParticleColors[index * 3] = color.r;
       columnParticleColors[index * 3 + 1] = color.g;
       columnParticleColors[index * 3 + 2] = color.b;
-      columnParticleSizes[index] = 1.8 + Math.pow(Math.random(), 2.1) * 6.2;
-      columnParticleAlphas[index] = 0.05 + Math.random() * 0.22;
+      columnParticleSizes[index] = 2.2 + Math.pow(Math.random(), 2.0) * 8.8;
+      columnParticleAlphas[index] = 0.08 + Math.random() * 0.32;
       columnParticlePhases[index] = Math.random() * Math.PI * 2;
     }
     const columnParticleGeometry = new THREE.BufferGeometry();
@@ -1159,7 +1160,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     columnParticleGeometry.setAttribute("aSize", new THREE.BufferAttribute(columnParticleSizes, 1));
     columnParticleGeometry.setAttribute("aAlpha", new THREE.BufferAttribute(columnParticleAlphas, 1));
     columnParticleGeometry.setAttribute("aPhase", new THREE.BufferAttribute(columnParticlePhases, 1));
-    const columnParticleMaterial = createVolumetricParticleMaterial(0.36);
+    const columnParticleMaterial = createVolumetricParticleMaterial(0.58);
     const columnParticles = new THREE.Points(columnParticleGeometry, columnParticleMaterial);
     pillarGroup.add(columnParticles);
 
@@ -1174,7 +1175,15 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         transparent: true,
       });
       const mesh = new THREE.Mesh(geometry, material);
-      mesh.renderOrder = 3;
+      const initialOffset = index > storyScenes.length / 2 ? index - storyScenes.length : index;
+      const initialAbsOffset = Math.abs(initialOffset);
+      const initialAngle = initialOffset * 0.78;
+      const initialScale = initialOffset === 0 ? 1.12 : Math.max(0.54, 0.82 - initialAbsOffset * 0.12);
+      mesh.position.set(Math.sin(initialAngle) * 2.6 - 0.08, 0.02 - initialAbsOffset * 0.07, Math.cos(initialAngle) * 1.18 - 0.06 - initialAbsOffset * 0.16);
+      mesh.rotation.set(initialOffset === 0 ? -0.018 : 0.018 * Math.sign(initialOffset), -initialAngle * 0.78 - 0.04, 0);
+      mesh.scale.set(initialScale, initialScale, 1);
+      material.opacity = initialOffset === 0 ? 0.82 : Math.max(0.1, 0.42 - initialAbsOffset * 0.12);
+      mesh.renderOrder = initialOffset === 0 ? 8 : Math.max(1, 5 - initialAbsOffset);
       mesh.userData.index = index;
       stage.add(mesh);
       return mesh;
@@ -1262,7 +1271,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
       oilTexture.offset.x = Math.sin(time * 0.045) * 0.035;
       oilTexture.offset.y = time * 0.032;
-      stage.rotation.y = Math.sin(time * 0.11) * 0.035;
+      stage.rotation.y = 0;
       particles.rotation.y -= 0.0009;
       particles.rotation.z = Math.sin(time * 0.18) * 0.06;
       liquidColumn.rotation.y = Math.sin(time * 0.2) * 0.18;
@@ -1270,27 +1279,25 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       liquidColumn.scale.z = 1 + Math.cos(time * 0.48) * 0.035;
       spine.rotation.x += 0.003;
       spine.rotation.y += 0.006;
-      pillarGroup.rotation.y = 0.12 + Math.sin(time * 0.18) * 0.22;
-      pillarGroup.rotation.x = Math.sin(time * 0.15) * 0.035;
+      pillarGroup.rotation.y = 0.1;
+      pillarGroup.rotation.x = 0;
       pillarShell.scale.x = 1 + Math.sin(time * 1.3) * 0.035;
       pillarShell.scale.z = 1 + Math.cos(time * 1.1) * 0.035;
       pillarCore.scale.x = 1 + Math.sin(time * 1.9) * 0.09;
       pillarCore.scale.z = 1 + Math.sin(time * 1.9) * 0.09;
       pillarLines.rotation.y += 0.0048;
       chainLinks.forEach((link, linkIndex) => {
-        link.position.x = -0.72 + Math.sin(linkIndex * 0.64 + time * 0.28) * 0.045;
-        link.rotation.z = 0.1 * Math.sin(linkIndex + time * 0.52);
+        link.position.x = -0.72 + Math.sin(linkIndex * 0.64) * 0.025;
+        link.rotation.z = 0.1 * Math.sin(linkIndex);
       });
       vertebraSegments.forEach((segment, segmentIndex) => {
-        const float = Math.sin(time * 0.58 + segment.phase) * 0.068;
-        const breath = 1 + Math.sin(time * 0.82 + segment.phase) * 0.035;
-        segment.group.position.x = Math.sin(time * 0.42 + segment.phase) * 0.09;
-        segment.group.position.y = segment.baseY + float;
-        segment.group.position.z = Math.cos(time * 0.38 + segment.phase) * 0.1;
-        segment.group.rotation.x = Math.sin(time * 0.34 + segment.phase) * 0.12;
-        segment.group.rotation.y = segment.phase * 0.18 + Math.sin(time * 0.3 + segment.phase) * 0.16;
-        segment.group.rotation.z = Math.cos(time * 0.3 + segment.phase) * 0.09;
-        segment.group.scale.setScalar(breath);
+        segment.group.position.x = Math.sin(segment.phase) * 0.025;
+        segment.group.position.y = segment.baseY;
+        segment.group.position.z = Math.cos(segment.phase * 0.8) * 0.025;
+        segment.group.rotation.x = 0.025 * Math.sin(segment.phase);
+        segment.group.rotation.y = (segmentIndex % 2 === 0 ? -0.06 : 0.06) + segment.phase * 0.035;
+        segment.group.rotation.z = 0.03 * Math.cos(segment.phase);
+        segment.group.scale.setScalar(1);
 
         segment.meshes.forEach((mesh, meshIndex) => {
           const material = mesh.material as THREE.MeshPhysicalMaterial;
@@ -1318,21 +1325,21 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       panelMeshes.forEach((mesh, index) => {
         const offset = getOffset(index);
         const absOffset = Math.abs(offset);
-        const direction = Math.sign(offset);
-        const targetX = offset === 0 ? -0.06 : direction * 0.64 + offset * 2.12;
-        const targetY = (offset === 0 ? 0.08 : -0.08) + Math.sin(time * 0.5 + index * 0.86) * (offset === 0 ? 0.08 : 0.12) - absOffset * 0.08;
-        const targetZ = offset === 0 ? 1.32 : -0.98 - absOffset * 0.92;
-        const targetScale = offset === 0 ? 1.48 : Math.max(0.5, 0.78 - absOffset * 0.1);
-        const targetOpacity = offset === 0 ? 0.78 : Math.max(0.08, 0.36 - absOffset * 0.1);
+        const carouselAngle = offset * 0.78;
+        const targetX = Math.sin(carouselAngle) * 2.6 - 0.08;
+        const targetY = 0.02 - absOffset * 0.07;
+        const targetZ = Math.cos(carouselAngle) * 1.18 - 0.06 - absOffset * 0.16;
+        const targetScale = offset === 0 ? 1.12 : Math.max(0.54, 0.82 - absOffset * 0.12);
+        const targetOpacity = offset === 0 ? 0.82 : Math.max(0.1, 0.42 - absOffset * 0.12);
 
         mesh.position.x += (targetX - mesh.position.x) * 0.065;
         mesh.position.y += (targetY - mesh.position.y) * 0.065;
         mesh.position.z += (targetZ - mesh.position.z) * 0.065;
-        mesh.rotation.y += ((offset === 0 ? -0.04 : -direction * (0.46 + absOffset * 0.08)) - mesh.rotation.y) * 0.075;
-        mesh.rotation.x += ((offset === 0 ? -0.018 : 0.035 * direction) - mesh.rotation.x) * 0.075;
+        mesh.rotation.y += ((-carouselAngle * 0.78 - 0.04) - mesh.rotation.y) * 0.075;
+        mesh.rotation.x += ((offset === 0 ? -0.018 : 0.018 * Math.sign(offset)) - mesh.rotation.x) * 0.075;
         mesh.scale.x += (targetScale - mesh.scale.x) * 0.07;
         mesh.scale.y += (targetScale - mesh.scale.y) * 0.07;
-        mesh.renderOrder = offset === 0 ? 8 : 2;
+        mesh.renderOrder = offset === 0 ? 8 : Math.max(1, 5 - absOffset);
 
         const material = mesh.material as THREE.MeshBasicMaterial;
         material.opacity += (targetOpacity - material.opacity) * 0.08;
