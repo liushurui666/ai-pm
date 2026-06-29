@@ -1607,7 +1607,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
     const oilTexture = createOilSlickTexture();
     const referenceOilTexture = createReferenceOilFilmTexture();
-    const referenceSpineFieldTexture = new THREE.TextureLoader().load("/landing/reference-spine-field-v66.png");
+    const referenceSpineFieldTexture = new THREE.TextureLoader().load("/landing/reference-spine-field-wide-v67.png");
+    const referenceSpineRimTexture = new THREE.TextureLoader().load("/landing/reference-spine-rim-wide-v67.png");
     const oilBumpTexture = createOilBumpTexture();
     const oilAlphaTexture = createOilAlphaTexture();
     const oilPatchTexture = createOilPatchTexture();
@@ -1615,6 +1616,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     referenceOilTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     referenceSpineFieldTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     referenceSpineFieldTexture.colorSpace = THREE.SRGBColorSpace;
+    referenceSpineRimTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    referenceSpineRimTexture.colorSpace = THREE.SRGBColorSpace;
     oilBumpTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     oilAlphaTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     oilPatchTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -2474,35 +2477,54 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     organicField.visible = true;
     pillarGroup.add(organicField);
 
-    // 这一层不是页面背景图，而是从用户提供的 mp4 参考帧提取出的柱体材质场：
-    // 黑底在 AdditiveBlending 下不会覆盖 UI，只把参考里的红蓝油膜、侧向骨节亮边和暗缝投回 3D 柱体。
+    // 这一层不是页面背景图，而是从用户提供的 mp4 参考帧提取出的宽柱体材质场：
+    // 黑底在 AdditiveBlending 下不会覆盖 UI，只把参考里的红蓝油膜、侧向骨节亮边和玻璃卡片遮挡关系投回 3D 柱体。
     // 它挂在 pillarGroup 内，滚轮推进时和几何柱体一起转动，专门解决“柱子不像同一根参考柱”的视觉差距。
-    const referenceSpineFieldGeometry = new THREE.PlaneGeometry(1.46, 6.16, 1, 1);
+    const referenceSpineFieldGeometry = new THREE.PlaneGeometry(1.92, 6.16, 1, 1);
     const referenceSpineFieldMaterial = new THREE.MeshBasicMaterial({
-      alphaTest: 0.05,
+      alphaTest: 0.035,
       blending: THREE.AdditiveBlending,
       color: new THREE.Color("#f6fbff"),
       depthTest: false,
       depthWrite: false,
       map: referenceSpineFieldTexture,
-      opacity: 0.54,
+      opacity: 0.46,
       side: THREE.DoubleSide,
       transparent: true,
     });
     const referenceSpineField = new THREE.Mesh(referenceSpineFieldGeometry, referenceSpineFieldMaterial);
-    referenceSpineField.position.set(-0.45, 0.06, 1.08);
-    referenceSpineField.rotation.set(0.02, -0.08, 0.012);
+    referenceSpineField.position.set(-0.56, 0.06, 1.06);
+    referenceSpineField.rotation.set(0.018, -0.07, 0.01);
     referenceSpineField.renderOrder = 7.35;
     pillarGroup.add(referenceSpineField);
 
     const referenceSpineGhostMaterial = referenceSpineFieldMaterial.clone();
-    referenceSpineGhostMaterial.opacity = 0.22;
+    referenceSpineGhostMaterial.opacity = 0.15;
     const referenceSpineGhost = new THREE.Mesh(referenceSpineFieldGeometry, referenceSpineGhostMaterial);
-    referenceSpineGhost.position.set(-0.2, -0.04, 0.72);
-    referenceSpineGhost.rotation.set(-0.015, 0.18, -0.026);
-    referenceSpineGhost.scale.set(0.86, 0.98, 1);
+    referenceSpineGhost.position.set(-0.28, -0.04, 0.72);
+    referenceSpineGhost.rotation.set(-0.015, 0.16, -0.024);
+    referenceSpineGhost.scale.set(0.82, 0.98, 1);
     referenceSpineGhost.renderOrder = 5.8;
     pillarGroup.add(referenceSpineGhost);
+
+    // 第二张参考贴图只保留彩色骨节棱线。它比通用粒子更接近原视频里的规则柱体轮廓，
+    // 但仍作为随柱体旋转的材质层存在，避免把整张参考图硬贴成静态背景。
+    const referenceSpineRimMaterial = new THREE.MeshBasicMaterial({
+      alphaTest: 0.025,
+      blending: THREE.AdditiveBlending,
+      color: new THREE.Color("#d8fdff"),
+      depthTest: false,
+      depthWrite: false,
+      map: referenceSpineRimTexture,
+      opacity: 0.32,
+      side: THREE.DoubleSide,
+      transparent: true,
+    });
+    const referenceSpineRim = new THREE.Mesh(referenceSpineFieldGeometry, referenceSpineRimMaterial);
+    referenceSpineRim.position.set(-0.58, 0.06, 1.14);
+    referenceSpineRim.rotation.set(0.018, -0.075, 0.012);
+    referenceSpineRim.renderOrder = 7.55;
+    pillarGroup.add(referenceSpineRim);
 
     const fieldNodes = Array.from({ length: 10 }, (_, nodeIndex) => ({
       phase: nodeIndex * 0.71,
@@ -2855,10 +2877,12 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 避免和通用油膜同步后看起来像一层整齐的页面滤镜。
       referenceOilTexture.offset.x = Math.sin(time * 0.06) * 0.04 + storyOrbit * 0.012;
       referenceOilTexture.offset.y = time * 0.046;
-      referenceSpineFieldMaterial.opacity = 0.5 + Math.sin(time * 0.24) * 0.035 + Math.min(0.08, Math.abs(scrollImpulse) * 0.02);
-      referenceSpineGhostMaterial.opacity = 0.18 + Math.cos(time * 0.2) * 0.025 + Math.min(0.06, Math.abs(scrollImpulse) * 0.015);
-      referenceSpineField.position.x = -0.45 + Math.sin(storyOrbit * 0.32) * 0.035;
-      referenceSpineGhost.position.x = -0.2 + Math.cos(storyOrbit * 0.28) * 0.03;
+      referenceSpineFieldMaterial.opacity = 0.42 + Math.sin(time * 0.2) * 0.026 + Math.min(0.07, Math.abs(scrollImpulse) * 0.018);
+      referenceSpineGhostMaterial.opacity = 0.13 + Math.cos(time * 0.18) * 0.018 + Math.min(0.045, Math.abs(scrollImpulse) * 0.012);
+      referenceSpineRimMaterial.opacity = 0.26 + Math.sin(time * 0.22 + 0.9) * 0.032 + Math.min(0.08, Math.abs(scrollImpulse) * 0.02);
+      referenceSpineField.position.x = -0.56 + Math.sin(storyOrbit * 0.32) * 0.028;
+      referenceSpineGhost.position.x = -0.28 + Math.cos(storyOrbit * 0.28) * 0.024;
+      referenceSpineRim.position.x = -0.58 + Math.sin(storyOrbit * 0.34 + 0.18) * 0.026;
       stage.rotation.y = Math.sin(storyOrbit) * 0.1;
       particles.rotation.y -= 0.0009;
       particles.rotation.z = Math.sin(time * 0.18) * 0.06;
@@ -3090,7 +3114,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceSpineFieldGeometry.dispose();
       referenceSpineFieldMaterial.dispose();
       referenceSpineGhostMaterial.dispose();
+      referenceSpineRimMaterial.dispose();
       referenceSpineFieldTexture.dispose();
+      referenceSpineRimTexture.dispose();
       oilBumpTexture.dispose();
       oilAlphaTexture.dispose();
       oilPatchTexture.dispose();
