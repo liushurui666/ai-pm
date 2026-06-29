@@ -1454,27 +1454,28 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       material.transparent = true;
       return material;
     };
-    const makeSourceProfileMaterial = (accentIndex: number, opacity = 0.52) => {
+    const makeSourceProfileMaterial = (accentIndex: number, opacity = 0.58) => {
       const material = oilBaseMaterial.clone();
       // 这层专门复刻参考视频里那根规整侧向骨柱的主剪影。
-      // 它不使用 alphaMap，否则挤出面的边缘会被程序纹理随机吃掉，无法形成“整柱”轮廓。
+      // v55 的挤出多边形虽然能补形，但默认帧会露出平面切片；
+      // 这里改回圆润湿润的 mesh 材质，让补形层只像骨体，不像贴片。
       material.alphaMap = null;
-      material.bumpScale = 0.068;
-      material.clearcoat = 0.74;
-      material.clearcoatRoughness = 0.38;
+      material.bumpScale = 0.082;
+      material.clearcoat = 0.9;
+      material.clearcoatRoughness = 0.3;
       material.color = new THREE.Color("#05080b");
       material.depthWrite = false;
       material.emissive = new THREE.Color(organicPalette[accentIndex % organicPalette.length]);
-      material.emissiveIntensity = 0.052 + (accentIndex % 4) * 0.01;
-      material.envMapIntensity = 0.98;
-      material.metalness = 0.035;
+      material.emissiveIntensity = 0.082 + (accentIndex % 4) * 0.012;
+      material.envMapIntensity = 1.42;
+      material.metalness = 0.026;
       material.opacity = opacity;
-      material.roughness = 0.5;
-      material.sheen = 0.68;
+      material.roughness = 0.36;
+      material.sheen = 0.82;
       material.side = THREE.DoubleSide;
-      material.specularIntensity = 0.58;
+      material.specularIntensity = 0.9;
       material.thickness = 1.24;
-      material.transmission = 0.04;
+      material.transmission = 0.07;
       material.transparent = true;
       return material;
     };
@@ -1714,51 +1715,24 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       baseRotation: THREE.Euler;
       baseScale: THREE.Vector3;
       group: THREE.Group;
-      hook: THREE.Mesh;
+      lowerProcess: THREE.Mesh;
       notch: THREE.Mesh;
       phase: number;
-      plate: THREE.Mesh;
-      tooth: THREE.Mesh;
+      sideBody: THREE.Mesh;
+      sideProcess: THREE.Mesh;
     }> = [];
-    const sourceProfileConfigs = Array.from({ length: 9 }, (_, segmentIndex) => {
+    const sourceProfileConfigs = Array.from({ length: 8 }, (_, segmentIndex) => {
       const phase = segmentIndex * 0.74;
-      const y = 2.18 - segmentIndex * 0.56;
+      const y = 2.46 - segmentIndex * 0.68;
       const isOuter = segmentIndex % 2 === 0;
       return {
         accent: 96 + segmentIndex,
         phase,
-        position: new THREE.Vector3(0.08 + Math.sin(phase) * 0.025, y, 0.82 + Math.cos(phase) * 0.025),
-        rotation: new THREE.Euler(0.1 + Math.sin(phase) * 0.018, -0.08 + Math.cos(phase) * 0.025, -0.025 + Math.sin(phase) * 0.02),
-        scale: new THREE.Vector3(isOuter ? 0.98 : 0.88, 0.82 + (segmentIndex % 3) * 0.025, 1),
+        position: new THREE.Vector3(0.02 + Math.sin(phase) * 0.018, y, 0.74 + Math.cos(phase) * 0.026),
+        rotation: new THREE.Euler(0.08 + Math.sin(phase) * 0.018, 0.02 + Math.cos(phase) * 0.02, -0.018 + Math.sin(phase) * 0.018),
+        scale: new THREE.Vector3(isOuter ? 0.9 : 0.82, 0.88 + (segmentIndex % 3) * 0.025, 0.92),
       };
     });
-    const sourceProfilePlatePoints: Array<[number, number]> = [
-      [-0.34, 0.16],
-      [-0.1, 0.3],
-      [0.28, 0.26],
-      [0.5, 0.1],
-      [0.48, -0.08],
-      [0.24, -0.22],
-      [-0.08, -0.26],
-      [-0.38, -0.12],
-    ];
-    const sourceProfileHookPoints: Array<[number, number]> = [
-      [-0.52, 0.04],
-      [-0.32, 0.14],
-      [-0.06, 0.08],
-      [0.02, -0.04],
-      [-0.18, -0.16],
-      [-0.48, -0.14],
-      [-0.62, -0.02],
-    ];
-    const sourceProfileToothPoints: Array<[number, number]> = [
-      [-0.26, 0.06],
-      [-0.04, 0.12],
-      [0.16, 0.04],
-      [0.12, -0.08],
-      [-0.1, -0.14],
-      [-0.3, -0.05],
-    ];
 
     sourceProfileConfigs.forEach((config, segmentIndex) => {
       const group = new THREE.Group();
@@ -1768,49 +1742,51 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       pillarGroup.add(group);
 
       // 参考视频里的柱体是“一个整体侧影被故事卡片切开”，不是每节独立朝不同方向浮动。
-      // 这里用统一朝向的挤出骨片叠成整柱主轮廓，旧随机骨节只做背后的暗体积。
-      const plate = new THREE.Mesh(createReferenceSpineShardGeometry(sourceProfilePlatePoints, 0.09), makeSourceProfileMaterial(config.accent, 0.58));
-      plate.position.set(0.08, 0, 0.02);
-      plate.rotation.set(0.02, -0.04, segmentIndex % 2 === 0 ? 0.02 : -0.015);
-      plate.renderOrder = 6;
-      group.add(plate);
+      // v57 放弃平面挤出剪影，改用一个椎骨主体 + 长侧突 + 小下突组合；
+      // 这样默认露出的顶部/底部会有圆润油膜厚度，更接近 mp4 的侧向脊柱雕塑。
+      const sideBody = new THREE.Mesh(createVertebraBodyGeometry(config.accent + 220), makeSourceProfileMaterial(config.accent, 0.62));
+      sideBody.position.set(0.16, 0.02, 0.0);
+      sideBody.rotation.set(0.02, 0.16, segmentIndex % 2 === 0 ? 0.02 : -0.02);
+      sideBody.scale.set(0.98, 0.64, 0.54);
+      sideBody.renderOrder = 6;
+      group.add(sideBody);
 
-      const hook = new THREE.Mesh(createReferenceSpineShardGeometry(sourceProfileHookPoints, 0.074), makeSourceProfileMaterial(config.accent + 2, 0.44));
-      hook.position.set(-0.12, -0.04, 0.05);
-      hook.rotation.set(0.06, -0.02, -0.08);
-      hook.scale.set(0.72, 0.66, 1);
-      hook.renderOrder = 6;
-      group.add(hook);
+      const sideProcess = new THREE.Mesh(createOrganicLobeGeometry(config.accent + 240), makeSourceProfileMaterial(config.accent + 2, 0.6));
+      sideProcess.position.set(-0.42, -0.04, 0.04);
+      sideProcess.rotation.set(0.08, 0.26, 0.1);
+      sideProcess.scale.set(1.64, 0.46, 0.32);
+      sideProcess.renderOrder = 7;
+      group.add(sideProcess);
 
-      const tooth = new THREE.Mesh(createReferenceSpineShardGeometry(sourceProfileToothPoints, 0.052), makeSourceProfileMaterial(config.accent + 4, 0.34));
-      tooth.position.set(0.08, -0.28, 0.08);
-      tooth.rotation.set(0.04, -0.06, -0.18);
-      tooth.scale.set(0.52, 0.58, 1);
-      tooth.renderOrder = 5;
-      group.add(tooth);
+      const lowerProcess = new THREE.Mesh(createOrganicLobeGeometry(config.accent + 260), makeSourceProfileMaterial(config.accent + 4, 0.44));
+      lowerProcess.position.set(-0.18, -0.22, -0.04);
+      lowerProcess.rotation.set(-0.08, -0.08, -0.16);
+      lowerProcess.scale.set(0.66, 0.28, 0.22);
+      lowerProcess.renderOrder = 5;
+      group.add(lowerProcess);
 
       const notch = new THREE.Mesh(cavityGeometry, deepCavityMaterial.clone());
       const notchMaterial = notch.material as THREE.MeshPhysicalMaterial;
       notchMaterial.depthWrite = false;
-      notchMaterial.opacity = 0.62;
-      notch.position.set(-0.03, 0.03, 0.12);
-      notch.rotation.set(0.12, -0.08, segmentIndex % 2 === 0 ? -0.18 : 0.14);
-      notch.scale.set(0.54, 0.12, 0.045);
+      notchMaterial.opacity = 0.46;
+      notch.position.set(0.08, 0.04, 0.24);
+      notch.rotation.set(0.16, 0.18, segmentIndex % 2 === 0 ? -0.12 : 0.1);
+      notch.scale.set(0.46, 0.13, 0.05);
       notch.renderOrder = 7;
       group.add(notch);
 
-      [plate, hook, tooth].forEach((mesh) => organicMeshes.push(mesh));
+      [sideBody, sideProcess, lowerProcess].forEach((mesh) => organicMeshes.push(mesh));
       cavityMeshes.push(notch);
       sourceProfileSegments.push({
         basePosition: config.position.clone(),
         baseRotation: config.rotation.clone(),
         baseScale: config.scale.clone(),
         group,
-        hook,
+        lowerProcess,
         notch,
         phase: config.phase,
-        plate,
-        tooth,
+        sideBody,
+        sideProcess,
       });
     });
 
@@ -2614,11 +2590,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           segment.baseScale.z
         );
 
-        [segment.plate, segment.hook, segment.tooth].forEach((mesh, meshIndex) => {
+        [segment.sideBody, segment.sideProcess, segment.lowerProcess].forEach((mesh, meshIndex) => {
           const material = mesh.material as THREE.MeshPhysicalMaterial;
           const paletteColor = new THREE.Color(organicPalette[(segmentIndex + meshIndex + activeIndexRef.current) % organicPalette.length]);
-          material.emissive.lerp(paletteColor.multiplyScalar(0.054 + Math.sin(time * 0.5 + segment.phase + meshIndex) * 0.012), 0.035);
-          material.envMapIntensity = 0.84 + Math.sin(time * 0.25 + segment.phase) * 0.08 + Math.min(0.18, Math.abs(scrollImpulse) * 0.06);
+          material.emissive.lerp(paletteColor.multiplyScalar(0.074 + Math.sin(time * 0.5 + segment.phase + meshIndex) * 0.014), 0.035);
+          material.envMapIntensity = 1.12 + Math.sin(time * 0.25 + segment.phase) * 0.1 + Math.min(0.22, Math.abs(scrollImpulse) * 0.07);
         });
 
         const notchMaterial = segment.notch.material as THREE.MeshPhysicalMaterial;
