@@ -256,12 +256,12 @@
 
 .landing-story-filter {
   left: clamp(20px, 3.8vw, 70px);
-  top: 54%;
+  top: 55%;
   bottom: auto;
   display: grid;
   width: min(230px, 22vw);
   gap: 12px;
-  opacity: 0.76;
+  opacity: 0.48;
 }
 
 .landing-story-filter span {
@@ -311,7 +311,7 @@
 .landing-story-copy {
   left: clamp(24px, 4vw, 72px);
   bottom: 32px;
-  width: min(460px, 36vw);
+  width: min(450px, 34vw);
   transform: none;
   pointer-events: none;
 }
@@ -391,6 +391,7 @@
 }
 
 .landing-story-console {
+  display: none;
   top: 18%;
   right: clamp(28px, 4vw, 76px);
   width: min(240px, 20vw);
@@ -438,6 +439,7 @@
 }
 
 .landing-story-footer {
+  display: none;
   right: clamp(28px, 4vw, 76px);
   bottom: 32px;
   color: rgba(238, 245, 255, 0.36);
@@ -544,7 +546,7 @@
 
   .landing-story-canvas {
     height: 100%;
-    opacity: 0.22;
+    opacity: 0.24;
   }
 
   .landing-story-hero-asset {
@@ -588,14 +590,7 @@
   }
 
   .landing-story-filter {
-    position: absolute;
-    top: auto;
-    left: 18px;
-    right: 18px;
-    bottom: 22px;
-    width: calc(100% - 36px);
-    margin: 0;
-    gap: 8px;
+    display: none;
   }
 
   .landing-story-filter span {

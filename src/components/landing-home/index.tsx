@@ -330,68 +330,74 @@ function createOilSlickTexture() {
 
 function createVertebraBodyGeometry(segmentIndex: number) {
   const phase = segmentIndex * 0.73;
-  const contourSeed = [
-    new THREE.Vector2(-0.72, -0.16),
-    new THREE.Vector2(-0.58, -0.31),
-    new THREE.Vector2(-0.16, -0.25),
-    new THREE.Vector2(0.18, -0.34),
-    new THREE.Vector2(0.66, -0.18),
-    new THREE.Vector2(0.54, -0.02),
-    new THREE.Vector2(0.72, 0.11),
-    new THREE.Vector2(0.28, 0.32),
-    new THREE.Vector2(-0.02, 0.24),
-    new THREE.Vector2(-0.44, 0.31),
-    new THREE.Vector2(-0.78, 0.1),
-  ].map((point, pointIndex) => {
-    const wobble = 1 + Math.sin(pointIndex * 1.9 + phase) * 0.045;
-    return new THREE.Vector2(point.x * wobble, point.y * (1 + Math.cos(pointIndex * 2.4 + phase) * 0.08));
-  });
-  const contour = new THREE.CatmullRomCurve3(
-    contourSeed.map((point) => new THREE.Vector3(point.x, point.y, 0)),
-    true,
-    "catmullrom",
-    0.62
-  ).getPoints(86).map((point) => new THREE.Vector2(point.x, point.y));
-  const shape = new THREE.Shape(contour);
+  const radialSegments = 96;
+  const heightSegments = 22;
+  const columns = radialSegments + 1;
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  const angleDistance = (angle: number, target: number) => {
+    const diff = Math.atan2(Math.sin(angle - target), Math.cos(angle - target));
+    return Math.abs(diff);
+  };
 
-  const mainHole = new THREE.Path();
-  mainHole.absellipse(
-    0.08 + Math.sin(phase) * 0.045,
-    0.02 + Math.cos(phase) * 0.018,
-    0.16 + (segmentIndex % 3) * 0.012,
-    0.082,
-    0,
-    Math.PI * 2,
-    false
-  );
-  shape.holes.push(mainHole);
+  // 之前的挤出多边形太像机械积木，单根 shader 又像彩带软管。
+  // 这里直接生成参数化椎体表面：上下有唇口，左右/后侧有不对称突起，
+  // 并在顶点层加入微扰，让每一节都是可动画的真实 3D 几何。
+  for (let row = 0; row <= heightSegments; row += 1) {
+    const v = row / heightSegments;
+    const yNorm = v * 2 - 1;
+    const vertical = Math.abs(yNorm);
+    const waist = 1 - vertical * vertical * 0.28;
+    const lip = Math.exp(-Math.pow((vertical - 0.72) / 0.18, 2)) * 0.17;
+    const organicOffset = Math.sin(phase + yNorm * 3.2) * 0.016;
 
-  if (segmentIndex % 2 === 0) {
-    const sideHole = new THREE.Path();
-    sideHole.absellipse(-0.34, -0.02, 0.07, 0.052, 0, Math.PI * 2, false);
-    shape.holes.push(sideHole);
+    for (let column = 0; column <= radialSegments; column += 1) {
+      const u = column / radialSegments;
+      const theta = u * Math.PI * 2;
+      const sideProcess =
+        (Math.exp(-Math.pow(angleDistance(theta, 0) / 0.42, 2)) +
+          Math.exp(-Math.pow(angleDistance(theta, Math.PI) / 0.46, 2)) * 0.78) *
+        Math.exp(-Math.pow(yNorm / 0.68, 2)) *
+        0.22;
+      const rearProcess = Math.exp(-Math.pow(angleDistance(theta, -Math.PI / 2) / 0.5, 2)) * Math.exp(-Math.pow((yNorm + 0.04) / 0.76, 2)) * 0.2;
+      const frontNotch = -Math.exp(-Math.pow(angleDistance(theta, Math.PI / 2) / 0.44, 2)) * Math.exp(-Math.pow(yNorm / 0.7, 2)) * 0.055;
+      const fineRipple = Math.sin(theta * 5.4 + phase) * 0.028 + Math.sin(yNorm * 8.2 + theta * 2.1 + phase) * 0.018;
+      const radiusX = (0.45 * waist + lip + sideProcess + fineRipple) * (1 + (segmentIndex % 3) * 0.025);
+      const radiusZ = 0.34 * waist + lip * 0.52 + rearProcess + frontNotch + fineRipple * 0.42;
+      const x = Math.cos(theta) * radiusX;
+      const z = Math.sin(theta) * radiusZ;
+      const y = yNorm * 0.27 + organicOffset + Math.sin(theta * 3 + phase) * 0.012 * (1 - vertical);
+
+      positions.push(x, y, z);
+      uvs.push(u, v);
+    }
   }
 
-  const geometry = new THREE.ExtrudeGeometry(shape, {
-    bevelEnabled: true,
-    bevelSegments: 14,
-    bevelSize: 0.115,
-    bevelThickness: 0.18,
-    curveSegments: 18,
-    depth: 0.62 + (segmentIndex % 3) * 0.04,
-    steps: 2,
-  });
-  geometry.center();
-  const position = geometry.attributes.position as THREE.BufferAttribute;
-  for (let vertexIndex = 0; vertexIndex < position.count; vertexIndex += 1) {
-    const x = position.getX(vertexIndex);
-    const y = position.getY(vertexIndex);
-    const z = position.getZ(vertexIndex);
-    const ridge = Math.sin(x * 11.7 + phase) * Math.cos(y * 16.3 - phase) * 0.018;
-    const oilDimple = Math.sin((x + z) * 17.2 + segmentIndex) * Math.sin(y * 23.1) * 0.01;
-    position.setXYZ(vertexIndex, x + ridge * 0.45, y + oilDimple, z + ridge);
+  for (let row = 0; row < heightSegments; row += 1) {
+    for (let column = 0; column < radialSegments; column += 1) {
+      const current = row * columns + column;
+      const next = current + columns;
+      indices.push(current, next, current + 1, current + 1, next, next + 1);
+    }
   }
-  position.needsUpdate = true;
+
+  const bottomCenterIndex = positions.length / 3;
+  positions.push(0, -0.285 + Math.sin(phase) * 0.008, 0);
+  uvs.push(0.5, 0);
+  const topCenterIndex = positions.length / 3;
+  positions.push(0, 0.285 + Math.cos(phase) * 0.008, 0);
+  uvs.push(0.5, 1);
+  for (let column = 0; column < radialSegments; column += 1) {
+    indices.push(bottomCenterIndex, column + 1, column);
+    const topRow = heightSegments * columns;
+    indices.push(topCenterIndex, topRow + column, topRow + column + 1);
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return geometry;
 }
@@ -440,10 +446,10 @@ function createPanelTexture(scene: StoryScene) {
   }
 
   // 玻璃板纹理只保留少量识别信息，让 WebGL 装置成为主角，避免重新变成“故事进度页”。
-  const gradient = context.createRadialGradient(520, 250, 60, 520, 250, 760);
-  gradient.addColorStop(0, "rgba(218,245,246,0.4)");
-  gradient.addColorStop(0.35, "rgba(70,108,116,0.42)");
-  gradient.addColorStop(1, "rgba(6,20,23,0.7)");
+  const gradient = context.createRadialGradient(520, 250, 70, 520, 250, 780);
+  gradient.addColorStop(0, "rgba(230,250,248,0.5)");
+  gradient.addColorStop(0.34, "rgba(82,125,132,0.48)");
+  gradient.addColorStop(1, "rgba(4,12,17,0.84)");
   context.fillStyle = gradient;
   drawRoundedRect(context, 24, 24, canvas.width - 48, canvas.height - 48, 54);
   context.fill();
@@ -457,14 +463,14 @@ function createPanelTexture(scene: StoryScene) {
     const y = Math.cos(index * 48.2) * 290 + 290;
     const radius = 26 + (index % 7) * 13;
     const blot = context.createRadialGradient(x, y, 0, x, y, radius);
-    blot.addColorStop(0, `${scene.accent}66`);
-    blot.addColorStop(0.46, "rgba(255,255,255,0.08)");
+    blot.addColorStop(0, `${scene.accent}7a`);
+    blot.addColorStop(0.46, "rgba(255,255,255,0.11)");
     blot.addColorStop(1, "rgba(255,255,255,0)");
     context.fillStyle = blot;
     context.fillRect(x - radius, y - radius, radius * 2, radius * 2);
   }
 
-  context.globalAlpha = 0.18;
+  context.globalAlpha = 0.24;
   context.strokeStyle = "#ffffff";
   context.lineWidth = 2;
   for (let index = 0; index < 11; index += 1) {
@@ -476,31 +482,31 @@ function createPanelTexture(scene: StoryScene) {
   context.restore();
 
   context.strokeStyle = scene.accent;
-  context.globalAlpha = 0.42;
-  context.lineWidth = 5;
+  context.globalAlpha = 0.62;
+  context.lineWidth = 6;
   drawRoundedRect(context, 26, 26, canvas.width - 52, canvas.height - 52, 54);
   context.stroke();
 
   context.globalAlpha = 1;
-  context.fillStyle = "rgba(255,255,255,0.52)";
-  context.font = "600 26px monospace";
+  context.fillStyle = "rgba(255,255,255,0.72)";
+  context.font = "700 28px monospace";
   context.textAlign = "center";
   context.fillText("AI PM", canvas.width / 2, 180);
 
-  context.fillStyle = "rgba(255,255,255,0.92)";
+  context.fillStyle = "rgba(255,255,255,0.98)";
   context.shadowColor = scene.accent;
-  context.shadowBlur = 26;
-  context.font = "900 64px monospace";
+  context.shadowBlur = 34;
+  context.font = "900 70px monospace";
   context.fillText(scene.label.toUpperCase(), canvas.width / 2, 286);
 
   context.shadowBlur = 0;
-  context.fillStyle = "rgba(232,246,255,0.58)";
-  context.font = "600 28px sans-serif";
+  context.fillStyle = "rgba(232,246,255,0.74)";
+  context.font = "700 28px sans-serif";
   context.fillText(scene.metric, canvas.width / 2, 352);
 
   context.textAlign = "left";
-  context.fillStyle = "rgba(255,255,255,0.42)";
-  context.font = "500 20px monospace";
+  context.fillStyle = "rgba(255,255,255,0.56)";
+  context.font = "600 20px monospace";
   scene.signals.forEach((signal, index) => {
     context.fillText(`// ${signal}`, 76 + index * 250, 494);
   });
@@ -722,9 +728,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     stage.add(particles);
 
     const pillarGroup = new THREE.Group();
-    pillarGroup.position.set(1.34, -0.04, 0.1);
+    pillarGroup.position.set(1.08, -0.04, 0.16);
     pillarGroup.rotation.y = 0.12;
-    pillarGroup.scale.set(1.72, 1.28, 1.46);
+    pillarGroup.scale.set(1.36, 1.2, 1.18);
     stage.add(pillarGroup);
 
     const liquidColumnGeometry = new THREE.CylinderGeometry(0.5, 0.46, 5.8, 128, 72, true);
@@ -741,6 +747,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     });
     const liquidColumn = new THREE.Mesh(liquidColumnGeometry, liquidColumnMaterial);
     liquidColumn.position.set(0, 0, -0.04);
+    liquidColumn.visible = false;
     pillarGroup.add(liquidColumn);
 
     const glowConfigs = [
@@ -827,8 +834,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       iridescence: 1,
       iridescenceIOR: 1.78,
       iridescenceThicknessRange: [180, 1150],
+      map: oilTexture,
       metalness: 0.86,
-      roughness: 0.19,
+      roughness: 0.11,
       sheen: 0.55,
       sheenColor: new THREE.Color("#9dfff2"),
       sheenRoughness: 0.18,
@@ -856,7 +864,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       };
 
       const body = new THREE.Mesh(createVertebraBodyGeometry(chunkIndex), makeMaterial(chunkIndex));
-      body.scale.set(1.02 + (chunkIndex % 3) * 0.035, 1.08, 0.92 + (chunkIndex % 2) * 0.08);
+      body.scale.set(1.08 + (chunkIndex % 3) * 0.035, 1.0, 1.02 + (chunkIndex % 2) * 0.06);
       group.add(body);
       meshes.push(body);
 
@@ -897,7 +905,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       return { baseY, group, meshes, phase };
     });
     vertebraSegments.forEach((segment) => {
-      segment.group.visible = false;
+      segment.group.visible = true;
     });
 
     const fieldMaterial = oilBaseMaterial.clone();
@@ -907,11 +915,14 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     fieldMaterial.vertexColors = true;
     fieldMaterial.bumpMap = oilTexture;
     fieldMaterial.bumpScale = 0.035;
-    const organicField = new MarchingCubes(54, fieldMaterial, true, true, 160000);
+    fieldMaterial.depthWrite = false;
+    fieldMaterial.opacity = 0.32;
+    fieldMaterial.transparent = true;
+    const organicField = new MarchingCubes(46, fieldMaterial, true, true, 120000);
     organicField.isolation = 62;
     organicField.position.set(0.02, 0, 0.02);
     organicField.scale.set(1.42, 2.68, 0.86);
-    organicField.visible = false;
+    organicField.visible = true;
     pillarGroup.add(organicField);
 
     const fieldNodes = Array.from({ length: 9 }, (_, nodeIndex) => ({
@@ -1046,12 +1057,15 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const panelMeshes = storyScenes.map((sceneItem, index) => {
       const geometry = new THREE.PlaneGeometry(THREE_PANEL_WIDTH / 260, THREE_PANEL_HEIGHT / 260, 12, 8);
       const material = new THREE.MeshBasicMaterial({
+        depthTest: false,
+        depthWrite: false,
         map: createPanelTexture(sceneItem),
-        opacity: 0.78,
+        opacity: 0.9,
         side: THREE.DoubleSide,
         transparent: true,
       });
       const mesh = new THREE.Mesh(geometry, material);
+      mesh.renderOrder = 5;
       mesh.userData.index = index;
       stage.add(mesh);
       return mesh;
@@ -1102,7 +1116,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       columnParticleMaterial.uniforms.uTime.value = time;
       liquidColumnMaterial.uniforms.uTime.value = time;
       liquidColumnMaterial.uniforms.uAccent.value.lerp(activeColor, 0.03);
-      updateOrganicField(time, activeColor);
+      if (organicField.visible) {
+        updateOrganicField(time, activeColor);
+      }
       pointLight.color.lerp(activeColor, 0.035);
       magentaLight.intensity = 4.2 + Math.sin(time * 0.8) * 0.7;
       cyanLight.intensity = 4.9 + Math.cos(time * 0.7) * 0.8;
@@ -1189,11 +1205,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       panelMeshes.forEach((mesh, index) => {
         const offset = getOffset(index);
         const absOffset = Math.abs(offset);
-        const targetX = 1.26 + offset * 0.78;
-        const targetY = Math.sin(time * 0.74 + index * 0.86) * 0.18 - absOffset * 0.08;
-        const targetZ = -absOffset * 1.5 + (offset === 0 ? 0.84 : -0.72);
-        const targetScale = offset === 0 ? 0.95 : 0.68 - absOffset * 0.08;
-        const targetOpacity = offset === 0 ? 0.72 : Math.max(0.06, 0.2 - absOffset * 0.04);
+        const targetX = 0.9 + offset * 0.86;
+        const targetY = Math.sin(time * 0.74 + index * 0.86) * 0.2 - absOffset * 0.09;
+        const targetZ = -absOffset * 1.48 + (offset === 0 ? 0.98 : -0.68);
+        const targetScale = offset === 0 ? 1.06 : 0.72 - absOffset * 0.08;
+        const targetOpacity = offset === 0 ? 0.9 : Math.max(0.08, 0.28 - absOffset * 0.04);
 
         mesh.position.x += (targetX - mesh.position.x) * 0.065;
         mesh.position.y += (targetY - mesh.position.y) * 0.065;
@@ -1333,14 +1349,14 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
       <section className="landing-story-copy" aria-live="polite">
         <span className="landing-story-copy__eyebrow">
-          {activeScene.icon}
-          {activeScene.index} / {activeScene.label}
+          <DashboardOutlined />
+          AI PM / LIVE WORKBENCH
         </span>
         <h1>
-          {activeScene.title}
+          AI PM 项目作战舱
         </h1>
-        <p className="landing-story-copy__kicker">{activeScene.kicker}</p>
-        <p>{activeScene.description}</p>
+        <p className="landing-story-copy__kicker">需求、任务、Bug 和版本在同一块空间里实时推进。</p>
+        <p>登录后回到真实工作台，项目交付、负责人和风险状态在同一个视场里被持续校准。</p>
         <div className="landing-story-copy__actions">
           <a className="landing-story-button landing-story-button--primary" href={primaryHref}>
             <LoginOutlined />
@@ -1354,21 +1370,6 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         </div>
       </section>
 
-      <section className="landing-story-console" aria-label="当前分镜状态">
-        <div>
-          <span>SYSTEM SIGNAL</span>
-          <strong>{activeScene.metric}</strong>
-        </div>
-        <ul>
-          {activeScene.signals.map((signal) => (
-            <li key={signal}>{signal}</li>
-          ))}
-        </ul>
-      </section>
-
-      <footer className="landing-story-footer">
-        <span>WHEEL / TOUCH TO SHIFT THE FIELD</span>
-      </footer>
     </main>
   );
 }
