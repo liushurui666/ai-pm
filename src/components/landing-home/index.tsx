@@ -430,26 +430,26 @@ function createVertebraBodyGeometry(segmentIndex: number) {
     const v = row / heightSegments;
     const yNorm = v * 2 - 1;
     const vertical = Math.abs(yNorm);
-    const waist = 1 - vertical * vertical * 0.32;
-    const lip = Math.exp(-Math.pow((vertical - 0.62) / 0.16, 2)) * 0.16;
-    const organicOffset = Math.sin(phase + yNorm * 2.4) * 0.012;
+    const waist = 1 - vertical * vertical * 0.3;
+    const lip = Math.exp(-Math.pow((vertical - 0.62) / 0.15, 2)) * 0.18;
+    const organicOffset = Math.sin(phase + yNorm * 2.4) * 0.01;
 
     for (let column = 0; column <= radialSegments; column += 1) {
       const u = column / radialSegments;
       const theta = u * Math.PI * 2;
-      const processEnvelope = Math.exp(-Math.pow(yNorm / 0.56, 2));
+      const processEnvelope = Math.exp(-Math.pow(yNorm / 0.58, 2));
       const sideProcess =
-        (Math.exp(-Math.pow(angleDistance(theta, 0) / 0.28, 2)) +
-          Math.exp(-Math.pow(angleDistance(theta, Math.PI) / 0.28, 2)) * 0.96) *
+        (Math.exp(-Math.pow(angleDistance(theta, 0) / 0.32, 2)) +
+          Math.exp(-Math.pow(angleDistance(theta, Math.PI) / 0.32, 2)) * 0.88) *
         processEnvelope *
-        0.34;
-      const rearProcess = Math.exp(-Math.pow(angleDistance(theta, -Math.PI / 2) / 0.36, 2)) * Math.exp(-Math.pow((yNorm + 0.02) / 0.62, 2)) * 0.38;
+        0.2;
+      const rearProcess = Math.exp(-Math.pow(angleDistance(theta, -Math.PI / 2) / 0.38, 2)) * Math.exp(-Math.pow((yNorm + 0.02) / 0.64, 2)) * 0.3;
       const frontNotch = -Math.exp(-Math.pow(angleDistance(theta, Math.PI / 2) / 0.42, 2)) * Math.exp(-Math.pow(yNorm / 0.76, 2)) * 0.15;
-      const topBottomBite = -Math.exp(-Math.pow(angleDistance(theta, Math.PI / 2) / 0.72, 2)) * Math.exp(-Math.pow((vertical - 0.78) / 0.18, 2)) * 0.08;
-      const boneFacets = Math.sin(theta * 3.0 + phase) * 0.028 + Math.sin(theta * 6.0 + yNorm * 4.2 + phase) * 0.022;
-      const fineRipple = Math.sin(theta * 13.0 + phase) * 0.012 + Math.sin(yNorm * 14.0 + theta * 1.7 + phase) * 0.012;
-      const radiusX = (0.36 * waist + lip + sideProcess + topBottomBite + boneFacets + fineRipple) * (1 + (segmentIndex % 2) * 0.01);
-      const radiusZ = 0.26 * waist + lip * 0.32 + rearProcess + frontNotch + topBottomBite + boneFacets * 0.55 + fineRipple * 0.45;
+      const topBottomBite = -Math.exp(-Math.pow(angleDistance(theta, Math.PI / 2) / 0.7, 2)) * Math.exp(-Math.pow((vertical - 0.78) / 0.18, 2)) * 0.065;
+      const boneFacets = Math.sin(theta * 3.0 + phase) * 0.032 + Math.sin(theta * 6.0 + yNorm * 4.2 + phase) * 0.02;
+      const fineRipple = Math.sin(theta * 13.0 + phase) * 0.01 + Math.sin(yNorm * 14.0 + theta * 1.7 + phase) * 0.01;
+      const radiusX = (0.34 * waist + lip + sideProcess + topBottomBite + boneFacets + fineRipple) * (1 + (segmentIndex % 2) * 0.008);
+      const radiusZ = 0.29 * waist + lip * 0.34 + rearProcess + frontNotch + topBottomBite + boneFacets * 0.5 + fineRipple * 0.4;
       const x = Math.cos(theta) * radiusX;
       const z = Math.sin(theta) * radiusZ;
       const y = yNorm * 0.29 + organicOffset + Math.sin(theta * 3 + phase) * 0.014 * (1 - vertical);
@@ -489,8 +489,8 @@ function createVertebraBodyGeometry(segmentIndex: number) {
 
 function createOrganicLobeGeometry(seed: number) {
   const phase = seed * 0.91;
-  const axisSegments = 16;
-  const radialSegments = 28;
+  const axisSegments = 14;
+  const radialSegments = 24;
   const columns = radialSegments + 1;
   const positions: number[] = [];
   const indices: number[] = [];
@@ -498,23 +498,23 @@ function createOrganicLobeGeometry(seed: number) {
 
   for (let axisIndex = 0; axisIndex <= axisSegments; axisIndex += 1) {
     const t = axisIndex / axisSegments;
-    const x = (t - 0.5) * 0.86;
-    const endTaper = Math.pow(Math.sin(Math.PI * t), 0.58);
-    const rootMass = Math.exp(-Math.pow((t - 0.34) / 0.24, 2)) * 0.11;
-    const tipPinch = 1 - Math.max(0, t - 0.7) * 1.2;
-    const bendY = Math.sin(t * Math.PI * 1.2 + phase) * 0.025;
-    const bendZ = Math.cos(t * Math.PI * 1.1 + phase) * 0.03;
+    const x = (t - 0.5) * 0.62;
+    const endTaper = Math.pow(Math.sin(Math.PI * t), 0.7);
+    const rootMass = Math.exp(-Math.pow((t - 0.36) / 0.26, 2)) * 0.1;
+    const tipPinch = 0.86 - Math.max(0, t - 0.74) * 0.82;
+    const bendY = Math.sin(t * Math.PI * 1.2 + phase) * 0.022;
+    const bendZ = Math.cos(t * Math.PI * 1.1 + phase) * 0.026;
 
     for (let radialIndex = 0; radialIndex <= radialSegments; radialIndex += 1) {
       const u = radialIndex / radialSegments;
       const angle = u * Math.PI * 2;
       const ridge =
         1 +
-        Math.sin(angle * 3 + phase + t * 4.2) * 0.16 +
-        Math.cos(angle * 5 - phase + t * 3.6) * 0.08 +
-        Math.sin((x + Math.sin(angle)) * 22 + phase) * 0.035;
-      const radiusY = (0.028 + endTaper * 0.11 * tipPinch + rootMass) * ridge;
-      const radiusZ = (0.022 + endTaper * 0.085 * tipPinch + rootMass * 0.72) * (1 + Math.cos(angle * 4 + phase) * 0.1);
+        Math.sin(angle * 3 + phase + t * 4.2) * 0.14 +
+        Math.cos(angle * 5 - phase + t * 3.6) * 0.07 +
+        Math.sin((x + Math.sin(angle)) * 21 + phase) * 0.04;
+      const radiusY = (0.032 + endTaper * 0.088 * tipPinch + rootMass) * ridge;
+      const radiusZ = (0.026 + endTaper * 0.07 * tipPinch + rootMass * 0.78) * (1 + Math.cos(angle * 4 + phase) * 0.1);
 
       positions.push(x, Math.sin(angle) * radiusY + bendY, Math.cos(angle) * radiusZ + bendZ);
       uvs.push(t, u);
@@ -530,10 +530,10 @@ function createOrganicLobeGeometry(seed: number) {
   }
 
   const leftCap = positions.length / 3;
-  positions.push(-0.43, Math.sin(phase) * 0.015, Math.cos(phase) * 0.015);
+  positions.push(-0.31, Math.sin(phase) * 0.012, Math.cos(phase) * 0.012);
   uvs.push(0, 0.5);
   const rightCap = positions.length / 3;
-  positions.push(0.43, Math.sin(phase + 1.2) * 0.012, Math.cos(phase + 1.2) * 0.012);
+  positions.push(0.31, Math.sin(phase + 1.2) * 0.01, Math.cos(phase + 1.2) * 0.01);
   uvs.push(1, 0.5);
 
   for (let radialIndex = 0; radialIndex < radialSegments; radialIndex += 1) {
@@ -574,11 +574,12 @@ function createPanelTexture(scene: StoryScene) {
     return new THREE.CanvasTexture(canvas);
   }
 
-  // 玻璃板纹理只保留少量识别信息，让 WebGL 装置成为主角，避免重新变成“故事进度页”。
+  // 参考录屏里的主卡不是明亮 SaaS 玻璃，而是带暖灰油膜的烟熏屏；
+  // 这里降低白雾和冷色占比，让柱体能像从卡片后方穿过，同时保留可读标题。
   const gradient = context.createRadialGradient(520, 250, 70, 520, 250, 780);
-  gradient.addColorStop(0, "rgba(172,196,190,0.7)");
-  gradient.addColorStop(0.34, "rgba(62,82,82,0.72)");
-  gradient.addColorStop(1, "rgba(7,12,16,0.94)");
+  gradient.addColorStop(0, "rgba(142,134,112,0.62)");
+  gradient.addColorStop(0.4, "rgba(58,64,60,0.74)");
+  gradient.addColorStop(1, "rgba(7,10,14,0.95)");
   context.fillStyle = gradient;
   drawRoundedRect(context, 24, 24, canvas.width - 48, canvas.height - 48, 54);
   context.fill();
@@ -587,20 +588,20 @@ function createPanelTexture(scene: StoryScene) {
   drawRoundedRect(context, 24, 24, canvas.width - 48, canvas.height - 48, 54);
   context.clip();
 
-  for (let index = 0; index < 190; index += 1) {
+  for (let index = 0; index < 132; index += 1) {
     const x = Math.sin(index * 91.7) * 520 + 520;
     const y = Math.cos(index * 48.2) * 290 + 290;
-    const radius = 26 + (index % 7) * 13;
+    const radius = 22 + (index % 7) * 11;
     const blot = context.createRadialGradient(x, y, 0, x, y, radius);
-    blot.addColorStop(0, `${scene.accent}78`);
-    blot.addColorStop(0.46, "rgba(255,255,255,0.1)");
+    blot.addColorStop(0, `${scene.accent}58`);
+    blot.addColorStop(0.46, "rgba(236,226,198,0.08)");
     blot.addColorStop(1, "rgba(255,255,255,0)");
     context.fillStyle = blot;
     context.fillRect(x - radius, y - radius, radius * 2, radius * 2);
   }
 
-  context.globalAlpha = 0.09;
-  context.strokeStyle = "#ffffff";
+  context.globalAlpha = 0.07;
+  context.strokeStyle = "#f0e8cc";
   context.lineWidth = 2;
   for (let index = 0; index < 11; index += 1) {
     context.beginPath();
@@ -610,10 +611,16 @@ function createPanelTexture(scene: StoryScene) {
   }
   context.restore();
 
-  context.strokeStyle = scene.accent;
-  context.globalAlpha = 0.68;
-  context.lineWidth = 8;
+  context.strokeStyle = "#9d9278";
+  context.globalAlpha = 0.78;
+  context.lineWidth = 9;
   drawRoundedRect(context, 26, 26, canvas.width - 52, canvas.height - 52, 54);
+  context.stroke();
+
+  context.strokeStyle = scene.accent;
+  context.globalAlpha = 0.28;
+  context.lineWidth = 3;
+  drawRoundedRect(context, 31, 31, canvas.width - 62, canvas.height - 62, 49);
   context.stroke();
 
   context.globalAlpha = 1;
@@ -859,9 +866,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     stage.add(particles);
 
     const pillarGroup = new THREE.Group();
-    pillarGroup.position.set(0.48, -0.04, 0.06);
+    pillarGroup.position.set(0.42, -0.02, 0.04);
     pillarGroup.rotation.y = 0.1;
-    pillarGroup.scale.set(1.32, 1.22, 1.12);
+    pillarGroup.scale.set(1.02, 1.24, 0.96);
     stage.add(pillarGroup);
 
     const liquidColumnGeometry = new THREE.CylinderGeometry(0.5, 0.46, 5.8, 128, 72, true);
@@ -960,20 +967,20 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     oilBumpTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     const oilBaseMaterial = new THREE.MeshPhysicalMaterial({
       bumpMap: oilBumpTexture,
-      bumpScale: 0.12,
+      bumpScale: 0.135,
       clearcoat: 1,
-      clearcoatRoughness: 0.22,
-      color: new THREE.Color("#06080c"),
+      clearcoatRoughness: 0.18,
+      color: new THREE.Color("#040509"),
       emissive: new THREE.Color("#9ae8ff"),
-      emissiveIntensity: 0.11,
+      emissiveIntensity: 0.075,
       emissiveMap: oilTexture,
-      envMapIntensity: 1.9,
+      envMapIntensity: 2.18,
       iridescence: 1,
       iridescenceIOR: 1.78,
       iridescenceThicknessRange: [90, 1450],
       map: oilTexture,
-      metalness: 0.38,
-      roughness: 0.48,
+      metalness: 0.44,
+      roughness: 0.42,
       roughnessMap: oilBumpTexture,
       sheen: 0.55,
       sheenColor: new THREE.Color("#9dfff2"),
@@ -1002,42 +1009,42 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       };
 
       const body = new THREE.Mesh(createVertebraBodyGeometry(chunkIndex), makeMaterial(chunkIndex));
-      body.scale.set(0.96 + (chunkIndex % 2) * 0.025, 1.02, 0.94 + (chunkIndex % 2) * 0.045);
+      body.scale.set(0.9 + (chunkIndex % 2) * 0.022, 1.0, 0.92 + (chunkIndex % 2) * 0.04);
       group.add(body);
       meshes.push(body);
 
       const leftProcess = new THREE.Mesh(createOrganicLobeGeometry(chunkIndex + 12), makeMaterial(chunkIndex + 1));
-      leftProcess.position.set(-0.5, -0.025, -0.16);
-      leftProcess.rotation.set(0.18 + Math.sin(phase) * 0.08, 0.34, 0.28);
-      leftProcess.scale.set(1.08, 0.8, 0.66);
+      leftProcess.position.set(-0.39, -0.03, -0.14);
+      leftProcess.rotation.set(0.2 + Math.sin(phase) * 0.08, 0.28, 0.44);
+      leftProcess.scale.set(0.72, 0.86, 0.64);
       group.add(leftProcess);
       meshes.push(leftProcess);
 
       const rightProcess = new THREE.Mesh(createOrganicLobeGeometry(chunkIndex + 24), makeMaterial(chunkIndex + 2));
-      rightProcess.position.set(0.48, 0.025, 0.18);
-      rightProcess.rotation.set(-0.18 + Math.cos(phase) * 0.08, -0.38, -0.24);
-      rightProcess.scale.set(0.98, 0.74, 0.62);
+      rightProcess.position.set(0.38, 0.025, 0.16);
+      rightProcess.rotation.set(-0.18 + Math.cos(phase) * 0.08, -0.32, -0.38);
+      rightProcess.scale.set(0.66, 0.78, 0.58);
       group.add(rightProcess);
       meshes.push(rightProcess);
 
       const rearSpike = new THREE.Mesh(createOrganicLobeGeometry(chunkIndex + 36), makeMaterial(chunkIndex + 3));
-      rearSpike.position.set(Math.sin(phase) * 0.025, -0.02, -0.48);
-      rearSpike.rotation.set(0.08 * Math.sin(phase), Math.PI / 2 + 0.18, 0.14 * Math.cos(phase));
-      rearSpike.scale.set(1.16, 0.7, 0.58);
+      rearSpike.position.set(Math.sin(phase) * 0.024, -0.015, -0.38);
+      rearSpike.rotation.set(0.08 * Math.sin(phase), Math.PI / 2 + 0.12, 0.14 * Math.cos(phase));
+      rearSpike.scale.set(0.86, 0.72, 0.5);
       group.add(rearSpike);
       meshes.push(rearSpike);
 
       const lowerKnuckle = new THREE.Mesh(createOrganicLobeGeometry(chunkIndex + 48), makeMaterial(chunkIndex + 4));
       lowerKnuckle.position.set(-0.2 + Math.sin(phase) * 0.035, -0.13, 0.3);
       lowerKnuckle.rotation.set(0.32, -0.28, 0.42);
-      lowerKnuckle.scale.set(0.54, 0.58, 0.45);
+      lowerKnuckle.scale.set(0.42, 0.56, 0.38);
       group.add(lowerKnuckle);
       meshes.push(lowerKnuckle);
 
       const upperKnuckle = new THREE.Mesh(createOrganicLobeGeometry(chunkIndex + 60), makeMaterial(chunkIndex + 5));
       upperKnuckle.position.set(0.24 + Math.cos(phase) * 0.035, 0.12, -0.28);
       upperKnuckle.rotation.set(-0.24, 0.2, -0.34);
-      upperKnuckle.scale.set(0.5, 0.52, 0.42);
+      upperKnuckle.scale.set(0.4, 0.5, 0.36);
       group.add(upperKnuckle);
       meshes.push(upperKnuckle);
 
@@ -1224,10 +1231,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       const mesh = new THREE.Mesh(geometry, material);
       const initialOffset = index > storyScenes.length / 2 ? index - storyScenes.length : index;
       const initialAbsOffset = Math.abs(initialOffset);
-      const initialAngle = initialOffset * 0.78;
+      const initialAngle = initialOffset * 1.02;
       const initialScale = initialOffset === 0 ? 1.12 : Math.max(0.54, 0.82 - initialAbsOffset * 0.12);
-      mesh.position.set(Math.sin(initialAngle) * 2.6 - 0.08, 0.02 - initialAbsOffset * 0.07, Math.cos(initialAngle) * 1.18 - 0.06 - initialAbsOffset * 0.16);
-      mesh.rotation.set(initialOffset === 0 ? -0.018 : 0.018 * Math.sign(initialOffset), -initialAngle * 0.78 - 0.04, 0);
+      mesh.position.set(Math.sin(initialAngle) * 2.92 - 0.08, 0.02 - initialAbsOffset * 0.08, Math.cos(initialAngle) * 1.26 - 0.06 - initialAbsOffset * 0.2);
+      mesh.rotation.set(initialOffset === 0 ? -0.018 : 0.018 * Math.sign(initialOffset), -initialAngle * 0.9 - 0.04, 0);
       mesh.scale.set(initialScale, initialScale, 1);
       material.opacity = initialOffset === 0 ? 0.82 : Math.max(0.1, 0.42 - initialAbsOffset * 0.12);
       mesh.renderOrder = initialOffset === 0 ? 8 : Math.max(1, 5 - initialAbsOffset);
@@ -1311,7 +1318,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 参考 mp4 里滚动时不是单独翻卡片，而是整个中心装置一起换角度。
       // 所以这里用同一个 visualProgress 同时驱动卡片 carousel 和脊柱本体，
       // 保证用户滚轮推进时能看到柱体跟随故事段旋转，而不是固定在原地。
-      const storyOrbit = visualProgress * 0.98;
+      const storyOrbit = visualProgress * 1.12;
       particleMaterial.uniforms.uTime.value = time;
       columnParticleMaterial.uniforms.uTime.value = time;
       liquidColumnMaterial.uniforms.uTime.value = time;
@@ -1353,7 +1360,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
       oilTexture.offset.x = Math.sin(time * 0.045) * 0.035;
       oilTexture.offset.y = time * 0.032;
-      stage.rotation.y = Math.sin(storyOrbit) * 0.045;
+      stage.rotation.y = Math.sin(storyOrbit) * 0.06;
       particles.rotation.y -= 0.0009;
       particles.rotation.z = Math.sin(time * 0.18) * 0.06;
       liquidColumn.rotation.y = Math.sin(time * 0.2) * 0.18;
@@ -1361,10 +1368,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       liquidColumn.scale.z = 1 + Math.cos(time * 0.48) * 0.035;
       spine.rotation.x += 0.003;
       spine.rotation.y += 0.006;
-      pillarGroup.position.x = 0.48 + Math.sin(storyOrbit) * 0.28;
-      pillarGroup.position.z = 0.06 + Math.cos(storyOrbit) * 0.12;
-      pillarGroup.rotation.y = 0.12 - storyOrbit * 0.72;
-      pillarGroup.rotation.x = Math.sin(storyOrbit * 0.72) * 0.07;
+      pillarGroup.position.x = 0.42 + Math.sin(storyOrbit) * 0.34;
+      pillarGroup.position.z = 0.04 + Math.cos(storyOrbit) * 0.15;
+      pillarGroup.rotation.y = 0.16 - storyOrbit * 1.08;
+      pillarGroup.rotation.x = Math.sin(storyOrbit * 0.72) * 0.085;
       pillarShell.scale.x = 1 + Math.sin(time * 1.3) * 0.035;
       pillarShell.scale.z = 1 + Math.cos(time * 1.1) * 0.035;
       pillarCore.scale.x = 1 + Math.sin(time * 1.9) * 0.09;
@@ -1375,12 +1382,12 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         link.rotation.z = 0.1 * Math.sin(linkIndex + storyOrbit);
       });
       vertebraSegments.forEach((segment, segmentIndex) => {
-        segment.group.position.x = Math.sin(segment.phase + storyOrbit * 0.48) * 0.045;
+        segment.group.position.x = Math.sin(segment.phase + storyOrbit * 0.56) * 0.05;
         segment.group.position.y = segment.baseY;
-        segment.group.position.z = Math.cos(segment.phase * 0.8 + storyOrbit * 0.42) * 0.045;
-        segment.group.rotation.x = 0.04 * Math.sin(segment.phase + storyOrbit * 0.34);
-        segment.group.rotation.y = (segmentIndex % 2 === 0 ? -0.12 : 0.12) + segment.phase * 0.07 + storyOrbit * 0.28;
-        segment.group.rotation.z = 0.05 * Math.cos(segment.phase + storyOrbit * 0.32);
+        segment.group.position.z = Math.cos(segment.phase * 0.8 + storyOrbit * 0.5) * 0.05;
+        segment.group.rotation.x = 0.04 * Math.sin(segment.phase + storyOrbit * 0.42);
+        segment.group.rotation.y = (segmentIndex % 2 === 0 ? -0.1 : 0.1) + segment.phase * 0.065 + storyOrbit * 0.34;
+        segment.group.rotation.z = 0.05 * Math.cos(segment.phase + storyOrbit * 0.38);
         segment.group.scale.setScalar(1);
 
         segment.meshes.forEach((mesh, meshIndex) => {
@@ -1409,17 +1416,17 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       panelMeshes.forEach((mesh, index) => {
         const offset = getVisualOffset(index, visualProgress);
         const absOffset = Math.abs(offset);
-        const carouselAngle = offset * 0.78;
-        const targetX = Math.sin(carouselAngle) * 2.6 - 0.08;
-        const targetY = 0.02 - absOffset * 0.07;
-        const targetZ = Math.cos(carouselAngle) * 1.18 - 0.06 - absOffset * 0.16;
+        const carouselAngle = offset * 1.02;
+        const targetX = Math.sin(carouselAngle) * 2.92 - 0.08;
+        const targetY = 0.02 - absOffset * 0.08;
+        const targetZ = Math.cos(carouselAngle) * 1.26 - 0.06 - absOffset * 0.2;
         const targetScale = offset === 0 ? 1.12 : Math.max(0.54, 0.82 - absOffset * 0.12);
         const targetOpacity = offset === 0 ? 0.82 : Math.max(0.1, 0.42 - absOffset * 0.12);
 
         mesh.position.x += (targetX - mesh.position.x) * 0.065;
         mesh.position.y += (targetY - mesh.position.y) * 0.065;
         mesh.position.z += (targetZ - mesh.position.z) * 0.065;
-        mesh.rotation.y += ((-carouselAngle * 0.78 - 0.04) - mesh.rotation.y) * 0.075;
+        mesh.rotation.y += ((-carouselAngle * 0.9 - 0.04) - mesh.rotation.y) * 0.075;
         mesh.rotation.x += ((offset === 0 ? -0.018 : 0.018 * Math.sign(offset)) - mesh.rotation.x) * 0.075;
         mesh.scale.x += (targetScale - mesh.scale.x) * 0.07;
         mesh.scale.y += (targetScale - mesh.scale.y) * 0.07;
