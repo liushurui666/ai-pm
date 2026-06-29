@@ -1438,19 +1438,19 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 这里单独加重环境反射、clearcoat 和局部自发光，让规则骨节在默认静止帧里也有可读光影。
       material.alphaMap = null;
       material.bumpScale = 0.076;
-      material.clearcoat = 0.72;
-      material.clearcoatRoughness = 0.44;
-      material.color = new THREE.Color("#11191a");
+      material.clearcoat = 0.86;
+      material.clearcoatRoughness = 0.34;
+      material.color = new THREE.Color("#080d10");
       material.emissive = new THREE.Color(organicPalette[accentIndex % organicPalette.length]);
-      material.emissiveIntensity = 0.078 + (accentIndex % 3) * 0.012;
-      material.envMapIntensity = 1.35;
+      material.emissiveIntensity = 0.102 + (accentIndex % 3) * 0.014;
+      material.envMapIntensity = 1.68;
       material.metalness = 0.02;
       material.opacity = opacity;
-      material.roughness = 0.48;
-      material.sheen = 0.72;
-      material.specularIntensity = 0.78;
+      material.roughness = 0.38;
+      material.sheen = 0.82;
+      material.specularIntensity = 0.96;
       material.thickness = 1.12;
-      material.transmission = 0.12;
+      material.transmission = 0.08;
       material.transparent = true;
       return material;
     };
@@ -1613,6 +1613,17 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     });
     vertebraSegments.forEach((segment) => {
       segment.group.visible = true;
+      // v49 对照参考后发现，旧随机骨节层会在主柱外侧形成过多不规则尖刺；
+      // 参考视频的主体更规整，随机层只能做背后暗体积，不能继续和新主脊柱争抢轮廓。
+      segment.meshes.forEach((mesh, meshIndex) => {
+        const material = mesh.material as THREE.MeshPhysicalMaterial;
+        material.depthWrite = false;
+        material.emissiveIntensity *= 0.34;
+        material.envMapIntensity *= 0.42;
+        material.opacity = meshIndex === 0 ? 0.12 : 0.075;
+        material.transparent = true;
+        mesh.renderOrder = 1;
+      });
     });
 
     const referenceStackSegments: Array<{
@@ -1624,44 +1635,47 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       phase: number;
       y: number;
     }> = [];
-    Array.from({ length: 12 }, (_, stackIndex) => {
+    Array.from({ length: 10 }, (_, stackIndex) => {
       const group = new THREE.Group();
-      const phase = stackIndex * 0.58;
-      const y = -3.02 + stackIndex * 0.55;
-      const side = stackIndex % 2 === 0 ? 1 : -1;
-      group.position.set(Math.sin(phase) * 0.026, y, 0.46 + Math.cos(phase) * 0.016);
-      group.rotation.set(0.05 * Math.sin(phase), side * 0.08, 0.03 * Math.cos(phase));
-      group.scale.set(0.96, 1.02, 0.9);
+      const phase = stackIndex * 0.67;
+      const y = -3.08 + stackIndex * 0.66;
+      const side = 1;
+      const sideProfile = 0.32 + Math.sin(phase) * 0.05;
+      group.position.set(0.06 + Math.sin(phase) * 0.034, y, 0.5 + Math.cos(phase) * 0.022);
+      group.rotation.set(0.06 * Math.sin(phase), sideProfile, 0.04 * Math.cos(phase));
+      group.scale.set(1.02, 1.0, 0.92);
       pillarGroup.add(group);
 
-      // 这条主柱负责对齐参考视频的规则脊柱轮廓：中轴连续、骨节间距固定、侧翼只做轻微交替。
-      // 旧随机骨节仍在背后提供体积暗部，但第一眼必须读到这条更规整的骨架。
-      const body = new THREE.Mesh(createVertebraBodyGeometry(stackIndex + 96), makeReferenceSpineMaterial(stackIndex, 0.86));
-      body.scale.set(0.92 + (stackIndex % 3) * 0.025, 1.02, 0.82);
+      // 这条主柱负责对齐参考视频的侧向脊柱轮廓：节距更大，主骨块偏扁，侧突基本统一向左伸出。
+      // 参考不是正面均匀串珠，若继续左右交替会显得像装饰柱而不是录屏里的脊柱雕塑。
+      const body = new THREE.Mesh(createVertebraBodyGeometry(stackIndex + 96), makeReferenceSpineMaterial(stackIndex, 0.82));
+      body.position.set(0.08, 0, 0.02);
+      body.rotation.set(0.02 * Math.sin(phase), 0.08, -0.02 * Math.cos(phase));
+      body.scale.set(1.22 + (stackIndex % 3) * 0.035, 0.92, 0.74);
       body.renderOrder = 5;
       group.add(body);
 
-      const lobeA = new THREE.Mesh(createOrganicLobeGeometry(stackIndex + 140), makeReferenceSpineMaterial(stackIndex + 2, 0.72));
-      lobeA.position.set(-0.44 * side, 0.02, 0.02);
-      lobeA.rotation.set(0.18, 0.16 * side, 0.72 * side);
-      lobeA.scale.set(0.72, 0.42, 0.36);
+      const lobeA = new THREE.Mesh(createOrganicLobeGeometry(stackIndex + 140), makeReferenceSpineMaterial(stackIndex + 2, 0.74));
+      lobeA.position.set(-0.62 * side + Math.sin(phase) * 0.035, -0.06, 0.02);
+      lobeA.rotation.set(0.24, 0.2 * side, 0.34 * side);
+      lobeA.scale.set(1.08, 0.36, 0.34);
       lobeA.renderOrder = 5;
       group.add(lobeA);
 
       const lobeB = new THREE.Mesh(createOrganicLobeGeometry(stackIndex + 168), makeReferenceSpineMaterial(stackIndex + 3, 0.66));
-      lobeB.position.set(0.34 * side, -0.03, -0.18);
-      lobeB.rotation.set(-0.14, -0.22 * side, -0.48 * side);
-      lobeB.scale.set(0.52, 0.32, 0.3);
+      lobeB.position.set(-0.38 * side + Math.cos(phase) * 0.03, -0.2, -0.16);
+      lobeB.rotation.set(-0.1, -0.08 * side, 0.12 * side);
+      lobeB.scale.set(0.62, 0.26, 0.28);
       lobeB.renderOrder = 4;
       group.add(lobeB);
 
       const mouth = new THREE.Mesh(cavityGeometry, deepCavityMaterial.clone());
       const mouthMaterial = mouth.material as THREE.MeshPhysicalMaterial;
       mouthMaterial.depthWrite = false;
-      mouthMaterial.opacity = 0.52;
-      mouth.position.set(0.04 * side, 0.02, 0.36);
-      mouth.rotation.set(0.18, 0.16 * side, 0.22 * side);
-      mouth.scale.set(0.54, 0.18, 0.055);
+      mouthMaterial.opacity = 0.48;
+      mouth.position.set(-0.12 * side, 0.02, 0.42);
+      mouth.rotation.set(0.16, 0.24 * side, 0.14 * side);
+      mouth.scale.set(0.7, 0.15, 0.05);
       mouth.renderOrder = 6;
       group.add(mouth);
 
@@ -1988,9 +2002,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const tendonMaterial = oilBaseMaterial.clone();
     tendonMaterial.color = new THREE.Color("#030508");
     tendonMaterial.emissive = new THREE.Color("#56f4ff");
-    tendonMaterial.emissiveIntensity = 0.008;
-    tendonMaterial.envMapIntensity = 0.62;
-    tendonMaterial.opacity = 0.08;
+    tendonMaterial.emissiveIntensity = 0.004;
+    tendonMaterial.envMapIntensity = 0.34;
+    tendonMaterial.opacity = 0.028;
     tendonMaterial.roughness = 0.78;
     tendonMaterial.transparent = true;
     const spineTendons = Array.from({ length: 5 }, (_, tendonIndex) => {
@@ -2006,6 +2020,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       const geometry = new THREE.TubeGeometry(curve, 112, tendonIndex % 2 === 0 ? 0.023 : 0.018, 10, false);
       const tendon = new THREE.Mesh(geometry, tendonMaterial.clone());
       tendon.renderOrder = 2;
+      // 新的规则主脊柱已经承担连接感，旧 Tube 韧带在对照图里会变成几根生硬黑杆；
+      // 参考视频没有这种直线结构，所以保留资源和动画代码但默认不显示，避免破坏柱体剪影。
+      tendon.visible = false;
       pillarGroup.add(tendon);
       return tendon;
     });
@@ -2201,6 +2218,42 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const columnParticleMaterial = createVolumetricParticleMaterial(0.56);
     const columnParticles = new THREE.Points(columnParticleGeometry, columnParticleMaterial);
     pillarGroup.add(columnParticles);
+
+    const fleckTextures = organicPalette.map((color) => createGlowTexture(color));
+    const spineFlecks = Array.from({ length: 118 }, (_, fleckIndex) => {
+      const texture = fleckTextures[fleckIndex % fleckTextures.length];
+      const material = new THREE.SpriteMaterial({
+        blending: THREE.AdditiveBlending,
+        depthTest: false,
+        depthWrite: false,
+        map: texture,
+        opacity: 0.12 + (fleckIndex % 5) * 0.02,
+        rotation: Math.sin(fleckIndex * 1.9) * Math.PI,
+        transparent: true,
+      });
+      const sprite = new THREE.Sprite(material);
+      const lane = fleckIndex % 7;
+      const y = -2.82 + ((fleckIndex * 0.37) % 5.72);
+      const side = lane < 4 ? -1 : 1;
+      const x = (side < 0 ? -0.22 : 0.18) + Math.sin(fleckIndex * 1.37) * 0.24;
+      const z = 0.68 + Math.cos(fleckIndex * 0.91) * 0.16;
+      const scale = 0.035 + (fleckIndex % 6) * 0.008;
+
+      // 参考柱体表面有很多贴在骨块上的高频青紫/红金碎光，不是空间里均匀漂浮的大粒子。
+      // 这些 sprite 挂在柱体本地坐标里，只做极短的椭圆闪片，补足材质贴图在远景里不够锐的问题。
+      sprite.position.set(x, y, z);
+      sprite.scale.set(scale * (2.8 + (fleckIndex % 4) * 0.5), scale * (0.48 + (fleckIndex % 3) * 0.08), 1);
+      sprite.renderOrder = 9;
+      pillarGroup.add(sprite);
+      return {
+        baseOpacity: 0.12 + (fleckIndex % 5) * 0.02,
+        basePosition: sprite.position.clone(),
+        baseScale: sprite.scale.clone(),
+        material,
+        phase: fleckIndex * 0.47,
+        sprite,
+      };
+    });
 
     const panelMeshes = storyScenes.map((sceneItem, index) => {
       const geometry = new THREE.PlaneGeometry(THREE_PANEL_WIDTH / 245, THREE_PANEL_HEIGHT / 245, 12, 8);
@@ -2414,6 +2467,18 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           material.envMapIntensity = 1.18 + Math.sin(time * 0.3 + segment.phase) * 0.12 + Math.min(0.24, Math.abs(scrollImpulse) * 0.08);
         });
       });
+      spineFlecks.forEach((item, fleckIndex) => {
+        const pulse = 0.62 + Math.sin(time * 1.2 + item.phase) * 0.3 + Math.min(0.32, Math.abs(scrollImpulse) * 0.1);
+        item.material.opacity = item.baseOpacity * pulse;
+        item.material.rotation = Math.sin(item.phase) * Math.PI + Math.sin(time * 0.32 + item.phase) * 0.2 + storyOrbit * 0.08;
+        item.sprite.position.x = item.basePosition.x + Math.sin(time * 0.28 + item.phase) * 0.026;
+        item.sprite.position.y = item.basePosition.y + Math.cos(time * 0.24 + item.phase) * 0.018;
+        item.sprite.scale.set(
+          item.baseScale.x * (0.88 + pulse * 0.22 + (fleckIndex % 3) * 0.035),
+          item.baseScale.y * (0.86 + pulse * 0.18),
+          1
+        );
+      });
       surfaceOilPatches.forEach((item, patchIndex) => {
         const pulse = 0.74 + Math.sin(time * 0.55 + item.phase) * 0.16 + Math.min(0.22, Math.abs(scrollImpulse) * 0.09);
         item.material.opacity = item.opacity * pulse;
@@ -2527,6 +2592,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         material.map?.dispose();
         material.dispose();
       });
+      spineFlecks.forEach((item) => {
+        item.material.dispose();
+      });
+      fleckTextures.forEach((texture) => texture.dispose());
       surfaceOilPatches.forEach((item) => {
         item.material.dispose();
       });
