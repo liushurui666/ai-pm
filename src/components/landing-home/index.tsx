@@ -2525,17 +2525,51 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     pillarGroup.add(referenceSpineGhost);
 
     // 动态短循环来自同一段参考 mp4 的柱体裁切，只提供源视频级的细碎高光和玻璃遮挡微动。
-    // 透明叠加层跟静态参考场共用同一几何尺寸，保证滚轮推进时作为柱体的一部分整体旋转，而不是贴在屏幕上的视频。
-    const referenceSpineMotionMaterial = new THREE.MeshBasicMaterial({
-      alphaTest: 0.02,
+    // 直接用 MeshBasicMaterial 会把参考视频里的暗色玻璃面板也加到页面里，形成“贴了一张矩形视频”的廉价感；
+    // 这里用亮度/饱和度抠像 shader，只留下彩色油膜、高光和边缘粒子，让它更像嵌在柱体里的发光材质。
+    const referenceSpineMotionMaterial = new THREE.ShaderMaterial({
       blending: THREE.AdditiveBlending,
-      color: new THREE.Color("#effcff"),
       depthTest: false,
       depthWrite: false,
-      map: referenceSpineMotionTexture,
-      opacity: 0.16,
       side: THREE.DoubleSide,
       transparent: true,
+      uniforms: {
+        uMap: { value: referenceSpineMotionTexture },
+        uOpacity: { value: 0.15 },
+        uTime: { value: 0 },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D uMap;
+        uniform float uOpacity;
+        uniform float uTime;
+        varying vec2 vUv;
+
+        void main() {
+          vec4 video = texture2D(uMap, vUv);
+          float maxChannel = max(max(video.r, video.g), video.b);
+          float minChannel = min(min(video.r, video.g), video.b);
+          float saturation = maxChannel - minChannel;
+          float luma = dot(video.rgb, vec3(0.2126, 0.7152, 0.0722));
+          float colorKey = smoothstep(0.03, 0.18, saturation);
+          float lightKey = smoothstep(0.075, 0.38, luma);
+          float edgeFade = smoothstep(0.0, 0.08, vUv.x) * smoothstep(0.98, 0.82, vUv.x);
+          float verticalFade = smoothstep(0.02, 0.13, vUv.y) * smoothstep(0.99, 0.86, vUv.y);
+          float foregroundPanelDimming = 1.0 - smoothstep(0.62, 0.86, vUv.x) * 0.58;
+          float scanPulse = 0.92 + sin(uTime * 0.82 + vUv.y * 10.0) * 0.08;
+          float alpha = max(colorKey * 1.08, lightKey * 0.52) * edgeFade * verticalFade * foregroundPanelDimming * uOpacity * scanPulse;
+          vec3 color = pow(video.rgb, vec3(0.82)) * vec3(0.96, 1.08, 1.18);
+
+          gl_FragColor = vec4(color, alpha);
+        }
+      `,
     });
     const referenceSpineMotion = new THREE.Mesh(referenceSpineFieldGeometry, referenceSpineMotionMaterial);
     referenceSpineMotion.position.set(-0.57, 0.06, 1.18);
@@ -2913,10 +2947,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 避免和通用油膜同步后看起来像一层整齐的页面滤镜。
       referenceOilTexture.offset.x = Math.sin(time * 0.06) * 0.04 + storyOrbit * 0.012;
       referenceOilTexture.offset.y = time * 0.046;
-      referenceSpineFieldMaterial.opacity = 0.42 + Math.sin(time * 0.2) * 0.026 + Math.min(0.07, Math.abs(scrollImpulse) * 0.018);
+      referenceSpineFieldMaterial.opacity = 0.47 + Math.sin(time * 0.2) * 0.03 + Math.min(0.08, Math.abs(scrollImpulse) * 0.02);
       referenceSpineGhostMaterial.opacity = 0.13 + Math.cos(time * 0.18) * 0.018 + Math.min(0.045, Math.abs(scrollImpulse) * 0.012);
-      referenceSpineMotionMaterial.opacity = 0.13 + Math.sin(time * 0.31 + 0.4) * 0.018 + Math.min(0.055, Math.abs(scrollImpulse) * 0.015);
-      referenceSpineRimMaterial.opacity = 0.26 + Math.sin(time * 0.22 + 0.9) * 0.032 + Math.min(0.08, Math.abs(scrollImpulse) * 0.02);
+      referenceSpineMotionMaterial.uniforms.uTime.value = time;
+      referenceSpineMotionMaterial.uniforms.uOpacity.value = 0.22 + Math.sin(time * 0.31 + 0.4) * 0.026 + Math.min(0.08, Math.abs(scrollImpulse) * 0.022);
+      referenceSpineRimMaterial.opacity = 0.3 + Math.sin(time * 0.22 + 0.9) * 0.035 + Math.min(0.09, Math.abs(scrollImpulse) * 0.022);
       referenceSpineField.position.x = -0.56 + Math.sin(storyOrbit * 0.32) * 0.028;
       referenceSpineGhost.position.x = -0.28 + Math.cos(storyOrbit * 0.28) * 0.024;
       referenceSpineMotion.position.x = -0.57 + Math.sin(storyOrbit * 0.36 + 0.08) * 0.027;
