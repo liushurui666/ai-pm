@@ -727,6 +727,143 @@ function createOrganicLobeGeometry(seed: number) {
   return geometry;
 }
 
+function createReferenceVertebraCoreGeometry(seed: number) {
+  const phase = seed * 0.57;
+  const radialSegments = 72;
+  const heightSegments = 24;
+  const columns = radialSegments + 1;
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  const angleDistance = (angle: number, target: number) => {
+    const diff = Math.atan2(Math.sin(angle - target), Math.cos(angle - target));
+    return Math.abs(diff);
+  };
+
+  // 参考视频里的主柱骨节比旧的随机椎骨更规整，像被玻璃卡片遮掉中段后的圆润骨块。
+  // 这套几何只给“对齐参考图的主侧影”使用：少高频锯齿、多连续鼓包，让横突能从同一个实体里长出来。
+  for (let row = 0; row <= heightSegments; row += 1) {
+    const v = row / heightSegments;
+    const yNorm = v * 2 - 1;
+    const vertical = Math.abs(yNorm);
+    const envelope = Math.pow(Math.max(0.02, 1 - vertical * vertical), 0.44);
+    const rim = Math.exp(-Math.pow((vertical - 0.7) / 0.18, 2)) * 0.07;
+    const waist = 1 - Math.exp(-Math.pow(yNorm / 0.36, 2)) * 0.1;
+
+    for (let column = 0; column <= radialSegments; column += 1) {
+      const u = column / radialSegments;
+      const theta = u * Math.PI * 2;
+      const rootEnvelope = Math.exp(-Math.pow((yNorm + 0.02) / 0.72, 2));
+      const leftRoot = Math.exp(-Math.pow(angleDistance(theta, Math.PI + Math.sin(phase) * 0.06) / 0.5, 2)) * rootEnvelope * 0.1;
+      const rightRoot = Math.exp(-Math.pow(angleDistance(theta, 0.04 + Math.cos(phase) * 0.05) / 0.45, 2)) * rootEnvelope * 0.08;
+      const rearLift = Math.exp(-Math.pow(angleDistance(theta, -Math.PI / 2 + Math.sin(phase) * 0.08) / 0.5, 2)) * rootEnvelope * 0.06;
+      const frontSaddle = -Math.exp(-Math.pow(angleDistance(theta, Math.PI / 2) / 0.58, 2)) * rootEnvelope * 0.05;
+      const oilFacet = Math.sin(theta * 2.5 + phase + yNorm * 1.2) * 0.012 + Math.cos(theta * 5.5 - phase) * 0.006;
+      const radiusX = Math.max(0.04, 0.27 * envelope * waist + rim + leftRoot + rightRoot + oilFacet);
+      const radiusZ = Math.max(0.04, 0.19 * envelope + rim * 0.42 + rearLift + frontSaddle + oilFacet * 0.55);
+      const x = Math.cos(theta) * radiusX;
+      const y = yNorm * 0.32 + Math.sin(theta * 2 + phase) * 0.006 * (1 - vertical);
+      const z = Math.sin(theta) * radiusZ;
+
+      positions.push(x, y, z);
+      uvs.push(u, v);
+    }
+  }
+
+  for (let row = 0; row < heightSegments; row += 1) {
+    for (let column = 0; column < radialSegments; column += 1) {
+      const current = row * columns + column;
+      const next = current + columns;
+      indices.push(current, next, current + 1, current + 1, next, next + 1);
+    }
+  }
+
+  const bottomCenterIndex = positions.length / 3;
+  positions.push(0, -0.31 + Math.sin(phase) * 0.004, 0);
+  uvs.push(0.5, 0);
+  const topCenterIndex = positions.length / 3;
+  positions.push(0, 0.31 + Math.cos(phase) * 0.004, 0);
+  uvs.push(0.5, 1);
+  for (let column = 0; column < radialSegments; column += 1) {
+    indices.push(bottomCenterIndex, column + 1, column);
+    const topRow = heightSegments * columns;
+    indices.push(topCenterIndex, topRow + column, topRow + column + 1);
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function createReferenceProcessGeometry(seed: number) {
+  const phase = seed * 0.61;
+  const axisSegments = 24;
+  const radialSegments = 26;
+  const columns = radialSegments + 1;
+  const positions: number[] = [];
+  const indices: number[] = [];
+  const uvs: number[] = [];
+  const centerAt = (t: number) => ({
+    x: (t - 0.5) * 0.82,
+    y: -0.032 * t + Math.sin(t * Math.PI * 1.05 + phase) * 0.018,
+    z: Math.cos(t * Math.PI * 0.9 + phase) * 0.018,
+  });
+
+  // 参考柱体的横突末端是圆钝的 club 形，不是旧 lobe 那种带噪声的尖碎触手。
+  // 这里沿 X 轴扫出一根平滑骨突：根部厚、颈部收、末端再鼓起，滚动时看起来像同一根骨柱的侧向结构。
+  for (let axisIndex = 0; axisIndex <= axisSegments; axisIndex += 1) {
+    const t = axisIndex / axisSegments;
+    const center = centerAt(t);
+    const rootMass = Math.exp(-Math.pow((t - 0.28) / 0.22, 2));
+    const clubMass = Math.exp(-Math.pow((t - 0.84) / 0.2, 2));
+    const tendon = Math.pow(Math.sin(Math.PI * Math.min(0.98, Math.max(0.02, t))), 0.58);
+    const radiusBase = 0.035 + tendon * 0.048 + rootMass * 0.05 + clubMass * 0.054;
+
+    for (let radialIndex = 0; radialIndex <= radialSegments; radialIndex += 1) {
+      const u = radialIndex / radialSegments;
+      const angle = u * Math.PI * 2;
+      const softFacet = 1 + Math.sin(angle * 2 + phase + t * 2.4) * 0.045 + Math.cos(angle * 4 - phase) * 0.025;
+      const radiusY = radiusBase * softFacet * (1 + clubMass * 0.14);
+      const radiusZ = radiusBase * (0.78 + rootMass * 0.18) * (1 + Math.cos(angle * 3 + phase) * 0.035);
+      positions.push(center.x, Math.sin(angle) * radiusY + center.y, Math.cos(angle) * radiusZ + center.z);
+      uvs.push(t, u);
+    }
+  }
+
+  for (let axisIndex = 0; axisIndex < axisSegments; axisIndex += 1) {
+    for (let radialIndex = 0; radialIndex < radialSegments; radialIndex += 1) {
+      const current = axisIndex * columns + radialIndex;
+      const next = current + columns;
+      indices.push(current, next, current + 1, current + 1, next, next + 1);
+    }
+  }
+
+  const leftCenter = centerAt(0);
+  const leftCap = positions.length / 3;
+  positions.push(leftCenter.x, leftCenter.y, leftCenter.z);
+  uvs.push(0, 0.5);
+  const rightCenter = centerAt(1);
+  const rightCap = positions.length / 3;
+  positions.push(rightCenter.x, rightCenter.y, rightCenter.z);
+  uvs.push(1, 0.5);
+
+  for (let radialIndex = 0; radialIndex < radialSegments; radialIndex += 1) {
+    indices.push(leftCap, radialIndex + 1, radialIndex);
+    const rightRow = axisSegments * columns;
+    indices.push(rightCap, rightRow + radialIndex, rightRow + radialIndex + 1);
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 function createBoneChipGeometry(seed: number) {
   const phase = seed * 1.13;
   const outlineCount = 9;
@@ -1460,21 +1597,21 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // v55 的挤出多边形虽然能补形，但默认帧会露出平面切片；
       // 这里改回圆润湿润的 mesh 材质，让补形层只像骨体，不像贴片。
       material.alphaMap = null;
-      material.bumpScale = 0.082;
-      material.clearcoat = 0.9;
-      material.clearcoatRoughness = 0.3;
+      material.bumpScale = 0.068;
+      material.clearcoat = 0.94;
+      material.clearcoatRoughness = 0.26;
       material.color = new THREE.Color("#05080b");
       material.depthWrite = false;
       material.emissive = new THREE.Color(organicPalette[accentIndex % organicPalette.length]);
-      material.emissiveIntensity = 0.082 + (accentIndex % 4) * 0.012;
-      material.envMapIntensity = 1.42;
+      material.emissiveIntensity = 0.096 + (accentIndex % 4) * 0.014;
+      material.envMapIntensity = 1.74;
       material.metalness = 0.026;
       material.opacity = opacity;
-      material.roughness = 0.36;
-      material.sheen = 0.82;
+      material.roughness = 0.3;
+      material.sheen = 0.88;
       material.side = THREE.DoubleSide;
-      material.specularIntensity = 0.9;
-      material.thickness = 1.24;
+      material.specularIntensity = 1.08;
+      material.thickness = 1.34;
       material.transmission = 0.07;
       material.transparent = true;
       return material;
@@ -1673,24 +1810,24 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
       // 这条主柱负责对齐参考视频的侧向脊柱轮廓：节距更大，主骨块偏扁，侧突基本统一向左伸出。
       // 参考不是正面均匀串珠，若继续左右交替会显得像装饰柱而不是录屏里的脊柱雕塑。
-      const body = new THREE.Mesh(createVertebraBodyGeometry(stackIndex + 96), makeReferenceSpineMaterial(stackIndex, 0.54));
+      const body = new THREE.Mesh(createReferenceVertebraCoreGeometry(stackIndex + 96), makeReferenceSpineMaterial(stackIndex, 0.4));
       body.position.set(0.08, 0, 0.02);
       body.rotation.set(0.02 * Math.sin(phase), 0.08, -0.02 * Math.cos(phase));
       body.scale.set(1.22 + (stackIndex % 3) * 0.035, 0.92, 0.74);
       body.renderOrder = 5;
       group.add(body);
 
-      const lobeA = new THREE.Mesh(createOrganicLobeGeometry(stackIndex + 140), makeReferenceSpineMaterial(stackIndex + 2, 0.58));
-      lobeA.position.set(-0.62 * side + Math.sin(phase) * 0.035, -0.06, 0.02);
-      lobeA.rotation.set(0.24, 0.2 * side, 0.34 * side);
-      lobeA.scale.set(1.26, 0.34, 0.32);
+      const lobeA = new THREE.Mesh(createReferenceProcessGeometry(stackIndex + 140), makeReferenceSpineMaterial(stackIndex + 2, 0.5));
+      lobeA.position.set(-0.5 * side + Math.sin(phase) * 0.035, -0.06, 0.02);
+      lobeA.rotation.set(0.18, 0.16 * side, 0.28 * side);
+      lobeA.scale.set(0.88, 0.72, 0.58);
       lobeA.renderOrder = 5;
       group.add(lobeA);
 
-      const lobeB = new THREE.Mesh(createOrganicLobeGeometry(stackIndex + 168), makeReferenceSpineMaterial(stackIndex + 3, 0.38));
-      lobeB.position.set(-0.38 * side + Math.cos(phase) * 0.03, -0.2, -0.16);
+      const lobeB = new THREE.Mesh(createReferenceProcessGeometry(stackIndex + 168), makeReferenceSpineMaterial(stackIndex + 3, 0.24));
+      lobeB.position.set(-0.28 * side + Math.cos(phase) * 0.03, -0.2, -0.16);
       lobeB.rotation.set(-0.1, -0.08 * side, 0.12 * side);
-      lobeB.scale.set(0.62, 0.26, 0.28);
+      lobeB.scale.set(0.42, 0.48, 0.42);
       lobeB.renderOrder = 4;
       group.add(lobeB);
 
@@ -1742,26 +1879,26 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       pillarGroup.add(group);
 
       // 参考视频里的柱体是“一个整体侧影被故事卡片切开”，不是每节独立朝不同方向浮动。
-      // v57 放弃平面挤出剪影，改用一个椎骨主体 + 长侧突 + 小下突组合；
-      // 这样默认露出的顶部/底部会有圆润油膜厚度，更接近 mp4 的侧向脊柱雕塑。
-      const sideBody = new THREE.Mesh(createVertebraBodyGeometry(config.accent + 220), makeSourceProfileMaterial(config.accent, 0.62));
+      // v58 继续把参考层从“随机骨节”收敛成专用规则骨块：
+      // 主体用更平滑的椎骨核心，横突用圆钝 club 形扫掠体，避免默认帧出现鱼鳞状尖刺。
+      const sideBody = new THREE.Mesh(createReferenceVertebraCoreGeometry(config.accent + 220), makeSourceProfileMaterial(config.accent, 0.72));
       sideBody.position.set(0.16, 0.02, 0.0);
       sideBody.rotation.set(0.02, 0.16, segmentIndex % 2 === 0 ? 0.02 : -0.02);
-      sideBody.scale.set(0.98, 0.64, 0.54);
+      sideBody.scale.set(1.04, 0.66, 0.58);
       sideBody.renderOrder = 6;
       group.add(sideBody);
 
-      const sideProcess = new THREE.Mesh(createOrganicLobeGeometry(config.accent + 240), makeSourceProfileMaterial(config.accent + 2, 0.6));
+      const sideProcess = new THREE.Mesh(createReferenceProcessGeometry(config.accent + 240), makeSourceProfileMaterial(config.accent + 2, 0.72));
       sideProcess.position.set(-0.42, -0.04, 0.04);
-      sideProcess.rotation.set(0.08, 0.26, 0.1);
-      sideProcess.scale.set(1.64, 0.46, 0.32);
+      sideProcess.rotation.set(0.06, 0.22, 0.08);
+      sideProcess.scale.set(0.96, 1.04, 0.78);
       sideProcess.renderOrder = 7;
       group.add(sideProcess);
 
-      const lowerProcess = new THREE.Mesh(createOrganicLobeGeometry(config.accent + 260), makeSourceProfileMaterial(config.accent + 4, 0.44));
-      lowerProcess.position.set(-0.18, -0.22, -0.04);
-      lowerProcess.rotation.set(-0.08, -0.08, -0.16);
-      lowerProcess.scale.set(0.66, 0.28, 0.22);
+      const lowerProcess = new THREE.Mesh(createReferenceProcessGeometry(config.accent + 260), makeSourceProfileMaterial(config.accent + 4, 0.46));
+      lowerProcess.position.set(-0.22, -0.24, -0.04);
+      lowerProcess.rotation.set(-0.06, -0.06, -0.14);
+      lowerProcess.scale.set(0.46, 0.64, 0.44);
       lowerProcess.renderOrder = 5;
       group.add(lowerProcess);
 
@@ -1822,17 +1959,19 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     });
 
     [
-      { accent: 31, position: new THREE.Vector3(-0.56, 2.2, 0.38), rotation: new THREE.Euler(0.28, 0.34, 0.5), scale: new THREE.Vector3(0.78, 0.46, 0.36) },
-      { accent: 32, position: new THREE.Vector3(0.62, 2.14, 0.54), rotation: new THREE.Euler(0.12, -0.22, -0.06), scale: new THREE.Vector3(0.92, 0.32, 0.32) },
-      { accent: 33, position: new THREE.Vector3(-0.64, -2.36, 0.38), rotation: new THREE.Euler(-0.18, 0.42, 0.62), scale: new THREE.Vector3(1.02, 0.62, 0.48) },
+      { accent: 31, position: new THREE.Vector3(-0.5, 2.2, 0.38), rotation: new THREE.Euler(0.28, 0.34, 0.5), scale: new THREE.Vector3(0.58, 0.72, 0.58) },
+      { accent: 32, position: new THREE.Vector3(0.56, 2.14, 0.54), rotation: new THREE.Euler(0.12, -0.22, -0.06), scale: new THREE.Vector3(0.6, 0.56, 0.52) },
+      { accent: 33, position: new THREE.Vector3(-0.56, -2.36, 0.38), rotation: new THREE.Euler(-0.18, 0.42, 0.62), scale: new THREE.Vector3(0.72, 0.78, 0.62) },
     ].forEach((config) => {
-      const wing = new THREE.Mesh(createOrganicLobeGeometry(config.accent), makeOilMaterial(config.accent));
+      // 卡片上下露出的横向骨片也要和参考主柱保持同一种圆钝语言；
+      // 如果继续使用旧噪声 lobe，会在第一屏边缘出现不属于参考的尖刺轮廓。
+      const wing = new THREE.Mesh(createReferenceProcessGeometry(config.accent), makeOilMaterial(config.accent));
       const wingMaterial = wing.material as THREE.MeshPhysicalMaterial;
-      wingMaterial.emissiveIntensity = 0.052;
+      wingMaterial.emissiveIntensity = 0.044;
       wingMaterial.envMapIntensity = 0.6;
       if (config.accent !== 33) {
         wingMaterial.depthWrite = false;
-        wingMaterial.opacity = 0.42;
+        wingMaterial.opacity = 0.34;
       }
       wing.position.copy(config.position);
       wing.rotation.copy(config.rotation);
@@ -1858,18 +1997,18 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     });
 
     [
-      { accent: 41, position: new THREE.Vector3(0.76, 2.12, 0.78), rotation: new THREE.Euler(0.1, -0.18, -0.02), scale: new THREE.Vector3(0.9, 0.24, 0.28) },
-      { accent: 42, position: new THREE.Vector3(-0.54, 2.08, 0.62), rotation: new THREE.Euler(0.2, 0.44, 0.42), scale: new THREE.Vector3(0.72, 0.28, 0.28) },
-      { accent: 43, position: new THREE.Vector3(0.02, 2.0, 0.9), rotation: new THREE.Euler(0.42, -0.08, 0.02), scale: new THREE.Vector3(0.32, 0.42, 0.28) },
+      { accent: 41, position: new THREE.Vector3(0.68, 2.12, 0.78), rotation: new THREE.Euler(0.1, -0.18, -0.02), scale: new THREE.Vector3(0.56, 0.68, 0.5) },
+      { accent: 42, position: new THREE.Vector3(-0.48, 2.08, 0.62), rotation: new THREE.Euler(0.2, 0.44, 0.42), scale: new THREE.Vector3(0.48, 0.62, 0.48) },
+      { accent: 43, position: new THREE.Vector3(0.02, 2.0, 0.9), rotation: new THREE.Euler(0.42, -0.08, 0.02), scale: new THREE.Vector3(0.32, 0.56, 0.42) },
     ].forEach((config) => {
       // 右侧长骨片和下方小凸起决定参考图的上缘剪影；
-      // 这里用真实 mesh 增加横向尖片，避免上方露出段继续像一团圆滑黑块。
-      const fin = new THREE.Mesh(createOrganicLobeGeometry(config.accent), makeOilMaterial(config.accent));
+      // v58 开始不再用尖噪声 lobe 做前景横片，统一改成圆钝骨突，减少用户指出的“跟参考不是一个东西”的碎片感。
+      const fin = new THREE.Mesh(createReferenceProcessGeometry(config.accent), makeOilMaterial(config.accent));
       const finMaterial = fin.material as THREE.MeshPhysicalMaterial;
-      finMaterial.emissiveIntensity = 0.06;
-      finMaterial.envMapIntensity = 0.68;
+      finMaterial.emissiveIntensity = 0.052;
+      finMaterial.envMapIntensity = 0.72;
       finMaterial.depthWrite = false;
-      finMaterial.opacity = 0.42;
+      finMaterial.opacity = 0.34;
       fin.position.copy(config.position);
       fin.rotation.copy(config.rotation);
       fin.scale.copy(config.scale);
@@ -2061,11 +2200,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       material.clearcoat = 0.58;
       material.depthTest = false;
       material.depthWrite = false;
-      material.emissiveIntensity = 0.058;
-      material.envMapIntensity = 0.86;
-      material.opacity = 0.68;
-      material.roughness = 0.56;
-      material.specularIntensity = 0.38;
+      material.emissiveIntensity = 0.038;
+      material.envMapIntensity = 0.6;
+      material.opacity = 0.38;
+      material.roughness = 0.62;
+      material.specularIntensity = 0.28;
       material.transparent = true;
       mesh.position.copy(config.position);
       mesh.rotation.copy(config.rotation);
@@ -2157,7 +2296,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     fieldMaterial.bumpMap = oilTexture;
     fieldMaterial.bumpScale = 0.035;
     fieldMaterial.depthWrite = false;
-    fieldMaterial.opacity = 0.052;
+    fieldMaterial.opacity = 0.034;
     fieldMaterial.transparent = true;
     const organicField = new MarchingCubes(46, fieldMaterial, true, true, 120000);
     organicField.isolation = 66;
@@ -2325,24 +2464,24 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     pillarGroup.add(columnParticles);
 
     const fleckTextures = organicPalette.map((color) => createGlowTexture(color));
-    const spineFlecks = Array.from({ length: 118 }, (_, fleckIndex) => {
+    const spineFlecks = Array.from({ length: 164 }, (_, fleckIndex) => {
       const texture = fleckTextures[fleckIndex % fleckTextures.length];
       const material = new THREE.SpriteMaterial({
         blending: THREE.AdditiveBlending,
         depthTest: false,
         depthWrite: false,
         map: texture,
-        opacity: 0.12 + (fleckIndex % 5) * 0.02,
+        opacity: 0.095 + (fleckIndex % 5) * 0.018,
         rotation: Math.sin(fleckIndex * 1.9) * Math.PI,
         transparent: true,
       });
       const sprite = new THREE.Sprite(material);
-      const lane = fleckIndex % 7;
-      const y = -2.82 + ((fleckIndex * 0.37) % 5.72);
-      const side = lane < 4 ? -1 : 1;
-      const x = (side < 0 ? -0.22 : 0.18) + Math.sin(fleckIndex * 1.37) * 0.24;
-      const z = 0.68 + Math.cos(fleckIndex * 0.91) * 0.16;
-      const scale = 0.035 + (fleckIndex % 6) * 0.008;
+      const lane = fleckIndex % 9;
+      const y = -2.86 + ((fleckIndex * 0.31) % 5.78);
+      const side = lane < 6 ? -1 : 1;
+      const x = (side < 0 ? -0.34 : 0.12) + Math.sin(fleckIndex * 1.37) * 0.18;
+      const z = 0.74 + Math.cos(fleckIndex * 0.91) * 0.13;
+      const scale = 0.025 + (fleckIndex % 6) * 0.006;
 
       // 参考柱体表面有很多贴在骨块上的高频青紫/红金碎光，不是空间里均匀漂浮的大粒子。
       // 这些 sprite 挂在柱体本地坐标里，只做极短的椭圆闪片，补足材质贴图在远景里不够锐的问题。
@@ -2351,7 +2490,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       sprite.renderOrder = 9;
       pillarGroup.add(sprite);
       return {
-        baseOpacity: 0.12 + (fleckIndex % 5) * 0.02,
+        baseOpacity: 0.095 + (fleckIndex % 5) * 0.018,
         basePosition: sprite.position.clone(),
         baseScale: sprite.scale.clone(),
         material,
@@ -2569,7 +2708,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           const material = mesh.material as THREE.MeshPhysicalMaterial;
           const paletteColor = new THREE.Color(organicPalette[(segmentIndex + meshIndex + activeIndexRef.current) % organicPalette.length]);
           material.emissive.lerp(paletteColor.multiplyScalar(0.078 + Math.sin(time * 0.64 + segment.phase + meshIndex) * 0.018), 0.03);
-          material.envMapIntensity = 1.18 + Math.sin(time * 0.3 + segment.phase) * 0.12 + Math.min(0.24, Math.abs(scrollImpulse) * 0.08);
+          material.envMapIntensity = 1.34 + Math.sin(time * 0.3 + segment.phase) * 0.14 + Math.min(0.26, Math.abs(scrollImpulse) * 0.08);
         });
       });
       sourceProfileSegments.forEach((segment, segmentIndex) => {
@@ -2594,7 +2733,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           const material = mesh.material as THREE.MeshPhysicalMaterial;
           const paletteColor = new THREE.Color(organicPalette[(segmentIndex + meshIndex + activeIndexRef.current) % organicPalette.length]);
           material.emissive.lerp(paletteColor.multiplyScalar(0.074 + Math.sin(time * 0.5 + segment.phase + meshIndex) * 0.014), 0.035);
-          material.envMapIntensity = 1.12 + Math.sin(time * 0.25 + segment.phase) * 0.1 + Math.min(0.22, Math.abs(scrollImpulse) * 0.07);
+          material.envMapIntensity = 1.58 + Math.sin(time * 0.25 + segment.phase) * 0.16 + Math.min(0.28, Math.abs(scrollImpulse) * 0.08);
         });
 
         const notchMaterial = segment.notch.material as THREE.MeshPhysicalMaterial;
