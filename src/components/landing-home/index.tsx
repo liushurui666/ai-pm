@@ -887,6 +887,28 @@ function createPanelTexture(scene: StoryScene) {
     context.fillRect(-radius, -radius, radius * 2, radius * 2);
     context.restore();
   }
+  [
+    { color: "#78efff", x: 580, y: 92, radius: 54, sx: 0.78, sy: 0.5 },
+    { color: "#b58cff", x: 452, y: 146, radius: 76, sx: 1.02, sy: 0.62 },
+    { color: "#f88bd6", x: 540, y: 206, radius: 66, sx: 0.9, sy: 0.58 },
+    { color: "#76f6ec", x: 672, y: 230, radius: 44, sx: 0.72, sy: 0.42 },
+    { color: "#e2bf73", x: 616, y: 330, radius: 58, sx: 1.1, sy: 0.52 },
+  ].forEach((fragment, fragmentIndex) => {
+    // 参考画面里玻璃屏的色斑是几团可辨认的油膜折射，不是平均铺开的粒子。
+    // 这里用更少、更大的局部色块压过均匀纹理，让面板投影向参考帧的“脏玻璃”质感靠拢。
+    const projection = context.createRadialGradient(0, 0, 0, 0, 0, fragment.radius);
+    projection.addColorStop(0, `${fragment.color}a0`);
+    projection.addColorStop(0.22, `${fragment.color}55`);
+    projection.addColorStop(0.58, `${fragment.color}18`);
+    projection.addColorStop(1, `${fragment.color}00`);
+    context.save();
+    context.translate(fragment.x, fragment.y);
+    context.rotate(-0.24 + fragmentIndex * 0.18);
+    context.scale(fragment.sx, fragment.sy);
+    context.fillStyle = projection;
+    context.fillRect(-fragment.radius, -fragment.radius, fragment.radius * 2, fragment.radius * 2);
+    context.restore();
+  });
   for (let index = 0; index < 12; index += 1) {
     const color = index % 4 === 0 ? "#72e9ff" : index % 4 === 1 ? "#bf82ff" : index % 4 === 2 ? "#ff8dda" : "#e5c27b";
     const x = 470 + Math.sin(index * 2.4) * 116;
@@ -923,9 +945,9 @@ function createPanelTexture(scene: StoryScene) {
   drawRoundedRect(context, 24, 24, canvas.width - 48, canvas.height - 48, 54);
   context.fill();
 
-  context.globalAlpha = 0.06;
+  context.globalAlpha = 0.034;
   context.strokeStyle = "#f4ebd0";
-  context.lineWidth = 1.8;
+  context.lineWidth = 1.25;
   for (let index = 0; index < 9; index += 1) {
     context.beginPath();
     context.moveTo(70, 128 + index * 38);
@@ -1020,12 +1042,12 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
   const handleWheel = useCallback((event: WheelEvent<HTMLElement>) => {
     const now = performance.now();
-    const impulse = Math.max(-0.95, Math.min(0.95, event.deltaY / 360));
+    const impulse = Math.max(-1.25, Math.min(1.25, event.deltaY / 280));
 
     // 参考视频里的滚动是“手一推，整个 3D 场域都有惯性”，不是只等分镜切完才动。
     // 所以无论这次 wheel 是否触发场景切换，都先把滚轮力度写进 Three 动画循环；
     // 动画循环会逐帧衰减这个值，让柱体和卡片在触控板连续滑动时有真实跟手感。
-    scrollImpulseRef.current = Math.max(-1.8, Math.min(1.8, scrollImpulseRef.current + impulse));
+    scrollImpulseRef.current = Math.max(-2.4, Math.min(2.4, scrollImpulseRef.current + impulse));
 
     // Active Theory 的 /work 不是原生长页面滚动，而是滚轮推进固定舞台；
     // 这里做一个短锁，避免触控板连续 delta 把故事一下跳完。
@@ -1306,27 +1328,27 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const oilBaseMaterial = new THREE.MeshPhysicalMaterial({
       alphaMap: oilAlphaTexture,
       bumpMap: oilBumpTexture,
-      bumpScale: 0.088,
-      clearcoat: 0.24,
-      clearcoatRoughness: 0.74,
-      color: new THREE.Color("#2d3837"),
+      bumpScale: 0.104,
+      clearcoat: 0.32,
+      clearcoatRoughness: 0.68,
+      color: new THREE.Color("#242d2d"),
       emissive: new THREE.Color("#6e617a"),
-      emissiveIntensity: 0.046,
+      emissiveIntensity: 0.056,
       emissiveMap: oilTexture,
-      envMapIntensity: 0.48,
+      envMapIntensity: 0.68,
       iridescence: 1,
       iridescenceIOR: 1.9,
       iridescenceThicknessRange: [110, 1720],
       map: oilTexture,
       metalness: 0.015,
-      opacity: 0.84,
-      roughness: 0.8,
+      opacity: 0.82,
+      roughness: 0.74,
       roughnessMap: oilBumpTexture,
       sheen: 0.5,
       sheenColor: new THREE.Color("#b59aff"),
       sheenRoughness: 0.82,
       specularColor: new THREE.Color("#c9eaff"),
-      specularIntensity: 0.24,
+      specularIntensity: 0.34,
       thickness: 0.82,
       transmission: 0.18,
       transparent: true,
@@ -1337,8 +1359,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const makeOilMaterial = (accentIndex: number) => {
       const material = oilBaseMaterial.clone();
       material.emissive = new THREE.Color(organicPalette[accentIndex % organicPalette.length]);
-      material.emissiveIntensity = 0.028 + (accentIndex % 4) * 0.004;
-      material.color = new THREE.Color("#2e3937");
+      material.emissiveIntensity = 0.036 + (accentIndex % 4) * 0.006;
+      material.color = new THREE.Color("#24302f");
       return material;
     };
     const cavityGeometry = new THREE.SphereGeometry(0.18, 24, 12);
@@ -1351,6 +1373,18 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       metalness: 0.08,
       opacity: 0.48,
       roughness: 0.9,
+      transparent: true,
+    });
+    const deepCavityMaterial = new THREE.MeshPhysicalMaterial({
+      clearcoat: 0.12,
+      color: new THREE.Color("#020407"),
+      depthWrite: false,
+      emissive: new THREE.Color("#07131a"),
+      emissiveIntensity: 0.014,
+      envMapIntensity: 0.16,
+      metalness: 0.02,
+      opacity: 0.56,
+      roughness: 1,
       transparent: true,
     });
     const cavityMeshes: THREE.Mesh[] = [];
@@ -1491,10 +1525,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       pillarGroup.add(heroShape);
       organicMeshes.push(heroShape);
 
-      const heroMouth = new THREE.Mesh(cavityGeometry, cavityMaterial);
-      heroMouth.position.set(config.position.x + (shapeIndex === 0 ? 0.02 : -0.04), config.position.y + (shapeIndex === 0 ? 0.04 : -0.02), config.position.z + 0.22);
-      heroMouth.rotation.set(0.22, shapeIndex === 0 ? -0.18 : 0.24, shapeIndex === 0 ? 0.08 : -0.08);
-      heroMouth.scale.set(shapeIndex === 0 ? 1.18 : 1.0, 0.34, 0.09);
+      const heroMouth = new THREE.Mesh(cavityGeometry, deepCavityMaterial);
+      heroMouth.position.set(config.position.x + (shapeIndex === 0 ? 0.08 : -0.04), config.position.y + (shapeIndex === 0 ? 0.06 : -0.02), config.position.z + (shapeIndex === 0 ? 0.44 : 0.28));
+      heroMouth.rotation.set(0.2, shapeIndex === 0 ? -0.2 : 0.24, shapeIndex === 0 ? 0.06 : -0.08);
+      heroMouth.scale.set(shapeIndex === 0 ? 1.62 : 1.0, shapeIndex === 0 ? 0.5 : 0.34, 0.08);
       pillarGroup.add(heroMouth);
       cavityMeshes.push(heroMouth);
     });
@@ -1513,6 +1547,58 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       wing.scale.copy(config.scale);
       pillarGroup.add(wing);
       organicMeshes.push(wing);
+    });
+
+    [
+      { position: new THREE.Vector3(-0.34, 2.34, 0.68), rotation: new THREE.Euler(0.14, 0.18, -0.18), scale: new THREE.Vector3(0.58, 0.18, 0.05) },
+      { position: new THREE.Vector3(0.28, 2.12, 0.7), rotation: new THREE.Euler(0.2, -0.18, 0.18), scale: new THREE.Vector3(0.52, 0.16, 0.05) },
+      { position: new THREE.Vector3(-0.14, 1.98, 0.68), rotation: new THREE.Euler(0.22, 0.08, -0.12), scale: new THREE.Vector3(0.42, 0.14, 0.04) },
+    ].forEach((config) => {
+      // 参考柱体上方最有辨识度的是“黑色中空洞”，不是单纯暗色材质。
+      // 黑洞必须藏在油膜体块里，不能像单独贴上去的黑色碎片；因此用压扁椭球埋到前侧深处。
+      const hollow = new THREE.Mesh(cavityGeometry, deepCavityMaterial);
+      hollow.position.copy(config.position);
+      hollow.rotation.copy(config.rotation);
+      hollow.scale.copy(config.scale);
+      hollow.renderOrder = 8;
+      pillarGroup.add(hollow);
+      cavityMeshes.push(hollow);
+    });
+
+    [
+      { accent: 41, position: new THREE.Vector3(0.92, 2.24, 0.82), rotation: new THREE.Euler(0.16, -0.34, -0.08), scale: new THREE.Vector3(1.58, 0.46, 0.44) },
+      { accent: 42, position: new THREE.Vector3(-0.66, 2.14, 0.76), rotation: new THREE.Euler(0.2, 0.44, 0.42), scale: new THREE.Vector3(1.12, 0.44, 0.38) },
+      { accent: 43, position: new THREE.Vector3(0.06, 1.96, 0.94), rotation: new THREE.Euler(0.42, -0.08, 0.02), scale: new THREE.Vector3(0.54, 0.58, 0.4) },
+    ].forEach((config) => {
+      // 右侧长骨片和下方小凸起决定参考图的上缘剪影；
+      // 这里用真实 mesh 增加横向尖片，避免上方露出段继续像一团圆滑黑块。
+      const fin = new THREE.Mesh(createOrganicLobeGeometry(config.accent), makeOilMaterial(config.accent));
+      const finMaterial = fin.material as THREE.MeshPhysicalMaterial;
+      finMaterial.emissiveIntensity = 0.06;
+      finMaterial.envMapIntensity = 0.68;
+      fin.position.copy(config.position);
+      fin.rotation.copy(config.rotation);
+      fin.scale.copy(config.scale);
+      pillarGroup.add(fin);
+      organicMeshes.push(fin);
+    });
+
+    [
+      { accent: 44, position: new THREE.Vector3(0.08, 2.03, 1.02), rotation: new THREE.Euler(0.28, -0.08, 0.12), scale: new THREE.Vector3(0.52, 0.58, 0.44) },
+      { accent: 45, position: new THREE.Vector3(-0.34, 2.34, 1.0), rotation: new THREE.Euler(0.36, 0.16, -0.22), scale: new THREE.Vector3(0.42, 0.46, 0.34) },
+    ].forEach((config) => {
+      // 参考洞口下沿有几颗高亮的蓝紫/青色油膜结节，能把黑洞从一团黑色里“抠”出来。
+      // 这里补两个前景小骨点，位置跟随柱体旋转，默认只做微弱光晕，不承担故事文案。
+      const bead = new THREE.Mesh(createOrganicLobeGeometry(config.accent), makeOilMaterial(config.accent));
+      const beadMaterial = bead.material as THREE.MeshPhysicalMaterial;
+      beadMaterial.emissiveIntensity = 0.08;
+      beadMaterial.envMapIntensity = 0.84;
+      bead.position.copy(config.position);
+      bead.rotation.copy(config.rotation);
+      bead.scale.copy(config.scale);
+      bead.renderOrder = 10;
+      pillarGroup.add(bead);
+      organicMeshes.push(bead);
     });
 
     // 参考视频里的柱体不是只有硬几何边界，玻璃屏前后会看到一层随柱体走的烟熏油膜。
@@ -1587,13 +1673,13 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     fieldMaterial.bumpMap = oilTexture;
     fieldMaterial.bumpScale = 0.035;
     fieldMaterial.depthWrite = false;
-    fieldMaterial.opacity = 0.012;
+    fieldMaterial.opacity = 0.052;
     fieldMaterial.transparent = true;
     const organicField = new MarchingCubes(46, fieldMaterial, true, true, 120000);
     organicField.isolation = 66;
     organicField.position.set(0.02, 0, 0.02);
     organicField.scale.set(1.14, 2.68, 0.66);
-    organicField.visible = false;
+    organicField.visible = true;
     pillarGroup.add(organicField);
 
     const fieldNodes = Array.from({ length: 10 }, (_, nodeIndex) => ({
@@ -1847,16 +1933,16 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       if (Math.abs(progressDelta) < 0.0008) {
         visualProgress += progressDelta;
       } else {
-        visualProgress += progressDelta * 0.1;
+        visualProgress += progressDelta * 0.16;
       }
 
       // 参考 mp4 里滚动时不是单独翻卡片，而是整个中心装置一起换角度。
       // 所以这里用同一个 visualProgress 同时驱动卡片 carousel 和脊柱本体，
       // 保证用户滚轮推进时能看到柱体跟随故事段旋转，而不是固定在原地。
       const scrollImpulse = scrollImpulseRef.current;
-      scrollImpulseRef.current += (0 - scrollImpulseRef.current) * 0.075;
-      const motionProgress = visualProgress + scrollImpulse * 0.34;
-      const storyOrbit = motionProgress * 1.22 + scrollImpulse * 0.34;
+      scrollImpulseRef.current += (0 - scrollImpulseRef.current) * 0.052;
+      const motionProgress = visualProgress + scrollImpulse * 0.58;
+      const storyOrbit = motionProgress * 1.42 + scrollImpulse * 0.48;
       particleMaterial.uniforms.uTime.value = time;
       columnParticleMaterial.uniforms.uTime.value = time;
       liquidColumnMaterial.uniforms.uTime.value = time;
@@ -1905,7 +1991,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
       oilTexture.offset.x = Math.sin(time * 0.045) * 0.035;
       oilTexture.offset.y = time * 0.032;
-      stage.rotation.y = Math.sin(storyOrbit) * 0.06;
+      stage.rotation.y = Math.sin(storyOrbit) * 0.1;
       particles.rotation.y -= 0.0009;
       particles.rotation.z = Math.sin(time * 0.18) * 0.06;
       liquidColumn.rotation.y = Math.sin(time * 0.2) * 0.18;
@@ -1913,10 +1999,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       liquidColumn.scale.z = 1 + Math.cos(time * 0.48) * 0.035;
       spine.rotation.x += 0.003;
       spine.rotation.y += 0.006;
-      pillarGroup.position.x = -0.1 + Math.sin(storyOrbit) * 0.38 + scrollImpulse * 0.075;
-      pillarGroup.position.z = -0.38 + Math.cos(storyOrbit) * 0.16;
-      pillarGroup.rotation.y = -0.04 - storyOrbit * 1.38;
-      pillarGroup.rotation.x = Math.sin(storyOrbit * 0.72) * 0.12 + scrollImpulse * 0.052;
+      pillarGroup.position.x = -0.1 + Math.sin(storyOrbit) * 0.55 + scrollImpulse * 0.12;
+      pillarGroup.position.z = -0.38 + Math.cos(storyOrbit) * 0.24;
+      pillarGroup.rotation.y = -0.04 - storyOrbit * 1.72;
+      pillarGroup.rotation.x = Math.sin(storyOrbit * 0.72) * 0.16 + scrollImpulse * 0.08;
       pillarShell.scale.x = 1 + Math.sin(time * 1.3) * 0.035;
       pillarShell.scale.z = 1 + Math.cos(time * 1.1) * 0.035;
       pillarCore.scale.x = 1 + Math.sin(time * 1.9) * 0.09;
@@ -2051,6 +2137,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       });
       cavityGeometry.dispose();
       cavityMaterial.dispose();
+      deepCavityMaterial.dispose();
       oilBaseMaterial.dispose();
       oilTexture.dispose();
       oilBumpTexture.dispose();
