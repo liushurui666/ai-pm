@@ -1,52 +1,53 @@
 # Landing 3D Spine Design QA
 
 - source visual truth path: `/tmp/ai-pm-video-reference/frame-02.png`
-- implementation screenshot path: `/tmp/ai-pm-exact-spine/default-v31.png`
+- implementation screenshot path: `/tmp/ai-pm-exact-spine/default-v35.png`
 - viewport: 1920x1080 desktop, 390x844 mobile
-- state: unauthenticated landing page, default story frame; scroll state captured after one wheel gesture
-- full-view comparison evidence: `/tmp/ai-pm-exact-spine/crop-compare-v31.png`
-- focused region comparison evidence: `/tmp/ai-pm-exact-spine/motion-strip-v31.png`
+- state: unauthenticated landing page default frame; scroll state captured after one wheel gesture
+- full-view comparison evidence: `/tmp/ai-pm-exact-spine/crop-compare-v35.png`
+- focused region comparison evidence: `/tmp/ai-pm-exact-spine/motion-strip-v35.png`
 - final result: blocked
 
 ## Findings
 
 - [P1] 柱体仍未达到参考 mp4 的完全一致
-  Location: `src/components/landing-home/index.tsx` Three.js spine geometry.
-  Evidence: `/tmp/ai-pm-exact-spine/crop-compare-v31.png` shows v31 moves the pillar toward a smokier translucent surface with alpha-map breakups and internal veil layers. The source frame still has a more natural bone-like top silhouette and stronger blue/purple/gold oil-film patching on the exposed upper vertebra.
-  Impact: user explicitly requires the pillar to match the video with no visible gap, so this remains a blocking fidelity issue.
-  Fix: next pass should tune the exposed top vertebra silhouette and recover clustered oil-film highlights without returning to the toy-like glossy look.
+  Location: `src/components/landing-home/index.tsx` Three.js spine geometry and material.
+  Evidence: `/tmp/ai-pm-exact-spine/crop-compare-v35.png` shows v35 has a wider exposed top/bottom bone mass, darker smoky material, and stronger follow-along oil patches than v31. The reference still has a more natural vertebra silhouette, cleaner hollow shapes, and brighter cyan/purple/gold oil-film fragments on the exposed upper bone.
+  Impact: the user explicitly requires the pillar to be identical to the provided video, so the remaining silhouette/material drift is still blocking.
+  Fix: tune the exposed top bone from the reference frame more precisely, especially the black hollow center, the right-side protruding fin, and the color-fragment placement.
 
-- [P1] 卡片柱体投影仍不是参考的物理融合感
+- [P1] Glass-screen projection still lacks source-level physical refraction
   Location: generated panel texture in `createPanelTexture`.
-  Evidence: v31 replaces much of the evenly distributed dotted projection with larger clustered haze, but the source card still has sharper cyan/purple oil patches and more believable refraction from the pillar behind the glass.
-  Impact: the foreground screen still reveals the implementation as a procedural approximation.
-  Fix: keep the clustered approach, but add sharper local oil-film patches around the upper center and right-center of the panel.
+  Evidence: v35 improves the central smoky projection and keeps the card warm/dense, but the source screen has sharper, more organic oil-film patches over the title area and a different glass grain.
+  Impact: the foreground screen still reads as a procedural approximation next to the source capture.
+  Fix: create a more source-shaped procedural projection mask with larger clustered cyan/purple fragments and less uniform horizontal line texture.
 
-- [P2] 滚动联动已接入中心装置，但时间曲线仍需按 mp4 微调
+- [P2] Scroll linkage is materially improved but not frame-matched
   Location: wheel/touch handlers and animation loop.
-  Evidence: `/tmp/ai-pm-exact-spine/motion-strip-v31.png` shows default静止、滚动瞬间、滚动后 3 个状态里柱体和故事卡片同步旋转/移位；v31 keeps the stronger v30 scroll coupling while adding a softer translucent pillar layer.
-  Impact: the main interaction problem is materially improved, but the reference video's carousel arc still feels more cinematic.
-  Fix: compare against `/tmp/ai-pm-video-reference/motion-contact-sheet.png` and tune inertia/settle timing frame by frame.
+  Evidence: `/tmp/ai-pm-exact-spine/motion-strip-v35.png` shows the default frame, scroll impulse, and settled frame all move the pillar and carousel together. The overall arc is still not a frame-perfect match to the reference mp4.
+  Impact: the main interaction is now aligned with the requested behavior, but the timing/camera curve still needs fine tuning.
+  Fix: use the mp4 motion contact sheet to tune camera offset, carousel radius, and pillar rotation by frame.
 
 ## Required Fidelity Surfaces
 
-- Fonts and typography: project text intentionally remains AI PM copy; not judged as a blocker for the user's pillar-specific request.
-- Spacing and layout rhythm: desktop and mobile screenshots show no obvious overflow; main card placement remains aligned with the reference composition.
-- Colors and visual tokens: v31 reduces mirror-like toy highlights and increases smoky opacity variation, but now needs more source-like cyan/purple/gold oil patches on the exposed top vertebra.
-- Image quality and asset fidelity: source is a video frame; implementation remains procedural Three.js as requested. The dynamic pillar is real geometry, not a static screenshot.
-- Copy and content: product-specific labels remain AI PM rather than the source site's portfolio text by design.
+- Fonts and typography: AI PM product copy intentionally remains product-specific; typography is not the blocker for this pillar-focused request.
+- Spacing and layout rhythm: desktop and mobile captures show no new overflow from the added hero bone shapes; main card remains aligned with the scene.
+- Colors and visual tokens: v35 restores darker smoky material and adds stronger exposed oil patches, but source-like color fragments are still not bright or naturally placed enough.
+- Image quality and asset fidelity: implementation remains procedural Three.js geometry/material/texture as requested, not a static screenshot. The current procedural result still falls short of the visual target.
+- Copy and content: AI PM labels remain intentionally different from the source portfolio page.
 
 ## Patches Made Since Previous QA Pass
 
-- Added wheel/touch impulse into the Three.js animation loop so pillar and cards react during scroll, not only after scene index changes.
-- Reworked vertebra body geometry again for v30: 9 rounder chunks became 8 longer, tighter, more continuous spine segments.
-- Added a v31 alpha map for smoky broken opacity on the pillar surface.
-- Added pillar-local veil sprites so the translucent haze rotates with the column instead of sitting as a page background.
-- Replaced evenly scattered panel speckles with clustered oil-film haze and reduced pillar glint count to avoid glossy toy highlights.
-- Captured desktop default, scroll impulse, scroll settled, mobile, and side-by-side comparison screenshots for v31.
+- Added procedural oil-patch texture and pillar-local patch sprites that rotate with the spine.
+- Reduced the smooth MarchingCubes field so the center no longer collapses into a continuous black pipe.
+- Added larger top/bottom hero vertebra shapes and side wings to make the exposed pillar read as one connected sculpture through the glass card.
+- Darkened and roughened the oil material while preserving animated light, texture offset, and scroll-driven movement.
+- Strengthened scroll coupling so wheel/touch progress drives both the glass carousel and the pillar orientation.
+- Captured desktop default, scroll impulse, scroll settled, mobile, side-by-side crop, and motion strip screenshots for v35.
 
 ## Implementation Checklist
 
-- Keep v31 screenshots as the current QA baseline.
-- For stricter matching, compare additional mp4 frames and tune the silhouette frame by frame.
+- Keep v35 as the current evidence baseline.
+- Continue with a source-frame-specific exposed-top silhouette pass before claiming exact match.
+- Preserve the current scroll-coupled motion behavior when making the next fidelity pass.
 - Keep `pnpm lint`, `pnpm build`, and visual comparison as blocking checks before handoff.
