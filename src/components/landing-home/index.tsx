@@ -532,6 +532,90 @@ function createReferenceOilFilmTexture() {
   return texture;
 }
 
+function createReferenceSpineSubjectMaskTexture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 1024;
+  const context = canvas.getContext("2d");
+
+  if (context) {
+    context.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 源视频主体裁切里仍然带着参考站前景玻璃卡片的右侧矩形边。
+    // 这张 alpha 遮罩只保留左侧规整脊柱和卡片压住柱体时的少量折射，
+    // 让视频层参与“实体柱体成型”，而不是在 Three 场景里露出一张平面视频的边界。
+    for (let segmentIndex = 0; segmentIndex < 13; segmentIndex += 1) {
+      const centerY = 56 + segmentIndex * 78 + Math.sin(segmentIndex * 1.27) * 12;
+      const centerX = 86 + Math.sin(segmentIndex * 0.91) * 10;
+      const radiusX = 64 + (segmentIndex % 4) * 6;
+      const radiusY = 74 + (segmentIndex % 5) * 8;
+      const alpha = segmentIndex <= 1 || segmentIndex >= 11 ? 0.72 : 0.94;
+      const gradient = context.createRadialGradient(centerX, centerY, 0, centerX, centerY, radiusY);
+      gradient.addColorStop(0, `rgba(255,255,255,${alpha})`);
+      gradient.addColorStop(0.5, "rgba(255,255,255,0.62)");
+      gradient.addColorStop(1, "rgba(255,255,255,0)");
+      context.save();
+      context.translate(centerX, centerY);
+      context.rotate(-0.08 + Math.sin(segmentIndex * 1.9) * 0.22);
+      context.scale(radiusX / radiusY, 1);
+      context.fillStyle = gradient;
+      context.fillRect(-radiusY, -radiusY, radiusY * 2, radiusY * 2);
+      context.restore();
+    }
+
+    context.globalCompositeOperation = "source-over";
+    const spineBand = context.createLinearGradient(0, 0, canvas.width, 0);
+    spineBand.addColorStop(0, "rgba(255,255,255,0)");
+    spineBand.addColorStop(0.08, "rgba(255,255,255,0.62)");
+    spineBand.addColorStop(0.28, "rgba(255,255,255,0.96)");
+    spineBand.addColorStop(0.5, "rgba(255,255,255,0.78)");
+    spineBand.addColorStop(0.66, "rgba(255,255,255,0.28)");
+    spineBand.addColorStop(0.84, "rgba(255,255,255,0)");
+    context.globalCompositeOperation = "destination-in";
+    context.fillStyle = spineBand;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
+    const verticalFade = context.createLinearGradient(0, 0, 0, canvas.height);
+    verticalFade.addColorStop(0, "rgba(255,255,255,0)");
+    verticalFade.addColorStop(0.055, "rgba(255,255,255,0.78)");
+    verticalFade.addColorStop(0.15, "rgba(255,255,255,1)");
+    verticalFade.addColorStop(0.88, "rgba(255,255,255,1)");
+    verticalFade.addColorStop(0.975, "rgba(255,255,255,0)");
+    context.fillStyle = verticalFade;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
+    // 参考柱体边缘不是整齐裁切线，而是被暗场和玻璃折射吃掉。
+    // 用少量 subtract 形状打掉上下和右侧硬边，避免再次出现 v74 的竖向视频边。
+    context.globalCompositeOperation = "destination-out";
+    for (let biteIndex = 0; biteIndex < 22; biteIndex += 1) {
+      const x = 144 + ((Math.sin(biteIndex * 2.41) + 1) / 2) * 88;
+      const y = 34 + ((Math.cos(biteIndex * 3.17) + 1) / 2) * 956;
+      const radiusX = 22 + (biteIndex % 5) * 9;
+      const radiusY = 34 + (biteIndex % 7) * 11;
+      const bite = context.createRadialGradient(x, y, 0, x, y, radiusY);
+      bite.addColorStop(0, "rgba(0,0,0,0.42)");
+      bite.addColorStop(0.52, "rgba(0,0,0,0.16)");
+      bite.addColorStop(1, "rgba(0,0,0,0)");
+      context.save();
+      context.translate(x, y);
+      context.rotate(Math.sin(biteIndex * 1.3) * Math.PI);
+      context.scale(radiusX / radiusY, 1);
+      context.fillStyle = bite;
+      context.fillRect(-radiusY, -radiusY, radiusY * 2, radiusY * 2);
+      context.restore();
+    }
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.generateMipmaps = false;
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearFilter;
+  texture.wrapS = THREE.ClampToEdgeWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.needsUpdate = true;
+  return texture;
+}
+
 function createOilBumpTexture() {
   const canvas = document.createElement("canvas");
   canvas.width = 512;
@@ -1329,17 +1413,21 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
   }, [goToScene]);
 
   const handleWheel = useCallback((event: WheelEvent<HTMLElement>) => {
+    // 首页是固定视口的 3D 故事舞台，滚轮应该驱动场景状态而不是让页面原生滚动；
+    // 不阻止默认滚动时，触控板会把 Three 动画和浏览器滚动混在一起，柱体跟手感会被削弱。
+    event.preventDefault();
+
     const now = performance.now();
-    const impulse = Math.max(-1.25, Math.min(1.25, event.deltaY / 280));
+    const impulse = Math.max(-1.55, Math.min(1.55, event.deltaY / 240));
 
     // 参考视频里的滚动是“手一推，整个 3D 场域都有惯性”，不是只等分镜切完才动。
     // 所以无论这次 wheel 是否触发场景切换，都先把滚轮力度写进 Three 动画循环；
     // 动画循环会逐帧衰减这个值，让柱体和卡片在触控板连续滑动时有真实跟手感。
-    scrollImpulseRef.current = Math.max(-2.4, Math.min(2.4, scrollImpulseRef.current + impulse));
+    scrollImpulseRef.current = Math.max(-3.1, Math.min(3.1, scrollImpulseRef.current + impulse));
 
     // Active Theory 的 /work 不是原生长页面滚动，而是滚轮推进固定舞台；
     // 这里做一个短锁，避免触控板连续 delta 把故事一下跳完。
-    if (Math.abs(event.deltaY) < 28 || now - wheelLockRef.current < 620) {
+    if (Math.abs(event.deltaY) < 28 || now - wheelLockRef.current < 560) {
       return;
     }
 
@@ -1607,6 +1695,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
     const oilTexture = createOilSlickTexture();
     const referenceOilTexture = createReferenceOilFilmTexture();
+    const referenceSpineSubjectMaskTexture = createReferenceSpineSubjectMaskTexture();
     const referenceSpineFieldTexture = new THREE.TextureLoader().load("/landing/reference-spine-field-wide-v67.png");
     const referenceSpineRimTexture = new THREE.TextureLoader().load("/landing/reference-spine-rim-wide-v67.png");
     // 参考视频里的柱体默认并不是推进故事线，而是有细密的油膜/粒子呼吸。
@@ -1639,6 +1728,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const oilPatchTexture = createOilPatchTexture();
     oilTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     referenceOilTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    referenceSpineSubjectMaskTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     referenceSpineFieldTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     referenceSpineFieldTexture.colorSpace = THREE.SRGBColorSpace;
     referenceSpineRimTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -2598,14 +2688,16 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     // 从而减少“程序化骨节 + 一层光效”的割裂感，更接近用户要求的同一根规整油膜柱体。
     const referenceSpineSubjectGeometry = new THREE.PlaneGeometry(1.24, 6.22, 1, 1);
     const referenceSpineSubjectMaterial = new THREE.ShaderMaterial({
-      blending: THREE.AdditiveBlending,
+      blending: THREE.NormalBlending,
       depthTest: false,
       depthWrite: false,
       side: THREE.DoubleSide,
       transparent: true,
       uniforms: {
         uMap: { value: referenceSpineSubjectTexture },
-        uOpacity: { value: 0.38 },
+        uMask: { value: referenceSpineSubjectMaskTexture },
+        uOpacity: { value: 0.72 },
+        uScroll: { value: 0 },
         uTime: { value: 0 },
       },
       vertexShader: `
@@ -2618,24 +2710,33 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       `,
       fragmentShader: `
         uniform sampler2D uMap;
+        uniform sampler2D uMask;
         uniform float uOpacity;
+        uniform float uScroll;
         uniform float uTime;
         varying vec2 vUv;
 
         void main() {
           vec4 video = texture2D(uMap, vUv);
+          vec4 organicMaskSample = texture2D(uMask, vUv);
           float maxChannel = max(max(video.r, video.g), video.b);
           float minChannel = min(min(video.r, video.g), video.b);
           float saturation = maxChannel - minChannel;
           float luma = dot(video.rgb, vec3(0.2126, 0.7152, 0.0722));
-          float chromaMatte = smoothstep(0.026, 0.15, saturation);
-          float lumaMatte = smoothstep(0.045, 0.3, luma);
-          float edgeFade = smoothstep(0.035, 0.18, vUv.x) * smoothstep(0.96, 0.64, vUv.x);
-          float verticalFade = smoothstep(0.01, 0.09, vUv.y) * smoothstep(1.0, 0.88, vUv.y);
-          float rightPanelCull = 1.0 - smoothstep(0.48, 0.82, vUv.x) * 0.9;
-          float scanPulse = 0.94 + sin(uTime * 0.7 + vUv.y * 12.0) * 0.06;
-          float alpha = max(chromaMatte, lumaMatte * 0.58) * edgeFade * verticalFade * rightPanelCull * scanPulse * uOpacity;
-          vec3 color = pow(video.rgb, vec3(0.78)) * vec3(1.06, 1.12, 1.22);
+          float organicMask = organicMaskSample.a;
+          float bodyMatte = smoothstep(0.018, 0.12, luma + saturation * 0.48);
+          float chromaMatte = smoothstep(0.026, 0.18, saturation);
+          float lumaMatte = smoothstep(0.04, 0.34, luma);
+          float edgeFade = smoothstep(0.015, 0.12, vUv.x) * smoothstep(0.92, 0.62, vUv.x);
+          float verticalFade = smoothstep(0.01, 0.075, vUv.y) * smoothstep(1.0, 0.9, vUv.y);
+          float rightPanelCull = 1.0 - smoothstep(0.5, 0.84, vUv.x) * 0.78;
+          float scrollBreath = 1.0 + min(0.16, abs(uScroll) * 0.05);
+          float scanPulse = 0.94 + sin(uTime * 0.7 + vUv.y * 12.0 + uScroll * 0.8) * 0.06;
+          float alpha = max(bodyMatte, max(chromaMatte * 0.86, lumaMatte * 0.52)) * organicMask * edgeFade * verticalFade * rightPanelCull * scanPulse * scrollBreath * uOpacity;
+          vec3 darkBody = video.rgb * vec3(0.68, 0.78, 0.96);
+          vec3 oilHighlight = pow(video.rgb, vec3(0.72)) * vec3(1.06, 1.14, 1.26);
+          vec3 color = mix(darkBody, oilHighlight, smoothstep(0.045, 0.22, saturation + luma * 0.28));
+          color += vec3(0.03, 0.055, 0.08) * bodyMatte;
 
           gl_FragColor = vec4(color, alpha);
         }
@@ -2962,9 +3063,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 所以这里用同一个 visualProgress 同时驱动卡片 carousel 和脊柱本体，
       // 保证用户滚轮推进时能看到柱体跟随故事段旋转，而不是固定在原地。
       const scrollImpulse = scrollImpulseRef.current;
-      scrollImpulseRef.current += (0 - scrollImpulseRef.current) * 0.052;
-      const motionProgress = visualProgress + scrollImpulse * 0.58;
-      const storyOrbit = motionProgress * 1.68 + scrollImpulse * 0.62;
+      scrollImpulseRef.current += (0 - scrollImpulseRef.current) * 0.046;
+      const scrollFollow = Math.max(-1.9, Math.min(1.9, scrollImpulse));
+      const motionProgress = visualProgress + scrollFollow * 0.76;
+      const storyOrbit = motionProgress * 1.74 + scrollFollow * 0.92;
       particleMaterial.uniforms.uTime.value = time;
       columnParticleMaterial.uniforms.uTime.value = time;
       liquidColumnMaterial.uniforms.uTime.value = time;
@@ -3022,12 +3124,17 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceSpineMotionMaterial.uniforms.uTime.value = time;
       referenceSpineMotionMaterial.uniforms.uOpacity.value = 0.22 + Math.sin(time * 0.31 + 0.4) * 0.026 + Math.min(0.08, Math.abs(scrollImpulse) * 0.022);
       referenceSpineSubjectMaterial.uniforms.uTime.value = time;
-      referenceSpineSubjectMaterial.uniforms.uOpacity.value = 0.38 + Math.sin(time * 0.26 + 0.7) * 0.028 + Math.min(0.075, Math.abs(scrollImpulse) * 0.02);
+      referenceSpineSubjectMaterial.uniforms.uScroll.value = scrollFollow;
+      referenceSpineSubjectMaterial.uniforms.uOpacity.value = 0.68 + Math.sin(time * 0.26 + 0.7) * 0.034 + Math.min(0.11, Math.abs(scrollFollow) * 0.028);
       referenceSpineRimMaterial.opacity = 0.3 + Math.sin(time * 0.22 + 0.9) * 0.035 + Math.min(0.09, Math.abs(scrollImpulse) * 0.022);
       referenceSpineField.position.x = -0.56 + Math.sin(storyOrbit * 0.32) * 0.028;
       referenceSpineGhost.position.x = -0.28 + Math.cos(storyOrbit * 0.28) * 0.024;
       referenceSpineMotion.position.x = -0.57 + Math.sin(storyOrbit * 0.36 + 0.08) * 0.027;
-      referenceSpineSubject.position.x = -0.86 + Math.sin(storyOrbit * 0.38 + 0.1) * 0.024;
+      referenceSpineSubject.position.x = -0.86 + Math.sin(storyOrbit * 0.38 + 0.1) * 0.034 + scrollFollow * 0.046;
+      referenceSpineSubject.position.z = 1.34 + Math.cos(storyOrbit * 0.34 + 0.2) * 0.03 + Math.abs(scrollFollow) * 0.018;
+      referenceSpineSubject.rotation.y = -0.078 + Math.sin(storyOrbit * 0.46) * 0.035 + scrollFollow * 0.045;
+      referenceSpineSubject.rotation.z = 0.012 + Math.sin(storyOrbit * 0.32) * 0.012 + scrollFollow * 0.018;
+      referenceSpineSubject.scale.set(1 + Math.min(0.06, Math.abs(scrollFollow) * 0.02), 1 + Math.min(0.035, Math.abs(scrollFollow) * 0.012), 1);
       referenceSpineRim.position.x = -0.58 + Math.sin(storyOrbit * 0.34 + 0.18) * 0.026;
       stage.rotation.y = Math.sin(storyOrbit) * 0.1;
       particles.rotation.y -= 0.0009;
@@ -3038,9 +3145,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       spine.rotation.x += 0.003;
       spine.rotation.y += 0.006;
       pillarGroup.position.x = -0.98 + Math.sin(storyOrbit) * 1.06 + scrollImpulse * 0.24;
+      pillarGroup.position.y = -0.02 + Math.sin(storyOrbit * 0.46) * 0.055 - scrollFollow * 0.055;
       pillarGroup.position.z = -0.34 + Math.cos(storyOrbit) * 0.34;
       pillarGroup.rotation.y = -0.14 - storyOrbit * 2.62;
       pillarGroup.rotation.x = Math.sin(storyOrbit * 0.72) * 0.24 + scrollImpulse * 0.14;
+      pillarGroup.rotation.z = Math.sin(storyOrbit * 0.54) * 0.08 + scrollFollow * 0.06;
       pillarShell.scale.x = 1 + Math.sin(time * 1.3) * 0.035;
       pillarShell.scale.z = 1 + Math.cos(time * 1.1) * 0.035;
       pillarCore.scale.x = 1 + Math.sin(time * 1.9) * 0.09;
@@ -3178,17 +3287,19 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const targetScale = offset === 0 ? 1.14 : Math.max(0.52, 0.78 - absOffset * 0.12);
         const targetOpacity = offset === 0 ? 0.975 : Math.max(0.06, 0.2 - absOffset * 0.075);
 
-        mesh.position.x += (targetX - mesh.position.x) * 0.065;
-        mesh.position.y += (targetY - mesh.position.y) * 0.065;
-        mesh.position.z += (targetZ - mesh.position.z) * 0.065;
-        mesh.rotation.y += ((-carouselAngle * 0.9 - 0.04) - mesh.rotation.y) * 0.075;
-        mesh.rotation.x += ((offset === 0 ? -0.018 : 0.018 * Math.sign(offset)) - mesh.rotation.x) * 0.075;
-        mesh.scale.x += (targetScale - mesh.scale.x) * 0.07;
-        mesh.scale.y += (targetScale - mesh.scale.y) * 0.07;
+        // 滚动宣传效果必须像参考视频一样“卡片和中轴装置一起被推着走”；
+        // 这里提高 carousel 的追赶速度，让用户手势后的第一帧就能看到玻璃屏和柱体同步换面。
+        mesh.position.x += (targetX - mesh.position.x) * 0.098;
+        mesh.position.y += (targetY - mesh.position.y) * 0.098;
+        mesh.position.z += (targetZ - mesh.position.z) * 0.098;
+        mesh.rotation.y += ((-carouselAngle * 0.9 - 0.04) - mesh.rotation.y) * 0.11;
+        mesh.rotation.x += ((offset === 0 ? -0.018 : 0.018 * Math.sign(offset)) - mesh.rotation.x) * 0.11;
+        mesh.scale.x += (targetScale - mesh.scale.x) * 0.092;
+        mesh.scale.y += (targetScale - mesh.scale.y) * 0.092;
         mesh.renderOrder = offset === 0 ? 8 : Math.max(1, 5 - absOffset);
 
         const material = mesh.material as THREE.MeshBasicMaterial;
-        material.opacity += (targetOpacity - material.opacity) * 0.08;
+        material.opacity += (targetOpacity - material.opacity) * 0.108;
       });
 
       renderer.render(scene, camera);
@@ -3265,6 +3376,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceSpineSubjectMaterial.dispose();
       referenceSpineRimMaterial.dispose();
       referenceSpineFieldTexture.dispose();
+      referenceSpineSubjectMaskTexture.dispose();
       referenceSpineMotionTexture.dispose();
       referenceSpineSubjectTexture.dispose();
       referenceSpineMotionVideo.pause();
