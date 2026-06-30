@@ -70,7 +70,7 @@ const ACTIVE_THEORY_WORK_HOGWARTS_LOGO_PATH = "/landing/active-theory-hogwarts-l
 const STORY_WORK_TRACK_STEP = THREE.MathUtils.degToRad(50);
 const STORY_WORK_ITEM_REPEAT = 3;
 const STORY_WORK_DOM_Y_STEP = 152;
-const STORY_WORK_DOM_LANE_X = 34;
+const STORY_WORK_DOM_LANE_X = 196;
 const STORY_WORK_WEBGL_Y_STEP = 0.78;
 
 function createSolidDataTexture(r: number, g: number, b: number) {
@@ -169,17 +169,16 @@ function getInfiniteStorySlotOffset(slotIndex: number, progress: number, length 
 }
 
 function getStoryWorkItemLane(slotIndex: number) {
-  // Active Theory 的 `positionViews()` 会把 15 个 WorkItem 固定在一圈 target 上，
-  // 滚动时真正变化的是相机 target，而不是每张卡在世界坐标里左右游走。
-  // AI PM 当前固定相机/固定柱体，因此把“绕圈”压缩成每个 slot 固定的小横向层级；
-  // 横向值只由 slot 决定，不再由滚动 progress 决定，向下滚时视觉就是沿 y 轴穿过。
-  const sourceIndex = slotIndex % storyScenes.length;
-  const angle = -sourceIndex * STORY_WORK_TRACK_STEP;
+  // Active Theory 源码的 WorkItems 不是 5 张业务卡复用文案，而是 15 个真实 view：
+  // `positionViews()` 从 angle=0 开始每张相差 50deg，固定在一圈 target 上。
+  // 这里同样让 15 个 slot 都拥有自己的环形 lane；为了锁住 AI PM 的柱体中轴，只把这组
+  // lane 用在卡片自身的 x/z/rotation，不再把相机或柱体整体推向左右。
+  const angle = -Math.PI / 2 - slotIndex * STORY_WORK_TRACK_STEP;
 
   return {
     x: Math.cos(angle) * STORY_WORK_DOM_LANE_X,
-    z: Math.sin(angle) * 26,
-    rotationY: Math.sin(angle) * 0.34,
+    z: Math.sin(angle) * 74,
+    rotationY: Math.cos(angle) * 0.48,
   };
 }
 
@@ -230,13 +229,13 @@ function getStoryWorkItemWebGLLayout(slotIndex: number, offset: number) {
     absOffset,
     focus,
     trackWindow,
-    x: 0.08 + laneRatio * 0.11,
+    x: 0.1 + laneRatio * 0.92,
     y: 0.12 - offset * STORY_WORK_WEBGL_Y_STEP,
-    z: 1.42 + lane.z * 0.004 + focus * 0.5 - absOffset * 0.062,
+    z: 1.42 + lane.z * 0.007 + focus * 0.58 - absOffset * 0.066,
     rotationX: THREE.MathUtils.clamp(offset * -0.052, -0.2, 0.2),
-    rotationY: -0.08 + lane.rotationY * 0.44 + THREE.MathUtils.clamp(offset * -0.105, -0.34, 0.34),
-    rotationZ: laneRatio * 0.028,
-    scale: 0.36 + trackWindow * 0.21 + focus * 0.36,
+    rotationY: -0.08 + lane.rotationY * 0.82 + THREE.MathUtils.clamp(offset * -0.12, -0.38, 0.38),
+    rotationZ: laneRatio * 0.044,
+    scale: 0.28 + trackWindow * 0.14 + focus * 0.28,
   };
 }
 
@@ -244,7 +243,7 @@ function getStoryWorkItemHitLayerOpacity(visual: StoryWorkItemVisual) {
   // DOM 层不再只是一个极淡 hit-area：用户明确要看到“所有卡片都在真实滚动并可交互”。
   // 这里仍然让 WebGL pane 承担主光影，但把 DOM 的透明度抬到能辨认多张卡片的范围，
   // 否则在暗场里会误读成只有一张卡片在换内容。
-  return Math.min(0.56, visual.opacity * (visual.isFocused ? 0.58 : 0.42));
+  return Math.min(0.74, visual.opacity * (visual.isFocused ? 0.7 : 0.54));
 }
 
 function getInitialStoryCardStyle(slotIndex: number, progress = 0) {
@@ -2319,6 +2318,7 @@ function createSourceSpineShaderMaterial(options: {
       uniform float uPhase;
       uniform vec2 uResolution;
       uniform float uScroll;
+      uniform float uSpineScroll;
       uniform float uTime;
       varying vec2 vUv;
       varying vec3 vEyePos;
@@ -2397,29 +2397,37 @@ function createSourceSpineShaderMaterial(options: {
 
       void main() {
         vec2 uv = vUv;
+        float sourceSpinePhase = fract(uSpineScroll);
         uv.x += vWorldPosition.x * 0.2;
-        uv += vec2(uScroll * 0.012 + sin(uTime * 0.08 + uPhase) * 0.004, 0.0);
+        uv += vec2(
+          uScroll * 0.016 + sin(uTime * 0.08 + uPhase) * 0.004,
+          sourceSpinePhase * 0.22 + vWorldPosition.y * 0.018
+        );
         vec3 baseColor = texture2D(tBaseColor, uv).rgb;
         vec3 normal = unpackNormalFBR(vEyePos, vWorldNormal, tNormal, uNormalStrength, 1.0, vUv);
-        normal.y -= vWorldPosition.y * 0.02;
+        normal.y -= vWorldPosition.y * 0.02 + sin(sourceSpinePhase * 6.28318 + vWorldPosition.y * 1.7) * 0.018;
         vec3 color = getFBR(baseColor, uv, normal);
         // 源站 SpineShader 用 gl_FragCoord / resolution 做屏幕折射采样。
         // 旧版固定围绕 0.5 采样会把整根柱体抹成同一片亮雾；这里改回屏幕采样，
         // 让每节骨体按自己的屏幕位置吃到不同的油膜/玻璃反射。
         vec2 screenUv = gl_FragCoord.xy / max(uResolution, vec2(1.0));
         screenUv += normal.xy * 0.1 * uReflection.x;
-        screenUv += vec2(uScroll * 0.018, vWorldPosition.y * 0.003);
+        screenUv += vec2(uScroll * 0.018, vWorldPosition.y * 0.003 - sourceSpinePhase * 0.075);
         float fresnel = pow(1.0 - clamp(abs(dot(normalize(normal), normalize(vViewDir))), 0.0, 1.0), 2.4);
-        float oilBand = smoothstep(0.22, 0.92, sin((vWorldPosition.y + uPhase) * 3.6 + uTime * 0.18) * 0.5 + 0.5);
+        float scrollBand = sin((vWorldPosition.y + sourceSpinePhase * 3.2 + uPhase) * 3.6 + uTime * 0.18) * 0.5 + 0.5;
+        float oilBand = smoothstep(0.22, 0.92, scrollBand);
         vec2 refractionUv = clamp(screenUv + vec2(sin(uTime * 0.17 + uPhase) * 0.012, cos(uTime * 0.13 + uPhase) * 0.01), vec2(0.02), vec2(0.98));
         vec3 refraction = pow(max(texture2D(tRefraction, refractionUv).rgb, 0.0), vec3(0.92));
         vec3 wetBody = mix(vec3(0.004, 0.007, 0.011), color * 0.72, 0.62);
-        vec3 oilEdge = refraction * uReflection.y * (0.24 + fresnel * 0.34 + oilBand * 0.055);
+        // 参考 mp4 的柱体在滚轮推进时不是整根横移，而是内部 refraction 与油膜高光沿竖向换相。
+        // 这里把 uSpineScroll 同时喂给 base uv、screen refraction uv 和油膜 band；
+        // 这样真实 spine.bin 实例会随滚动产生可见的上下流动，而不需要改变实例 x/z。
+        vec3 oilEdge = refraction * uReflection.y * (0.28 + fresnel * 0.42 + oilBand * 0.11);
         color = wetBody + oilEdge;
-        color += uAccent * fresnel * (0.085 + oilBand * 0.07);
+        color += uAccent * fresnel * (0.11 + oilBand * 0.11);
         color = pow(max(color, 0.0), vec3(1.08));
 
-        float alpha = uOpacity * (0.86 + fresnel * 0.16);
+        float alpha = uOpacity * (0.88 + fresnel * 0.2 + oilBand * 0.045);
         gl_FragColor = vec4(color, alpha);
       }
     `,
@@ -2477,7 +2485,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 这样向下滚动时所有卡片会像源码 WorkItems 一样接力穿过镜头，不会退化成一张卡片换内容。
       node.dataset.active = visual.isFocused && slot?.sceneIndex === activeIndexRef.current ? "true" : "false";
       node.style.opacity = String(getStoryWorkItemHitLayerOpacity(visual));
-      node.style.pointerEvents = Math.abs(offset) < 4.4 ? "auto" : "none";
+      node.style.pointerEvents = Math.abs(offset) < 7.4 ? "auto" : "none";
+      node.tabIndex = Math.abs(offset) < 7.4 ? 0 : -1;
       node.style.zIndex = String(visual.zIndex);
       node.style.transform = visual.transform;
     });
@@ -2511,6 +2520,48 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     applyStoryCardDomProgress(scrollTargetRef.current, scrollImpulseRef.current);
     activeIndexRef.current = normalizedIndex;
     setActiveIndex(normalizedIndex);
+
+    const scrollSection = scrollSectionRef.current;
+
+    if (scrollSection) {
+      const sectionTop = window.scrollY + scrollSection.getBoundingClientRect().top;
+      const scrollUnit = Math.max(320, window.innerHeight * 0.72);
+      window.scrollTo({
+        behavior: "smooth",
+        top: sectionTop + Math.max(0, closestTarget) * scrollUnit,
+      });
+    }
+  }, [applyStoryCardDomProgress]);
+
+  const goToStorySlot = useCallback((slotIndex: number) => {
+    const slot = storyWorkItemSlots[slotIndex];
+
+    if (!slot) {
+      return;
+    }
+
+    const cycleBase = Math.round((scrollTargetRef.current - slotIndex) / STORY_WORK_ITEM_SLOT_COUNT) * STORY_WORK_ITEM_SLOT_COUNT;
+    const candidates = [
+      slotIndex + cycleBase - STORY_WORK_ITEM_SLOT_COUNT,
+      slotIndex + cycleBase,
+      slotIndex + cycleBase + STORY_WORK_ITEM_SLOT_COUNT,
+    ];
+    let closestTarget = candidates[0];
+
+    for (const candidate of candidates) {
+      if (Math.abs(candidate - scrollTargetRef.current) < Math.abs(closestTarget - scrollTargetRef.current)) {
+        closestTarget = candidate;
+      }
+    }
+
+    // 源站 WorkItem hover/click 会把滚动位置推到对应 view 的 target。
+    // 这里不能再只按 sceneIndex 跳转，否则 15 个可见 slot 实际上会退化成 5 个按钮；
+    // 每张重复卡都要拥有自己的 progress，点击后队列会沿当前方向滚到那张卡。
+    scrollImpulseRef.current = Math.max(-2.4, Math.min(2.4, (closestTarget - scrollTargetRef.current) * 0.92));
+    scrollTargetRef.current = closestTarget;
+    applyStoryCardDomProgress(scrollTargetRef.current, scrollImpulseRef.current);
+    activeIndexRef.current = slot.sceneIndex;
+    setActiveIndex(slot.sceneIndex);
 
     const scrollSection = scrollSectionRef.current;
 
@@ -3933,15 +3984,20 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const chainMaterial = oilBaseMaterial.clone();
     chainMaterial.color = new THREE.Color("#05070c");
     chainMaterial.emissive = new THREE.Color("#5fe7ff");
-    chainMaterial.emissiveIntensity = 0.018;
-    chainMaterial.envMapIntensity = 0.92;
-    chainMaterial.opacity = 0.18;
+    chainMaterial.emissiveIntensity = 0.024;
+    chainMaterial.envMapIntensity = 1.08;
+    chainMaterial.opacity = 0.12;
     chainMaterial.transparent = true;
-    const chainLinks = Array.from({ length: 9 }, (_, linkIndex) => {
-      const link = new THREE.Mesh(chainGeometry, chainMaterial);
-      link.position.set(-1.12 + Math.sin(linkIndex * 0.64) * 0.025, -2.72 + linkIndex * 0.22, -1.02);
-      link.rotation.set(Math.PI / 2, linkIndex % 2 === 0 ? 0.18 : Math.PI / 2 + 0.18, 0.1 * Math.sin(linkIndex));
-      link.scale.set(0.52, 0.92, 0.52);
+    const chainLinks = Array.from({ length: 80 }, (_, linkIndex) => {
+      const linkMaterial = chainMaterial.clone();
+      const link = new THREE.Mesh(chainGeometry, linkMaterial);
+      // 镜像源码 `ChainInstancer` 是 80 个链节沿 y 轴排布，滚动时每个链节绕 y 大幅换面。
+      // 这层不是装饰散点，而是参考 mp4 里柱体旁边会跟着滚动转动的暗色链状结构；
+      // x/z 固定在柱体左后侧，只用 y 循环和 rotation.y 表达“跟着滚动”。
+      link.position.set(-1.08, 4 - linkIndex * 0.22, -0.94);
+      link.rotation.set(Math.PI / 2, Math.PI / 2 * linkIndex, 0.08 * Math.sin(linkIndex));
+      link.scale.set(1.12, 0.9, 1.12);
+      link.renderOrder = 7.35;
       pillarGroup.add(link);
       return link;
     });
@@ -4408,7 +4464,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       {
         angle: -1.26,
         height: 3.18,
-        opacity: 0.018,
+        opacity: 0.007,
         radiusX: 2.68,
         radiusZ: 0.66,
         renderOrder: 3.25,
@@ -4420,7 +4476,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       {
         angle: 0.03,
         height: 2.42,
-        opacity: 0.018,
+        opacity: 0.009,
         radiusX: 0.86,
         radiusZ: 0.82,
         renderOrder: 4.85,
@@ -4432,7 +4488,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       {
         angle: 2.62,
         height: 1.9,
-        opacity: 0.014,
+        opacity: 0.006,
         radiusX: 1.78,
         radiusZ: 0.84,
         renderOrder: 2.9,
@@ -4752,9 +4808,21 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         tendon.rotation.y = Math.sin(time * 0.18 + tendonIndex) * 0.045;
       });
       chainLinks.forEach((link, linkIndex) => {
-        link.position.x = -1.12 + Math.sin(linkIndex * 0.64 + time * 0.18) * 0.018;
-        link.position.y = -2.72 + linkIndex * 0.22 + Math.sin(pillarVerticalPhase + linkIndex * 0.28) * 0.018;
-        link.rotation.z = 0.1 * Math.sin(linkIndex + time * 0.22);
+        const chainLoopHeight = Math.max(0.22, chainLinks.length * 0.22);
+        const chainTravelY = 4 - THREE.MathUtils.euclideanModulo(linkIndex * 0.22 + sourceSpineTravel * 0.46, chainLoopHeight);
+        const edgeFade = linkIndex < 8 || linkIndex > chainLinks.length - 9 ? 0.38 : 1;
+        const material = link.material as THREE.MeshPhysicalMaterial;
+
+        // 对齐镜像 `ChainInstancer`：80 个链节的 x/z 不参与滚动，滚动只推动 y 循环和 y 轴大幅换面。
+        // 这会让柱体侧边出现类似 mp4 的链状光影跟随，而不会重新制造整根柱子的横向偏移。
+        link.position.x = -1.08;
+        link.position.y = chainTravelY + Math.sin(pillarVerticalPhase + linkIndex * 0.28) * 0.012;
+        link.position.z = -0.94;
+        link.rotation.x = Math.PI / 2;
+        link.rotation.y = Math.PI / 2 * linkIndex - sourceScrollProgress * Math.PI * 8 + scrollFollow * 0.08;
+        link.rotation.z = 0.08 * Math.sin(linkIndex + time * 0.22);
+        material.opacity = (0.07 + Math.min(0.08, Math.abs(scrollImpulse) * 0.02)) * edgeFade;
+        material.emissiveIntensity = 0.018 + Math.min(0.035, Math.abs(scrollImpulse) * 0.01);
       });
       vertebraSegments.forEach((segment, segmentIndex) => {
         const verticalBreath = Math.sin(time * 0.18 + pillarVerticalPhase + segment.phase) * 0.012;
@@ -4924,7 +4992,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const offset = getInfiniteStorySlotOffset(panel.slotIndex, motionProgress);
         const layout = getStoryWorkItemWebGLLayout(panel.slotIndex, offset);
         const scrollBoost = Math.min(0.12, Math.abs(scrollImpulse) * 0.035);
-        const targetOpacity = Math.min(0.42, 0.056 + layout.trackWindow * 0.15 + layout.focus * 0.22 + scrollBoost * 0.12);
+        const cardWindow = Math.pow(layout.trackWindow, 1.72);
+        const cardFocus = Math.pow(layout.focus, 1.35);
+        const targetOpacity = Math.min(0.34, 0.018 + cardWindow * 0.08 + cardFocus * 0.22 + scrollBoost * 0.06);
 
         // 这里是这次修正的核心：WorkItem pane 仍有多张、仍会转面和排序，
         // 但 x 不再随 offset 改变。向下滚动时所有 pane 都沿同一条纵向队列经过柱体，
@@ -4947,7 +5017,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         material.opacity += (targetOpacity - material.opacity) * 0.12;
         // 视觉主层重新交给 WebGL WorkPane：DOM 只负责 hit area，WebGL pane 才负责源站式媒体玻璃。
         // 这里比 v118 略微抬高面片和背板，但仍用透明上限控制，避免退回一整块大色卡遮住柱体。
-        backplateMaterial.opacity += ((0.018 + layout.trackWindow * 0.036 + layout.focus * 0.068 + scrollBoost * 0.055) - backplateMaterial.opacity) * 0.12;
+        // 非焦点 pane 如果保持同样大面积高透明度，会叠成一整块雾板，用户会误以为只有一张卡。
+        // 因此把 WorkItem 的玻璃背板做成“焦点清楚、远景迅速衰减”，让 15 个真实 slot 的前后关系更像源码。
+        backplateMaterial.opacity += ((0.006 + Math.pow(layout.trackWindow, 2) * 0.016 + cardFocus * 0.04 + scrollBoost * 0.026) - backplateMaterial.opacity) * 0.12;
       });
       // DOM 前景轨道和 WebGL WorkItem 使用同一个无界 progress。
       // 它只改变卡片自身的轨道坐标/转面/透明度，不改变柱体坐标；这样即使 WebGL 暗场很重，
@@ -5024,6 +5096,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       });
       tendonMaterial.dispose();
       chainGeometry.dispose();
+      chainLinks.forEach((link) => {
+        // 每个链节都有独立透明度和发光强度，不能再共用一个材质；
+        // 卸载页面时逐个释放，避免频繁预览首页留下 WebGL material 泄漏。
+        (link.material as THREE.Material).dispose();
+      });
       chainMaterial.dispose();
       organicField.geometry.dispose();
       fieldMaterial.dispose();
@@ -5149,12 +5226,13 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
             data-story-key={scene.key}
             data-story-slot={slotIndex}
             key={key}
-            onClick={() => goToScene(sceneIndex)}
-            onFocus={() => goToScene(sceneIndex)}
+            onClick={() => goToStorySlot(slotIndex)}
+            onFocus={() => goToStorySlot(slotIndex)}
             ref={(node) => {
               storyCardRefs.current[slotIndex] = node;
             }}
             style={{ "--card-accent": scene.accent, ...getInitialStoryCardStyle(slotIndex, activeIndex) } as CSSProperties}
+            tabIndex={Math.abs(getInfiniteStorySlotOffset(slotIndex, activeIndex)) < 7.4 ? 0 : -1}
             type="button"
           >
             <span>{scene.label}</span>

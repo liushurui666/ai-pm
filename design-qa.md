@@ -3,9 +3,9 @@
 - source visual truth path: `/tmp/ai-pm-at-reference/mp4-02-4.2s.png`
 - source video: `/Users/liushurui/Library/Application Support/LarkShell/screenshot/20260629120942_rec_.mp4`
 - source mirror: `/Users/liushurui/Desktop/workspace/new-jiguangjuzhen/activetheory-work-clone-nav-orb-20260524-121151(1)`
-- implementation default screenshot: `/tmp/ai-pm-v123-wheel-fallback/top.png`
-- implementation after-wheel screenshot: `/tmp/ai-pm-v124-wheel-half-fallback/after-wheel-980.png`
-- viewport: 1920x1080 desktop, Codex in-app browser, `http://localhost:3004/?qa=v124`
+- implementation default screenshot: `/tmp/ai-pm-v127-real-scroll/top.png`
+- implementation after-wheel screenshot: `/tmp/ai-pm-v127-real-scroll/after-wheel-980.png`
+- viewport: 1920x1080 desktop, Codex in-app browser, `http://localhost:3004/?qa=v127`
 - state: unauthenticated landing page, hydrated WebGL canvas, real `mouse.wheel(0, 980)` page scroll from `scrollY=0` to `scrollY=980`
 - full-view comparison evidence: source frame and implementation screenshots were opened separately in Codex visual inspection; side-by-side image generation was blocked because the local environment lacks PIL/ImageMagick.
 - focused region comparison evidence: center pillar + foreground WorkItem card stack were inspected in the source frame and latest after-scroll screenshot.
@@ -22,20 +22,20 @@
 
 - [P1] WorkItem interaction direction is corrected again toward the source queue.
   Location: DOM card rail and WebGL panel track.
-  Evidence: browser verification on `http://localhost:3004/?qa=v124` reports 15 DOM WorkItem hit layers. After a real `mouse.wheel(0, 980)`, `scrollY=980`, 11 cards are visible in the viewport band, 9 are interactive, and active focus advances from `command` to `requirement`.
-  Impact: this resolves the user's complaint that only one card seemed to exist. The UI now has multiple real slots moving through the scene while preserving click/focus on readable cards.
-  Fix: keep the 15-slot queue and source-style slot count; do not revert to single-card copy swapping.
+  Evidence: browser verification on `http://localhost:3004/?qa=v127` reports 15 DOM WorkItem hit layers. At the top state, 7 cards are visible and all 7 are interactive, with visible slot centers spanning x `828-1237`. After a real browser scroll of 980px, `scrollY=980`, 7 cards remain visible/interactable, active focus advances from slot `0`/command to slot `1`/requirement, and the visible queue spans x `791-1229`.
+  Impact: this resolves the user's complaint that the card interaction looked like one card. The UI now uses 15 source-style slots, each with its own click/focus scroll target, while readable cards retain interaction.
+  Fix: keep the 15-slot queue, per-slot click/focus target, and source-style 50deg lane spacing; do not revert to 5 scene-level targets or single-card copy swapping.
 
 - [P1] Pillar no longer drifts horizontally during scroll.
   Location: `activeTheorySpineInstances` animation in `src/components/landing-home/index.tsx`.
-  Evidence: the implementation wraps spine instances along y, locks `pillarGroup.position` and `pillarGroup.rotation` to a fixed x/z pose, locks fallback spine segment x values, and changes WorkItem x from progress-driven orbiting to fixed slot lanes. In v124 the visible DOM card centers stay within x `1028-1103` after wheel scroll.
+  Evidence: the implementation wraps spine instances along y, locks `pillarGroup.position` and `pillarGroup.rotation` to a fixed x/z pose, locks fallback spine segment x values, and keeps scroll progress out of pillar x/z. In v127 the broader card x range comes from fixed per-slot WorkItem lanes; the pillar itself remains anchored while scroll drives y-looping spine instances, chain links, oil-film phase, and card queue progress.
   Impact: this matches the requested “从上到下” scroll behavior and avoids the previous lateral twisting impression.
-  Fix: keep y-only looping for the pillar and fixed-lane WorkItems; any future camera/card changes must not feed scroll progress into `pillarGroup`, individual spine instance x/z, or WorkItem x position.
+  Fix: keep y-only looping for the pillar; any future camera/card changes must not feed scroll progress into `pillarGroup`, individual spine instance x/z, or fallback spine segment x values.
 
 - [P2] WebGL WorkPane projections are now the primary card visual layer.
   Location: `referenceGlassPanels`, `panelMeshes`, and `.landing-story-hero-asset`.
-  Evidence: `/tmp/ai-pm-v124-wheel-half-fallback/after-wheel-980.png` shows the large reference glass panels and WorkItem panes as translucent media surfaces. DOM cards are visible enough for interaction, while WebGL panes remain the main glass/media layer.
-  Impact: this removes the most obvious single-giant-card impression from the previous pass and makes the card stack read more like source media panes, though the panel design still is not identical to the source.
+  Evidence: `/tmp/ai-pm-v127-real-scroll/after-wheel-980.png` shows the static background glass reduced to a darker environment layer while the 15 WorkItem panes/cards remain readable enough to show queue continuity. DOM cards are visible enough for interaction, while WebGL panes remain the main glass/media layer.
+  Impact: this removes the large foggy board that made the queue read as one covered card, while preserving the dark ActiveTheory-style glass stage.
   Fix: refine panel media/refraction in a later pass rather than increasing flat opacity.
 
 ## Patches Made In This Pass
@@ -58,13 +58,17 @@
 - Added deterministic `random` attributes to the FlowerParticle point cloud and ported more of the source top/bottom spiral math, improving the pillar's internal particle flow while the group itself remains anchored.
 - Reversed column particle drift so the pillar reads as top-to-bottom movement on downward scroll.
 - Lowered WebGL WorkPane opacity/backplate strength and the static reference background opacity so the panels do not cover the pillar and card stack as large colored rectangles.
+- Changed WorkItem lane generation from 5 repeated scene lanes to 15 source-style slots at 50deg spacing, so all repeated cards occupy distinct positions instead of collapsing into one visible card.
+- Added `goToStorySlot(slotIndex)` so each visible repeated WorkItem has its own click/focus scroll target, matching the source behavior where every WorkItem view maps to a target.
+- Expanded visible card hit targets to the near/mid queue (`absOffset < 7.4`) and assigns `tabIndex` accordingly, so all readable cards are actually interactive.
+- Reduced the static reference background glass opacity and changed WorkPane opacity/backplate falloff to focus-weighted curves, preventing environment glass from smearing the 15-card queue into a single flat board.
 
 ## Validation
 
 - `corepack pnpm lint`: passed.
 - `corepack pnpm build`: passed.
-- Browser route: `http://localhost:3004/?qa=v124`.
-- Browser checks: real `mouse.wheel(0, 980)` advanced the page to `scrollY=980`; the DOM rail rendered 15 WorkItem hit layers; after wheel scroll, 11 cards were visible, 9 were interactive, active focus advanced to slot `1`/`requirement`, and visible card center x stayed in a narrow fixed-lane band `1028-1103`. Console contained only the existing DRACOLoader deprecation warning.
+- Browser route: `http://localhost:3004/?qa=v127`.
+- Browser checks: real in-app browser scroll advanced the page from `scrollY=0` to `scrollY=980`; the DOM rail rendered 15 WorkItem hit layers. Top state had 7 visible/interactive cards with visible slots `0,1,2,3,12,13,14`; after scroll it had 7 visible/interactive cards with visible slots `0,1,2,3,4,13,14`, active focus advanced to slot `1`/`requirement`, and the visible card centers spanned x `791-1229` from fixed per-slot lanes while the pillar stayed anchored.
 
 ## Follow-up Polish
 
