@@ -13,7 +13,7 @@ import {
 } from "@ant-design/icons";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, PointerEvent, ReactNode, TouchEvent, WheelEvent } from "react";
+import type { CSSProperties, PointerEvent, ReactNode, TouchEvent } from "react";
 import * as THREE from "three";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
@@ -2019,19 +2019,6 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     setActiveIndex(normalizedIndex);
   }, []);
 
-  const handleWheel = useCallback((event: WheelEvent<HTMLElement>) => {
-    event.preventDefault();
-
-    const delta = Math.max(-1.35, Math.min(1.35, event.deltaY / 360));
-
-    if (Math.abs(delta) < 0.018) {
-      return;
-    }
-
-    // 源站 Work 轨道是无界滚动：滚轮改变累计位置，而不是触发一次会自动回正的冲量。
-    pushInfiniteScroll(delta);
-  }, [pushInfiniteScroll]);
-
   const handleTouchStart = useCallback((event: TouchEvent<HTMLElement>) => {
     touchStartRef.current = event.touches[0]?.clientY ?? null;
   }, []);
@@ -2077,6 +2064,34 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
   useEffect(() => {
     activeIndexRef.current = activeIndex;
   }, [activeIndex]);
+
+  useEffect(() => {
+    const root = experienceRef.current;
+
+    if (!root) {
+      return;
+    }
+
+    const handleNativeWheel = (event: globalThis.WheelEvent) => {
+      event.preventDefault();
+
+      const delta = Math.max(-1.35, Math.min(1.35, event.deltaY / 360));
+
+      if (Math.abs(delta) < 0.018) {
+        return;
+      }
+
+      // React 在部分浏览器会把 wheel 委托成 passive listener，直接 preventDefault 会产生控制台错误；
+      // 固定视口 3D 故事必须拦截原生页面滚动，所以这里使用原生非 passive 监听承载无界 WorkItem 轨道。
+      pushInfiniteScroll(delta);
+    };
+
+    root.addEventListener("wheel", handleNativeWheel, { passive: false });
+
+    return () => {
+      root.removeEventListener("wheel", handleNativeWheel);
+    };
+  }, [pushInfiniteScroll]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -3427,7 +3442,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     pillarGroup.add(referenceSpineMotion);
 
     // 这层是 v76 的关键：素材层面改成更宽的 mp4 柱体主体，再由“动态视频 mask + 有机轮廓 mask”共同裁切。
-    // 它仍然是 pillarGroup 里的 3D mesh，滚轮推进时会和柱体整体旋转；但视觉主形来自源视频柱子，
+    // 它仍然是 pillarGroup 里的 3D mesh，滚轮推进时只做纵向油膜相位；视觉主形来自源视频柱子，
     // 从而减少“程序化骨节 + 一层光效”的割裂感，更接近用户要求的同一根规整油膜柱体。
     const referenceSpineSubjectGeometry = new THREE.PlaneGeometry(1.88, 6.28, 1, 1);
     const referenceSpineSubjectMaterial = new THREE.ShaderMaterial({
@@ -3787,10 +3802,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       {
         angle: -1.26,
         height: 3.18,
-        opacity: 0.38,
+        opacity: 0.18,
         radiusX: 2.68,
         radiusZ: 0.66,
-        renderOrder: 6.05,
+        renderOrder: 3.25,
         sourceIndex: -1,
         variant: "left" as const,
         width: 2.18,
@@ -3799,10 +3814,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       {
         angle: 0.03,
         height: 2.98,
-        opacity: 0.82,
+        opacity: 0.34,
         radiusX: 0.86,
         radiusZ: 0.82,
-        renderOrder: 8.76,
+        renderOrder: 4.85,
         sourceIndex: 0,
         variant: "front" as const,
         width: 5.05,
@@ -3811,10 +3826,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       {
         angle: 2.62,
         height: 1.9,
-        opacity: 0.22,
+        opacity: 0.12,
         radiusX: 1.78,
         radiusZ: 0.84,
-        renderOrder: 4.9,
+        renderOrder: 2.9,
         sourceIndex: 1,
         variant: "rear" as const,
         width: 1.46,
@@ -3839,11 +3854,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         config.variant === "front" ? createWorkRefractionPanelMaterial(texture, activeTheoryWorkNormalTexture, activeTheoryWorkEnvTexture, config.opacity * 0.72) : null;
       const refractionMesh = refractionMaterial ? new THREE.Mesh(geometry, refractionMaterial) : null;
 
-      // 这些屏幕不是可读产品卡片，而是参考 mp4 里的空间玻璃层：
-      // 左大屏负责构图比例，前景屏负责“柱体被玻璃压住”的深度关系，后屏负责远景暗框。
-      // 它们挂在 stage 而不是 DOM 背景里，动画里用 storyOrbit 同步推进，避免再次出现“卡片转了、柱子没跟着转”的割裂。
+      // 这些屏幕只保留参考 mp4 里的空间玻璃氛围，不能再冒充主滚动卡片；
+      // 真正的 WorkItem 轨道由下方 storyScenes 生成的五张业务卡承担，避免用户滚动时只看到一张大卡在切换。
       if (mediaMesh) {
-        // 源站 pane 的真实项目媒体需要压进 UI 玻璃里，稍微高于底图但低于折射高光。
+        // 源站 pane 的真实项目媒体只作为低透明背景投影，不能盖过 AI PM 自己的多卡片滚动轨道。
         mediaMesh.renderOrder = config.renderOrder + 0.025;
         stage.add(mediaMesh);
       }
@@ -3863,7 +3877,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         depthTest: false,
         depthWrite: false,
         map: createPanelTexture(sceneItem),
-        opacity: 0.015,
+        opacity: 0.18,
         side: THREE.DoubleSide,
         transparent: true,
       });
@@ -3875,10 +3889,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       mesh.position.set(Math.sin(initialAngle) * 2.86 + 0.26, 0.04 - initialAbsOffset * 0.08, Math.cos(initialAngle) * 1.18 - 0.04 - initialAbsOffset * 0.22);
       mesh.rotation.set(initialOffset === 0 ? -0.018 : 0.018 * Math.sign(initialOffset), -initialAngle * 0.9 - 0.04, 0);
       mesh.scale.set(initialScale, initialScale, 1);
-      // v80：默认态先让源视频柱体和参考玻璃遮挡主导，故事卡只作为极淡空间屏存在；
-      // 真正的宣传卡片在滚轮触发时才抬起，避免静止帧被自绘 Command OS 盖掉参考柱体主形。
-      material.opacity = initialOffset === 0 ? 0.015 : Math.max(0.012, 0.024 - initialAbsOffset * 0.01);
-      mesh.renderOrder = initialOffset === 0 ? 8 : Math.max(1, 5 - initialAbsOffset);
+      // 这些卡片对应源站 WorkItem：所有项目卡都一直存在于同一条环形轨道上，
+      // 滚动只改变相对 offset 和镜头目标，不能再做成“滚一下才出现的一张演示卡”。
+      material.opacity = initialOffset === 0 ? 0.58 : Math.max(0.14, 0.28 - initialAbsOffset * 0.045);
+      mesh.renderOrder = initialOffset === 0 ? 12 : Math.max(6, 10 - initialAbsOffset);
       mesh.userData.index = index;
       stage.add(mesh);
       return mesh;
@@ -3902,6 +3916,12 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     let width = 1;
     let height = 1;
     let visualProgress = 0;
+    const pillarBasePosition = new THREE.Vector3(-0.62, -0.02, -0.36);
+    const cameraBasePosition = new THREE.Vector3(0, 0.2, 7.2);
+    const cameraTargetPosition = cameraBasePosition.clone();
+    const cameraLookAtTarget = new THREE.Vector3(-0.58, -0.04, -0.35);
+    const cameraBaseLookAt = new THREE.Vector3(-0.58, -0.04, -0.35);
+    const workTrackStep = THREE.MathUtils.degToRad(50);
 
     const resize = () => {
       const rect = root.getBoundingClientRect();
@@ -3913,8 +3933,6 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       particleMaterial.uniforms.uPixelRatio.value = renderer.getPixelRatio();
       columnParticleMaterial.uniforms.uPixelRatio.value = renderer.getPixelRatio();
     };
-
-    const workTrackStep = THREE.MathUtils.degToRad(50);
 
     const getVisualOffset = (index: number, progress: number, length = storyScenes.length) => {
       let offset = index - progress;
@@ -3950,7 +3968,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       scrollImpulseRef.current += (0 - scrollImpulseRef.current) * 0.046;
       const scrollFollow = Math.max(-1.9, Math.min(1.9, scrollImpulse));
       const motionProgress = visualProgress + scrollFollow * 0.18;
-      const storyOrbit = motionProgress * 1.74;
+      const pillarVerticalPhase = motionProgress * 0.18 + scrollFollow * 0.025;
       particleMaterial.uniforms.uTime.value = time;
       columnParticleMaterial.uniforms.uTime.value = time;
       liquidColumnMaterial.uniforms.uTime.value = time;
@@ -4001,8 +4019,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       oilTexture.offset.y = time * 0.032;
       // 参考柱体的油膜颗粒会有很慢的内向漂移；专用贴图单独滚动，
       // 避免和通用油膜同步后看起来像一层整齐的页面滤镜。
-      referenceOilTexture.offset.x = Math.sin(time * 0.06) * 0.04 + storyOrbit * 0.012;
-      referenceOilTexture.offset.y = time * 0.046;
+      referenceOilTexture.offset.x = Math.sin(time * 0.06) * 0.04 + scrollFollow * 0.004;
+      referenceOilTexture.offset.y = time * 0.046 + pillarVerticalPhase * 0.045;
       referenceSpineFieldMaterial.opacity = 0.47 + Math.sin(time * 0.2) * 0.03 + Math.min(0.08, Math.abs(scrollImpulse) * 0.02);
       referenceSpineGhostMaterial.opacity = 0.13 + Math.cos(time * 0.18) * 0.018 + Math.min(0.045, Math.abs(scrollImpulse) * 0.012);
       referenceSpineMotionMaterial.uniforms.uTime.value = time;
@@ -4078,12 +4096,13 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       liquidColumn.scale.z = 1 + Math.cos(time * 0.48) * 0.035;
       spine.rotation.x += 0.003;
       spine.rotation.y += 0.006;
-      // 源码里柱体/项目装置本身不被滚动拖走，变化来自 camera target 插值。
-      // 本地只旋转朝向和折光，position 固定，防止滚动时整根柱子漂移或停手后回正。
-      pillarGroup.position.set(-0.62, -0.02, -0.36);
-      pillarGroup.rotation.y = -0.08 - storyOrbit * 1.16;
-      pillarGroup.rotation.x = Math.sin(time * 0.14) * 0.018 + scrollImpulse * 0.018;
-      pillarGroup.rotation.z = Math.sin(time * 0.12) * 0.012;
+      // 源码里柱体/项目装置本身不被滚动拖走，滚动感来自卡片 target 和 camera target 插值。
+      // 所以这里彻底切断柱体与卡片轨道角度的横向关系：position 固定，y 轴只保留极慢呼吸。
+      // 滚轮带来的变化只进入油膜、视频 shader 和柱内粒子的 y 向穿行，避免出现整根柱子左右偏移。
+      pillarGroup.position.copy(pillarBasePosition);
+      pillarGroup.rotation.y = -0.08 + Math.sin(time * 0.08) * 0.01;
+      pillarGroup.rotation.x = Math.sin(time * 0.14) * 0.014 + scrollFollow * 0.004;
+      pillarGroup.rotation.z = Math.sin(time * 0.12) * 0.01;
       pillarShell.scale.x = 1 + Math.sin(time * 1.3) * 0.035;
       pillarShell.scale.z = 1 + Math.cos(time * 1.1) * 0.035;
       pillarCore.scale.x = 1 + Math.sin(time * 1.9) * 0.09;
@@ -4095,16 +4114,18 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         tendon.rotation.y = Math.sin(time * 0.18 + tendonIndex) * 0.045;
       });
       chainLinks.forEach((link, linkIndex) => {
-        link.position.x = -1.12 + Math.sin(linkIndex * 0.64 + storyOrbit) * 0.035;
-        link.rotation.z = 0.1 * Math.sin(linkIndex + storyOrbit);
+        link.position.x = -1.12 + Math.sin(linkIndex * 0.64 + time * 0.18) * 0.018;
+        link.position.y = -2.72 + linkIndex * 0.22 + Math.sin(pillarVerticalPhase + linkIndex * 0.28) * 0.018;
+        link.rotation.z = 0.1 * Math.sin(linkIndex + time * 0.22);
       });
       vertebraSegments.forEach((segment, segmentIndex) => {
-        segment.group.position.x = Math.sin(segment.phase + storyOrbit * 0.56) * 0.038;
-        segment.group.position.y = segment.baseY;
-        segment.group.position.z = Math.cos(segment.phase * 0.8 + storyOrbit * 0.5) * 0.04;
-        segment.group.rotation.x = 0.034 * Math.sin(segment.phase + storyOrbit * 0.42) + scrollImpulse * 0.01;
-        segment.group.rotation.y = segment.sideBias * 0.055 + segment.phase * 0.032 + storyOrbit * 0.42;
-        segment.group.rotation.z = 0.04 * Math.cos(segment.phase + storyOrbit * 0.38) + scrollImpulse * 0.008;
+        const verticalBreath = Math.sin(time * 0.18 + pillarVerticalPhase + segment.phase) * 0.012;
+        segment.group.position.x = Math.sin(segment.phase + time * 0.12) * 0.018;
+        segment.group.position.y = segment.baseY + verticalBreath;
+        segment.group.position.z = Math.cos(segment.phase * 0.8 + time * 0.1) * 0.018;
+        segment.group.rotation.x = 0.022 * Math.sin(segment.phase + time * 0.14) + scrollFollow * 0.004;
+        segment.group.rotation.y = segment.sideBias * 0.055 + segment.phase * 0.032 + Math.sin(time * 0.1 + segment.phase) * 0.018;
+        segment.group.rotation.z = 0.024 * Math.cos(segment.phase + time * 0.12) + scrollFollow * 0.003;
         segment.group.scale.setScalar(segment.massVariation);
 
         segment.meshes.forEach((mesh, meshIndex) => {
@@ -4174,7 +4195,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const pulse = Math.sin(time * 0.38 + item.phase);
 
         // `spine.bin` 是柱体的真实骨节，不能再用 scrollFollow 逐块拉偏。
-        // 滚动的视角变化交给外层柱体旋转，单个实例只做极小的油膜呼吸。
+        // 滚动的视角变化交给卡片轨道和纵向粒子流，单个实例只做极小的油膜呼吸。
         item.mesh.position.x = item.basePosition.x + Math.sin(time * 0.12 + item.phase) * 0.004;
         item.mesh.position.y = item.basePosition.y + pulse * 0.006;
         item.mesh.position.z = item.basePosition.z + Math.cos(time * 0.1 + item.phase) * 0.004;
@@ -4202,9 +4223,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       spineFlecks.forEach((item, fleckIndex) => {
         const pulse = 0.62 + Math.sin(time * 1.2 + item.phase) * 0.3 + Math.min(0.32, Math.abs(scrollImpulse) * 0.1);
         item.material.opacity = item.baseOpacity * pulse;
-        item.material.rotation = Math.sin(item.phase) * Math.PI + Math.sin(time * 0.32 + item.phase) * 0.2 + storyOrbit * 0.08;
+        item.material.rotation = Math.sin(item.phase) * Math.PI + Math.sin(time * 0.32 + item.phase + pillarVerticalPhase) * 0.2;
         item.sprite.position.x = item.basePosition.x + Math.sin(time * 0.28 + item.phase) * 0.026;
-        item.sprite.position.y = item.basePosition.y + Math.cos(time * 0.24 + item.phase) * 0.018;
+        item.sprite.position.y = item.basePosition.y + Math.cos(time * 0.24 + item.phase) * 0.018 + Math.sin(pillarVerticalPhase + fleckIndex * 0.07) * 0.012;
         item.sprite.scale.set(
           item.baseScale.x * (0.88 + pulse * 0.22 + (fleckIndex % 3) * 0.035),
           item.baseScale.y * (0.86 + pulse * 0.18),
@@ -4214,8 +4235,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       surfaceOilPatches.forEach((item, patchIndex) => {
         const pulse = 0.74 + Math.sin(time * 0.55 + item.phase) * 0.16 + Math.min(0.22, Math.abs(scrollImpulse) * 0.09);
         item.material.opacity = item.opacity * pulse;
-        item.material.rotation = item.rotation + Math.sin(time * 0.22 + item.phase) * 0.06 + storyOrbit * 0.03;
+        item.material.rotation = item.rotation + Math.sin(time * 0.22 + item.phase + pillarVerticalPhase) * 0.06;
         item.sprite.position.x = item.position.x + Math.sin(time * 0.18 + item.phase) * 0.035;
+        item.sprite.position.y = item.position.y + Math.sin(pillarVerticalPhase + patchIndex * 0.19) * 0.014;
         item.sprite.position.z = item.position.z + Math.cos(time * 0.2 + patchIndex) * 0.025;
         item.sprite.scale.set(item.scaleX * (0.94 + pulse * 0.1), item.scaleY * (0.96 + pulse * 0.08), 1);
       });
@@ -4244,7 +4266,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       for (let index = 0; index < columnParticleCount; index += 1) {
         const angle = columnParticleSeeds[index * 4] + time * columnParticleSeeds[index * 4 + 3] * 0.42;
         const radius = columnParticleSeeds[index * 4 + 1] + Math.sin(time * 1.6 + index) * 0.035;
-        const y = (((columnParticleSeeds[index * 4 + 2] + time * 0.062 * columnParticleSeeds[index * 4 + 3]) % 1) * 5.4) - 2.7;
+        const verticalSeed = THREE.MathUtils.euclideanModulo(
+          columnParticleSeeds[index * 4 + 2] + time * 0.062 * columnParticleSeeds[index * 4 + 3] + pillarVerticalPhase * 0.12,
+          1
+        );
+        const y = (verticalSeed * 5.4) - 2.7;
         columnPositions.setXYZ(index, Math.cos(angle) * radius, y, Math.sin(angle) * radius);
       }
       columnPositions.needsUpdate = true;
@@ -4253,28 +4279,38 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const offset = getVisualOffset(index, motionProgress);
         const absOffset = Math.abs(offset);
         const focus = Math.max(0, 1 - absOffset);
-        const carouselAngle = offset * workTrackStep;
-        const targetX = Math.sin(carouselAngle) * 2.72 - 0.42;
-        const targetY = -offset * 0.58 + Math.sin(carouselAngle) * 0.05;
-        const targetZ = Math.cos(carouselAngle) * 1.22 - 0.12 - absOffset * 0.18;
-        const targetScale = 0.56 + focus * 0.58;
-        const scrollVisibility = Math.min(0.38, Math.abs(scrollImpulse) * 0.18);
-        const targetOpacity = 0.012 + focus * 0.035 + scrollVisibility * (0.32 + focus * 0.68);
+        const trackWindow = Math.max(0, 1 - absOffset / 3.2);
+        const carouselAngle = -offset * workTrackStep;
+        const targetX = Math.sin(carouselAngle) * 2.84 - 0.38;
+        const targetY = -offset * 0.68 + Math.sin(carouselAngle * 0.5) * 0.04;
+        const targetZ = Math.cos(carouselAngle) * 1.34 - 0.18 - absOffset * 0.12;
+        const targetScale = 0.52 + trackWindow * 0.16 + focus * 0.48;
+        const scrollBoost = Math.min(0.12, Math.abs(scrollImpulse) * 0.035);
+        const targetOpacity = 0.09 + trackWindow * 0.24 + focus * 0.28 + scrollBoost;
 
-        // 同步源码的 WorkItems 思路：每张卡片固定在环形 target 上，滚动改变相对 offset。
-        // angle 始终有界，所以无限滚动也不会翻背面或把画面变成自由旋转的转盘。
-        mesh.position.x += (targetX - mesh.position.x) * 0.13;
-        mesh.position.y += (targetY - mesh.position.y) * 0.13;
-        mesh.position.z += (targetZ - mesh.position.z) * 0.13;
-        mesh.rotation.y += ((-carouselAngle * 0.52 - 0.06) - mesh.rotation.y) * 0.14;
-        mesh.rotation.x += ((offset === 0 ? -0.018 : 0.018 * Math.sign(offset)) - mesh.rotation.x) * 0.11;
-        mesh.scale.x += (targetScale - mesh.scale.x) * 0.092;
-        mesh.scale.y += (targetScale - mesh.scale.y) * 0.092;
-        mesh.renderOrder = focus > 0.72 ? 8 : Math.max(1, 5 - absOffset);
+        // 这段直接对应源站 `positionViews`：卡片按 50 度步进围绕柱体排布，同时每张卡有 y 方向错位。
+        // 与源码不同的是本页不移动真实浏览器滚动条，而是用无界 progress 换算相对 offset；
+        // 因此所有卡片都能连续从上到下经过镜头，且不会在停手后自动回正到第 0 张。
+        mesh.position.x += (targetX - mesh.position.x) * 0.16;
+        mesh.position.y += (targetY - mesh.position.y) * 0.16;
+        mesh.position.z += (targetZ - mesh.position.z) * 0.16;
+        mesh.rotation.y += ((-carouselAngle * 0.64 - 0.06) - mesh.rotation.y) * 0.15;
+        mesh.rotation.x += ((-0.022 * Math.sign(offset || 1)) - mesh.rotation.x) * 0.12;
+        mesh.scale.x += (targetScale - mesh.scale.x) * 0.1;
+        mesh.scale.y += (targetScale - mesh.scale.y) * 0.1;
+        mesh.renderOrder = Math.round(8 + focus * 8 + trackWindow * 2 - absOffset);
 
         const material = mesh.material as THREE.MeshBasicMaterial;
-        material.opacity += (targetOpacity - material.opacity) * 0.108;
+        material.opacity += (targetOpacity - material.opacity) * 0.12;
       });
+
+      // 源站是真实 camera.group 在相邻 WorkItem target 间插值；这里为了满足“柱子不左右偏移”，
+      // 只保留 y 方向的镜头扫描，让滚轮像沿着柱体上下观察，同时避免 x/z 变化造成柱体横漂错觉。
+      const cameraScanY = Math.sin(pillarVerticalPhase * Math.PI * 0.7) * 0.12 + scrollFollow * 0.035;
+      cameraTargetPosition.set(cameraBasePosition.x, cameraBasePosition.y + cameraScanY, cameraBasePosition.z);
+      camera.position.lerp(cameraTargetPosition, 0.12);
+      cameraLookAtTarget.set(cameraBaseLookAt.x, cameraBaseLookAt.y + cameraScanY * 0.58, cameraBaseLookAt.z);
+      camera.lookAt(cameraLookAtTarget);
 
       renderer.render(scene, camera);
     };
@@ -4436,7 +4472,6 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       onTouchEnd={handleTouchEnd}
       onTouchMove={handleTouchMove}
       onTouchStart={handleTouchStart}
-      onWheel={handleWheel}
       ref={experienceRef}
       style={sceneStyle}
       tabIndex={0}
