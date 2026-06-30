@@ -1622,6 +1622,18 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     referenceSpineMotionVideo.playbackRate = 0.62;
     void referenceSpineMotionVideo.play().catch(() => undefined);
     const referenceSpineMotionTexture = new THREE.VideoTexture(referenceSpineMotionVideo);
+    // 独立的主体裁切只保留 mp4 左侧柱体区域，避免 v72 在 shader 内临时裁 UV 时露出竖向视频边。
+    // 它和宽版动态层共用播放节奏，但素材本身更窄，默认态会更像参考里的连续油膜柱体。
+    const referenceSpineSubjectVideo = document.createElement("video");
+    referenceSpineSubjectVideo.autoplay = true;
+    referenceSpineSubjectVideo.loop = true;
+    referenceSpineSubjectVideo.muted = true;
+    referenceSpineSubjectVideo.playsInline = true;
+    referenceSpineSubjectVideo.preload = "auto";
+    referenceSpineSubjectVideo.src = "/landing/reference-spine-subject-v73.mp4";
+    referenceSpineSubjectVideo.playbackRate = 0.62;
+    void referenceSpineSubjectVideo.play().catch(() => undefined);
+    const referenceSpineSubjectTexture = new THREE.VideoTexture(referenceSpineSubjectVideo);
     const oilBumpTexture = createOilBumpTexture();
     const oilAlphaTexture = createOilAlphaTexture();
     const oilPatchTexture = createOilPatchTexture();
@@ -1635,6 +1647,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     referenceSpineMotionTexture.generateMipmaps = false;
     referenceSpineMotionTexture.magFilter = THREE.LinearFilter;
     referenceSpineMotionTexture.minFilter = THREE.LinearFilter;
+    referenceSpineSubjectTexture.colorSpace = THREE.SRGBColorSpace;
+    referenceSpineSubjectTexture.generateMipmaps = false;
+    referenceSpineSubjectTexture.magFilter = THREE.LinearFilter;
+    referenceSpineSubjectTexture.minFilter = THREE.LinearFilter;
     oilBumpTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     oilAlphaTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     oilPatchTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -2577,10 +2593,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     referenceSpineMotion.renderOrder = 7.48;
     pillarGroup.add(referenceSpineMotion);
 
-    // 这层是 v71 的关键：不再把整段裁切视频平均铺满，而是只采样 mp4 左侧真实柱体主体区域。
+    // 这层是 v73 的关键：素材层面已经裁成 mp4 左侧柱体主体，再由 shader 做亮度/色彩遮罩。
     // 它仍然是 pillarGroup 里的 3D mesh，滚轮推进时会和柱体整体旋转；但视觉主形来自源视频柱子，
     // 从而减少“程序化骨节 + 一层光效”的割裂感，更接近用户要求的同一根规整油膜柱体。
-    const referenceSpineSubjectGeometry = new THREE.PlaneGeometry(1.36, 6.22, 1, 1);
+    const referenceSpineSubjectGeometry = new THREE.PlaneGeometry(1.24, 6.22, 1, 1);
     const referenceSpineSubjectMaterial = new THREE.ShaderMaterial({
       blending: THREE.AdditiveBlending,
       depthTest: false,
@@ -2588,8 +2604,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       side: THREE.DoubleSide,
       transparent: true,
       uniforms: {
-        uMap: { value: referenceSpineMotionTexture },
-        uOpacity: { value: 0.42 },
+        uMap: { value: referenceSpineSubjectTexture },
+        uOpacity: { value: 0.38 },
         uTime: { value: 0 },
       },
       vertexShader: `
@@ -2607,17 +2623,16 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         varying vec2 vUv;
 
         void main() {
-          vec2 sourceUv = vec2(mix(0.045, 0.58, vUv.x), vUv.y);
-          vec4 video = texture2D(uMap, sourceUv);
+          vec4 video = texture2D(uMap, vUv);
           float maxChannel = max(max(video.r, video.g), video.b);
           float minChannel = min(min(video.r, video.g), video.b);
           float saturation = maxChannel - minChannel;
           float luma = dot(video.rgb, vec3(0.2126, 0.7152, 0.0722));
           float chromaMatte = smoothstep(0.026, 0.15, saturation);
           float lumaMatte = smoothstep(0.045, 0.3, luma);
-          float edgeFade = smoothstep(0.035, 0.18, vUv.x) * smoothstep(0.995, 0.8, vUv.x);
+          float edgeFade = smoothstep(0.035, 0.18, vUv.x) * smoothstep(0.96, 0.64, vUv.x);
           float verticalFade = smoothstep(0.01, 0.09, vUv.y) * smoothstep(1.0, 0.88, vUv.y);
-          float rightPanelCull = 1.0 - smoothstep(0.46, 0.58, sourceUv.x) * 0.72;
+          float rightPanelCull = 1.0 - smoothstep(0.48, 0.82, vUv.x) * 0.9;
           float scanPulse = 0.94 + sin(uTime * 0.7 + vUv.y * 12.0) * 0.06;
           float alpha = max(chromaMatte, lumaMatte * 0.58) * edgeFade * verticalFade * rightPanelCull * scanPulse * uOpacity;
           vec3 color = pow(video.rgb, vec3(0.78)) * vec3(1.06, 1.12, 1.22);
@@ -3007,7 +3022,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceSpineMotionMaterial.uniforms.uTime.value = time;
       referenceSpineMotionMaterial.uniforms.uOpacity.value = 0.22 + Math.sin(time * 0.31 + 0.4) * 0.026 + Math.min(0.08, Math.abs(scrollImpulse) * 0.022);
       referenceSpineSubjectMaterial.uniforms.uTime.value = time;
-      referenceSpineSubjectMaterial.uniforms.uOpacity.value = 0.42 + Math.sin(time * 0.26 + 0.7) * 0.03 + Math.min(0.085, Math.abs(scrollImpulse) * 0.022);
+      referenceSpineSubjectMaterial.uniforms.uOpacity.value = 0.38 + Math.sin(time * 0.26 + 0.7) * 0.028 + Math.min(0.075, Math.abs(scrollImpulse) * 0.02);
       referenceSpineRimMaterial.opacity = 0.3 + Math.sin(time * 0.22 + 0.9) * 0.035 + Math.min(0.09, Math.abs(scrollImpulse) * 0.022);
       referenceSpineField.position.x = -0.56 + Math.sin(storyOrbit * 0.32) * 0.028;
       referenceSpineGhost.position.x = -0.28 + Math.cos(storyOrbit * 0.28) * 0.024;
@@ -3251,9 +3266,13 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceSpineRimMaterial.dispose();
       referenceSpineFieldTexture.dispose();
       referenceSpineMotionTexture.dispose();
+      referenceSpineSubjectTexture.dispose();
       referenceSpineMotionVideo.pause();
       referenceSpineMotionVideo.removeAttribute("src");
       referenceSpineMotionVideo.load();
+      referenceSpineSubjectVideo.pause();
+      referenceSpineSubjectVideo.removeAttribute("src");
+      referenceSpineSubjectVideo.load();
       referenceSpineRimTexture.dispose();
       oilBumpTexture.dispose();
       oilAlphaTexture.dispose();
