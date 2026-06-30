@@ -69,6 +69,8 @@ const ACTIVE_THEORY_WORK_HOGWARTS_THUMB_PATH = "/landing/active-theory-hogwarts-
 const ACTIVE_THEORY_WORK_HOGWARTS_LOGO_PATH = "/landing/active-theory-hogwarts-logo.jpg";
 const STORY_WORK_TRACK_STEP = THREE.MathUtils.degToRad(50);
 const STORY_WORK_ITEM_REPEAT = 3;
+const STORY_WORK_CARD_RADIUS_X = 292;
+const STORY_WORK_CARD_RADIUS_Z = 190;
 
 function createSolidDataTexture(r: number, g: number, b: number) {
   const texture = new THREE.DataTexture(new Uint8Array([r, g, b, 255]), 1, 1, THREE.RGBAFormat);
@@ -168,20 +170,21 @@ function getInfiniteStorySlotOffset(slotIndex: number, progress: number, length 
 function getStoryWorkItemVisualFromOffset(offset: number, impulse = 0): StoryWorkItemVisual {
   const absOffset = Math.abs(offset);
   const angle = -offset * STORY_WORK_TRACK_STEP;
-  const focus = Math.max(0, 1 - absOffset * 0.64);
-  const trackWindow = Math.max(0, 1 - absOffset / 5.2);
-  const x = 0;
-  const y = -offset * 178;
-  const z = focus * 240 - absOffset * 48 + Math.cos(angle) * 18;
-  const rotateX = THREE.MathUtils.clamp(offset * -0.036, -0.13, 0.13);
-  const rotateY = -angle * 0.98 + THREE.MathUtils.clamp(impulse * 0.024, -0.16, 0.16);
-  const rotateZ = Math.sin(angle) * 0.72;
-  const scale = 0.48 + trackWindow * 0.24 + focus * 0.34;
-  const opacity = Math.min(0.98, 0.07 + trackWindow * 0.46 + focus * 0.36 + Math.min(0.08, Math.abs(impulse) * 0.022));
+  const focus = Math.max(0, 1 - absOffset * 0.58);
+  const trackWindow = Math.max(0, 1 - absOffset / 7.2);
+  const sourceRadius = STORY_WORK_CARD_RADIUS_X * (0.76 + trackWindow * 0.24);
+  const x = Math.sin(angle) * sourceRadius;
+  const y = -offset * 104;
+  const z = Math.cos(angle) * STORY_WORK_CARD_RADIUS_Z + focus * 260 - absOffset * 30;
+  const rotateX = THREE.MathUtils.clamp(offset * -0.044, -0.16, 0.16);
+  const rotateY = -angle * 0.9 + THREE.MathUtils.clamp(impulse * 0.026, -0.16, 0.16);
+  const rotateZ = Math.sin(angle) * 2.8;
+  const scale = 0.42 + trackWindow * 0.24 + focus * 0.32;
+  const opacity = Math.min(0.98, 0.11 + trackWindow * 0.5 + focus * 0.3 + Math.min(0.08, Math.abs(impulse) * 0.022));
 
-  // 这套公式保留 Active Theory `WorkItems.positionViews()` 的核心：每张卡片都是常驻 view，
-  // 以 50 度步进拥有自己的转面和景深；但按用户反馈把轨道改成固定中心轴的上下传送带。
-  // x 轴显式锁为 0，滚轮只推进 y/z/rotateY，避免之前把源码环形半径映射到屏幕 x 后造成“整组卡片和柱子左右偏移”的错觉。
+  // 这套公式保留 Active Theory `WorkItems.positionViews()` 的核心：15 张真实 view 常驻、
+  // 50 度步进、相邻卡片同时出现在一条轨道上。柱体本身仍然锁 x/z，
+  // 横向半径只给卡片队列使用，避免用户滚动时误读成整根柱子左右漂移。
   return {
     isFocused: absOffset < 0.42,
     opacity,
@@ -2511,6 +2514,31 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       return;
     }
 
+    const syncNativeScrollProgress = () => {
+      const scrollSection = scrollSectionRef.current;
+
+      if (!scrollSection) {
+        return;
+      }
+
+      const rect = scrollSection.getBoundingClientRect();
+      const scrollUnit = Math.max(320, window.innerHeight * 0.72);
+      const nativeProgress = Math.max(0, -rect.top / scrollUnit);
+      const nativeDelta = nativeProgress - nativeScrollProgressRef.current;
+
+      if (Math.abs(nativeDelta) <= 0.0008) {
+        return;
+      }
+
+      // 浏览器滚动事件先把 DOM WorkItem 推到位，RAF 再继续平滑 WebGL。
+      // 这样触控板惯性、浏览器自动滚动和自动化滚动都是真实进度，不会看成单张卡片停在首帧。
+      nativeScrollProgressRef.current = nativeProgress;
+      scrollTargetRef.current = nativeProgress;
+      scrollImpulseRef.current = Math.max(-3.8, Math.min(3.8, scrollImpulseRef.current + nativeDelta * 1.35));
+      applyStoryCardDomProgress(nativeProgress, scrollImpulseRef.current);
+      syncActiveIndexFromProgress(nativeProgress);
+    };
+
     const handleNativeWheel = (event: globalThis.WheelEvent) => {
       const isInsideExperience = event.target instanceof Node && root.contains(event.target);
       const isDocumentWheel =
@@ -2529,12 +2557,15 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       scrollImpulseRef.current = Math.max(-3.8, Math.min(3.8, scrollImpulseRef.current + wheelImpulse * 1.15));
     };
 
+    window.addEventListener("scroll", syncNativeScrollProgress, { passive: true });
     window.addEventListener("wheel", handleNativeWheel, { capture: true, passive: true });
+    syncNativeScrollProgress();
 
     return () => {
+      window.removeEventListener("scroll", syncNativeScrollProgress);
       window.removeEventListener("wheel", handleNativeWheel, { capture: true });
     };
-  }, []);
+  }, [applyStoryCardDomProgress, syncActiveIndexFromProgress]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -4375,20 +4406,25 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       const initialOffset = getInfiniteStorySlotOffset(slotIndex, 0);
       const initialAbsOffset = Math.abs(initialOffset);
       const initialAngle = -initialOffset * workTrackStep;
-      const initialFocus = Math.max(0, 1 - initialAbsOffset * 0.64);
-      const initialTrackWindow = Math.max(0, 1 - initialAbsOffset / 5.2);
-      const initialScale = 0.5 + initialTrackWindow * 0.22 + initialFocus * 0.5;
-      mesh.position.set(0.18, 0.12 - initialOffset * 0.82, 1.74 + initialFocus * 0.7 - initialAbsOffset * 0.1 + Math.cos(initialAngle) * 0.04);
-      mesh.rotation.set(THREE.MathUtils.clamp(initialOffset * -0.036, -0.13, 0.13), -initialAngle * 0.98 - 0.04, Math.sin(initialAngle) * 0.01);
+      const initialFocus = Math.max(0, 1 - initialAbsOffset * 0.58);
+      const initialTrackWindow = Math.max(0, 1 - initialAbsOffset / 7.2);
+      const initialCardRadiusX = 0.68 + initialTrackWindow * 0.32;
+      const initialScale = 0.44 + initialTrackWindow * 0.22 + initialFocus * 0.48;
+      mesh.position.set(
+        0.18 + Math.sin(initialAngle) * initialCardRadiusX,
+        0.12 - initialOffset * 0.52,
+        1.55 + Math.cos(initialAngle) * 0.5 + initialFocus * 0.56 - initialAbsOffset * 0.06
+      );
+      mesh.rotation.set(THREE.MathUtils.clamp(initialOffset * -0.044, -0.16, 0.16), -initialAngle * 0.9 - 0.04, Math.sin(initialAngle) * 0.035);
       mesh.scale.set(initialScale, initialScale, 1);
       backplate.position.copy(mesh.position);
       backplate.position.z -= 0.018;
       backplate.rotation.copy(mesh.rotation);
       backplate.scale.set(initialScale * 1.04, initialScale * 1.04, 1);
-      // 这些卡片对应源站 WorkItem：所有项目卡都一直存在于同一条无界轨道上，
-      // 但为了满足“柱子和卡片都不要横向漂移”，轨道中心固定在同一个 x；
-      // 旋转、景深和 y 轴位移负责表达真实滚动，15 个 slot 保证不是单卡换文案。
-      material.opacity = Math.min(0.26, 0.018 + initialTrackWindow * 0.065 + initialFocus * 0.17);
+      // 这些卡片对应源站 WorkItem：所有项目卡都一直存在于同一条无界轨道上。
+      // v115 把横向半径只还给卡片队列，柱体和 camera x/z 继续锁死；
+      // 这样能看到多张卡片沿同一条轨道转面接力，而不是一张卡片在原地换文案。
+      material.opacity = Math.min(0.34, 0.032 + initialTrackWindow * 0.11 + initialFocus * 0.2);
       mesh.renderOrder = initialOffset === 0 ? 30 : Math.max(20, 28 - initialAbsOffset);
       backplate.renderOrder = mesh.renderOrder - 0.2;
       mesh.userData.index = sceneIndex;
@@ -4607,9 +4643,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 所以这里把 position 和滚动旋转都锁住，只保留时间驱动的极轻微油膜呼吸，保证用户向下滚动时看到的是
       // “柱内从上到下流动”，而不是整根柱子产生 x/z 漂移或绕屏幕横向回正。
       pillarGroup.position.copy(pillarBasePosition);
-      pillarGroup.rotation.y = -0.08 + Math.sin(time * 0.08) * 0.003;
-      pillarGroup.rotation.x = Math.sin(time * 0.14) * 0.004;
-      pillarGroup.rotation.z = Math.sin(time * 0.12) * 0.003;
+      pillarGroup.rotation.set(0, -0.08, 0);
       if (activeTheoryFlowerPointCloud) {
         activeTheoryFlowerPointCloud.position.x = -0.02;
         activeTheoryFlowerPointCloud.position.y = 0.02 + Math.sin(time * 0.16) * 0.006;
@@ -4650,8 +4684,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       });
       referenceStackSegments.forEach((segment, segmentIndex) => {
         const pulse = Math.sin(time * 0.42 + segment.phase) * 0.018;
-        const stackDrift = Math.sin(time * 0.18 + segment.phase) * 0.003;
-        segment.group.position.x = stackDrift;
+        // 用户明确指出柱体滚动不能左右偏移，兜底骨块也必须锁定 x 轴。
+        segment.group.position.x = 0;
         segment.group.position.y = segment.y + pulse;
         segment.group.position.z = 0.47 + Math.cos(time * 0.16 + segment.phase) * 0.012;
         segment.group.rotation.x = Math.sin(time * 0.16 + segment.phase) * 0.006;
@@ -4671,7 +4705,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
         // 源帧柱体默认几乎不漂移，只保留油膜呼吸；滚动时由外层 pillarGroup 负责整体换面。
         // 这里的微动只让单节在同一根柱子里有轻微折光，避免重新变成旧版那种“各飘各的碎片”。
-        segment.group.position.x = segment.basePosition.x + Math.sin(time * 0.12 + segment.phase) * 0.002;
+        segment.group.position.x = segment.basePosition.x;
         segment.group.position.y = segment.basePosition.y + localPulse * 0.006;
         segment.group.position.z = segment.basePosition.z + Math.cos(time * 0.22 + segment.phase) * 0.003;
         segment.group.rotation.x = segment.baseRotation.x + Math.sin(time * 0.14 + segment.phase) * 0.002;
@@ -4797,25 +4831,26 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const { backplate, backplateMaterial, mesh, material } = panel;
         const offset = getInfiniteStorySlotOffset(panel.slotIndex, motionProgress);
         const absOffset = Math.abs(offset);
-        const focus = Math.max(0, 1 - absOffset * 0.64);
-        const trackWindow = Math.max(0, 1 - absOffset / 5.2);
+        const focus = Math.max(0, 1 - absOffset * 0.58);
+        const trackWindow = Math.max(0, 1 - absOffset / 7.2);
         const carouselAngle = -offset * workTrackStep;
-        const targetX = 0.18;
-        const targetY = 0.12 - offset * 0.82;
-        const targetZ = 1.74 + focus * 0.7 - absOffset * 0.1 + Math.cos(carouselAngle) * 0.04;
-        const targetScale = 0.5 + trackWindow * 0.22 + focus * 0.5;
+        const cardRadiusX = 0.68 + trackWindow * 0.32;
+        const targetX = 0.18 + Math.sin(carouselAngle) * cardRadiusX;
+        const targetY = 0.12 - offset * 0.52;
+        const targetZ = 1.55 + Math.cos(carouselAngle) * 0.5 + focus * 0.56 - absOffset * 0.06;
+        const targetScale = 0.44 + trackWindow * 0.22 + focus * 0.48;
         const scrollBoost = Math.min(0.12, Math.abs(scrollImpulse) * 0.035);
-        const targetOpacity = Math.min(0.26, 0.018 + trackWindow * 0.065 + focus * 0.17 + scrollBoost * 0.14);
+        const targetOpacity = Math.min(0.34, 0.032 + trackWindow * 0.11 + focus * 0.2 + scrollBoost * 0.14);
 
-        // 这段把源站 `positionViews` 的多 view / 50 度转面 / camera target 插值改造成纵向版本：
-        // targetX 固定，用户滚轮只改变 offset 对应的 y、z 和 rotationY。
-        // 因此卡片会像源码一样一张接一张穿过视口，但不会再沿屏幕左右摆动，柱体也不会被误读成横向漂移。
+        // 这段回到源站 `positionViews` 的多 view / 50 度转面 / 相邻 target 插值逻辑：
+        // 卡片在自身轨道上有横向半径和景深，柱体和镜头仍锁 x/z，只沿 y 扫描。
+        // 用户滚动时看到的是多张 WorkItem 接力穿场，而不是柱子被卡片轨道拖着左右跑。
         mesh.position.x += (targetX - mesh.position.x) * 0.16;
         mesh.position.y += (targetY - mesh.position.y) * 0.16;
         mesh.position.z += (targetZ - mesh.position.z) * 0.16;
-        const targetRotationY = -carouselAngle * 0.98 - 0.04;
-        const targetRotationX = THREE.MathUtils.clamp(offset * -0.036, -0.13, 0.13);
-        const targetRotationZ = Math.sin(carouselAngle) * 0.01;
+        const targetRotationY = -carouselAngle * 0.9 - 0.04;
+        const targetRotationX = THREE.MathUtils.clamp(offset * -0.044, -0.16, 0.16);
+        const targetRotationZ = Math.sin(carouselAngle) * 0.035;
         mesh.rotation.y += (targetRotationY - mesh.rotation.y) * 0.16;
         mesh.rotation.x += (targetRotationX - mesh.rotation.x) * 0.1;
         mesh.rotation.z += (targetRotationZ - mesh.rotation.z) * 0.1;
@@ -4832,11 +4867,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         // WebGL 里的大 WorkPane 只承担源站式玻璃投影和景深层次；
         // 真正可读、可点击的业务卡片在 DOM 轨道里。这里压低背板/纹理不透明度，
         // 避免 3D 面片变成一整块廉价彩色矩形，把柱体和多卡片关系盖住。
-        backplateMaterial.opacity += ((0.006 + trackWindow * 0.012 + focus * 0.026 + scrollBoost * 0.06) - backplateMaterial.opacity) * 0.12;
+        backplateMaterial.opacity += ((0.012 + trackWindow * 0.026 + focus * 0.044 + scrollBoost * 0.06) - backplateMaterial.opacity) * 0.12;
       });
       // DOM 前景轨道和 WebGL WorkItem 使用同一个无界 progress。
-      // 它只改变卡片的 y/rotate/opacity，不改变柱体坐标；这样即使 WebGL 暗场很重，
-      // 用户也能稳定看见“所有卡片沿同一条轨道上下穿行”的真实滚动关系。
+      // 它只改变卡片自身的轨道坐标/转面/透明度，不改变柱体坐标；这样即使 WebGL 暗场很重，
+      // 用户也能稳定看见“所有卡片沿同一条真实轨道接力穿行”的滚动关系。
       applyStoryCardDomProgress(motionProgress, scrollImpulse);
 
       // 源站是真实 camera.group 在相邻 WorkItem target 间插值；这里为了满足“柱子不左右偏移”，
