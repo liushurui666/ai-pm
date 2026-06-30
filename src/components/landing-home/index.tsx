@@ -55,8 +55,15 @@ type StoryWorkItemVisual = {
   zIndex: number;
 };
 
+type WorkRefractionCanvas = {
+  canvas: HTMLCanvasElement;
+  context: CanvasRenderingContext2D;
+  texture: THREE.CanvasTexture;
+};
+
 const ACTIVE_THEORY_DRACO_DECODER_PATH = "/landing/draco/";
 const ACTIVE_THEORY_KTX2_TRANSCODER_PATH = "/landing/basis/";
+const ACTIVE_THEORY_CHAINLINK_GEOMETRY_PATH = "/landing/active-theory-chainlink.bin";
 const ACTIVE_THEORY_SPINE_BASE_COLOR_PATH = "/landing/active-theory-alien-cracked-basecolor.ktx2";
 const ACTIVE_THEORY_SPINE_GEOMETRY_PATH = "/landing/active-theory-source-spine.bin";
 const ACTIVE_THEORY_FLOWER_SPINE_POINT_CLOUD_PATH = "/landing/active-theory-flower-spine-1024.bin";
@@ -1414,6 +1421,151 @@ function drawRoundedRect(context: CanvasRenderingContext2D, x: number, y: number
   context.closePath();
 }
 
+function createWorkRefractionCanvasTexture(): WorkRefractionCanvas {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 576;
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("Work refraction canvas context is unavailable");
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.generateMipmaps = false;
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearFilter;
+  texture.needsUpdate = true;
+
+  return { canvas, context, texture };
+}
+
+function drawWorkRefractionPane(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  rotation: number,
+  accent: string,
+  focus: number,
+  time: number,
+  slotIndex: number
+) {
+  context.save();
+  context.translate(x, y);
+  context.rotate(rotation);
+  context.globalCompositeOperation = "lighter";
+
+  const radius = 26 + focus * 14;
+  // Canvas 2D 这层不是页面可见 UI，而是模拟源码 Work/refraction MRT 的运行时缓冲：
+  // 卡片亮边、媒体雾面和扫描线会被 SpineShader 按屏幕坐标采样到柱体油膜上。
+  // 这样柱体高光会跟真实 WorkItem 队列滚动，而不是继续吃一张固定参考视频贴图。
+  context.fillStyle = "rgba(18,30,34,0.18)";
+  drawRoundedRect(context, -width * 0.5, -height * 0.5, width, height, radius);
+  context.fill();
+
+  const mediaGlow = context.createRadialGradient(-width * 0.04, -height * 0.12, 0, -width * 0.04, -height * 0.12, width * 0.62);
+  mediaGlow.addColorStop(0, `rgba(244,252,255,${0.12 + focus * 0.18})`);
+  mediaGlow.addColorStop(0.34, `rgba(110,255,225,${0.06 + focus * 0.08})`);
+  mediaGlow.addColorStop(1, "rgba(0,0,0,0)");
+  context.fillStyle = mediaGlow;
+  drawRoundedRect(context, -width * 0.45, -height * 0.39, width * 0.9, height * 0.78, radius * 0.82);
+  context.fill();
+
+  context.globalAlpha = 0.22 + focus * 0.32;
+  context.strokeStyle = accent;
+  context.lineWidth = 2.2 + focus * 2.4;
+  drawRoundedRect(context, -width * 0.5, -height * 0.5, width, height, radius);
+  context.stroke();
+
+  context.globalAlpha = 0.08 + focus * 0.16;
+  context.strokeStyle = "rgba(255,255,255,0.88)";
+  context.lineWidth = 1.2;
+  drawRoundedRect(context, -width * 0.43, -height * 0.34, width * 0.86, height * 0.68, Math.max(8, radius - 12));
+  context.stroke();
+
+  context.globalAlpha = 0.05 + focus * 0.12;
+  context.strokeStyle = "rgba(216,255,246,0.9)";
+  context.lineWidth = 1;
+  for (let lineIndex = 0; lineIndex < 5; lineIndex += 1) {
+    const scanY = -height * 0.34 + lineIndex * height * 0.16 + Math.sin(time * 0.7 + slotIndex + lineIndex) * 4;
+    context.beginPath();
+    context.moveTo(-width * 0.35, scanY);
+    context.lineTo(width * (0.1 + lineIndex * 0.08), scanY + Math.sin(time * 0.48 + lineIndex) * 12);
+    context.stroke();
+  }
+
+  context.restore();
+  context.globalAlpha = 1;
+}
+
+function updateWorkRefractionCanvasTexture(refraction: WorkRefractionCanvas, progress: number, time: number, impulse: number) {
+  const { canvas, context, texture } = refraction;
+  const width = canvas.width;
+  const height = canvas.height;
+
+  context.clearRect(0, 0, width, height);
+  context.globalCompositeOperation = "source-over";
+  const background = context.createLinearGradient(0, 0, width, height);
+  background.addColorStop(0, "rgba(2,5,8,0.96)");
+  background.addColorStop(0.42, "rgba(8,17,19,0.9)");
+  background.addColorStop(1, "rgba(0,2,4,0.98)");
+  context.fillStyle = background;
+  context.fillRect(0, 0, width, height);
+
+  // 源站的 `Work/refraction` 是 WorkItemShader 写入的离屏缓冲，不是静态 env。
+  // 当前没有完整 MRT 管线时，用同一条 15-slot WorkItem 轨道在 canvas 里绘制折射输入：
+  // 这保证滚轮推进时，柱体采样到的亮斑、玻璃屏边缘和媒体雾面都来自真实卡片队列。
+  context.globalCompositeOperation = "lighter";
+  for (let bandIndex = 0; bandIndex < 13; bandIndex += 1) {
+    const seed = bandIndex * 0.173;
+    const phase = (progress * 0.09 + time * 0.018 + seed) % 1;
+    const y = phase * height;
+    const x = width * (0.46 + Math.sin(time * 0.21 + bandIndex) * 0.045);
+    const radius = 28 + (bandIndex % 4) * 16 + Math.abs(impulse) * 2;
+    const glow = context.createRadialGradient(x, y, 0, x, y, radius);
+    glow.addColorStop(0, bandIndex % 3 === 0 ? "rgba(182,102,255,0.16)" : "rgba(105,246,255,0.15)");
+    glow.addColorStop(0.44, bandIndex % 4 === 0 ? "rgba(255,126,170,0.08)" : "rgba(120,255,224,0.06)");
+    glow.addColorStop(1, "rgba(0,0,0,0)");
+    context.fillStyle = glow;
+    context.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+  }
+
+  storyWorkItemSlots.forEach(({ scene, slotIndex }) => {
+    const offset = getInfiniteStorySlotOffset(slotIndex, progress);
+    const absOffset = Math.abs(offset);
+
+    if (absOffset > 7.8) {
+      return;
+    }
+
+    const orbit = getStoryWorkItemOrbit(offset);
+    const focus = Math.max(0, 1 - absOffset * 0.54);
+    const trackWindow = Math.max(0, 1 - absOffset / 7.8);
+    const paneX = width * (0.52 + orbit.x * 0.255);
+    const paneY = height * (0.52 - offset * 0.142 + Math.sin(time * 0.18 + slotIndex) * 0.008);
+    const paneWidth = (155 + trackWindow * 126 + focus * 96) * (0.92 + orbit.z * 0.06);
+    const paneHeight = 88 + trackWindow * 72 + focus * 48;
+    const paneRotation = orbit.rotationY * 0.11 + impulse * 0.003;
+
+    drawWorkRefractionPane(context, paneX, paneY, paneWidth, paneHeight, paneRotation, scene.accent, focus, time, slotIndex);
+  });
+
+  context.globalCompositeOperation = "screen";
+  context.globalAlpha = 0.16 + Math.min(0.12, Math.abs(impulse) * 0.018);
+  const spineBeam = context.createLinearGradient(width * 0.41, 0, width * 0.58, 0);
+  spineBeam.addColorStop(0, "rgba(0,0,0,0)");
+  spineBeam.addColorStop(0.48, "rgba(111,255,229,0.22)");
+  spineBeam.addColorStop(0.52, "rgba(201,148,255,0.16)");
+  spineBeam.addColorStop(1, "rgba(0,0,0,0)");
+  context.fillStyle = spineBeam;
+  context.fillRect(width * 0.36, 0, width * 0.28, height);
+  context.globalAlpha = 1;
+  texture.needsUpdate = true;
+}
+
 function normalizeActiveTheoryDracoAttributeName(attributeName: string) {
   // 源站的几何封装会把点云字段叫做 `positions/colors`，而 Three.js shader/BufferGeometry 期望的是
   // `position/color`。这里在解码入口统一归一化，避免后续材质和几何逻辑到处判断两套命名。
@@ -2238,8 +2390,8 @@ function createSourceSpineShaderMaterial(options: {
   // - `uNormalStrength` 固定为源站的 0.19；
   // - `uReflection` 回到源站 `SpineShader` 的 [1, 1] 系列采样，再在 fragment 内压暗主体；
   // - `matcap-test` 与 `damaged_road_normal` 参与主色，而不是只做一层很薄的外壳；
-  // - 源站真实 `tRefraction` 来自 Work 场景的 MRT pass，这里用同一段参考动态柱体材质
-  //   作为近似输入，避免退回静态 env 采样后柱体缺少 mp4 里的湿润流动高光。
+  // - 源站真实 `tRefraction` 来自 Work 场景的 MRT pass；这里接入运行时 WorkRefractionCanvas，
+  //   用当前 15 张 WorkItem 的真实 offset 队列绘制折射输入，比旧版固定参考视频更接近源码数据流。
   return new THREE.ShaderMaterial({
     depthTest: false,
     depthWrite: false,
@@ -2981,6 +3133,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     referenceSpineSubjectMaskVideo.playbackRate = 0.62;
     void referenceSpineSubjectMaskVideo.play().catch(() => undefined);
     const referenceSpineSubjectDynamicMaskTexture = new THREE.VideoTexture(referenceSpineSubjectMaskVideo);
+    // 运行时 Work/refraction 缓冲：源码里 `SpineShader.tRefraction` 来自 Work 场景 MRT，
+    // 不是独立的视频贴片。这里用 CanvasTexture 按当前滚动进度重绘 WorkItem 队列，
+    // 让柱体油膜高光和玻璃卡片的真实位置同步，继续缩小和 ActiveTheory Work 的材质管线差距。
+    const workRefractionCanvas = createWorkRefractionCanvasTexture();
     const oilBumpTexture = createOilBumpTexture();
     const oilAlphaTexture = createOilAlphaTexture();
     const oilPatchTexture = createOilPatchTexture();
@@ -3593,7 +3749,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
             normalTexture: activeTheorySpineNormalTexture,
             opacity: 0.68,
             phase,
-            refractionTexture: referenceSpineMotionTexture,
+            refractionTexture: workRefractionCanvas.texture,
           });
 
           const mesh = new THREE.Mesh(sourceGeometry, material);
@@ -3978,7 +4134,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       return tendon;
     });
 
-    const chainGeometry = new THREE.TorusGeometry(0.16, 0.036, 14, 36);
+    let chainGeometry: THREE.BufferGeometry = new THREE.TorusGeometry(0.16, 0.036, 14, 36);
     const chainMaterial = oilBaseMaterial.clone();
     chainMaterial.color = new THREE.Color("#05070c");
     chainMaterial.emissive = new THREE.Color("#5fe7ff");
@@ -3999,6 +4155,29 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       pillarGroup.add(link);
       return link;
     });
+
+    void loadActiveTheoryDracoGeometry(ACTIVE_THEORY_CHAINLINK_GEOMETRY_PATH)
+      .then((sourceGeometry) => {
+        if (sceneDisposed) {
+          sourceGeometry.dispose();
+          return;
+        }
+
+        // 镜像源码的 `ChainInstancer` 使用的是同一枚 `chainlink.bin` 链节几何，80 次复制后按 y 轴排布。
+        // 旧 Torus 只能表达“有一串环”，但细节截面、法线和折射高光都不可能对上参考；
+        // 这里在链节资源加载成功后原位替换所有 mesh 的 geometry，保留已验证的 y-loop/rotation.y 动画。
+        sourceGeometry.center();
+        sourceGeometry.computeVertexNormals();
+        chainLinks.forEach((link) => {
+          link.geometry = sourceGeometry;
+          link.scale.set(2.6, 2.08, 2.6);
+        });
+        chainGeometry.dispose();
+        chainGeometry = sourceGeometry;
+      })
+      .catch(() => {
+        // 链节是视觉保真层，不参与登录/跳转；真实几何恢复失败时保留 Torus 兜底。
+      });
 
     const fieldMaterial = oilBaseMaterial.clone();
     fieldMaterial.color = new THREE.Color("#05080d");
@@ -4658,6 +4837,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       const sourceSpineTravel = motionProgress * 1.24;
       const sourceSpineScrollPhase = THREE.MathUtils.euclideanModulo(motionProgress * 1.18, 1);
       const pillarVerticalPhase = motionProgress * 0.42 + scrollFollow * 0.025;
+      updateWorkRefractionCanvasTexture(workRefractionCanvas, motionProgress, time, scrollImpulse);
       particleMaterial.uniforms.uTime.value = time;
       columnParticleMaterial.uniforms.uTime.value = time;
       activeTheoryFlowerPointMaterial.uniforms.uTime.value = time;
@@ -5085,6 +5265,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         activeTheoryFlowerPointGeometry.dispose();
       }
       activeTheoryFlowerPointMaterial.dispose();
+      workRefractionCanvas.texture.dispose();
       spineTendons.forEach((tendon) => {
         tendon.geometry.dispose();
         (tendon.material as THREE.Material).dispose();

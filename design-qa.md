@@ -3,38 +3,38 @@
 - source visual truth path: `/tmp/ai-pm-at-reference/mp4-02-4.2s.png`
 - source video: `/Users/liushurui/Library/Application Support/LarkShell/screenshot/20260629120942_rec_.mp4`
 - source mirror: `/Users/liushurui/Desktop/workspace/new-jiguangjuzhen/activetheory-work-clone-nav-orb-20260524-121151(1)`
-- implementation default screenshot: `/tmp/ai-pm-v128-real-scroll/top.png`
-- implementation after-wheel screenshot: `/tmp/ai-pm-v128-real-scroll/after-wheel-980-stable.png`
-- viewport: 1876x992 desktop, Codex in-app browser, `http://localhost:3004/?qa=v128`
+- implementation default screenshot: `/tmp/ai-pm-v129-refraction-chain/top.png`
+- implementation after-wheel screenshot: `/tmp/ai-pm-v129-refraction-chain/after-wheel-980.png`
+- viewport: 1876x992 desktop, Codex in-app browser, `http://localhost:3004/?qa=v129`
 - state: unauthenticated landing page, hydrated WebGL canvas, real in-app browser scroll from `scrollY=0` to `scrollY=980`
-- full-view comparison evidence: source frame and implementation screenshots were opened separately in Codex visual inspection; side-by-side image generation was blocked because the local environment lacks PIL/ImageMagick.
-- focused region comparison evidence: center pillar + foreground WorkItem card stack were inspected in the source frame and latest after-scroll screenshot.
+- full-view comparison evidence: `/tmp/ai-pm-v129-refraction-chain/source-vs-after-wheel-980.png` combines the source frame and the latest implementation screenshot at the same 992px height.
+- focused region comparison evidence: center pillar + foreground WorkItem card stack were inspected in the side-by-side comparison image and the latest after-scroll screenshot.
 - final result: blocked
-- blocking reason: interaction structure now matches the requested direction, but literal 100% ActiveTheory visual fidelity is still blocked by material/refraction/media differences.
+- blocking reason: interaction structure and refraction data flow are closer to the requested direction, but literal 100% ActiveTheory visual fidelity is still blocked by media composition, source project assets, and exact material/refraction differences.
 
 ## Findings
 
 - [P1] Source material/refraction is still richer than the implementation.
   Location: center pillar and glass panels in `src/components/landing-home/index.tsx`.
-  Evidence: the reference frame has darker wet-shell geometry, sharper oil-film highlights, and denser chromatic refraction; `/tmp/ai-pm-latest-landing-qa/final-after-scroll.png` still uses approximated local shader layers and AI PM canvas textures.
+  Evidence: `/tmp/ai-pm-v129-refraction-chain/source-vs-after-wheel-980.png` shows the implementation now samples an offset-driven Work/refraction canvas, but the source still has darker wet-shell geometry, sharper chromatic highlights, larger real media panes, and stronger panel-to-spine occlusion.
   Impact: this prevents claiming a pixel-level clone of the ActiveTheory Work scene.
-  Fix: continue porting the mirror's `SpineShader`/Work refraction behavior and replace remaining approximated panel media with closer source-like media surfaces.
+  Fix: continue replacing approximated panel media/composite layers with source-like project media surfaces and port more of the mirror's WorkItemShader/refraction buffer behavior.
 
 - [P1] WorkItem interaction direction is corrected again toward the source queue.
   Location: DOM card rail and WebGL panel track.
-  Evidence: browser verification on `http://localhost:3004/?qa=v128` reports 15 DOM WorkItem hit layers. At the top state, 8 cards are visible and all 8 are interactive, with the focus card at slot `0`/command and the surrounding queue spanning x `731-1324`. After a real browser scroll of 980px and stabilization, `scrollY=980`, 8 cards remain visible/interactable, active focus advances to slot `1`/requirement, and the visible queue spans x `737-1353`.
+  Evidence: browser verification on `http://localhost:3004/?qa=v129` reports 15 DOM WorkItem hit layers. At the top state, 8 cards are visible and all 8 are interactive, with the focus card at slot `0`/command. After a real browser scroll of 980px and stabilization, `scrollY=980`, 8 cards remain visible/interactable, active focus advances to slot `1`/requirement, and the visible queue spans x `737-1353`.
   Impact: this resolves the user's complaint that the card interaction looked like one card. The UI now uses 15 source-style slots, each with its own click/focus scroll target, while readable cards retain interaction.
   Fix: keep the 15-slot queue, per-slot click/focus target, and offset-driven 50deg card orbit; do not revert to 5 scene-level targets, single-card copy swapping, or fixed-x card lanes.
 
 - [P1] Pillar no longer drifts horizontally during scroll.
   Location: `activeTheorySpineInstances` animation in `src/components/landing-home/index.tsx`.
-  Evidence: the implementation wraps spine instances along y, locks `pillarGroup.position` and `pillarGroup.rotation` to a fixed x/z pose, locks fallback spine segment x values, and keeps scroll progress out of pillar x/z. In v128 the broader card x range comes from the offset-driven WorkItem orbit; the pillar itself remains anchored while scroll drives y-looping spine instances, chain links, oil-film phase, and card queue progress.
+  Evidence: the implementation wraps spine instances along y, locks `pillarGroup.position` and `pillarGroup.rotation` to a fixed x/z pose, locks fallback spine segment x values, and keeps scroll progress out of pillar x/z. In v129 the broader card x range comes from the offset-driven WorkItem orbit; the pillar itself remains anchored while scroll drives y-looping spine instances, chain links, oil-film phase, Work/refraction canvas, and card queue progress.
   Impact: this matches the requested “从上到下” scroll behavior and avoids the previous lateral twisting impression.
   Fix: keep y-only looping for the pillar; any future camera/card changes must not feed scroll progress into `pillarGroup`, individual spine instance x/z, or fallback spine segment x values.
 
 - [P2] WebGL WorkPane projections are now the primary card visual layer.
   Location: `referenceGlassPanels`, `panelMeshes`, and `.landing-story-hero-asset`.
-  Evidence: `/tmp/ai-pm-v128-real-scroll/after-wheel-980-stable.png` shows the static background glass reduced to a darker environment layer while the 15 WorkItem panes/cards remain readable enough to show queue continuity. DOM cards are visible enough for interaction, while WebGL panes remain the main glass/media layer.
+  Evidence: `/tmp/ai-pm-v129-refraction-chain/after-wheel-980.png` shows the static background glass reduced to a darker environment layer while the 15 WorkItem panes/cards remain readable enough to show queue continuity. DOM cards are visible enough for interaction, while WebGL panes remain the main glass/media layer.
   Impact: this removes the large foggy board that made the queue read as one covered card, while preserving the dark ActiveTheory-style glass stage.
   Fix: refine panel media/refraction in a later pass rather than increasing flat opacity.
 
@@ -62,13 +62,15 @@
 - Added `goToStorySlot(slotIndex)` so each visible repeated WorkItem has its own click/focus scroll target, matching the source behavior where every WorkItem view maps to a target.
 - Expanded visible card hit targets to the near/mid queue (`absOffset < 7.4`) and assigns `tabIndex` accordingly, so all readable cards are actually interactive.
 - Reduced the static reference background glass opacity and changed WorkPane opacity/backplate falloff to focus-weighted curves, preventing environment glass from smearing the 15-card queue into a single flat board.
+- Added a runtime `WorkRefractionCanvas` and connected it to `createSourceSpineShaderMaterial.tRefraction`, so source spine highlights now sample the current 15-slot WorkItem orbit instead of a fixed reference video texture.
+- Added `public/landing/active-theory-chainlink.bin` from the mirror and replaced the fallback Torus chain geometry when the real DRACO asset loads, while preserving the source-style y-loop and y-axis rotation animation.
 
 ## Validation
 
 - `corepack pnpm lint`: passed.
 - `corepack pnpm build`: passed.
-- Browser route: `http://localhost:3004/?qa=v128`.
-- Browser checks: real in-app browser scroll advanced the page from `scrollY=0` to `scrollY=980`; the DOM rail rendered 15 WorkItem hit layers. Top state had 8 visible/interactive cards with visible slots `0,1,2,3,11,12,13,14`; after scroll it had 8 visible/interactive cards with visible slots `0,1,2,3,4,12,13,14`, active focus advanced to slot `1`/`requirement`, and the visible card range spanned x `737-1353` from the card-only orbit while the pillar stayed anchored.
+- Browser route: `http://localhost:3004/?qa=v129`.
+- Browser checks: real in-app browser scroll advanced the page from `scrollY=0` to `scrollY=980`; the DOM rail rendered 15 WorkItem hit layers. Top state had 8 visible/interactive cards with active slot `0`; after scroll it had 8 visible/interactive cards, active focus advanced to slot `1`/`requirement`, the visible card range spanned x `737-1353` from the card-only orbit, and browser console error logs were empty.
 
 ## Follow-up Polish
 
