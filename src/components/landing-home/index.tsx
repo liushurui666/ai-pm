@@ -76,10 +76,14 @@ const ACTIVE_THEORY_WORK_HOGWARTS_THUMB_PATH = "/landing/active-theory-hogwarts-
 const ACTIVE_THEORY_WORK_HOGWARTS_LOGO_PATH = "/landing/active-theory-hogwarts-logo.jpg";
 const STORY_WORK_TRACK_STEP = THREE.MathUtils.degToRad(50);
 const STORY_WORK_ITEM_REPEAT = 3;
-const STORY_WORK_DOM_Y_STEP = 152;
-const STORY_WORK_DOM_ORBIT_X = 212;
-const STORY_WORK_DOM_ORBIT_Z = 126;
-const STORY_WORK_WEBGL_Y_STEP = 0.78;
+const STORY_WORK_SOURCE_RADIUS = 3.8;
+const STORY_WORK_SOURCE_CAMERA_RADIUS = STORY_WORK_SOURCE_RADIUS * 2;
+const STORY_WORK_SOURCE_Y_STEP = 0.84;
+const STORY_WORK_VISIBLE_RANGE = 8.2;
+const STORY_WORK_DOM_Y_STEP = 128;
+const STORY_WORK_DOM_ORBIT_X = 184;
+const STORY_WORK_DOM_ORBIT_Z = 112;
+const STORY_WORK_WEBGL_Y_STEP = 0.72;
 
 function createSolidDataTexture(r: number, g: number, b: number) {
   const texture = new THREE.DataTexture(new Uint8Array([r, g, b, 255]), 1, 1, THREE.RGBAFormat);
@@ -168,12 +172,22 @@ const storyWorkItemSlots = Array.from({ length: STORY_WORK_ITEM_SLOT_COUNT }, (_
 });
 
 function getInfiniteStorySlotOffset(slotIndex: number, progress: number, length = STORY_WORK_ITEM_SLOT_COUNT) {
-  // Active Theory 的 WorkItems 是一串真实 view，而不是单张卡复用文案。
-  // 这里用三轮 slot 做无界最近槽位：滚动持续累加时，同一张业务卡的拷贝会从上到下接力穿场，
-  // 既避免 5 张卡过早折返，也避免靠单卡换内容伪装滚动。
-  const nearestCycle = Math.round((progress - slotIndex) / length);
+  // Active Theory 源码里的 WorkItems 一共 15 个真实 view，卡片按 50deg / 0.84yStep
+  // 放在一条螺旋队列上，滚动时只改变“当前相机所在的连续 index”。
+  // 这里保留同样的连续 index 语义，但把它归一到固定长度的循环窗口里：
+  // 卡片不会在停止滚动后回正，也不会靠替换单张内容假装滚动；越过底部的 slot 会从顶部接上。
+  const normalizedProgress = THREE.MathUtils.euclideanModulo(progress, length);
+  let offset = slotIndex - normalizedProgress;
 
-  return slotIndex + nearestCycle * length - progress;
+  if (offset > length / 2) {
+    offset -= length;
+  }
+
+  if (offset < -length / 2) {
+    offset += length;
+  }
+
+  return offset;
 }
 
 function getStoryWorkItemOrbit(offset: number) {
@@ -182,20 +196,24 @@ function getStoryWorkItemOrbit(offset: number) {
   // 因此不能再真的移动 camera，否则柱体会在屏幕上左右漂。这里把“camera 穿过目标点”的相对运动
   // 转译到每张卡自己的 offset：offset 每变化 1，就沿同样的 50deg 轨道换面一次。
   // 这样 15 张卡都会真实从上到下旋转穿场，而柱体仍然只做 y 向滚动。
-  const angle = -Math.PI / 2 + offset * STORY_WORK_TRACK_STEP;
+  const angle = offset * STORY_WORK_TRACK_STEP;
+  const sourceRelativeX = Math.sin(angle);
+  const sourceRelativeZ = -Math.cos(angle);
 
   return {
     angle,
-    x: Math.cos(angle),
-    z: Math.sin(angle),
-    rotationY: Math.cos(angle),
+    sourceCameraRadius: STORY_WORK_SOURCE_CAMERA_RADIUS,
+    sourceYStep: STORY_WORK_SOURCE_Y_STEP,
+    x: sourceRelativeX,
+    z: sourceRelativeZ,
+    rotationY: sourceRelativeX,
   };
 }
 
 function getStoryWorkItemVisualFromOffset(offset: number, impulse = 0): StoryWorkItemVisual {
   const absOffset = Math.abs(offset);
-  const focus = Math.max(0, 1 - absOffset * 0.54);
-  const trackWindow = Math.max(0, 1 - absOffset / 7.8);
+  const focus = Math.max(0, 1 - absOffset * 0.5);
+  const trackWindow = Math.max(0, 1 - absOffset / STORY_WORK_VISIBLE_RANGE);
   const orbit = getStoryWorkItemOrbit(offset);
   const x = orbit.x * STORY_WORK_DOM_ORBIT_X;
   const y = -offset * STORY_WORK_DOM_Y_STEP;
@@ -223,8 +241,8 @@ function getStoryWorkItemVisual(slotIndex: number, progress: number, impulse = 0
 
 function getStoryWorkItemWebGLLayout(offset: number) {
   const absOffset = Math.abs(offset);
-  const focus = Math.max(0, 1 - absOffset * 0.54);
-  const trackWindow = Math.max(0, 1 - absOffset / 7.8);
+  const focus = Math.max(0, 1 - absOffset * 0.5);
+  const trackWindow = Math.max(0, 1 - absOffset / STORY_WORK_VISIBLE_RANGE);
   const orbit = getStoryWorkItemOrbit(offset);
 
   // WebGL pane 和 DOM hit layer 共用同一个 offset 螺旋轨道。
@@ -361,8 +379,8 @@ const activeTheoryFlowerPointVertexShader = `
     topOffset *= 0.8 + sin(transformed.y * 0.2 + uTime * 0.02 + sourceScroll + randomC * 2.0) * 0.2;
     transformed.y += topOffset;
 
-    float spiralMask = smoothstep(0.0, 0.5, abs(sourceScroll - 0.5));
-    float spiralAngle = sourceScroll * 5.0 + length(transformed.xz) + transformed.y * 0.5 + uRotate * 2.0;
+    float spiralMask = 0.22 + 0.08 * sin(uTime * 0.08 + randomC * 6.28318);
+    float spiralAngle = uTime * 0.12 + length(transformed.xz) + transformed.y * 0.5 + uRotate * 0.35;
     transformed.x -= cos(spiralAngle) * 0.46 * spiralMask;
     transformed.z -= sin(spiralAngle) * 0.46 * spiralMask;
 
@@ -380,8 +398,8 @@ const activeTheoryFlowerPointVertexShader = `
     }
 
     transformed.y -= pow(sourceScroll, 4.0) * 2.8 * pow(randomD, 12.0);
-    transformed.x -= cos(transformed.y) * 0.18 * pow(randomD, 4.0) * pow(sourceScroll, 3.5);
-    transformed.z -= sin(transformed.y) * 0.18 * pow(randomD, 4.0) * pow(sourceScroll, 3.5);
+    transformed.x -= cos(transformed.y + uTime * 0.16) * 0.045 * pow(randomD, 4.0);
+    transformed.z -= sin(transformed.y + uTime * 0.16) * 0.045 * pow(randomD, 4.0);
     transformed.xz = mix(transformed.xz, vec2(0.0), pow(smoothstep(3.1, -3.1, transformed.y), 3.0) * 0.76);
 
     vec4 mvPosition = modelViewMatrix * vec4(transformed, 1.0);
@@ -1537,13 +1555,13 @@ function updateWorkRefractionCanvasTexture(refraction: WorkRefractionCanvas, pro
     const offset = getInfiniteStorySlotOffset(slotIndex, progress);
     const absOffset = Math.abs(offset);
 
-    if (absOffset > 7.8) {
+    if (absOffset > STORY_WORK_VISIBLE_RANGE) {
       return;
     }
 
     const orbit = getStoryWorkItemOrbit(offset);
     const focus = Math.max(0, 1 - absOffset * 0.54);
-    const trackWindow = Math.max(0, 1 - absOffset / 7.8);
+    const trackWindow = Math.max(0, 1 - absOffset / STORY_WORK_VISIBLE_RANGE);
     const paneX = width * (0.52 + orbit.x * 0.255);
     const paneY = height * (0.52 - offset * 0.142 + Math.sin(time * 0.18 + slotIndex) * 0.008);
     const paneWidth = (155 + trackWindow * 126 + focus * 96) * (0.92 + orbit.z * 0.06);
@@ -2635,8 +2653,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 这样向下滚动时所有卡片会像源码 WorkItems 一样接力穿过镜头，不会退化成一张卡片换内容。
       node.dataset.active = visual.isFocused && slot?.sceneIndex === activeIndexRef.current ? "true" : "false";
       node.style.opacity = String(getStoryWorkItemHitLayerOpacity(visual));
-      node.style.pointerEvents = Math.abs(offset) < 7.4 ? "auto" : "none";
-      node.tabIndex = Math.abs(offset) < 7.4 ? 0 : -1;
+      node.style.pointerEvents = Math.abs(offset) < STORY_WORK_VISIBLE_RANGE ? "auto" : "none";
+      node.tabIndex = Math.abs(offset) < STORY_WORK_VISIBLE_RANGE ? 0 : -1;
       node.style.zIndex = String(visual.zIndex);
       node.style.transform = visual.transform;
     });
@@ -2724,6 +2742,36 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       });
     }
   }, [applyStoryCardDomProgress]);
+
+  const handleStoryCardPointerEnter = useCallback((slotIndex: number, event: PointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType !== "mouse") {
+      return;
+    }
+
+    const offset = getInfiniteStorySlotOffset(slotIndex, scrollTargetRef.current);
+
+    if (Math.abs(offset) > STORY_WORK_VISIBLE_RANGE * 0.74) {
+      return;
+    }
+
+    // 源站 WorkItem 的 hover 会把滚动 rig 推向对应 view，而不是只高亮当前那一张。
+    // 这里复用同一个 slot progress：鼠标扫过任意可见卡片时，整条队列按真实滚动位置前进，
+    // 不再出现“只有一张卡片可交互、其他卡只是装饰”的错觉。
+    goToStorySlot(slotIndex);
+  }, [goToStorySlot]);
+
+  const handleStoryCardFocus = useCallback((slotIndex: number) => {
+    const slot = storyWorkItemSlots[slotIndex];
+
+    if (!slot) {
+      return;
+    }
+
+    // 键盘 focus 只同步当前业务上下文，不主动滚页。
+    // 否则 Tab 到任意按钮都会触发平滑滚动，用户会误以为交互把队列强行吸回一张焦点卡。
+    activeIndexRef.current = slot.sceneIndex;
+    setActiveIndex(slot.sceneIndex);
+  }, []);
 
   const handleTouchStart = useCallback((event: TouchEvent<HTMLElement>) => {
     touchStartRef.current = event.touches[0]?.clientY ?? null;
@@ -4842,7 +4890,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       columnParticleMaterial.uniforms.uTime.value = time;
       activeTheoryFlowerPointMaterial.uniforms.uTime.value = time;
       activeTheoryFlowerPointMaterial.uniforms.uScroll.value = sourceSpineScrollPhase;
-      activeTheoryFlowerPointMaterial.uniforms.uRotate.value = sourceScrollSpin;
+      // 用户这轮明确要求“滚动柱子只是从上到下的过程”，所以点云的绕轴扰动不再吃滚动角度。
+      // 滚动只进入 uScroll 控制 y 向穿行；uRotate 保留极慢时间呼吸，避免整根柱体因滚轮产生左右偏移错觉。
+      activeTheoryFlowerPointMaterial.uniforms.uRotate.value = time * 0.08;
       activeTheoryFlowerPointMaterial.uniforms.uSparkle.value = time * 0.42 + Math.abs(scrollImpulse) * 0.18;
       activeTheoryFlowerPointMaterial.uniforms.uOpacity.value = 0.28 + Math.min(0.12, Math.abs(scrollImpulse) * 0.034);
       liquidColumnMaterial.uniforms.uTime.value = time;
@@ -4997,7 +5047,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         link.position.y = chainTravelY + Math.sin(pillarVerticalPhase + linkIndex * 0.28) * 0.012;
         link.position.z = -0.94;
         link.rotation.x = Math.PI / 2;
-        link.rotation.y = Math.PI / 2 * linkIndex - sourceScrollProgress * Math.PI * 8 + scrollFollow * 0.08;
+        link.rotation.y = Math.PI / 2 * linkIndex + time * 0.055 + scrollFollow * 0.02;
         link.rotation.z = 0.08 * Math.sin(linkIndex + time * 0.22);
         material.opacity = (0.07 + Math.min(0.08, Math.abs(scrollImpulse) * 0.02)) * edgeFade;
         material.emissiveIntensity = 0.018 + Math.min(0.035, Math.abs(scrollImpulse) * 0.01);
@@ -5406,12 +5456,13 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
             data-story-slot={slotIndex}
             key={key}
             onClick={() => goToStorySlot(slotIndex)}
-            onFocus={() => goToStorySlot(slotIndex)}
+            onFocus={() => handleStoryCardFocus(slotIndex)}
+            onPointerEnter={(event) => handleStoryCardPointerEnter(slotIndex, event)}
             ref={(node) => {
               storyCardRefs.current[slotIndex] = node;
             }}
             style={{ "--card-accent": scene.accent, ...getInitialStoryCardStyle(slotIndex, activeIndex) } as CSSProperties}
-            tabIndex={Math.abs(getInfiniteStorySlotOffset(slotIndex, activeIndex)) < 7.4 ? 0 : -1}
+            tabIndex={Math.abs(getInfiniteStorySlotOffset(slotIndex, activeIndex)) < STORY_WORK_VISIBLE_RANGE ? 0 : -1}
             type="button"
           >
             <span>{scene.label}</span>
