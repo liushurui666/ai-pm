@@ -15,6 +15,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent, ReactNode, TouchEvent, WheelEvent } from "react";
 import * as THREE from "three";
+import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { MarchingCubes } from "three/examples/jsm/objects/MarchingCubes.js";
 import { ThemeToggleButton, useThemePreference } from "@/components/theme-mode";
 
@@ -40,6 +41,10 @@ type StoryScene = {
 };
 
 type ReferenceGlassPanelVariant = "left" | "front" | "rear";
+
+const ACTIVE_THEORY_DRACO_DECODER_PATH = "/landing/draco/";
+const ACTIVE_THEORY_SPINE_GEOMETRY_PATH = "/landing/active-theory-source-spine.bin";
+const ACTIVE_THEORY_SPINE_MATCAP_PATH = "/landing/active-theory-matcap-test.jpg";
 
 const storyScenes: StoryScene[] = [
   {
@@ -1125,6 +1130,45 @@ function drawRoundedRect(context: CanvasRenderingContext2D, x: number, y: number
   context.closePath();
 }
 
+async function loadActiveTheoryDracoGeometry(source: string) {
+  // 镜像工程里的 `*.bin` 不是普通 JSON，而是「10 字节头 + JSON 元信息 + DRACO 数据」的自定义封装。
+  // 首页需要在浏览器里异步恢复这段真实几何，才能让柱体轮廓接近源站 Work 场景；
+  // 如果解码失败，调用方会继续保留现有程序化柱体，避免登录页因为视觉资产异常而白屏。
+  const response = await fetch(source);
+
+  if (!response.ok) {
+    throw new Error(`Active Theory geometry load failed: ${response.status}`);
+  }
+
+  const buffer = await response.arrayBuffer();
+  const headerPrefix = new TextDecoder().decode(new Uint8Array(buffer, 0, 2)).replace(/\0/g, "");
+  const headerLength = Number(headerPrefix);
+
+  if (!Number.isFinite(headerLength) || headerLength <= 0) {
+    throw new Error("Active Theory geometry header is invalid");
+  }
+
+  const dracoBuffer = buffer.slice(10 + headerLength);
+  const loader = new DRACOLoader();
+  loader.setDecoderPath(ACTIVE_THEORY_DRACO_DECODER_PATH);
+
+  try {
+    return await new Promise<THREE.BufferGeometry>((resolve, reject) => {
+      loader.parse(
+        dracoBuffer,
+        (geometry) => {
+          geometry.computeBoundingBox();
+          geometry.computeBoundingSphere();
+          resolve(geometry);
+        },
+        (error) => reject(error)
+      );
+    });
+  } finally {
+    loader.dispose();
+  }
+}
+
 function createPanelTexture(scene: StoryScene) {
   const canvas = document.createElement("canvas");
   canvas.width = 1024;
@@ -1393,9 +1437,9 @@ function createReferenceGlassPanelTexture(variant: ReferenceGlassPanelVariant) {
   // mesh 再挂到 Three 场景里跟随柱体旋转，既保留自实现，也更接近参考里的层次。
   context.clearRect(0, 0, width, height);
   const baseGradient = context.createLinearGradient(0, 0, width, height);
-  baseGradient.addColorStop(0, variant === "front" ? "rgba(39,42,58,0.46)" : "rgba(139,224,218,0.2)");
-  baseGradient.addColorStop(0.42, variant === "rear" ? "rgba(20,34,38,0.14)" : "rgba(154,193,186,0.18)");
-  baseGradient.addColorStop(1, "rgba(8,12,16,0.08)");
+  baseGradient.addColorStop(0, variant === "front" ? "rgba(33,42,48,0.82)" : "rgba(129,199,187,0.22)");
+  baseGradient.addColorStop(0.42, variant === "front" ? "rgba(21,28,31,0.76)" : variant === "rear" ? "rgba(20,34,38,0.14)" : "rgba(154,193,186,0.18)");
+  baseGradient.addColorStop(1, variant === "front" ? "rgba(5,8,11,0.7)" : "rgba(8,12,16,0.08)");
   context.fillStyle = baseGradient;
   drawRoundedRect(context, inset, inset, width - inset * 2, height - inset * 2, radius);
   context.fill();
@@ -1405,8 +1449,8 @@ function createReferenceGlassPanelTexture(variant: ReferenceGlassPanelVariant) {
   context.clip();
 
   const haze = context.createRadialGradient(width * 0.48, height * 0.34, 0, width * 0.48, height * 0.34, Math.max(width, height) * 0.72);
-  haze.addColorStop(0, variant === "front" ? "rgba(176,158,230,0.2)" : "rgba(215,249,239,0.2)");
-  haze.addColorStop(0.48, "rgba(130,180,174,0.08)");
+  haze.addColorStop(0, variant === "front" ? "rgba(151,180,188,0.3)" : "rgba(215,249,239,0.2)");
+  haze.addColorStop(0.48, variant === "front" ? "rgba(58,85,86,0.18)" : "rgba(130,180,174,0.08)");
   haze.addColorStop(1, "rgba(0,0,0,0)");
   context.fillStyle = haze;
   context.fillRect(0, 0, width, height);
@@ -1417,7 +1461,7 @@ function createReferenceGlassPanelTexture(variant: ReferenceGlassPanelVariant) {
   diagonal.addColorStop(0.58, "rgba(122,255,238,0.1)");
   diagonal.addColorStop(1, "rgba(255,255,255,0)");
   context.fillStyle = diagonal;
-  context.globalAlpha = variant === "rear" ? 0.32 : 0.52;
+  context.globalAlpha = variant === "front" ? 0.42 : variant === "rear" ? 0.32 : 0.52;
   context.beginPath();
   context.moveTo(width * 0.04, height * 0.18);
   context.lineTo(width * 0.78, height * 0.04);
@@ -1446,7 +1490,7 @@ function createReferenceGlassPanelTexture(variant: ReferenceGlassPanelVariant) {
   });
   context.globalCompositeOperation = "source-over";
 
-  context.globalAlpha = variant === "front" ? 0.16 : 0.22;
+  context.globalAlpha = variant === "front" ? 0.1 : 0.22;
   context.strokeStyle = "rgba(220,255,248,0.66)";
   context.lineWidth = 1.2;
   for (let lineIndex = 0; lineIndex < 7; lineIndex += 1) {
@@ -1457,9 +1501,34 @@ function createReferenceGlassPanelTexture(variant: ReferenceGlassPanelVariant) {
     context.stroke();
   }
 
+  if (variant === "front") {
+    // 参考 Work 画面里的主屏不是空白透明框，而是一块带弱内容投影的烟熏显示面；
+    // 这里只放低对比度的产品信号，避免重新变成“故事进度条”，同时让屏幕在默认帧真实压住柱体。
+    context.globalAlpha = 0.78;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.font = "600 58px Arial, sans-serif";
+    context.fillStyle = "rgba(223,249,255,0.66)";
+    context.shadowColor = "rgba(93,231,255,0.38)";
+    context.shadowBlur = 18;
+    context.fillText("AI PM", width * 0.5, height * 0.42);
+    context.font = "500 34px Arial, sans-serif";
+    context.fillStyle = "rgba(203,242,235,0.45)";
+    context.shadowBlur = 12;
+    context.fillText("DELIVERY OPERATIONS", width * 0.5, height * 0.53);
+    context.shadowBlur = 0;
+    context.globalAlpha = 0.2;
+    context.strokeStyle = "rgba(164,255,239,0.58)";
+    context.lineWidth = 1;
+    context.beginPath();
+    context.moveTo(width * 0.28, height * 0.62);
+    context.lineTo(width * 0.72, height * 0.62);
+    context.stroke();
+  }
+
   context.restore();
 
-  context.globalAlpha = variant === "front" ? 0.42 : 0.58;
+  context.globalAlpha = variant === "front" ? 0.54 : 0.58;
   context.strokeStyle = accent;
   context.lineWidth = variant === "front" ? 4.5 : 5.6;
   drawRoundedRect(context, inset, inset, width - inset * 2, height - inset * 2, radius);
@@ -1805,6 +1874,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const referenceSpineSubjectMaskTexture = createReferenceSpineSubjectMaskTexture();
     const referenceSpineFieldTexture = new THREE.TextureLoader().load("/landing/reference-spine-field-wide-v67.png");
     const referenceSpineRimTexture = new THREE.TextureLoader().load("/landing/reference-spine-rim-wide-v67.png");
+    const activeTheorySpineMatcapTexture = new THREE.TextureLoader().load(ACTIVE_THEORY_SPINE_MATCAP_PATH);
     // 参考视频里的柱体默认并不是推进故事线，而是有细密的油膜/粒子呼吸。
     // 这里把用户提供 mp4 中同一柱体的短裁切做成 VideoTexture，只作为微弱动态材质层叠加到柱体组内；
     // 这样不会把整张网页截图当背景，也能避免单帧贴图看起来“死”和“不跟视频一个级别”。
@@ -1850,6 +1920,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     referenceSpineFieldTexture.colorSpace = THREE.SRGBColorSpace;
     referenceSpineRimTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     referenceSpineRimTexture.colorSpace = THREE.SRGBColorSpace;
+    activeTheorySpineMatcapTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    activeTheorySpineMatcapTexture.colorSpace = THREE.SRGBColorSpace;
     referenceSpineMotionTexture.colorSpace = THREE.SRGBColorSpace;
     referenceSpineMotionTexture.generateMipmaps = false;
     referenceSpineMotionTexture.magFilter = THREE.LinearFilter;
@@ -1895,6 +1967,16 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
     const organicPalette = ["#6ee7ff", "#8e73ff", "#db5cff", "#ff6fc6", "#d7a261"];
     const organicMeshes: THREE.Mesh[] = [];
+    const activeTheorySpineInstances: Array<{
+      basePosition: THREE.Vector3;
+      baseRotation: THREE.Euler;
+      baseScale: THREE.Vector3;
+      highlight: THREE.Mesh;
+      mesh: THREE.Mesh;
+      phase: number;
+    }> = [];
+    let activeTheorySpineGeometry: THREE.BufferGeometry | null = null;
+    let sceneDisposed = false;
     const makeOilMaterial = (accentIndex: number) => {
       const material = oilBaseMaterial.clone();
       material.emissive = new THREE.Color(organicPalette[accentIndex % organicPalette.length]);
@@ -2166,21 +2248,21 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
       // 这条主柱负责对齐参考视频的侧向脊柱轮廓：节距更大，主骨块偏扁，侧突基本统一向左伸出。
       // 参考不是正面均匀串珠，若继续左右交替会显得像装饰柱而不是录屏里的脊柱雕塑。
-      const body = new THREE.Mesh(createReferenceVertebraCoreGeometry(stackIndex + 96), makeReferenceSpineMaterial(stackIndex, 0.2));
+      const body = new THREE.Mesh(createReferenceVertebraCoreGeometry(stackIndex + 96), makeReferenceSpineMaterial(stackIndex, 0.11));
       body.position.set(0.08, 0, 0.02);
       body.rotation.set(0.02 * Math.sin(phase), 0.08, -0.02 * Math.cos(phase));
       body.scale.set(1.22 + (stackIndex % 3) * 0.035, 0.92, 0.74);
       body.renderOrder = 5;
       group.add(body);
 
-      const lobeA = new THREE.Mesh(createReferenceProcessGeometry(stackIndex + 140), makeReferenceSpineMaterial(stackIndex + 2, 0.22));
+      const lobeA = new THREE.Mesh(createReferenceProcessGeometry(stackIndex + 140), makeReferenceSpineMaterial(stackIndex + 2, 0.12));
       lobeA.position.set(-0.5 * side + Math.sin(phase) * 0.035, -0.06, 0.02);
       lobeA.rotation.set(0.18, 0.16 * side, 0.28 * side);
       lobeA.scale.set(0.88, 0.72, 0.58);
       lobeA.renderOrder = 5;
       group.add(lobeA);
 
-      const lobeB = new THREE.Mesh(createReferenceProcessGeometry(stackIndex + 168), makeReferenceSpineMaterial(stackIndex + 3, 0.1));
+      const lobeB = new THREE.Mesh(createReferenceProcessGeometry(stackIndex + 168), makeReferenceSpineMaterial(stackIndex + 3, 0.07));
       lobeB.position.set(-0.28 * side + Math.cos(phase) * 0.03, -0.2, -0.16);
       lobeB.rotation.set(-0.1, -0.08 * side, 0.12 * side);
       lobeB.scale.set(0.42, 0.48, 0.42);
@@ -2240,7 +2322,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 参考视频里的柱体是“一个整体侧影被故事卡片切开”，不是每节独立朝不同方向浮动。
       // v58 继续把参考层从“随机骨节”收敛成专用规则骨块：
       // 主体用更平滑的椎骨核心，横突用圆钝 club 形扫掠体，避免默认帧出现鱼鳞状尖刺。
-      const sideBody = new THREE.Mesh(createReferenceVertebraCoreGeometry(config.accent + 220), makeSourceProfileMaterial(config.accent, 0.42 * edgeFade));
+      const sideBody = new THREE.Mesh(createReferenceVertebraCoreGeometry(config.accent + 220), makeSourceProfileMaterial(config.accent, 0.26 * edgeFade));
       const sideBodyMaterial = sideBody.material as THREE.MeshPhysicalMaterial;
       sideBodyMaterial.envMapIntensity *= edgeFade;
       sideBodyMaterial.specularIntensity *= edgeFade;
@@ -2252,7 +2334,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
       // 参考里横突不是从主柱边缘硬插出来，而是有一段湿润的根部团块把主体和侧突糊在一起。
       // 这块小骨根专门解决 v59 仍然偏“程序化拼接”的问题，让侧突根部更像同一块扫描/雕塑模型。
-      const processRoot = new THREE.Mesh(createReferenceVertebraCoreGeometry(config.accent + 280), makeSourceProfileMaterial(config.accent + 1, 0.34 * edgeFade));
+      const processRoot = new THREE.Mesh(createReferenceVertebraCoreGeometry(config.accent + 280), makeSourceProfileMaterial(config.accent + 1, 0.2 * edgeFade));
       const processRootMaterial = processRoot.material as THREE.MeshPhysicalMaterial;
       processRootMaterial.envMapIntensity *= edgeFade;
       processRootMaterial.specularIntensity *= edgeFade;
@@ -2262,7 +2344,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       processRoot.renderOrder = 6.5;
       group.add(processRoot);
 
-      const sideProcess = new THREE.Mesh(createReferenceProcessGeometry(config.accent + 240), makeSourceProfileMaterial(config.accent + 2, 0.36 * edgeFade));
+      const sideProcess = new THREE.Mesh(createReferenceProcessGeometry(config.accent + 240), makeSourceProfileMaterial(config.accent + 2, 0.22 * edgeFade));
       const sideProcessMaterial = sideProcess.material as THREE.MeshPhysicalMaterial;
       sideProcessMaterial.envMapIntensity *= edgeFade;
       sideProcessMaterial.specularIntensity *= edgeFade;
@@ -2286,7 +2368,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           ],
           0.045
         ),
-        makeSourceProfileMaterial(config.accent + 3, 0.42)
+        makeSourceProfileMaterial(config.accent + 3, 0.24)
       );
       const processBladeMaterial = processBlade.material as THREE.MeshPhysicalMaterial;
       // 扁平骨片只应该提供参考里的暗色硬剪影；如果沿用高 clearcoat/envMap，
@@ -2305,7 +2387,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       processBlade.renderOrder = 7.5;
       group.add(processBlade);
 
-      const lowerProcess = new THREE.Mesh(createReferenceProcessGeometry(config.accent + 260), makeSourceProfileMaterial(config.accent + 4, 0.22 * edgeFade));
+      const lowerProcess = new THREE.Mesh(createReferenceProcessGeometry(config.accent + 260), makeSourceProfileMaterial(config.accent + 4, 0.14 * edgeFade));
       const lowerProcessMaterial = lowerProcess.material as THREE.MeshPhysicalMaterial;
       lowerProcessMaterial.envMapIntensity *= edgeFade;
       lowerProcessMaterial.specularIntensity *= edgeFade;
@@ -2341,6 +2423,70 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         sideProcess,
       });
     });
+
+    void loadActiveTheoryDracoGeometry(ACTIVE_THEORY_SPINE_GEOMETRY_PATH)
+      .then((sourceGeometry) => {
+        if (sceneDisposed) {
+          sourceGeometry.dispose();
+          return;
+        }
+
+        activeTheorySpineGeometry = sourceGeometry;
+
+        // 参考 Work 场景的 `spine.bin` 只是一枚骨节资产，源站通过 `SpineInstancer` 把它实例化成中轴。
+        // 这里不再继续堆手写随机几何，而是把同源 DRACO mesh 复制成一串规则骨节；
+        // 这样默认帧的柱体轮廓、滚动时的换面和参考 mp4 的结构关系会更接近。
+        Array.from({ length: 13 }, (_, instanceIndex) => {
+          const phase = instanceIndex * 0.58;
+          const material = makeSourceProfileMaterial(140 + instanceIndex, 0.58);
+          material.clearcoat = 0.86;
+          material.clearcoatRoughness = 0.3;
+          material.color = new THREE.Color("#02050a");
+          material.depthTest = false;
+          material.depthWrite = false;
+          material.emissiveIntensity = 0.2;
+          material.envMapIntensity = 2.9;
+          material.opacity = 0.54;
+          material.roughness = 0.28;
+          material.side = THREE.DoubleSide;
+          material.specularIntensity = 1.56;
+          material.transparent = true;
+
+          const mesh = new THREE.Mesh(sourceGeometry, material);
+          const highlightMaterial = new THREE.MeshMatcapMaterial({
+            // 源站 SpineShader 会把 refraction/matcap/normal 混在一起输出，直接换成普通物理材质会缺少那种湿润的彩色边缘。
+            // 这层同几何 matcap 外壳只负责提供薄薄的油膜反光，不参与深度写入，避免把主体骨节涂成一整根亮柱。
+            blending: THREE.AdditiveBlending,
+            color: new THREE.Color("#94ecff"),
+            depthTest: false,
+            depthWrite: false,
+            matcap: activeTheorySpineMatcapTexture,
+            opacity: 0.19,
+            side: THREE.DoubleSide,
+            transparent: true,
+          });
+          const highlight = new THREE.Mesh(sourceGeometry, highlightMaterial);
+          const basePosition = new THREE.Vector3(Math.sin(phase) * 0.035 - 0.05, -3.04 + instanceIndex * 0.51, 1.1 + Math.cos(phase) * 0.035);
+          const baseRotation = new THREE.Euler(0.18 + Math.sin(phase) * 0.04, 0.42 + instanceIndex * 0.11, (instanceIndex % 2 === 0 ? 0.34 : -0.26) + Math.cos(phase) * 0.04);
+          const baseScale = new THREE.Vector3(1.55 + (instanceIndex % 3) * 0.08, 1.28, 1.42);
+          mesh.position.copy(basePosition);
+          mesh.rotation.copy(baseRotation);
+          mesh.scale.copy(baseScale);
+          mesh.renderOrder = 7.9;
+          highlight.position.copy(basePosition);
+          highlight.rotation.copy(baseRotation);
+          highlight.scale.copy(baseScale).multiplyScalar(1.014);
+          highlight.renderOrder = 8.08;
+          pillarGroup.add(mesh);
+          pillarGroup.add(highlight);
+          activeTheorySpineInstances.push({ basePosition, baseRotation, baseScale, highlight, mesh, phase });
+          organicMeshes.push(mesh);
+          organicMeshes.push(highlight);
+        });
+      })
+      .catch(() => {
+        // 几何恢复失败时只降级为现有程序化柱体；登录页不能因为视觉资产加载失败而影响用户进入系统。
+      });
 
     const exposedHeroShapes = [
       { accent: 18, position: new THREE.Vector3(-0.04, 2.3, 0.2), rotation: new THREE.Euler(0.14, -0.12, 0.02), scale: new THREE.Vector3(1.12, 1.02, 0.9) },
@@ -2817,7 +2963,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         uDynamicMask: { value: referenceSpineSubjectDynamicMaskTexture },
         uMap: { value: referenceSpineSubjectTexture },
         uMask: { value: referenceSpineSubjectMaskTexture },
-        uOpacity: { value: 0.86 },
+        uOpacity: { value: 1.08 },
         uScroll: { value: 0 },
         uTime: { value: 0 },
       },
@@ -3173,15 +3319,15 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         y: 0.54,
       },
       {
-        angle: 0.08,
-        height: 1.98,
-        opacity: 0.58,
-        radiusX: 1.1,
-        radiusZ: 0.86,
+        angle: 0.03,
+        height: 2.46,
+        opacity: 0.68,
+        radiusX: 0.86,
+        radiusZ: 0.82,
         renderOrder: 8.76,
         variant: "front" as const,
-        width: 3.52,
-        y: -0.02,
+        width: 4.12,
+        y: 0.12,
       },
       {
         angle: 2.62,
@@ -3380,27 +3526,27 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceSpineMotionMaterial.uniforms.uOpacity.value = 0.22 + Math.sin(time * 0.31 + 0.4) * 0.026 + Math.min(0.08, Math.abs(scrollImpulse) * 0.022);
       referenceSpineSubjectMaterial.uniforms.uTime.value = time;
       referenceSpineSubjectMaterial.uniforms.uScroll.value = scrollFollow;
-      referenceSpineSubjectMaterial.uniforms.uOpacity.value = 0.84 + Math.sin(time * 0.26 + 0.7) * 0.035 + Math.min(0.12, Math.abs(scrollFollow) * 0.03);
+      referenceSpineSubjectMaterial.uniforms.uOpacity.value = 1.06 + Math.sin(time * 0.26 + 0.7) * 0.04 + Math.min(0.16, Math.abs(scrollFollow) * 0.04);
       referenceSpineOcclusionMaterial.uniforms.uTime.value = time;
       referenceSpineOcclusionMaterial.uniforms.uScroll.value = scrollFollow;
-      referenceSpineOcclusionMaterial.uniforms.uOpacity.value = 0.3 + Math.sin(time * 0.22 + 0.2) * 0.022 + Math.min(0.08, Math.abs(scrollFollow) * 0.02);
-      referenceSpineRimMaterial.opacity = 0.3 + Math.sin(time * 0.22 + 0.9) * 0.035 + Math.min(0.09, Math.abs(scrollImpulse) * 0.022);
-      referenceSpineField.position.x = -0.36 + Math.sin(storyOrbit * 0.32) * 0.02 + scrollFollow * 0.032;
-      referenceSpineField.rotation.y = -0.075 + Math.sin(storyOrbit * 0.34) * 0.026 + scrollFollow * 0.052;
-      referenceSpineGhost.position.x = -0.16 + Math.cos(storyOrbit * 0.28) * 0.018 + scrollFollow * 0.025;
-      referenceSpineGhost.rotation.y = 0.12 + Math.sin(storyOrbit * 0.3) * 0.02 + scrollFollow * 0.038;
-      referenceSpineMotion.position.x = -0.36 + Math.sin(storyOrbit * 0.36 + 0.08) * 0.022 + scrollFollow * 0.036;
-      referenceSpineMotion.rotation.y = -0.08 + Math.sin(storyOrbit * 0.36 + 0.08) * 0.024 + scrollFollow * 0.05;
-      referenceSpineSubject.position.x = -0.62 + Math.sin(storyOrbit * 0.38 + 0.1) * 0.026 + scrollFollow * 0.068;
-      referenceSpineSubject.position.z = 1.3 + Math.cos(storyOrbit * 0.34 + 0.2) * 0.026 + Math.abs(scrollFollow) * 0.022;
-      referenceSpineSubject.rotation.y = -0.09 + Math.sin(storyOrbit * 0.46) * 0.03 + scrollFollow * 0.084;
-      referenceSpineSubject.rotation.z = 0.006 + Math.sin(storyOrbit * 0.32) * 0.01 + scrollFollow * 0.024;
-      referenceSpineSubject.scale.set(1 + Math.min(0.06, Math.abs(scrollFollow) * 0.02), 1 + Math.min(0.035, Math.abs(scrollFollow) * 0.012), 1);
-      referenceSpineOcclusion.position.x = -0.38 + Math.sin(storyOrbit * 0.32 + 0.18) * 0.022 + scrollFollow * 0.058;
+      referenceSpineOcclusionMaterial.uniforms.uOpacity.value = 0.44 + Math.sin(time * 0.22 + 0.2) * 0.026 + Math.min(0.12, Math.abs(scrollFollow) * 0.03);
+      referenceSpineRimMaterial.opacity = 0.42 + Math.sin(time * 0.22 + 0.9) * 0.04 + Math.min(0.12, Math.abs(scrollImpulse) * 0.028);
+      referenceSpineField.position.x = -0.28 + Math.sin(storyOrbit * 0.32) * 0.018 + scrollFollow * 0.044;
+      referenceSpineField.rotation.y = -0.075 + Math.sin(storyOrbit * 0.34) * 0.026 + scrollFollow * 0.068;
+      referenceSpineGhost.position.x = -0.1 + Math.cos(storyOrbit * 0.28) * 0.016 + scrollFollow * 0.036;
+      referenceSpineGhost.rotation.y = 0.12 + Math.sin(storyOrbit * 0.3) * 0.02 + scrollFollow * 0.052;
+      referenceSpineMotion.position.x = -0.28 + Math.sin(storyOrbit * 0.36 + 0.08) * 0.02 + scrollFollow * 0.052;
+      referenceSpineMotion.rotation.y = -0.08 + Math.sin(storyOrbit * 0.36 + 0.08) * 0.024 + scrollFollow * 0.066;
+      referenceSpineSubject.position.x = -0.48 + Math.sin(storyOrbit * 0.38 + 0.1) * 0.024 + scrollFollow * 0.092;
+      referenceSpineSubject.position.z = 1.36 + Math.cos(storyOrbit * 0.34 + 0.2) * 0.026 + Math.abs(scrollFollow) * 0.026;
+      referenceSpineSubject.rotation.y = -0.09 + Math.sin(storyOrbit * 0.46) * 0.032 + scrollFollow * 0.12;
+      referenceSpineSubject.rotation.z = 0.006 + Math.sin(storyOrbit * 0.32) * 0.01 + scrollFollow * 0.032;
+      referenceSpineSubject.scale.set(1.08 + Math.min(0.08, Math.abs(scrollFollow) * 0.024), 1.02 + Math.min(0.045, Math.abs(scrollFollow) * 0.014), 1);
+      referenceSpineOcclusion.position.x = -0.28 + Math.sin(storyOrbit * 0.32 + 0.18) * 0.02 + scrollFollow * 0.076;
       referenceSpineOcclusion.position.z = 1.48 + Math.cos(storyOrbit * 0.31 + 0.14) * 0.022;
       referenceSpineOcclusion.rotation.y = -0.08 + Math.sin(storyOrbit * 0.42 + 0.1) * 0.026 + scrollFollow * 0.072;
-      referenceSpineRim.position.x = -0.38 + Math.sin(storyOrbit * 0.34 + 0.18) * 0.022 + scrollFollow * 0.032;
-      referenceSpineRim.rotation.y = -0.08 + Math.sin(storyOrbit * 0.36 + 0.08) * 0.02 + scrollFollow * 0.048;
+      referenceSpineRim.position.x = -0.28 + Math.sin(storyOrbit * 0.34 + 0.18) * 0.02 + scrollFollow * 0.046;
+      referenceSpineRim.rotation.y = -0.08 + Math.sin(storyOrbit * 0.36 + 0.08) * 0.02 + scrollFollow * 0.066;
       referenceGlassPanels.forEach((panel, panelIndex) => {
         const orbitAngle = panel.angle + storyOrbit * 0.84 + scrollFollow * 0.28;
         const depthOffset = panel.variant === "front" ? 0.5 : panel.variant === "rear" ? -0.34 : 0.02;
@@ -3514,6 +3660,34 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const notchMaterial = segment.notch.material as THREE.MeshPhysicalMaterial;
         notchMaterial.opacity = 0.52 + Math.sin(time * 0.44 + segment.phase) * 0.05;
       });
+      activeTheorySpineInstances.forEach((item, instanceIndex) => {
+        const material = item.mesh.material as THREE.MeshPhysicalMaterial;
+        const highlightMaterial = item.highlight.material as THREE.MeshMatcapMaterial;
+        const pulse = Math.sin(time * 0.38 + item.phase);
+        const scrollLift = Math.max(-0.22, Math.min(0.22, scrollFollow * 0.08));
+
+        // 源站 Work 页的柱体不是页面固定贴图，而是随滚动相机/卡片轨道一起换角度的 3D instancer。
+        // 这段让真实 `spine.bin` 骨节按同一个 storyOrbit 旋转，同时保留很小的默认呼吸；
+        // 如果只移动外层玻璃屏，用户滚轮时会感觉柱子仍然卡在背景里。
+        item.mesh.position.x = item.basePosition.x + Math.sin(storyOrbit * 0.5 + item.phase) * 0.028 + scrollLift;
+        item.mesh.position.y = item.basePosition.y + pulse * 0.012 - scrollFollow * 0.018;
+        item.mesh.position.z = item.basePosition.z + Math.cos(storyOrbit * 0.44 + item.phase) * 0.032;
+        item.mesh.rotation.x = item.baseRotation.x + Math.sin(storyOrbit * 0.42 + item.phase) * 0.04 + scrollImpulse * 0.014;
+        item.mesh.rotation.y = item.baseRotation.y + storyOrbit * 0.34 + scrollFollow * 0.12;
+        item.mesh.rotation.z = item.baseRotation.z + Math.cos(storyOrbit * 0.36 + item.phase) * 0.038 + scrollImpulse * 0.02;
+        item.mesh.scale.set(
+          item.baseScale.x * (1 + pulse * 0.014),
+          item.baseScale.y * (1 - pulse * 0.01),
+          item.baseScale.z * (1 + Math.sin(time * 0.25 + instanceIndex) * 0.01)
+        );
+        item.highlight.position.copy(item.mesh.position);
+        item.highlight.rotation.copy(item.mesh.rotation);
+        item.highlight.scale.copy(item.mesh.scale).multiplyScalar(1.014);
+        material.emissiveIntensity = 0.18 + Math.sin(time * 0.52 + item.phase) * 0.034 + Math.min(0.1, Math.abs(scrollImpulse) * 0.03);
+        material.opacity = 0.5 + Math.sin(time * 0.3 + item.phase) * 0.052 + Math.min(0.14, Math.abs(scrollFollow) * 0.04);
+        highlightMaterial.opacity = 0.14 + Math.sin(time * 0.42 + item.phase) * 0.038 + Math.min(0.08, Math.abs(scrollImpulse) * 0.028);
+        highlightMaterial.color.lerp(new THREE.Color(organicPalette[(instanceIndex + activeIndexRef.current) % organicPalette.length]).lerp(new THREE.Color("#bffcff"), 0.42), 0.035);
+      });
       spineFlecks.forEach((item, fleckIndex) => {
         const pulse = 0.62 + Math.sin(time * 1.2 + item.phase) * 0.3 + Math.min(0.32, Math.abs(scrollImpulse) * 0.1);
         item.material.opacity = item.baseOpacity * pulse;
@@ -3598,6 +3772,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     window.addEventListener("resize", resize);
 
     return () => {
+      sceneDisposed = true;
       window.removeEventListener("resize", resize);
       window.cancelAnimationFrame(animationFrame);
       environmentTexture.dispose();
@@ -3621,10 +3796,23 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       liquidColumnMaterial.dispose();
       pillarLineGeometry.dispose();
       pillarLineMaterial.dispose();
+      const disposedGeometries = new Set<THREE.BufferGeometry>();
+      const disposedMaterials = new Set<THREE.Material>();
       organicMeshes.forEach((mesh) => {
-        mesh.geometry.dispose();
-        (mesh.material as THREE.MeshPhysicalMaterial).dispose();
+        if (!disposedGeometries.has(mesh.geometry)) {
+          disposedGeometries.add(mesh.geometry);
+          mesh.geometry.dispose();
+        }
+
+        const material = mesh.material as THREE.Material;
+        if (!disposedMaterials.has(material)) {
+          disposedMaterials.add(material);
+          material.dispose();
+        }
       });
+      if (activeTheorySpineGeometry && !disposedGeometries.has(activeTheorySpineGeometry)) {
+        activeTheorySpineGeometry.dispose();
+      }
       spineTendons.forEach((tendon) => {
         tendon.geometry.dispose();
         (tendon.material as THREE.Material).dispose();
@@ -3665,6 +3853,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceSpineOcclusionMaterial.dispose();
       referenceSpineRimMaterial.dispose();
       referenceSpineFieldTexture.dispose();
+      activeTheorySpineMatcapTexture.dispose();
       referenceSpineSubjectMaskTexture.dispose();
       referenceSpineMotionTexture.dispose();
       referenceSpineSubjectTexture.dispose();

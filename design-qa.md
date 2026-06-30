@@ -1,51 +1,56 @@
 # Landing 3D Spine Design QA
 
 - source visual truth path: `/Users/liushurui/Library/Application Support/LarkShell/screenshot/20260629120942_rec_.mp4`
-- supplemental mirror path: `/Users/liushurui/Desktop/workspace/new-jiguangjuzhen/activetheory-work-clone-nav-orb-20260524-121151(1)`
-- mirror runtime screenshot: `/tmp/ai-pm-exact-spine/active-theory-clone-work-recapture.png`
 - extracted reference frame: `/tmp/ai-pm-video-reference/user-ref-02.png`
-- implementation default screenshot: `/tmp/ai-pm-exact-spine/default-v85.png`
-- implementation scroll impulse screenshot: `/tmp/ai-pm-exact-spine/impulse-v85.png`
-- implementation settled screenshot: `/tmp/ai-pm-exact-spine/settled-v85.png`
-- comparison evidence: `/tmp/ai-pm-exact-spine/ref-default-impulse-v85.png`
-- latest code adjustment after screenshot evidence: v86 transform tightening in `src/components/landing-home/index.tsx`
-- viewport: 1280x720 desktop evidence
-- state: unauthenticated landing page; default idle light/motion plus one wheel interaction
+- supplemental mirror path: `/Users/liushurui/Desktop/workspace/new-jiguangjuzhen/activetheory-work-clone-nav-orb-20260524-121151(1)`
+- mirror source assets now used: `spine.bin`, `draco_wasm_wrapper.js`, `draco_decoder.wasm`, `matcap-test.jpg`
+- implementation default screenshot: `/tmp/ai-pm-exact-spine/default-v88-source-matcap.png`
+- implementation scroll screenshot: `/tmp/ai-pm-exact-spine/impulse-v88-source-matcap.png`
+- full-view comparison evidence: `/tmp/ai-pm-exact-spine/ref-default-impulse-v88.png`
+- focused region comparison evidence: `/tmp/ai-pm-exact-spine/pillar-panel-focused-v88.png`
+- viewport: 1280x720 desktop
+- state: unauthenticated landing page; default idle motion and one wheel-driven scroll state
 - final result: blocked
-- blocker: v85/v86 improves the spatial glass screens, source-video pillar response, and scroll-coupled rotation, but strict pixel-level identity with the mp4 reference is still not certified. The local mirror exposes useful `HomeLogoShader`/asset/config clues, yet its `/work/` runtime did not fully reproduce the 3D background locally, so the mp4 remains the only reliable visual truth.
+- blocker: v88 now loads the mirror's real Draco `spine.bin` geometry and source matcap highlight, but the visible result is still not pixel-identical to the provided reference mp4. The remaining differences are visible in front-screen opacity/content, WorkItem-style refraction thickness, and upper-column oil-film density.
 
 ## Findings
 
-- [P1] 柱体和玻璃屏已按同一轨道联动，但仍不是源站同一套 3D 资产
-  Location: `src/components/landing-home/index.tsx` Three.js stage.
-  Evidence: `/tmp/ai-pm-exact-spine/ref-default-impulse-v85.png` puts the mp4 reference, default implementation, and scroll implementation side by side. v85 adds self-generated left/front/rear glass panels and binds them to `storyOrbit`; v86 further reduces horizontal drift so the interaction reads more like rotation than translation.
-  Impact: addresses “滚动时柱子也要跟随滚动”的 behavior problem, but cannot claim 100% identical geometry/material.
-  Fix: exact identity would require authorized source 3D assets or a source-matched rebuilt model/shader pipeline; additional hand tuning can only approach, not certify zero difference.
+- [P1] Source geometry is integrated, but source shader is not fully reproduced
+  Location: `src/components/landing-home/index.tsx` Active Theory spine instance layer.
+  Evidence: `spine.bin` loads through browser-served Draco assets, and v88 shows more regular vertebra silhouettes than v86. The reference frame still has stronger cyan/purple wet highlights and deeper black-to-glass contrast.
+  Impact: the mirror materially improves the chance of close restoration, but geometry alone is not enough for a 100% visual match.
+  Fix: continue porting the core ideas from `SpineShader`: heavier refraction buffer contribution, normal-map distortion, and Work composite bloom/contrast.
 
-- [P1] 镜像能指导技术方向，不能作为直接复制来源
-  Location: supplemental mirror directory.
-  Evidence: the mirror contains `compiled.vs`, `spine.bin`, `flower_spine-1024.bin`, and `uil.local-z-v2.json`; `HomeLogoShader` confirms reference-style rendering uses normal/refraction/fresnel/video layers and `uScrollDelta`. The local `/work/` mirror screenshot did not show the full 3D scene, only the Work list plus canvas shell.
-  Impact: useful for choosing implementation mechanics, not enough to replace mp4 comparison.
-  Fix: keep using the mirror for parameter/shader analysis while recreating visuals with AI PM-owned procedural Three.js/Canvas layers.
+- [P1] Front glass screen now blocks the column, but it differs from the reference Work card
+  Location: `createReferenceGlassPanelTexture` and `referenceGlassPanels`.
+  Evidence: `/tmp/ai-pm-exact-spine/pillar-panel-focused-v88.png` shows the AI PM main screen occupying a similar spatial role, but the source screen has denser image/video content, brighter typography, and a thicker green glass edge.
+  Impact: the composition is closer, but users can still see it is not the same screen/rendering stack.
+  Fix: increase WorkItem-style video/refraction density or build a dedicated runtime texture for the front panel instead of the current low-contrast canvas projection.
 
-- [P2] 默认态更接近“静止装置”，滚动才出现宣传卡片运动
-  Location: `referenceGlassPanels`, `referenceSpineSubjectMaterial`, `pillarGroup`, and `panelMeshes`.
-  Evidence: `/tmp/ai-pm-exact-spine/default-v85.png` keeps custom story cards subdued and lets the source-video pillar/glass composition lead; `/tmp/ai-pm-exact-spine/impulse-v85.png` shows wheel-driven rotation.
-  Impact: better matches the requested “默认不动，只保留光晕粒子；滚动宣传时卡片旋转”的 direction.
-  Fix: no immediate code blocker, but visual exactness remains blocked.
+- [P2] Scroll coupling works, but motion amplitude still differs from the mp4
+  Location: `activeTheorySpineInstances`, `referenceGlassPanels`, and `pillarGroup` animation.
+  Evidence: v88 scroll screenshot shows the pillar and card rotate together. The reference scroll state rotates the central card around the column with a heavier parallax shift and less visible landing-page text overlap.
+  Impact: behavior direction is correct, but exact timing/easing remains unmatched.
+  Fix: tune `storyOrbit`, `scrollFollow`, and front-panel radius/rotation against additional mp4 frames.
 
-## Patches Made In V85/V86
+## Patches Made In V88
 
-- Added `createReferenceGlassPanelTexture` and `referenceGlassPanels` for self-generated left/front/rear frosted glass screens.
-- Added a HomeLogoShader-inspired rolling refraction/rainbow edge layer to `referenceSpineSubjectMaterial` without copying third-party shader source.
-- Increased column fleck/particle visibility to make the pillar surface read as oily, not plain smoke.
-- Tightened `pillarGroup` default scale and reduced horizontal scroll drift after v85 so the stage rotates around the pillar instead of sliding away.
-- Connected source-video field, ghost, motion, subject, occlusion, rim, and glass panels to the same `storyOrbit` / `scrollFollow` motion model.
+- Added browser-side Draco decode for the mirror `spine.bin` custom package format.
+- Added public Draco wasm decoder assets and ignored those third-party runtime files in ESLint.
+- Added the mirror `matcap-test.jpg` as a thin additive highlight layer over each source spine instance.
+- Enlarged and darkened the front glass screen so it behaves more like the reference occluding Work card.
+- Removed the deprecated `DRACOLoader.setDecoderConfig` call after browser verification showed only an old cached warning.
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: AI PM landing copy remains product-specific, not source-identical Work typography; blocked for exact clone.
+- Spacing and layout rhythm: central column/card relationship is closer, but the reference card begins farther left and carries stronger foreground dominance.
+- Colors and visual tokens: matcap improves cyan/purple highlights, but source bloom/refraction contrast is still stronger.
+- Image quality and asset fidelity: real source `spine.bin` and matcap are used; Work screen texture is still recreated by canvas and not source-identical.
+- Copy and content: intentionally uses AI PM copy; this is acceptable for product context but not for a literal 100% visual clone.
 
 ## Implementation Checklist
 
-- `git diff --check` passed.
-- `CI=true corepack pnpm lint` passed.
-- `CI=true corepack pnpm build` passed.
-- Browser evidence was captured for v85; a later browser-plugin capture attempt for v86 timed out, so v86 is verified by code review, diff check, lint, and build.
-- Do not mark Product Design QA passed until the visible vertebra silhouette, embedded oil-film/refraction, left/front glass-panel composition, foreground-card occlusion, and scroll motion match the mp4 at source-frame level.
+- Keep v88 evidence as the baseline for the next fidelity pass.
+- Next pass should target source-like `SpineShader` material and WorkItem card refraction before further layout polish.
+- Do not mark Product Design QA as passed until the pillar silhouette, front card opacity/content, oil-film refraction, and scroll motion match the mp4 at the same frame/state.
