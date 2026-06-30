@@ -1711,18 +1711,28 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     referenceSpineMotionVideo.playbackRate = 0.62;
     void referenceSpineMotionVideo.play().catch(() => undefined);
     const referenceSpineMotionTexture = new THREE.VideoTexture(referenceSpineMotionVideo);
-    // 独立的主体裁切只保留 mp4 左侧柱体区域，避免 v72 在 shader 内临时裁 UV 时露出竖向视频边。
-    // 它和宽版动态层共用播放节奏，但素材本身更窄，默认态会更像参考里的连续油膜柱体。
+    // v76 用更宽的源视频主体裁切保留参考柱体左侧真实骨节边缘；
+    // 再叠加同帧动态 mask 和运行时有机 mask，避免宽裁切里的前景玻璃卡片重新变成矩形贴片。
     const referenceSpineSubjectVideo = document.createElement("video");
     referenceSpineSubjectVideo.autoplay = true;
     referenceSpineSubjectVideo.loop = true;
     referenceSpineSubjectVideo.muted = true;
     referenceSpineSubjectVideo.playsInline = true;
     referenceSpineSubjectVideo.preload = "auto";
-    referenceSpineSubjectVideo.src = "/landing/reference-spine-subject-v73.mp4";
+    referenceSpineSubjectVideo.src = "/landing/reference-spine-subject-wide-v76.mp4";
     referenceSpineSubjectVideo.playbackRate = 0.62;
     void referenceSpineSubjectVideo.play().catch(() => undefined);
     const referenceSpineSubjectTexture = new THREE.VideoTexture(referenceSpineSubjectVideo);
+    const referenceSpineSubjectMaskVideo = document.createElement("video");
+    referenceSpineSubjectMaskVideo.autoplay = true;
+    referenceSpineSubjectMaskVideo.loop = true;
+    referenceSpineSubjectMaskVideo.muted = true;
+    referenceSpineSubjectMaskVideo.playsInline = true;
+    referenceSpineSubjectMaskVideo.preload = "auto";
+    referenceSpineSubjectMaskVideo.src = "/landing/reference-spine-subject-mask-v76.mp4";
+    referenceSpineSubjectMaskVideo.playbackRate = 0.62;
+    void referenceSpineSubjectMaskVideo.play().catch(() => undefined);
+    const referenceSpineSubjectDynamicMaskTexture = new THREE.VideoTexture(referenceSpineSubjectMaskVideo);
     const oilBumpTexture = createOilBumpTexture();
     const oilAlphaTexture = createOilAlphaTexture();
     const oilPatchTexture = createOilPatchTexture();
@@ -1741,6 +1751,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     referenceSpineSubjectTexture.generateMipmaps = false;
     referenceSpineSubjectTexture.magFilter = THREE.LinearFilter;
     referenceSpineSubjectTexture.minFilter = THREE.LinearFilter;
+    referenceSpineSubjectDynamicMaskTexture.generateMipmaps = false;
+    referenceSpineSubjectDynamicMaskTexture.magFilter = THREE.LinearFilter;
+    referenceSpineSubjectDynamicMaskTexture.minFilter = THREE.LinearFilter;
     oilBumpTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     oilAlphaTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     oilPatchTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -2046,21 +2059,21 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
       // 这条主柱负责对齐参考视频的侧向脊柱轮廓：节距更大，主骨块偏扁，侧突基本统一向左伸出。
       // 参考不是正面均匀串珠，若继续左右交替会显得像装饰柱而不是录屏里的脊柱雕塑。
-      const body = new THREE.Mesh(createReferenceVertebraCoreGeometry(stackIndex + 96), makeReferenceSpineMaterial(stackIndex, 0.28));
+      const body = new THREE.Mesh(createReferenceVertebraCoreGeometry(stackIndex + 96), makeReferenceSpineMaterial(stackIndex, 0.2));
       body.position.set(0.08, 0, 0.02);
       body.rotation.set(0.02 * Math.sin(phase), 0.08, -0.02 * Math.cos(phase));
       body.scale.set(1.22 + (stackIndex % 3) * 0.035, 0.92, 0.74);
       body.renderOrder = 5;
       group.add(body);
 
-      const lobeA = new THREE.Mesh(createReferenceProcessGeometry(stackIndex + 140), makeReferenceSpineMaterial(stackIndex + 2, 0.34));
+      const lobeA = new THREE.Mesh(createReferenceProcessGeometry(stackIndex + 140), makeReferenceSpineMaterial(stackIndex + 2, 0.22));
       lobeA.position.set(-0.5 * side + Math.sin(phase) * 0.035, -0.06, 0.02);
       lobeA.rotation.set(0.18, 0.16 * side, 0.28 * side);
       lobeA.scale.set(0.88, 0.72, 0.58);
       lobeA.renderOrder = 5;
       group.add(lobeA);
 
-      const lobeB = new THREE.Mesh(createReferenceProcessGeometry(stackIndex + 168), makeReferenceSpineMaterial(stackIndex + 3, 0.16));
+      const lobeB = new THREE.Mesh(createReferenceProcessGeometry(stackIndex + 168), makeReferenceSpineMaterial(stackIndex + 3, 0.1));
       lobeB.position.set(-0.28 * side + Math.cos(phase) * 0.03, -0.2, -0.16);
       lobeB.rotation.set(-0.1, -0.08 * side, 0.12 * side);
       lobeB.scale.set(0.42, 0.48, 0.42);
@@ -2120,7 +2133,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 参考视频里的柱体是“一个整体侧影被故事卡片切开”，不是每节独立朝不同方向浮动。
       // v58 继续把参考层从“随机骨节”收敛成专用规则骨块：
       // 主体用更平滑的椎骨核心，横突用圆钝 club 形扫掠体，避免默认帧出现鱼鳞状尖刺。
-      const sideBody = new THREE.Mesh(createReferenceVertebraCoreGeometry(config.accent + 220), makeSourceProfileMaterial(config.accent, 0.56 * edgeFade));
+      const sideBody = new THREE.Mesh(createReferenceVertebraCoreGeometry(config.accent + 220), makeSourceProfileMaterial(config.accent, 0.42 * edgeFade));
       const sideBodyMaterial = sideBody.material as THREE.MeshPhysicalMaterial;
       sideBodyMaterial.envMapIntensity *= edgeFade;
       sideBodyMaterial.specularIntensity *= edgeFade;
@@ -2132,7 +2145,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
       // 参考里横突不是从主柱边缘硬插出来，而是有一段湿润的根部团块把主体和侧突糊在一起。
       // 这块小骨根专门解决 v59 仍然偏“程序化拼接”的问题，让侧突根部更像同一块扫描/雕塑模型。
-      const processRoot = new THREE.Mesh(createReferenceVertebraCoreGeometry(config.accent + 280), makeSourceProfileMaterial(config.accent + 1, 0.48 * edgeFade));
+      const processRoot = new THREE.Mesh(createReferenceVertebraCoreGeometry(config.accent + 280), makeSourceProfileMaterial(config.accent + 1, 0.34 * edgeFade));
       const processRootMaterial = processRoot.material as THREE.MeshPhysicalMaterial;
       processRootMaterial.envMapIntensity *= edgeFade;
       processRootMaterial.specularIntensity *= edgeFade;
@@ -2142,7 +2155,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       processRoot.renderOrder = 6.5;
       group.add(processRoot);
 
-      const sideProcess = new THREE.Mesh(createReferenceProcessGeometry(config.accent + 240), makeSourceProfileMaterial(config.accent + 2, 0.5 * edgeFade));
+      const sideProcess = new THREE.Mesh(createReferenceProcessGeometry(config.accent + 240), makeSourceProfileMaterial(config.accent + 2, 0.36 * edgeFade));
       const sideProcessMaterial = sideProcess.material as THREE.MeshPhysicalMaterial;
       sideProcessMaterial.envMapIntensity *= edgeFade;
       sideProcessMaterial.specularIntensity *= edgeFade;
@@ -2176,7 +2189,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       processBladeMaterial.color = new THREE.Color("#020407");
       processBladeMaterial.emissiveIntensity = 0.052;
       processBladeMaterial.envMapIntensity = 0.66;
-      processBladeMaterial.opacity = (segmentIndex <= 1 ? 0.1 : 0.22) * edgeFade;
+      processBladeMaterial.opacity = (segmentIndex <= 1 ? 0.06 : 0.14) * edgeFade;
       processBladeMaterial.roughness = 0.68;
       processBladeMaterial.specularIntensity = 0.34;
       processBlade.position.set(-0.5, -0.02, 0.1);
@@ -2185,7 +2198,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       processBlade.renderOrder = 7.5;
       group.add(processBlade);
 
-      const lowerProcess = new THREE.Mesh(createReferenceProcessGeometry(config.accent + 260), makeSourceProfileMaterial(config.accent + 4, 0.32 * edgeFade));
+      const lowerProcess = new THREE.Mesh(createReferenceProcessGeometry(config.accent + 260), makeSourceProfileMaterial(config.accent + 4, 0.22 * edgeFade));
       const lowerProcessMaterial = lowerProcess.material as THREE.MeshPhysicalMaterial;
       lowerProcessMaterial.envMapIntensity *= edgeFade;
       lowerProcessMaterial.specularIntensity *= edgeFade;
@@ -2683,10 +2696,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     referenceSpineMotion.renderOrder = 7.48;
     pillarGroup.add(referenceSpineMotion);
 
-    // 这层是 v73 的关键：素材层面已经裁成 mp4 左侧柱体主体，再由 shader 做亮度/色彩遮罩。
+    // 这层是 v76 的关键：素材层面改成更宽的 mp4 柱体主体，再由“动态视频 mask + 有机轮廓 mask”共同裁切。
     // 它仍然是 pillarGroup 里的 3D mesh，滚轮推进时会和柱体整体旋转；但视觉主形来自源视频柱子，
     // 从而减少“程序化骨节 + 一层光效”的割裂感，更接近用户要求的同一根规整油膜柱体。
-    const referenceSpineSubjectGeometry = new THREE.PlaneGeometry(1.24, 6.22, 1, 1);
+    const referenceSpineSubjectGeometry = new THREE.PlaneGeometry(1.54, 6.22, 1, 1);
     const referenceSpineSubjectMaterial = new THREE.ShaderMaterial({
       blending: THREE.NormalBlending,
       depthTest: false,
@@ -2694,9 +2707,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       side: THREE.DoubleSide,
       transparent: true,
       uniforms: {
+        uDynamicMask: { value: referenceSpineSubjectDynamicMaskTexture },
         uMap: { value: referenceSpineSubjectTexture },
         uMask: { value: referenceSpineSubjectMaskTexture },
-        uOpacity: { value: 0.72 },
+        uOpacity: { value: 0.62 },
         uScroll: { value: 0 },
         uTime: { value: 0 },
       },
@@ -2709,6 +2723,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         }
       `,
       fragmentShader: `
+        uniform sampler2D uDynamicMask;
         uniform sampler2D uMap;
         uniform sampler2D uMask;
         uniform float uOpacity;
@@ -2718,24 +2733,28 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
         void main() {
           vec4 video = texture2D(uMap, vUv);
+          vec4 dynamicMaskSample = texture2D(uDynamicMask, vUv);
           vec4 organicMaskSample = texture2D(uMask, vUv);
           float maxChannel = max(max(video.r, video.g), video.b);
           float minChannel = min(min(video.r, video.g), video.b);
           float saturation = maxChannel - minChannel;
           float luma = dot(video.rgb, vec3(0.2126, 0.7152, 0.0722));
           float organicMask = organicMaskSample.a;
+          float dynamicMask = smoothstep(0.06, 0.72, dynamicMaskSample.r);
           float bodyMatte = smoothstep(0.018, 0.12, luma + saturation * 0.48);
           float chromaMatte = smoothstep(0.026, 0.18, saturation);
           float lumaMatte = smoothstep(0.04, 0.34, luma);
-          float edgeFade = smoothstep(0.015, 0.12, vUv.x) * smoothstep(0.92, 0.62, vUv.x);
+          float edgeFade = smoothstep(0.012, 0.095, vUv.x) * smoothstep(0.86, 0.58, vUv.x);
           float verticalFade = smoothstep(0.01, 0.075, vUv.y) * smoothstep(1.0, 0.9, vUv.y);
-          float rightPanelCull = 1.0 - smoothstep(0.5, 0.84, vUv.x) * 0.78;
+          float rightPanelCull = 1.0 - smoothstep(0.46, 0.8, vUv.x) * 0.82;
           float scrollBreath = 1.0 + min(0.16, abs(uScroll) * 0.05);
           float scanPulse = 0.94 + sin(uTime * 0.7 + vUv.y * 12.0 + uScroll * 0.8) * 0.06;
-          float alpha = max(bodyMatte, max(chromaMatte * 0.86, lumaMatte * 0.52)) * organicMask * edgeFade * verticalFade * rightPanelCull * scanPulse * scrollBreath * uOpacity;
+          float sourceMatte = max(bodyMatte * 0.9, max(chromaMatte * 0.86, lumaMatte * 0.52));
+          float pillarMask = organicMask * mix(0.68, 1.18, dynamicMask);
+          float alpha = sourceMatte * pillarMask * edgeFade * verticalFade * rightPanelCull * scanPulse * scrollBreath * uOpacity;
           vec3 darkBody = video.rgb * vec3(0.68, 0.78, 0.96);
           vec3 oilHighlight = pow(video.rgb, vec3(0.72)) * vec3(1.06, 1.14, 1.26);
-          vec3 color = mix(darkBody, oilHighlight, smoothstep(0.045, 0.22, saturation + luma * 0.28));
+          vec3 color = mix(darkBody, oilHighlight, smoothstep(0.045, 0.22, saturation + luma * 0.28 + dynamicMask * 0.08));
           color += vec3(0.03, 0.055, 0.08) * bodyMatte;
 
           gl_FragColor = vec4(color, alpha);
@@ -2743,7 +2762,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       `,
     });
     const referenceSpineSubject = new THREE.Mesh(referenceSpineSubjectGeometry, referenceSpineSubjectMaterial);
-    referenceSpineSubject.position.set(-0.86, 0.08, 1.34);
+    referenceSpineSubject.position.set(-0.94, 0.08, 1.34);
     referenceSpineSubject.rotation.set(0.016, -0.078, 0.012);
     referenceSpineSubject.renderOrder = 7.62;
     pillarGroup.add(referenceSpineSubject);
@@ -3125,12 +3144,12 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceSpineMotionMaterial.uniforms.uOpacity.value = 0.22 + Math.sin(time * 0.31 + 0.4) * 0.026 + Math.min(0.08, Math.abs(scrollImpulse) * 0.022);
       referenceSpineSubjectMaterial.uniforms.uTime.value = time;
       referenceSpineSubjectMaterial.uniforms.uScroll.value = scrollFollow;
-      referenceSpineSubjectMaterial.uniforms.uOpacity.value = 0.68 + Math.sin(time * 0.26 + 0.7) * 0.034 + Math.min(0.11, Math.abs(scrollFollow) * 0.028);
+      referenceSpineSubjectMaterial.uniforms.uOpacity.value = 0.6 + Math.sin(time * 0.26 + 0.7) * 0.03 + Math.min(0.1, Math.abs(scrollFollow) * 0.026);
       referenceSpineRimMaterial.opacity = 0.3 + Math.sin(time * 0.22 + 0.9) * 0.035 + Math.min(0.09, Math.abs(scrollImpulse) * 0.022);
       referenceSpineField.position.x = -0.56 + Math.sin(storyOrbit * 0.32) * 0.028;
       referenceSpineGhost.position.x = -0.28 + Math.cos(storyOrbit * 0.28) * 0.024;
       referenceSpineMotion.position.x = -0.57 + Math.sin(storyOrbit * 0.36 + 0.08) * 0.027;
-      referenceSpineSubject.position.x = -0.86 + Math.sin(storyOrbit * 0.38 + 0.1) * 0.034 + scrollFollow * 0.046;
+      referenceSpineSubject.position.x = -0.94 + Math.sin(storyOrbit * 0.38 + 0.1) * 0.034 + scrollFollow * 0.046;
       referenceSpineSubject.position.z = 1.34 + Math.cos(storyOrbit * 0.34 + 0.2) * 0.03 + Math.abs(scrollFollow) * 0.018;
       referenceSpineSubject.rotation.y = -0.078 + Math.sin(storyOrbit * 0.46) * 0.035 + scrollFollow * 0.045;
       referenceSpineSubject.rotation.z = 0.012 + Math.sin(storyOrbit * 0.32) * 0.012 + scrollFollow * 0.018;
@@ -3379,12 +3398,16 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceSpineSubjectMaskTexture.dispose();
       referenceSpineMotionTexture.dispose();
       referenceSpineSubjectTexture.dispose();
+      referenceSpineSubjectDynamicMaskTexture.dispose();
       referenceSpineMotionVideo.pause();
       referenceSpineMotionVideo.removeAttribute("src");
       referenceSpineMotionVideo.load();
       referenceSpineSubjectVideo.pause();
       referenceSpineSubjectVideo.removeAttribute("src");
       referenceSpineSubjectVideo.load();
+      referenceSpineSubjectMaskVideo.pause();
+      referenceSpineSubjectMaskVideo.removeAttribute("src");
+      referenceSpineSubjectMaskVideo.load();
       referenceSpineRimTexture.dispose();
       oilBumpTexture.dispose();
       oilAlphaTexture.dispose();
