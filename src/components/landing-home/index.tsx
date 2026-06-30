@@ -2020,6 +2020,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
   }, []);
 
   const handleWheel = useCallback((event: WheelEvent<HTMLElement>) => {
+    event.preventDefault();
+
     const delta = Math.max(-1.35, Math.min(1.35, event.deltaY / 360));
 
     if (Math.abs(delta) < 0.018) {
@@ -2045,6 +2047,12 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
     pushInfiniteScroll((start - end) / 240);
   }, [pushInfiniteScroll]);
+
+  const handleTouchMove = useCallback((event: TouchEvent<HTMLElement>) => {
+    if (touchStartRef.current !== null) {
+      event.preventDefault();
+    }
+  }, []);
 
   const handlePointerDown = useCallback((event: PointerEvent<HTMLElement>) => {
     if (event.pointerType === "mouse") {
@@ -3783,6 +3791,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         radiusX: 2.68,
         radiusZ: 0.66,
         renderOrder: 6.05,
+        sourceIndex: -1,
         variant: "left" as const,
         width: 2.18,
         y: 0.54,
@@ -3794,6 +3803,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         radiusX: 0.86,
         radiusZ: 0.82,
         renderOrder: 8.76,
+        sourceIndex: 0,
         variant: "front" as const,
         width: 5.05,
         y: 0.12,
@@ -3805,6 +3815,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         radiusX: 1.78,
         radiusZ: 0.84,
         renderOrder: 4.9,
+        sourceIndex: 1,
         variant: "rear" as const,
         width: 1.46,
         y: 1.16,
@@ -3903,16 +3914,18 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       columnParticleMaterial.uniforms.uPixelRatio.value = renderer.getPixelRatio();
     };
 
-    const getVisualOffset = (index: number, progress: number) => {
+    const workTrackStep = THREE.MathUtils.degToRad(50);
+
+    const getVisualOffset = (index: number, progress: number, length = storyScenes.length) => {
       let offset = index - progress;
-      const half = storyScenes.length / 2;
+      const half = length / 2;
 
       while (offset > half) {
-        offset -= storyScenes.length;
+        offset -= length;
       }
 
       while (offset < -half) {
-        offset += storyScenes.length;
+        offset += length;
       }
 
       return offset;
@@ -4001,41 +4014,44 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceSpineOcclusionMaterial.uniforms.uScroll.value = scrollFollow;
       referenceSpineOcclusionMaterial.uniforms.uOpacity.value = 0.38 + Math.sin(time * 0.22 + 0.2) * 0.022 + Math.min(0.1, Math.abs(scrollFollow) * 0.026);
       referenceSpineRimMaterial.opacity = 0.42 + Math.sin(time * 0.22 + 0.9) * 0.04 + Math.min(0.12, Math.abs(scrollImpulse) * 0.028);
-      referenceSpineField.position.x = -0.38 + Math.sin(storyOrbit * 0.32) * 0.018 + scrollFollow * 0.044;
-      referenceSpineField.rotation.y = -0.075 + Math.sin(storyOrbit * 0.34) * 0.026 + scrollFollow * 0.068;
-      referenceSpineGhost.position.x = -0.1 + Math.cos(storyOrbit * 0.28) * 0.016 + scrollFollow * 0.036;
-      referenceSpineGhost.rotation.y = 0.12 + Math.sin(storyOrbit * 0.3) * 0.02 + scrollFollow * 0.052;
-      referenceSpineMotion.position.x = -0.38 + Math.sin(storyOrbit * 0.36 + 0.08) * 0.02 + scrollFollow * 0.052;
-      referenceSpineMotion.rotation.y = -0.08 + Math.sin(storyOrbit * 0.36 + 0.08) * 0.024 + scrollFollow * 0.066;
-      referenceSpineSubject.position.x = -0.62 + Math.sin(storyOrbit * 0.38 + 0.1) * 0.024 + scrollFollow * 0.092;
-      referenceSpineSubject.position.z = 1.36 + Math.cos(storyOrbit * 0.34 + 0.2) * 0.026 + Math.abs(scrollFollow) * 0.026;
-      referenceSpineSubject.rotation.y = -0.09 + Math.sin(storyOrbit * 0.46) * 0.032 + scrollFollow * 0.12;
-      referenceSpineSubject.rotation.z = 0.006 + Math.sin(storyOrbit * 0.32) * 0.01 + scrollFollow * 0.032;
-      referenceSpineSubject.scale.set(1.12 + Math.min(0.08, Math.abs(scrollFollow) * 0.024), 1.025 + Math.min(0.045, Math.abs(scrollFollow) * 0.014), 1);
-      referenceSpineOcclusion.position.x = -0.38 + Math.sin(storyOrbit * 0.32 + 0.18) * 0.02 + scrollFollow * 0.076;
-      referenceSpineOcclusion.position.z = 1.48 + Math.cos(storyOrbit * 0.31 + 0.14) * 0.022;
-      referenceSpineOcclusion.rotation.y = -0.08 + Math.sin(storyOrbit * 0.42 + 0.1) * 0.026 + scrollFollow * 0.072;
-      referenceSpineRim.position.x = -0.38 + Math.sin(storyOrbit * 0.34 + 0.18) * 0.02 + scrollFollow * 0.046;
-      referenceSpineRim.rotation.y = -0.08 + Math.sin(storyOrbit * 0.36 + 0.08) * 0.02 + scrollFollow * 0.066;
+      referenceSpineField.position.x = -0.38 + Math.sin(time * 0.12) * 0.006;
+      referenceSpineField.rotation.y = -0.075 + Math.sin(time * 0.1) * 0.008;
+      referenceSpineGhost.position.x = -0.1 + Math.cos(time * 0.11) * 0.005;
+      referenceSpineGhost.rotation.y = 0.12 + Math.sin(time * 0.13) * 0.007;
+      referenceSpineMotion.position.x = -0.38 + Math.sin(time * 0.14 + 0.08) * 0.006;
+      referenceSpineMotion.rotation.y = -0.08 + Math.sin(time * 0.12 + 0.08) * 0.008;
+      referenceSpineSubject.position.x = -0.62 + Math.sin(time * 0.1 + 0.1) * 0.007;
+      referenceSpineSubject.position.z = 1.36 + Math.cos(time * 0.11 + 0.2) * 0.008;
+      referenceSpineSubject.rotation.y = -0.09 + Math.sin(time * 0.12) * 0.01;
+      referenceSpineSubject.rotation.z = 0.006 + Math.sin(time * 0.1) * 0.004;
+      referenceSpineSubject.scale.set(1.12, 1.025, 1);
+      referenceSpineOcclusion.position.x = -0.38 + Math.sin(time * 0.1 + 0.18) * 0.006;
+      referenceSpineOcclusion.position.z = 1.48 + Math.cos(time * 0.11 + 0.14) * 0.008;
+      referenceSpineOcclusion.rotation.y = -0.08 + Math.sin(time * 0.12 + 0.1) * 0.008;
+      referenceSpineRim.position.x = -0.38 + Math.sin(time * 0.13 + 0.18) * 0.006;
+      referenceSpineRim.rotation.y = -0.08 + Math.sin(time * 0.12 + 0.08) * 0.008;
       referenceGlassPanels.forEach((panel, panelIndex) => {
-        const orbitAngle = panel.angle + storyOrbit * 0.84 + scrollFollow * 0.28;
+        const offset = getVisualOffset(panel.sourceIndex, motionProgress, referenceGlassPanels.length);
+        const absOffset = Math.abs(offset);
+        const orbitAngle = offset * workTrackStep;
         const depthOffset = panel.variant === "front" ? 0.5 : panel.variant === "rear" ? -0.34 : 0.02;
-        const centerOffset = panel.variant === "front" ? -0.72 : panel.variant === "left" ? -0.34 : -0.22;
-        const helicalDrop = Math.sin(orbitAngle + Math.PI * 0.46) * (panel.variant === "front" ? 0.34 : 0.24);
-        const targetX = centerOffset + Math.sin(orbitAngle) * panel.radiusX + scrollImpulse * (panel.variant === "front" ? 0.038 : 0.028);
-        const targetY = panel.y + helicalDrop + Math.sin(time * 0.2 + panelIndex) * 0.012;
-        const targetZ = Math.cos(orbitAngle) * panel.radiusZ + depthOffset;
-        const targetRotationY = -orbitAngle * (panel.variant === "front" ? 0.5 : 0.68) - 0.08;
-        const targetRotationX = panel.variant === "front" ? -0.02 - helicalDrop * 0.05 + scrollFollow * 0.006 : 0.035 * Math.sign(panel.angle) - helicalDrop * 0.04;
-        const targetOpacity = panel.opacity + Math.min(0.16, Math.abs(scrollImpulse) * (panel.variant === "front" ? 0.07 : 0.04));
+        const centerOffset = -0.72;
+        const trackLift = -offset * 0.52;
+        const targetX = centerOffset + Math.sin(orbitAngle) * panel.radiusX;
+        const targetY = panel.y + trackLift + Math.sin(time * 0.18 + panelIndex) * 0.008;
+        const targetZ = Math.cos(orbitAngle) * panel.radiusZ + depthOffset - absOffset * 0.16;
+        const targetRotationY = -orbitAngle * (panel.variant === "front" ? 0.42 : 0.54) - 0.08;
+        const targetRotationX = panel.variant === "front" ? -0.02 : 0.026 * Math.sign(offset || panel.angle);
+        const focus = Math.max(0, 1 - absOffset * 0.72);
+        const targetOpacity = panel.opacity * (0.52 + focus * 0.58) + Math.min(0.08, Math.abs(scrollImpulse) * 0.032);
 
-        // 参考里的玻璃屏不是故事进度条，而是围绕柱体的空间装置。
-        // 这里用和 pillarGroup 同源的 storyOrbit 驱动位置、深度和朝向，让滚动时屏幕和柱体像一个整体被推着转。
-        panel.mesh.position.x += (targetX - panel.mesh.position.x) * 0.12;
-        panel.mesh.position.y += (targetY - panel.mesh.position.y) * 0.12;
-        panel.mesh.position.z += (targetZ - panel.mesh.position.z) * 0.12;
-        panel.mesh.rotation.y += (targetRotationY - panel.mesh.rotation.y) * 0.11;
-        panel.mesh.rotation.x += (targetRotationX - panel.mesh.rotation.x) * 0.1;
+        // 源站 WorkItems 是固定柱体 + 环绕卡片，滚动时相机在各卡片 target 间插值。
+        // 这里用有界 offset 模拟那段相机相对运动，避免卡片累积旋转到背面或把柱体拖偏。
+        panel.mesh.position.x += (targetX - panel.mesh.position.x) * 0.16;
+        panel.mesh.position.y += (targetY - panel.mesh.position.y) * 0.16;
+        panel.mesh.position.z += (targetZ - panel.mesh.position.z) * 0.16;
+        panel.mesh.rotation.y += (targetRotationY - panel.mesh.rotation.y) * 0.14;
+        panel.mesh.rotation.x += (targetRotationX - panel.mesh.rotation.x) * 0.12;
         panel.material.opacity += (targetOpacity - panel.material.opacity) * 0.08;
         if (panel.mediaMesh && panel.mediaMaterial) {
           panel.mediaMesh.position.copy(panel.mesh.position);
@@ -4054,7 +4070,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           panel.refractionMaterial.uniforms.uOpacity.value = Math.min(0.78, panel.material.opacity * 0.82 + Math.abs(scrollImpulse) * 0.05);
         }
       });
-      stage.rotation.y = Math.sin(storyOrbit) * 0.1;
+      stage.rotation.y = Math.sin(time * 0.08) * 0.01;
       particles.rotation.y -= 0.0009;
       particles.rotation.z = Math.sin(time * 0.18) * 0.06;
       liquidColumn.rotation.y = Math.sin(time * 0.2) * 0.18;
@@ -4062,15 +4078,12 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       liquidColumn.scale.z = 1 + Math.cos(time * 0.48) * 0.035;
       spine.rotation.x += 0.003;
       spine.rotation.y += 0.006;
-      // 参考 mp4 的主柱默认更像固定在画面中轴偏左的一根实体，
-      // 大幅左右漂移会让它不像“同一根柱子”。这里把默认横向漂移压小，
-      // 但保留滚动触发时的整体旋转和轻微位移，让柱体、卡片和玻璃屏作为同一个装置换面。
-      pillarGroup.position.x = -0.62 + Math.sin(storyOrbit) * 0.22 + scrollImpulse * 0.08;
-      pillarGroup.position.y = -0.02 + Math.sin(storyOrbit * 0.46) * 0.04 - scrollFollow * 0.04;
-      pillarGroup.position.z = -0.36 + Math.cos(storyOrbit) * 0.18;
-      pillarGroup.rotation.y = -0.08 - storyOrbit * 1.92 - scrollFollow * 0.22;
-      pillarGroup.rotation.x = Math.sin(storyOrbit * 0.72) * 0.14 + scrollImpulse * 0.12;
-      pillarGroup.rotation.z = Math.sin(storyOrbit * 0.54) * 0.045 + scrollFollow * 0.044;
+      // 源码里柱体/项目装置本身不被滚动拖走，变化来自 camera target 插值。
+      // 本地只旋转朝向和折光，position 固定，防止滚动时整根柱子漂移或停手后回正。
+      pillarGroup.position.set(-0.62, -0.02, -0.36);
+      pillarGroup.rotation.y = -0.08 - storyOrbit * 1.16;
+      pillarGroup.rotation.x = Math.sin(time * 0.14) * 0.018 + scrollImpulse * 0.018;
+      pillarGroup.rotation.z = Math.sin(time * 0.12) * 0.012;
       pillarShell.scale.x = 1 + Math.sin(time * 1.3) * 0.035;
       pillarShell.scale.z = 1 + Math.cos(time * 1.1) * 0.035;
       pillarCore.scale.x = 1 + Math.sin(time * 1.9) * 0.09;
@@ -4103,13 +4116,13 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       });
       referenceStackSegments.forEach((segment, segmentIndex) => {
         const pulse = Math.sin(time * 0.42 + segment.phase) * 0.018;
-        const stackDrift = Math.sin(storyOrbit * 0.52 + segment.phase) * 0.034;
+        const stackDrift = Math.sin(time * 0.18 + segment.phase) * 0.01;
         segment.group.position.x = stackDrift;
         segment.group.position.y = segment.y + pulse;
-        segment.group.position.z = 0.47 + Math.cos(segment.phase + storyOrbit * 0.6) * 0.035;
-        segment.group.rotation.x = Math.sin(segment.phase + storyOrbit * 0.54) * 0.055 + scrollImpulse * 0.012;
-        segment.group.rotation.y = (segmentIndex % 2 === 0 ? 0.08 : -0.08) + storyOrbit * 0.32;
-        segment.group.rotation.z = Math.cos(segment.phase + storyOrbit * 0.44) * 0.035;
+        segment.group.position.z = 0.47 + Math.cos(time * 0.16 + segment.phase) * 0.012;
+        segment.group.rotation.x = Math.sin(time * 0.16 + segment.phase) * 0.018;
+        segment.group.rotation.y = (segmentIndex % 2 === 0 ? 0.08 : -0.08) + Math.sin(time * 0.12 + segment.phase) * 0.012;
+        segment.group.rotation.z = Math.cos(time * 0.14 + segment.phase) * 0.014;
         segment.group.scale.set(0.96 + pulse * 0.8, 1.02 - pulse * 0.45, 0.9 + pulse * 0.5);
 
         [segment.body, segment.lobeA, segment.lobeB].forEach((mesh, meshIndex) => {
@@ -4121,16 +4134,15 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       });
       sourceProfileSegments.forEach((segment, segmentIndex) => {
         const localPulse = Math.sin(time * 0.28 + segment.phase);
-        const impulseLean = Math.max(-0.18, Math.min(0.18, scrollImpulse * 0.028));
 
-        // 源帧柱体默认几乎不漂移，只保留油膜呼吸；滚动时由 pillarGroup 的大旋转负责整体换面。
+        // 源帧柱体默认几乎不漂移，只保留油膜呼吸；滚动时由外层 pillarGroup 负责整体换面。
         // 这里的微动只让单节在同一根柱子里有轻微折光，避免重新变成旧版那种“各飘各的碎片”。
-        segment.group.position.x = segment.basePosition.x + Math.sin(storyOrbit * 0.38 + segment.phase) * 0.018 + impulseLean;
+        segment.group.position.x = segment.basePosition.x + Math.sin(time * 0.12 + segment.phase) * 0.006;
         segment.group.position.y = segment.basePosition.y + localPulse * 0.006;
         segment.group.position.z = segment.basePosition.z + Math.cos(time * 0.22 + segment.phase) * 0.008;
-        segment.group.rotation.x = segment.baseRotation.x + Math.sin(storyOrbit * 0.28 + segment.phase) * 0.012 + scrollImpulse * 0.006;
-        segment.group.rotation.y = segment.baseRotation.y + storyOrbit * 0.045 + Math.sin(time * 0.16 + segment.phase) * 0.008;
-        segment.group.rotation.z = segment.baseRotation.z + Math.sin(time * 0.18 + segment.phase) * 0.01 + scrollImpulse * 0.01;
+        segment.group.rotation.x = segment.baseRotation.x + Math.sin(time * 0.14 + segment.phase) * 0.006;
+        segment.group.rotation.y = segment.baseRotation.y + Math.sin(time * 0.16 + segment.phase) * 0.008;
+        segment.group.rotation.z = segment.baseRotation.z + Math.sin(time * 0.18 + segment.phase) * 0.006;
         segment.group.scale.set(
           segment.baseScale.x * (1 + localPulse * 0.006),
           segment.baseScale.y * (1 - localPulse * 0.005),
@@ -4160,17 +4172,15 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const material = item.mesh.material as THREE.ShaderMaterial;
         const highlightMaterial = item.highlight.material as THREE.MeshMatcapMaterial;
         const pulse = Math.sin(time * 0.38 + item.phase);
-        const scrollLift = Math.max(-0.12, Math.min(0.12, scrollFollow * 0.045));
 
-        // 源站 Work 页的柱体不是页面固定贴图，而是随滚动相机/卡片轨道一起换角度的 3D instancer。
-        // 这段让真实 `spine.bin` 骨节按同一个 storyOrbit 旋转，同时保留很小的默认呼吸；
-        // 如果只移动外层玻璃屏，用户滚轮时会感觉柱子仍然卡在背景里。
-        item.mesh.position.x = item.basePosition.x + Math.sin(storyOrbit * 0.34 + item.phase) * 0.012 + scrollLift;
-        item.mesh.position.y = item.basePosition.y + pulse * 0.006 - scrollFollow * 0.014;
-        item.mesh.position.z = item.basePosition.z + Math.cos(storyOrbit * 0.32 + item.phase) * 0.014;
-        item.mesh.rotation.x = item.baseRotation.x + Math.sin(storyOrbit * 0.3 + item.phase) * 0.018 + scrollImpulse * 0.01;
-        item.mesh.rotation.y = item.baseRotation.y + storyOrbit * 0.44 + scrollFollow * 0.14;
-        item.mesh.rotation.z = item.baseRotation.z + Math.cos(storyOrbit * 0.26 + item.phase) * 0.012 + scrollImpulse * 0.012;
+        // `spine.bin` 是柱体的真实骨节，不能再用 scrollFollow 逐块拉偏。
+        // 滚动的视角变化交给外层柱体旋转，单个实例只做极小的油膜呼吸。
+        item.mesh.position.x = item.basePosition.x + Math.sin(time * 0.12 + item.phase) * 0.004;
+        item.mesh.position.y = item.basePosition.y + pulse * 0.006;
+        item.mesh.position.z = item.basePosition.z + Math.cos(time * 0.1 + item.phase) * 0.004;
+        item.mesh.rotation.x = item.baseRotation.x + Math.sin(time * 0.13 + item.phase) * 0.006;
+        item.mesh.rotation.y = item.baseRotation.y + Math.sin(time * 0.11 + item.phase) * 0.006;
+        item.mesh.rotation.z = item.baseRotation.z + Math.cos(time * 0.1 + item.phase) * 0.006;
         item.mesh.scale.set(
           item.baseScale.x * (1 + pulse * 0.006),
           item.baseScale.y * (1 - pulse * 0.004),
@@ -4209,13 +4219,13 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         item.sprite.position.z = item.position.z + Math.cos(time * 0.2 + patchIndex) * 0.025;
         item.sprite.scale.set(item.scaleX * (0.94 + pulse * 0.1), item.scaleY * (0.96 + pulse * 0.08), 1);
       });
-      referenceCrownPieces.forEach((item, pieceIndex) => {
+      referenceCrownPieces.forEach((item) => {
         const material = item.mesh.material as THREE.MeshPhysicalMaterial;
         const slowPulse = Math.sin(time * 0.32 + item.phase);
-        item.mesh.position.y = item.basePosition.y + slowPulse * 0.012 + scrollImpulse * 0.012 * Math.sin(item.phase + pieceIndex);
+        item.mesh.position.y = item.basePosition.y + slowPulse * 0.012;
         item.mesh.position.z = item.basePosition.z + Math.cos(time * 0.26 + item.phase) * 0.01;
-        item.mesh.rotation.y = item.baseRotation.y + Math.sin(time * 0.2 + item.phase) * 0.018 + storyOrbit * 0.018;
-        item.mesh.rotation.z = item.baseRotation.z + Math.sin(time * 0.24 + item.phase) * 0.018 + scrollImpulse * 0.014;
+        item.mesh.rotation.y = item.baseRotation.y + Math.sin(time * 0.2 + item.phase) * 0.018;
+        item.mesh.rotation.z = item.baseRotation.z + Math.sin(time * 0.24 + item.phase) * 0.018;
         item.mesh.scale.set(
           item.baseScale.x * (1 + slowPulse * 0.012),
           item.baseScale.y * (1 - slowPulse * 0.008),
@@ -4242,24 +4252,25 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       panelMeshes.forEach((mesh, index) => {
         const offset = getVisualOffset(index, motionProgress);
         const absOffset = Math.abs(offset);
-        const carouselAngle = offset * 1.04;
-        const targetX = Math.sin(carouselAngle) * 2.72 + 0.18;
-        const targetY = offset * 0.58 + Math.sin(carouselAngle) * 0.08;
-        const targetZ = Math.cos(carouselAngle) * 1.24 - 0.08 - absOffset * 0.2;
-        const targetScale = offset === 0 ? 1.14 : Math.max(0.52, 0.78 - absOffset * 0.12);
+        const focus = Math.max(0, 1 - absOffset);
+        const carouselAngle = offset * workTrackStep;
+        const targetX = Math.sin(carouselAngle) * 2.72 - 0.42;
+        const targetY = -offset * 0.58 + Math.sin(carouselAngle) * 0.05;
+        const targetZ = Math.cos(carouselAngle) * 1.22 - 0.12 - absOffset * 0.18;
+        const targetScale = 0.56 + focus * 0.58;
         const scrollVisibility = Math.min(0.38, Math.abs(scrollImpulse) * 0.18);
-        const targetOpacity = offset === 0 ? 0.015 + scrollVisibility : Math.max(0.012, 0.024 - absOffset * 0.01 + scrollVisibility * 0.34);
+        const targetOpacity = 0.012 + focus * 0.035 + scrollVisibility * (0.32 + focus * 0.68);
 
-        // 滚动宣传效果必须像参考视频一样“卡片和中轴装置一起被推着走”；
-        // 这里提高 carousel 的追赶速度，让用户手势后的第一帧就能看到玻璃屏和柱体同步换面。
-        mesh.position.x += (targetX - mesh.position.x) * 0.098;
-        mesh.position.y += (targetY - mesh.position.y) * 0.098;
-        mesh.position.z += (targetZ - mesh.position.z) * 0.098;
-        mesh.rotation.y += ((-carouselAngle * 0.9 - 0.04) - mesh.rotation.y) * 0.11;
+        // 同步源码的 WorkItems 思路：每张卡片固定在环形 target 上，滚动改变相对 offset。
+        // angle 始终有界，所以无限滚动也不会翻背面或把画面变成自由旋转的转盘。
+        mesh.position.x += (targetX - mesh.position.x) * 0.13;
+        mesh.position.y += (targetY - mesh.position.y) * 0.13;
+        mesh.position.z += (targetZ - mesh.position.z) * 0.13;
+        mesh.rotation.y += ((-carouselAngle * 0.52 - 0.06) - mesh.rotation.y) * 0.14;
         mesh.rotation.x += ((offset === 0 ? -0.018 : 0.018 * Math.sign(offset)) - mesh.rotation.x) * 0.11;
         mesh.scale.x += (targetScale - mesh.scale.x) * 0.092;
         mesh.scale.y += (targetScale - mesh.scale.y) * 0.092;
-        mesh.renderOrder = offset === 0 ? 8 : Math.max(1, 5 - absOffset);
+        mesh.renderOrder = focus > 0.72 ? 8 : Math.max(1, 5 - absOffset);
 
         const material = mesh.material as THREE.MeshBasicMaterial;
         material.opacity += (targetOpacity - material.opacity) * 0.108;
@@ -4423,6 +4434,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
       onTouchEnd={handleTouchEnd}
+      onTouchMove={handleTouchMove}
       onTouchStart={handleTouchStart}
       onWheel={handleWheel}
       ref={experienceRef}
