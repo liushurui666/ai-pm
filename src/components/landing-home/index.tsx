@@ -13,7 +13,7 @@ import {
 } from "@ant-design/icons";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, PointerEvent, ReactNode, TouchEvent } from "react";
+import type { CSSProperties, PointerEvent, ReactNode, TouchEvent, WheelEvent as ReactWheelEvent } from "react";
 import * as THREE from "three";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
@@ -170,18 +170,18 @@ function getStoryWorkItemVisual(index: number, progress: number, impulse = 0): S
   const angle = -offset * STORY_WORK_TRACK_STEP;
   const focus = Math.max(0, 1 - absOffset * 0.72);
   const trackWindow = Math.max(0, 1 - absOffset / 3.55);
-  const x = Math.sin(angle) * 388;
-  const y = -offset * 178 + Math.sin(angle * 0.5) * 20;
+  const x = Math.sin(angle) * 318;
+  const y = -offset * 136 + Math.sin(angle * 0.5) * 18;
   const rotateX = THREE.MathUtils.clamp(offset * -0.052, -0.16, 0.16);
-  const rotateY = -angle * 0.56;
+  const rotateY = -angle * 0.82;
   const rotateZ = Math.sin(angle) * 2.15;
-  const scale = 0.56 + trackWindow * 0.18 + focus * 0.28;
-  const opacity = Math.min(0.98, 0.14 + trackWindow * 0.48 + focus * 0.32 + Math.min(0.1, Math.abs(impulse) * 0.026));
+  const scale = 0.58 + trackWindow * 0.2 + focus * 0.26;
+  const opacity = Math.min(0.98, 0.22 + trackWindow * 0.48 + focus * 0.26 + Math.min(0.1, Math.abs(impulse) * 0.026));
 
   // 这套公式按 Active Theory `WorkItems.positionViews()` 的思路抽象：
-  // 所有卡片一直在同一条 50 度步进的环形轨道上，只根据无界 progress 计算当前相对位置。
-  // 这里刻意放大非焦点卡片的可见窗口，避免退化成“中心一张卡片换内容”；
-  // 滚动时每张卡都会沿同一条纵向轨道穿过视场并旋转，柱体本身不参与 x/z 轨道。
+  // 所有卡片一直在同一条 50 度步进的环形轨道上，滚轮只改变相机相对 progress。
+  // 这里把 y 轴步距压回源站那种紧凑层叠，并加大 rotateY，让非焦点卡也能清楚地从上到下穿场；
+  // 这样交互表现为真实多卡片滚动，而不是一张中心卡片换内容。
   return {
     isFocused: absOffset < 0.42,
     opacity,
@@ -2333,6 +2333,19 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     syncActiveIndexFromProgress(scrollTargetRef.current);
   }, [applyStoryCardDomProgress, syncActiveIndexFromProgress]);
 
+  const pushWheelDelta = useCallback((deltaY: number) => {
+    const delta = Math.max(-1.35, Math.min(1.35, deltaY / 360));
+
+    if (Math.abs(delta) < 0.018) {
+      return;
+    }
+
+    // 真实用户滚轮、React onWheel 和浏览器自动化的滚动入口要走同一条无界轨道。
+    // 之前只靠 window capture listener，部分自动化环境会把固定视口页面当作“没有可滚动内容”而不派发 wheel；
+    // 抽成这个入口后，容器级 onWheel、原生 wheel 和触摸/按钮推进都能得到一致的卡片/柱体进度。
+    pushInfiniteScroll(delta);
+  }, [pushInfiniteScroll]);
+
   const goToScene = useCallback((nextIndex: number) => {
     const normalizedIndex = ((nextIndex % storyScenes.length) + storyScenes.length) % storyScenes.length;
     const cycleBase = Math.round(scrollTargetRef.current / storyScenes.length) * storyScenes.length;
@@ -2392,6 +2405,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     pointerStartRef.current = event.clientY;
   }, []);
 
+  const handleStoryWheel = useCallback((event: ReactWheelEvent<HTMLElement>) => {
+    event.preventDefault();
+    pushWheelDelta(event.deltaY);
+  }, [pushWheelDelta]);
+
   const handlePointerUp = useCallback((event: PointerEvent<HTMLElement>) => {
     const start = pointerStartRef.current;
     pointerStartRef.current = null;
@@ -2429,16 +2447,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
       event.preventDefault();
 
-      const delta = Math.max(-1.35, Math.min(1.35, event.deltaY / 360));
-
-      if (Math.abs(delta) < 0.018) {
-        return;
-      }
-
       // React 在部分浏览器会把 wheel 委托成 passive listener，直接 preventDefault 会产生控制台错误；
       // 固定视口 3D 故事必须拦截原生页面滚动，所以这里用 window capture 的非 passive 监听。
       // 这样真实触控板、Chrome 自动化和画布/DOM 卡片上方的滚轮都会进入同一条无界 WorkItem 轨道。
-      pushInfiniteScroll(delta);
+      pushWheelDelta(event.deltaY);
     };
 
     window.addEventListener("wheel", handleNativeWheel, { capture: true, passive: false });
@@ -2446,7 +2458,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     return () => {
       window.removeEventListener("wheel", handleNativeWheel, { capture: true });
     };
-  }, [pushInfiniteScroll]);
+  }, [pushWheelDelta]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -4278,7 +4290,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         color: new THREE.Color(sceneItem.accent).lerp(new THREE.Color("#d8fff7"), 0.34),
         depthTest: false,
         depthWrite: false,
-        opacity: 0.36,
+        opacity: 0.035,
         side: THREE.DoubleSide,
         toneMapped: false,
         transparent: true,
@@ -4287,9 +4299,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       const initialOffset = index > storyScenes.length / 2 ? index - storyScenes.length : index;
       const initialAbsOffset = Math.abs(initialOffset);
       const initialAngle = -initialOffset * workTrackStep;
-      const initialScale = initialOffset === 0 ? 1.22 : Math.max(0.58, 0.9 - initialAbsOffset * 0.065);
-      mesh.position.set(Math.sin(initialAngle) * 2.54 + 0.18, 0.22 - initialOffset * 1.04, 2.12 + Math.cos(initialAngle) * 0.48 - initialAbsOffset * 0.09);
-      mesh.rotation.set(initialOffset === 0 ? -0.018 : 0.02 * Math.sign(initialOffset), -initialAngle * 0.36 - 0.04, 0);
+      const initialScale = initialOffset === 0 ? 1.22 : Math.max(0.6, 0.88 - initialAbsOffset * 0.05);
+      mesh.position.set(Math.sin(initialAngle) * 2.06 + 0.1, 0.1 - initialOffset * 0.68, 1.98 + Math.cos(initialAngle) * 0.62 - initialAbsOffset * 0.07);
+      mesh.rotation.set(initialOffset === 0 ? -0.018 : 0.02 * Math.sign(initialOffset), -initialAngle * 0.82 - 0.04, 0);
       mesh.scale.set(initialScale, initialScale, 1);
       backplate.position.copy(mesh.position);
       backplate.position.z -= 0.018;
@@ -4297,7 +4309,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       backplate.scale.set(initialScale * 1.04, initialScale * 1.04, 1);
       // 这些卡片对应源站 WorkItem：所有项目卡都一直存在于同一条环形轨道上，
       // 滚动只改变相对 offset 和镜头目标，不能再做成“滚一下才出现的一张演示卡”。
-      material.opacity = initialOffset === 0 ? 0.86 : Math.max(0.34, 0.58 - initialAbsOffset * 0.04);
+      material.opacity = initialOffset === 0 ? 0.24 : Math.max(0.06, 0.12 - initialAbsOffset * 0.018);
       mesh.renderOrder = initialOffset === 0 ? 30 : Math.max(20, 28 - initialAbsOffset);
       backplate.renderOrder = mesh.renderOrder - 0.2;
       mesh.userData.index = index;
@@ -4367,8 +4379,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       const motionProgress = visualProgress + scrollFollow * 0.18;
       const sourceScrollProgress = THREE.MathUtils.euclideanModulo(motionProgress / Math.max(1, storyScenes.length - 1), 1);
       const sourceScrollSpin = motionProgress * workTrackStep;
-      const sourceSpineIndexOffset = motionProgress * 0.82;
-      const pillarVerticalPhase = motionProgress * 0.18 + scrollFollow * 0.025;
+      const sourceSpineTravel = motionProgress * 0.65;
+      const pillarVerticalPhase = motionProgress * 0.2 + scrollFollow * 0.025;
       particleMaterial.uniforms.uTime.value = time;
       columnParticleMaterial.uniforms.uTime.value = time;
       activeTheoryFlowerPointMaterial.uniforms.uTime.value = time;
@@ -4603,21 +4615,19 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       activeTheorySpineInstances.forEach((item, instanceIndex) => {
         const material = item.mesh.material as THREE.ShaderMaterial;
         const highlightMaterial = item.highlight.material as THREE.MeshMatcapMaterial;
-        const scrolledIndex = THREE.MathUtils.euclideanModulo(
-          instanceIndex + sourceSpineIndexOffset,
-          Math.max(1, activeTheorySpineInstances.length)
-        );
-        const stackY = 4 - scrolledIndex * 0.65;
+        const spineLoopHeight = Math.max(0.65, activeTheorySpineInstances.length * 0.65);
+        const baseDistanceFromTop = instanceIndex * 0.65;
+        const stackY = 4 - THREE.MathUtils.euclideanModulo(baseDistanceFromTop + sourceSpineTravel, spineLoopHeight);
         const pulse = Math.sin(time * 0.38 + item.phase);
 
-        // `spine.bin` 是柱体的真实骨节。参考源码的 SpineInstancer 本来就是“同一个 mesh 按 y 间距复制 40 次”；
-        // 用户向下滚动时不能把整根柱子左右拖走，所以这里让每个实例沿 y 轴按无界 progress 重新排队。
-        // 当最底部实例越界时它从顶部接回，形成真实的从上到下无限滚动，而不是停手后回正的单次动画。
-        item.mesh.position.x = item.basePosition.x + Math.sin(time * 0.12 + item.phase) * 0.0015;
+        // `spine.bin` 是柱体的真实骨节。用户这次明确要求滚动只体现为“从上到下”的柱体推进，
+        // 所以实例只沿 y 轴做无界循环，x/z 与每节自身旋转全部锁在源站 `SpineInstancer` 的规则队列上。
+        // 这样保留无限滚动连续性，同时避免旧实现里用 scrolledIndex 改旋转导致柱体左右扭偏。
+        item.mesh.position.x = item.basePosition.x;
         item.mesh.position.y = stackY + pulse * 0.006;
-        item.mesh.position.z = item.basePosition.z + Math.cos(time * 0.1 + item.phase) * 0.0015;
+        item.mesh.position.z = item.basePosition.z;
         item.mesh.rotation.x = item.baseRotation.x + Math.sin(time * 0.13 + item.phase) * 0.002;
-        item.mesh.rotation.y = scrolledIndex * 0.4 + Math.sin(time * 0.11 + item.phase) * 0.002;
+        item.mesh.rotation.y = item.baseRotation.y + Math.sin(time * 0.11 + item.phase) * 0.002;
         item.mesh.rotation.z = item.baseRotation.z + Math.cos(time * 0.1 + item.phase) * 0.002;
         item.mesh.scale.set(
           item.baseScale.x * (1 + pulse * 0.006),
@@ -4684,7 +4694,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const angle = columnParticleSeeds[index * 4] + time * columnParticleSeeds[index * 4 + 3] * 0.42;
         const radius = columnParticleSeeds[index * 4 + 1] + Math.sin(time * 1.6 + index) * 0.035;
         const verticalSeed = THREE.MathUtils.euclideanModulo(
-          columnParticleSeeds[index * 4 + 2] + time * 0.062 * columnParticleSeeds[index * 4 + 3] + pillarVerticalPhase * 0.12,
+          columnParticleSeeds[index * 4 + 2] - time * 0.046 * columnParticleSeeds[index * 4 + 3] - pillarVerticalPhase * 0.12,
           1
         );
         const y = (verticalSeed * 5.4) - 2.7;
@@ -4699,20 +4709,20 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const focus = Math.max(0, 1 - absOffset * 0.72);
         const trackWindow = Math.max(0, 1 - absOffset / 3.55);
         const carouselAngle = -offset * workTrackStep;
-        const targetX = Math.sin(carouselAngle) * 2.54 + 0.18;
-        const targetY = 0.22 - offset * 1.04 + Math.sin(carouselAngle * 0.5) * 0.035;
-        const targetZ = 2.12 + Math.cos(carouselAngle) * 0.48 - absOffset * 0.09;
-        const targetScale = 0.56 + trackWindow * 0.22 + focus * 0.48;
+        const targetX = Math.sin(carouselAngle) * 2.06 + 0.1;
+        const targetY = 0.1 - offset * 0.68 + Math.sin(carouselAngle * 0.5) * 0.03;
+        const targetZ = 1.98 + Math.cos(carouselAngle) * 0.62 - absOffset * 0.07;
+        const targetScale = 0.58 + trackWindow * 0.24 + focus * 0.42;
         const scrollBoost = Math.min(0.12, Math.abs(scrollImpulse) * 0.035);
-        const targetOpacity = 0.28 + trackWindow * 0.42 + focus * 0.34 + scrollBoost;
+        const targetOpacity = Math.min(0.28, 0.07 + trackWindow * 0.07 + focus * 0.11 + scrollBoost * 0.2);
 
         // 这段直接对应源站 `positionViews`：卡片按 50 度步进围绕柱体排布，并按索引在 y 轴上分层。
-        // 用户滚轮只改变无界 progress，所以每张卡都会真实地从上到下穿过视场并旋转到下一张；
+        // 用户滚轮只改变无界 progress，所以每张卡都会在同一条紧凑轨道里真实穿场；
         // 柱体本身不吃这个 x/z 轨道，避免再次出现“滚动时柱子整体左右偏移”的错觉。
         mesh.position.x += (targetX - mesh.position.x) * 0.16;
         mesh.position.y += (targetY - mesh.position.y) * 0.16;
         mesh.position.z += (targetZ - mesh.position.z) * 0.16;
-        const targetRotationY = -carouselAngle * 0.36 - 0.04;
+        const targetRotationY = -carouselAngle * 0.82 - 0.04;
         const targetRotationX = -0.018 * Math.sign(offset || 1);
         const targetRotationZ = Math.sin(carouselAngle) * 0.012;
         mesh.rotation.y += (targetRotationY - mesh.rotation.y) * 0.16;
@@ -4728,7 +4738,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         backplate.renderOrder = mesh.renderOrder - 0.2;
 
         material.opacity += (targetOpacity - material.opacity) * 0.12;
-        backplateMaterial.opacity += ((0.26 + trackWindow * 0.2 + focus * 0.26 + scrollBoost * 0.7) - backplateMaterial.opacity) * 0.12;
+        // WebGL 里的大 WorkPane 只承担源站式玻璃投影和景深层次；
+        // 真正可读、可点击的业务卡片在 DOM 轨道里。这里压低背板/纹理不透明度，
+        // 避免 3D 面片变成一整块廉价彩色矩形，把柱体和多卡片关系盖住。
+        backplateMaterial.opacity += ((0.018 + trackWindow * 0.018 + focus * 0.035 + scrollBoost * 0.1) - backplateMaterial.opacity) * 0.12;
       });
       // DOM 前景轨道和 WebGL WorkItem 使用同一个无界 progress。
       // 它只改变卡片的 y/rotate/opacity，不改变柱体坐标；这样即使 WebGL 暗场很重，
@@ -4908,6 +4921,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       onTouchEnd={handleTouchEnd}
       onTouchMove={handleTouchMove}
       onTouchStart={handleTouchStart}
+      onWheel={handleStoryWheel}
       ref={experienceRef}
       style={sceneStyle}
       tabIndex={0}
@@ -4926,6 +4940,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
             key={sceneItem.key}
             onClick={() => goToScene(index)}
             onFocus={() => goToScene(index)}
+            onPointerDown={() => goToScene(index)}
             ref={(node) => {
               storyCardRefs.current[index] = node;
             }}

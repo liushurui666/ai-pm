@@ -1,53 +1,61 @@
 # Landing 3D WorkItem Design QA
 
+- source visual truth path: `/tmp/ai-pm-at-reference/mp4-02-4.2s.png`
 - source video: `/Users/liushurui/Library/Application Support/LarkShell/screenshot/20260629120942_rec_.mp4`
-- source image: `/var/folders/xf/l02y_0qx7pd4zztgnkrpsbq80000gn/T/codex-clipboard-1e846b05-ef1a-49ee-bb9c-a6eb441cb54a.png`
 - source mirror: `/Users/liushurui/Desktop/workspace/new-jiguangjuzhen/activetheory-work-clone-nav-orb-20260524-121151(1)`
-- implementation default screenshot: `/tmp/ai-pm-v112-qa/default-v112.png`
-- implementation wheel screenshot: `/tmp/ai-pm-v112-qa/wheel-card-1-v112.png`
-- implementation card-focus screenshot: `/tmp/ai-pm-v112-qa/focus-click-card-3-v112.png`
-- validation viewport: 1876x992 desktop in Codex in-app browser
-- final result: passed for the requested interaction fix
-- result detail: v112 keeps the central pillar outer group locked to a stable x/z anchor, moves only the internal point cloud/oil/spine phases on scroll, and verifies that all five WorkItem cards are persistent interactive buttons on one source-inspired 50-degree track. The page still is not a literal byte-for-byte Active Theory clone because the original MRT refraction and exact post-processing stack are not fully reproduced.
+- implementation default screenshot: `/tmp/ai-pm-latest-landing-qa/final-before.png`
+- implementation after-scroll screenshot: `/tmp/ai-pm-latest-landing-qa/final-after-scroll.png`
+- viewport: 1876x992 desktop, Codex in-app browser, `http://localhost:3004/`
+- state: unauthenticated landing page, hydrated WebGL canvas, one wheel gesture after load
+- full-view comparison evidence: source frame and implementation screenshots were opened separately in Codex visual inspection; side-by-side image generation was blocked because the local environment lacks PIL/ImageMagick.
+- focused region comparison evidence: center pillar + foreground WorkItem card stack were inspected in the source frame and latest after-scroll screenshot.
+- final result: blocked
+- blocking reason: interaction structure now matches the requested direction, but literal 100% ActiveTheory visual fidelity is still blocked by material/refraction/media differences.
 
 ## Findings
 
-- [P1] WorkItem cards are persistent instead of one replacement card
-  Evidence: `/tmp/ai-pm-v112-qa/default-v112.png`.
-  Change: all five AI PM story cards render at first paint with stable transform/opacity/z-index values, matching the mirror's `WorkItems.positionViews()` idea that all project items exist on one track.
+- [P1] Source material/refraction is still richer than the implementation.
+  Location: center pillar and glass panels in `src/components/landing-home/index.tsx`.
+  Evidence: the reference frame has darker wet-shell geometry, sharper oil-film highlights, and denser chromatic refraction; `/tmp/ai-pm-latest-landing-qa/final-after-scroll.png` still uses approximated local shader layers and AI PM canvas textures.
+  Impact: this prevents claiming a pixel-level clone of the ActiveTheory Work scene.
+  Fix: continue porting the mirror's `SpineShader`/Work refraction behavior and replace remaining approximated panel media with closer source-like media surfaces.
 
-- [P1] Pillar no longer follows horizontal card orbit
-  Evidence: code path in `src/components/landing-home/index.tsx`.
-  Change: `pillarGroup.position.copy(pillarBasePosition)` remains fixed during animation, the pillar outer rotation no longer consumes scroll progress, and `getStoryWorkItemVisual()` owns the card x/y/rotation path. The card orbit can move left/right, but the pillar itself does not consume that x/z progress.
+- [P1] WorkItem interaction direction is corrected.
+  Location: DOM card rail and WebGL panel track.
+  Evidence: browser verification shows all five cards remain visible after hydration; one wheel gesture moves focus to `fix` while cards keep distinct positions, rotations, and opacity.
+  Impact: this resolves the user's latest complaint that the experience behaved like one card instead of real scrolling cards.
+  Fix: no further structural fix needed for this pass; future work should improve visual fidelity without collapsing back to a single-card swap.
 
-- [P1] Real wheel input advances the track
-  Evidence: `/tmp/ai-pm-v112-qa/wheel-card-1-v112.png`.
-  Change: wheel handling moved to non-passive window capture and now accepts canvas, card, and document wheel targets. Browser QA confirmed scrolling moves focus from card 0 to card 1 while neighboring cards keep their queued positions.
+- [P1] Pillar no longer drifts horizontally during scroll.
+  Location: `activeTheorySpineInstances` animation in `src/components/landing-home/index.tsx`.
+  Evidence: the new implementation only wraps spine instances along y; x/z and each segment's base rotation stay locked to the source-style instancer queue.
+  Impact: this matches the requested “从上到下” scroll behavior and avoids the previous lateral twisting impression.
+  Fix: keep y-only looping for the pillar; any future camera/card changes must not feed x/z progress into `pillarGroup` or individual spine instance x/z.
 
-- [P1] Card track uses one shared source-inspired formula
-  Evidence: `getLoopedStoryOffset()` and `getStoryWorkItemVisual()`.
-  Change: default SSR/first paint, immediate wheel/touch target updates, and RAF interpolation all use the same looped offset and 50-degree step. This avoids the earlier mismatch where WebGL and DOM card layers could appear to disagree.
+- [P2] WebGL WorkPane projections are now supporting depth instead of overpowering the page.
+  Location: `panelMeshes` material/backplate opacity.
+  Evidence: `/tmp/ai-pm-latest-landing-qa/final-before.png` and `/tmp/ai-pm-latest-landing-qa/final-after-scroll.png` show the large glass panels reduced to background projection while DOM cards remain the readable interaction layer.
+  Impact: this removes the most obvious cheap color-block effect from the previous pass, though the panel design still is not identical to the source.
+  Fix: refine panel media/refraction in a later pass rather than increasing flat opacity.
 
-- [P2] Front cards are interactive elements
-  Evidence: `/tmp/ai-pm-v112-qa/focus-click-card-3-v112.png`.
-  Change: cards are buttons with `onClick`/`onFocus` wired to `goToScene(index)`, `data-active`/`aria-pressed` now follow `activeIndex`, and browser QA confirmed clicking card 3 moves the Bug card into focus.
+## Patches Made In This Pass
 
-- [P2] Runtime health is clean
-  Evidence: `corepack pnpm lint` and `corepack pnpm build`.
-  Result: lint and production build both pass. Browser console only reports the existing Three.js DRACOLoader deprecation warning.
+- Reworked `getStoryWorkItemVisual()` to keep five DOM cards visible on one 50-degree source-inspired track with stronger rotateY and tighter y spacing.
+- Added a shared `pushWheelDelta()` path so container wheel, window wheel, touch, and card controls advance the same scroll target.
+- Added pointer-down scene selection on story cards so card interaction is not dependent on delayed click dispatch.
+- Changed the source spine instance animation to y-only infinite looping, with x/z and per-segment rotation locked to the source-style base queue.
+- Reversed column particle drift so the pillar reads as top-to-bottom movement on downward scroll.
+- Lowered WebGL WorkPane opacity/backplate strength so the panels do not cover the pillar and card stack as large colored rectangles.
 
-## Remaining Risks
+## Validation
 
-- The Active Theory source mirror is still a minified production bundle plus assets, not the full editable engine. Exact WorkItem refraction, post-processing, CMS video timing, and the source pillar's final material stack remain approximated.
-- Browser console still reports the existing Three.js `DRACOLoader.setDecoderConfig` deprecation warning from the custom Draco attribute decode path; this warning does not block the current interaction fix.
+- `corepack pnpm lint`: passed.
+- `corepack pnpm build`: passed after the final opacity/QA update.
+- Browser route: `http://localhost:3004/`.
+- Browser checks: hydrated canvas reported 1876x992; after one wheel gesture all five cards remained present, focus moved to `fix`, and console error log was empty.
 
-## Patches Made In V112
+## Follow-up Polish
 
-- Added a shared looped WorkItem track helper based on the mirror's 50-degree `positionViews()` step.
-- Made all five story cards render on first paint and persist on the same orbit.
-- Moved wheel handling to window capture so real wheel input reaches the fixed-viewport story consistently.
-- Added immediate DOM card updates on scroll target changes, then reused the same helper in RAF.
-- Kept the central pillar and camera x/z stable; scroll affects card orbit plus pillar internal light/particle/spine phase only.
-- Fixed card active state so React does not hard-code the first card after rerender.
-- Verified real wheel and click interactions in the Codex in-app browser.
-- Integrated the local `flower_spine-1024.bin` point-cloud asset through the Active Theory-style Draco header decode path.
+- Port more of the source Work/refraction pipeline if exact ActiveTheory-style glass is still the goal.
+- Tune the pillar shader toward darker wet geometry with sharper chromatic rim highlights.
+- Replace approximated AI PM panel texture behavior with source-like project media timing once the desired content set is decided.
