@@ -1964,11 +1964,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const experienceRef = useRef<HTMLElement>(null);
   const activeIndexRef = useRef(0);
+  const scrollTargetRef = useRef(0);
   const scrollImpulseRef = useRef(0);
-  const wheelLockRef = useRef(0);
   const touchStartRef = useRef<number | null>(null);
   const pointerStartRef = useRef<number | null>(null);
-  const gestureLockRef = useRef(0);
   const { cycleMode, effectiveTheme, mode: themeMode } = useThemePreference();
 
   const activeScene = storyScenes[activeIndex];
@@ -1982,43 +1981,54 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     [activeIndex, activeScene.accent]
   );
 
-  const goToScene = useCallback((nextIndex: number) => {
-    const normalizedIndex = (nextIndex + storyScenes.length) % storyScenes.length;
+  const syncActiveIndexFromProgress = useCallback((progress: number) => {
+    const normalizedIndex = ((Math.round(progress) % storyScenes.length) + storyScenes.length) % storyScenes.length;
+    if (activeIndexRef.current === normalizedIndex) {
+      return;
+    }
+
     activeIndexRef.current = normalizedIndex;
     setActiveIndex(normalizedIndex);
   }, []);
 
-  const goToSceneByGesture = useCallback((direction: 1 | -1) => {
-    const now = performance.now();
+  const pushInfiniteScroll = useCallback((delta: number) => {
+    scrollTargetRef.current += delta;
+    scrollImpulseRef.current = Math.max(-3.8, Math.min(3.8, scrollImpulseRef.current + delta * 1.25));
+    syncActiveIndexFromProgress(scrollTargetRef.current);
+  }, [syncActiveIndexFromProgress]);
 
-    // 真实移动浏览器可能会为同一次上滑同时派发 TouchEvent 和 PointerEvent；
-    // 这里用短锁把“一次手势”归并成一次分镜推进，避免手机上轻轻滑一下直接跳两屏。
-    if (now - gestureLockRef.current < 520) {
-      return;
+  const goToScene = useCallback((nextIndex: number) => {
+    const normalizedIndex = ((nextIndex % storyScenes.length) + storyScenes.length) % storyScenes.length;
+    const cycleBase = Math.round(scrollTargetRef.current / storyScenes.length) * storyScenes.length;
+    const candidates = [
+      cycleBase + normalizedIndex - storyScenes.length,
+      cycleBase + normalizedIndex,
+      cycleBase + normalizedIndex + storyScenes.length,
+    ];
+    let closestTarget = candidates[0];
+
+    for (const candidate of candidates) {
+      if (Math.abs(candidate - scrollTargetRef.current) < Math.abs(closestTarget - scrollTargetRef.current)) {
+        closestTarget = candidate;
+      }
     }
 
-    gestureLockRef.current = now;
-    goToScene(activeIndexRef.current + direction);
-  }, [goToScene]);
+    scrollImpulseRef.current = Math.max(-2.2, Math.min(2.2, (closestTarget - scrollTargetRef.current) * 0.92));
+    scrollTargetRef.current = closestTarget;
+    activeIndexRef.current = normalizedIndex;
+    setActiveIndex(normalizedIndex);
+  }, []);
 
   const handleWheel = useCallback((event: WheelEvent<HTMLElement>) => {
-    const now = performance.now();
-    const impulse = Math.max(-1.55, Math.min(1.55, event.deltaY / 240));
+    const delta = Math.max(-1.35, Math.min(1.35, event.deltaY / 360));
 
-    // 参考视频里的滚动是“手一推，整个 3D 场域都有惯性”，不是只等分镜切完才动。
-    // 所以无论这次 wheel 是否触发场景切换，都先把滚轮力度写进 Three 动画循环；
-    // 动画循环会逐帧衰减这个值，让柱体和卡片在触控板连续滑动时有真实跟手感。
-    scrollImpulseRef.current = Math.max(-3.1, Math.min(3.1, scrollImpulseRef.current + impulse));
-
-    // Active Theory 的 /work 不是原生长页面滚动，而是滚轮推进固定舞台；
-    // 这里做一个短锁，避免触控板连续 delta 把故事一下跳完。
-    if (Math.abs(event.deltaY) < 28 || now - wheelLockRef.current < 560) {
+    if (Math.abs(delta) < 0.018) {
       return;
     }
 
-    wheelLockRef.current = now;
-    goToScene(activeIndexRef.current + (event.deltaY > 0 ? 1 : -1));
-  }, [goToScene]);
+    // 源站 Work 轨道是无界滚动：滚轮改变累计位置，而不是触发一次会自动回正的冲量。
+    pushInfiniteScroll(delta);
+  }, [pushInfiniteScroll]);
 
   const handleTouchStart = useCallback((event: TouchEvent<HTMLElement>) => {
     touchStartRef.current = event.touches[0]?.clientY ?? null;
@@ -2033,10 +2043,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       return;
     }
 
-    const direction = start > end ? 1 : -1;
-    scrollImpulseRef.current = Math.max(-1.4, Math.min(1.4, scrollImpulseRef.current + direction * 0.92));
-    goToSceneByGesture(direction);
-  }, [goToSceneByGesture]);
+    pushInfiniteScroll((start - end) / 240);
+  }, [pushInfiniteScroll]);
 
   const handlePointerDown = useCallback((event: PointerEvent<HTMLElement>) => {
     if (event.pointerType === "mouse") {
@@ -2054,12 +2062,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       return;
     }
 
-    // Pointer 事件作为 touch 的兜底：移动浏览器和自动化环境对 TouchEvent 的实现不完全一致，
-    // 双通道可以保证固定视口故事在手机上也能用“上滑/下滑”推进，而不是只能点击底部分镜。
-    const direction = start > event.clientY ? 1 : -1;
-    scrollImpulseRef.current = Math.max(-1.4, Math.min(1.4, scrollImpulseRef.current + direction * 0.92));
-    goToSceneByGesture(direction);
-  }, [goToSceneByGesture]);
+    // Pointer 事件作为 touch 的兜底：移动浏览器和自动化环境对 TouchEvent 的实现不完全一致。
+    pushInfiniteScroll((start - event.clientY) / 240);
+  }, [pushInfiniteScroll]);
 
   useEffect(() => {
     activeIndexRef.current = activeIndex;
@@ -3898,21 +3903,6 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       columnParticleMaterial.uniforms.uPixelRatio.value = renderer.getPixelRatio();
     };
 
-    const getProgressDelta = (target: number, current: number) => {
-      let delta = target - current;
-      const half = storyScenes.length / 2;
-
-      if (delta > half) {
-        delta -= storyScenes.length;
-      }
-
-      if (delta < -half) {
-        delta += storyScenes.length;
-      }
-
-      return delta;
-    };
-
     const getVisualOffset = (index: number, progress: number) => {
       let offset = index - progress;
       const half = storyScenes.length / 2;
@@ -3932,22 +3922,22 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       animationFrame = window.requestAnimationFrame(animate);
       const time = performance.now() * 0.001;
       const activeColor = new THREE.Color(storyScenes[activeIndexRef.current].accent);
-      const progressDelta = getProgressDelta(activeIndexRef.current, visualProgress);
+      const progressDelta = scrollTargetRef.current - visualProgress;
 
       if (Math.abs(progressDelta) < 0.0008) {
         visualProgress += progressDelta;
       } else {
-        visualProgress += progressDelta * 0.16;
+        visualProgress += progressDelta * 0.13;
       }
+      syncActiveIndexFromProgress(visualProgress);
 
-      // 参考 mp4 里滚动时不是单独翻卡片，而是整个中心装置一起换角度。
-      // 所以这里用同一个 visualProgress 同时驱动卡片 carousel 和脊柱本体，
-      // 保证用户滚轮推进时能看到柱体跟随故事段旋转，而不是固定在原地。
+      // 参考 Work 页是无界 scroll rig：滚动位置持续累加，柱体和卡片按同一个轨道推进。
+      // 不再让 3D 回到 normalized activeIndex，否则用户一停手柱体就会“自己回正”。
       const scrollImpulse = scrollImpulseRef.current;
       scrollImpulseRef.current += (0 - scrollImpulseRef.current) * 0.046;
       const scrollFollow = Math.max(-1.9, Math.min(1.9, scrollImpulse));
-      const motionProgress = visualProgress + scrollFollow * 0.76;
-      const storyOrbit = motionProgress * 1.74 + scrollFollow * 0.92;
+      const motionProgress = visualProgress + scrollFollow * 0.18;
+      const storyOrbit = motionProgress * 1.74;
       particleMaterial.uniforms.uTime.value = time;
       columnParticleMaterial.uniforms.uTime.value = time;
       liquidColumnMaterial.uniforms.uTime.value = time;
@@ -4031,11 +4021,12 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const orbitAngle = panel.angle + storyOrbit * 0.84 + scrollFollow * 0.28;
         const depthOffset = panel.variant === "front" ? 0.5 : panel.variant === "rear" ? -0.34 : 0.02;
         const centerOffset = panel.variant === "front" ? -0.72 : panel.variant === "left" ? -0.34 : -0.22;
+        const helicalDrop = Math.sin(orbitAngle + Math.PI * 0.46) * (panel.variant === "front" ? 0.34 : 0.24);
         const targetX = centerOffset + Math.sin(orbitAngle) * panel.radiusX + scrollImpulse * (panel.variant === "front" ? 0.038 : 0.028);
-        const targetY = panel.y + Math.sin(time * 0.2 + panelIndex) * 0.018 - scrollFollow * 0.018;
+        const targetY = panel.y + helicalDrop + Math.sin(time * 0.2 + panelIndex) * 0.012;
         const targetZ = Math.cos(orbitAngle) * panel.radiusZ + depthOffset;
         const targetRotationY = -orbitAngle * (panel.variant === "front" ? 0.5 : 0.68) - 0.08;
-        const targetRotationX = panel.variant === "front" ? -0.02 + scrollFollow * 0.012 : 0.035 * Math.sign(panel.angle);
+        const targetRotationX = panel.variant === "front" ? -0.02 - helicalDrop * 0.05 + scrollFollow * 0.006 : 0.035 * Math.sign(panel.angle) - helicalDrop * 0.04;
         const targetOpacity = panel.opacity + Math.min(0.16, Math.abs(scrollImpulse) * (panel.variant === "front" ? 0.07 : 0.04));
 
         // 参考里的玻璃屏不是故事进度条，而是围绕柱体的空间装置。
@@ -4251,10 +4242,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       panelMeshes.forEach((mesh, index) => {
         const offset = getVisualOffset(index, motionProgress);
         const absOffset = Math.abs(offset);
-        const carouselAngle = offset * 1.02;
-        const targetX = Math.sin(carouselAngle) * 2.86 + 0.26;
-        const targetY = 0.04 - absOffset * 0.08;
-        const targetZ = Math.cos(carouselAngle) * 1.18 - 0.04 - absOffset * 0.22;
+        const carouselAngle = offset * 1.04;
+        const targetX = Math.sin(carouselAngle) * 2.72 + 0.18;
+        const targetY = offset * 0.58 + Math.sin(carouselAngle) * 0.08;
+        const targetZ = Math.cos(carouselAngle) * 1.24 - 0.08 - absOffset * 0.2;
         const targetScale = offset === 0 ? 1.14 : Math.max(0.52, 0.78 - absOffset * 0.12);
         const scrollVisibility = Math.min(0.38, Math.abs(scrollImpulse) * 0.18);
         const targetOpacity = offset === 0 ? 0.015 + scrollVisibility : Math.max(0.012, 0.024 - absOffset * 0.01 + scrollVisibility * 0.34);
@@ -4423,7 +4414,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         panel.refractionMaterial?.dispose();
       });
     };
-  }, []);
+  }, [syncActiveIndexFromProgress]);
 
   return (
     <main
