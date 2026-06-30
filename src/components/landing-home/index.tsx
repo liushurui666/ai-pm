@@ -2710,7 +2710,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         uDynamicMask: { value: referenceSpineSubjectDynamicMaskTexture },
         uMap: { value: referenceSpineSubjectTexture },
         uMask: { value: referenceSpineSubjectMaskTexture },
-        uOpacity: { value: 0.62 },
+        uOpacity: { value: 0.86 },
         uScroll: { value: 0 },
         uTime: { value: 0 },
       },
@@ -2764,8 +2764,70 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const referenceSpineSubject = new THREE.Mesh(referenceSpineSubjectGeometry, referenceSpineSubjectMaterial);
     referenceSpineSubject.position.set(-0.94, 0.08, 1.34);
     referenceSpineSubject.rotation.set(0.016, -0.078, 0.012);
-    referenceSpineSubject.renderOrder = 7.62;
+    referenceSpineSubject.renderOrder = 8.42;
     pillarGroup.add(referenceSpineSubject);
+
+    // v77 专门补参考视频里的“前景玻璃卡片压住柱体”的遮挡关系。
+    // 之前只抽柱体主体，会让我们的 AI PM 卡片和源视频卡片各自叠一层，柱体剪影就不像同一个 mp4；
+    // 这层仍然采样同一段参考视频，只保留玻璃边缘、烟熏面和轻微彩色折射，作为柱体前方的低透明遮挡。
+    const referenceSpineOcclusionMaterial = new THREE.ShaderMaterial({
+      blending: THREE.NormalBlending,
+      depthTest: false,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      transparent: true,
+      uniforms: {
+        uMap: { value: referenceSpineMotionTexture },
+        uOpacity: { value: 0.32 },
+        uScroll: { value: 0 },
+        uTime: { value: 0 },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D uMap;
+        uniform float uOpacity;
+        uniform float uScroll;
+        uniform float uTime;
+        varying vec2 vUv;
+
+        void main() {
+          vec4 video = texture2D(uMap, vUv);
+          float maxChannel = max(max(video.r, video.g), video.b);
+          float minChannel = min(min(video.r, video.g), video.b);
+          float saturation = maxChannel - minChannel;
+          float luma = dot(video.rgb, vec3(0.2126, 0.7152, 0.0722));
+          vec2 panelCenter = vec2(0.68, 0.52);
+          vec2 panelHalfSize = vec2(0.47, 0.31);
+          vec2 panelDistance = abs(vUv - panelCenter) - panelHalfSize;
+          float roundedPanel = 1.0 - smoothstep(0.0, 0.055, length(max(panelDistance, 0.0)) + min(max(panelDistance.x, panelDistance.y), 0.0));
+          float leftEdge = smoothstep(0.28, 0.34, vUv.x) * smoothstep(0.39, 0.34, vUv.x);
+          float topBottomEdge =
+            smoothstep(0.25, 0.31, vUv.y) * smoothstep(0.36, 0.31, vUv.y) +
+            smoothstep(0.72, 0.66, vUv.y) * smoothstep(0.61, 0.66, vUv.y);
+          float smokyInterior = smoothstep(0.025, 0.22, luma + saturation * 0.34);
+          float glassMask = roundedPanel * (0.22 + smokyInterior * 0.56 + leftEdge * 0.42 + topBottomEdge * 0.2);
+          float verticalFade = smoothstep(0.12, 0.24, vUv.y) * smoothstep(0.95, 0.76, vUv.y);
+          float scrollPulse = 0.94 + min(0.12, abs(uScroll) * 0.04);
+          float scan = 0.96 + sin(uTime * 0.38 + vUv.y * 8.0) * 0.04;
+          vec3 smoke = mix(vec3(0.035, 0.05, 0.06), pow(video.rgb, vec3(0.86)) * vec3(0.9, 1.02, 1.12), 0.56);
+          float alpha = glassMask * verticalFade * scrollPulse * scan * uOpacity;
+
+          gl_FragColor = vec4(smoke, alpha);
+        }
+      `,
+    });
+    const referenceSpineOcclusion = new THREE.Mesh(referenceSpineFieldGeometry, referenceSpineOcclusionMaterial);
+    referenceSpineOcclusion.position.set(-0.55, 0.02, 1.48);
+    referenceSpineOcclusion.rotation.set(0.018, -0.075, 0.012);
+    referenceSpineOcclusion.renderOrder = 8.5;
+    pillarGroup.add(referenceSpineOcclusion);
 
     // 第二张参考贴图只保留彩色骨节棱线。它比通用粒子更接近原视频里的规则柱体轮廓，
     // 但仍作为随柱体旋转的材质层存在，避免把整张参考图硬贴成静态背景。
@@ -2783,7 +2845,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const referenceSpineRim = new THREE.Mesh(referenceSpineFieldGeometry, referenceSpineRimMaterial);
     referenceSpineRim.position.set(-0.58, 0.06, 1.14);
     referenceSpineRim.rotation.set(0.018, -0.075, 0.012);
-    referenceSpineRim.renderOrder = 7.55;
+    referenceSpineRim.renderOrder = 8.34;
     pillarGroup.add(referenceSpineRim);
 
     const fieldNodes = Array.from({ length: 10 }, (_, nodeIndex) => ({
@@ -2987,7 +3049,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         depthTest: false,
         depthWrite: false,
         map: createPanelTexture(sceneItem),
-        opacity: 0.86,
+        opacity: 0.015,
         side: THREE.DoubleSide,
         transparent: true,
       });
@@ -2999,7 +3061,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       mesh.position.set(Math.sin(initialAngle) * 2.86 + 0.26, 0.04 - initialAbsOffset * 0.08, Math.cos(initialAngle) * 1.18 - 0.04 - initialAbsOffset * 0.22);
       mesh.rotation.set(initialOffset === 0 ? -0.018 : 0.018 * Math.sign(initialOffset), -initialAngle * 0.9 - 0.04, 0);
       mesh.scale.set(initialScale, initialScale, 1);
-      material.opacity = initialOffset === 0 ? 0.975 : Math.max(0.06, 0.2 - initialAbsOffset * 0.075);
+      // v80：默认态先让源视频柱体和参考玻璃遮挡主导，故事卡只作为极淡空间屏存在；
+      // 真正的宣传卡片在滚轮触发时才抬起，避免静止帧被自绘 Command OS 盖掉参考柱体主形。
+      material.opacity = initialOffset === 0 ? 0.015 : Math.max(0.012, 0.024 - initialAbsOffset * 0.01);
       mesh.renderOrder = initialOffset === 0 ? 8 : Math.max(1, 5 - initialAbsOffset);
       mesh.userData.index = index;
       stage.add(mesh);
@@ -3144,7 +3208,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceSpineMotionMaterial.uniforms.uOpacity.value = 0.22 + Math.sin(time * 0.31 + 0.4) * 0.026 + Math.min(0.08, Math.abs(scrollImpulse) * 0.022);
       referenceSpineSubjectMaterial.uniforms.uTime.value = time;
       referenceSpineSubjectMaterial.uniforms.uScroll.value = scrollFollow;
-      referenceSpineSubjectMaterial.uniforms.uOpacity.value = 0.6 + Math.sin(time * 0.26 + 0.7) * 0.03 + Math.min(0.1, Math.abs(scrollFollow) * 0.026);
+      referenceSpineSubjectMaterial.uniforms.uOpacity.value = 0.84 + Math.sin(time * 0.26 + 0.7) * 0.035 + Math.min(0.12, Math.abs(scrollFollow) * 0.03);
+      referenceSpineOcclusionMaterial.uniforms.uTime.value = time;
+      referenceSpineOcclusionMaterial.uniforms.uScroll.value = scrollFollow;
+      referenceSpineOcclusionMaterial.uniforms.uOpacity.value = 0.3 + Math.sin(time * 0.22 + 0.2) * 0.022 + Math.min(0.08, Math.abs(scrollFollow) * 0.02);
       referenceSpineRimMaterial.opacity = 0.3 + Math.sin(time * 0.22 + 0.9) * 0.035 + Math.min(0.09, Math.abs(scrollImpulse) * 0.022);
       referenceSpineField.position.x = -0.56 + Math.sin(storyOrbit * 0.32) * 0.028;
       referenceSpineGhost.position.x = -0.28 + Math.cos(storyOrbit * 0.28) * 0.024;
@@ -3154,6 +3221,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceSpineSubject.rotation.y = -0.078 + Math.sin(storyOrbit * 0.46) * 0.035 + scrollFollow * 0.045;
       referenceSpineSubject.rotation.z = 0.012 + Math.sin(storyOrbit * 0.32) * 0.012 + scrollFollow * 0.018;
       referenceSpineSubject.scale.set(1 + Math.min(0.06, Math.abs(scrollFollow) * 0.02), 1 + Math.min(0.035, Math.abs(scrollFollow) * 0.012), 1);
+      referenceSpineOcclusion.position.x = -0.55 + Math.sin(storyOrbit * 0.32 + 0.18) * 0.026 + scrollFollow * 0.034;
+      referenceSpineOcclusion.position.z = 1.48 + Math.cos(storyOrbit * 0.31 + 0.14) * 0.022;
+      referenceSpineOcclusion.rotation.y = -0.075 + Math.sin(storyOrbit * 0.42 + 0.1) * 0.026 + scrollFollow * 0.032;
       referenceSpineRim.position.x = -0.58 + Math.sin(storyOrbit * 0.34 + 0.18) * 0.026;
       stage.rotation.y = Math.sin(storyOrbit) * 0.1;
       particles.rotation.y -= 0.0009;
@@ -3304,7 +3374,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const targetY = 0.04 - absOffset * 0.08;
         const targetZ = Math.cos(carouselAngle) * 1.18 - 0.04 - absOffset * 0.22;
         const targetScale = offset === 0 ? 1.14 : Math.max(0.52, 0.78 - absOffset * 0.12);
-        const targetOpacity = offset === 0 ? 0.975 : Math.max(0.06, 0.2 - absOffset * 0.075);
+        const scrollVisibility = Math.min(0.38, Math.abs(scrollImpulse) * 0.18);
+        const targetOpacity = offset === 0 ? 0.015 + scrollVisibility : Math.max(0.012, 0.024 - absOffset * 0.01 + scrollVisibility * 0.34);
 
         // 滚动宣传效果必须像参考视频一样“卡片和中轴装置一起被推着走”；
         // 这里提高 carousel 的追赶速度，让用户手势后的第一帧就能看到玻璃屏和柱体同步换面。
@@ -3393,6 +3464,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceSpineGhostMaterial.dispose();
       referenceSpineMotionMaterial.dispose();
       referenceSpineSubjectMaterial.dispose();
+      referenceSpineOcclusionMaterial.dispose();
       referenceSpineRimMaterial.dispose();
       referenceSpineFieldTexture.dispose();
       referenceSpineSubjectMaskTexture.dispose();
