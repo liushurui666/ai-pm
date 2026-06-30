@@ -81,7 +81,7 @@ const STORY_WORK_SOURCE_CAMERA_RADIUS = STORY_WORK_SOURCE_RADIUS * 2;
 const STORY_WORK_SOURCE_Y_STEP = 0.84;
 const STORY_WORK_VISIBLE_RANGE = 8.2;
 const STORY_WORK_DOM_Y_STEP = 128;
-const STORY_WORK_DOM_ORBIT_X = 184;
+const STORY_WORK_DOM_ORBIT_X = 58;
 const STORY_WORK_DOM_ORBIT_Z = 112;
 const STORY_WORK_WEBGL_Y_STEP = 0.72;
 
@@ -190,6 +190,30 @@ function getInfiniteStorySlotOffset(slotIndex: number, progress: number, length 
   return offset;
 }
 
+function getClosestScrollableStoryTarget(currentProgress: number, rawTargets: number[], repeatPeriod: number) {
+  // 页面本身仍然依赖浏览器真实 scrollY，所以进度不能落到负数；
+  // 源码的 unlimited scroll 可以在内部跨过 0，但浏览器页面顶部以下没有负向滚动空间。
+  // 这里把“上一圈”的目标折回到同一个业务 slot 的下一圈，避免点击顶部可见卡片时被原生 scroll 立即拉回首张。
+  const current = Math.max(0, currentProgress);
+  let closestTarget = current;
+  let hasCandidate = false;
+
+  rawTargets.forEach((target) => {
+    let scrollableTarget = target;
+
+    while (scrollableTarget < 0) {
+      scrollableTarget += repeatPeriod;
+    }
+
+    if (!hasCandidate || Math.abs(scrollableTarget - current) < Math.abs(closestTarget - current)) {
+      closestTarget = scrollableTarget;
+      hasCandidate = true;
+    }
+  });
+
+  return closestTarget;
+}
+
 function getStoryWorkItemOrbit(offset: number) {
   // Active Theory 源码里的 WorkItems 是固定在 50deg 间距目标点上的一整串 view，
   // 滚动时由 camera target 在这些 view 之间推进。AI PM 这版按用户要求把柱体和相机 x/z 锁住，
@@ -245,14 +269,14 @@ function getStoryWorkItemWebGLLayout(offset: number) {
   const trackWindow = Math.max(0, 1 - absOffset / STORY_WORK_VISIBLE_RANGE);
   const orbit = getStoryWorkItemOrbit(offset);
 
-  // WebGL pane 和 DOM hit layer 共用同一个 offset 螺旋轨道。
-  // 关键区别是：横向旋转只属于卡片队列，绝不再驱动 camera/pillarGroup。
-  // 这样可以还原源码 WorkItems 的“多张真实项目卡围绕中轴滚动”，同时满足柱体不左右偏移。
+  // WebGL pane 和 DOM hit layer 共用同一个 offset 轨道。
+  // 这轮把横向位移压到只够产生透视遮挡的范围，主运动改成 y 轴连续穿行；
+  // 否则在相机锁定的 AI PM 版本里，源码的 camera-orbit 会被误读成“柱子跟着卡片左右漂”。
   return {
     absOffset,
     focus,
     trackWindow,
-    x: -0.05 + orbit.x * 1.08,
+    x: -0.05 + orbit.x * 0.34,
     y: 0.12 - offset * STORY_WORK_WEBGL_Y_STEP,
     z: 1.38 + orbit.z * 0.54 + focus * 0.74 - absOffset * 0.04,
     rotationX: THREE.MathUtils.clamp(offset * -0.052, -0.22, 0.22),
@@ -1562,7 +1586,7 @@ function updateWorkRefractionCanvasTexture(refraction: WorkRefractionCanvas, pro
     const orbit = getStoryWorkItemOrbit(offset);
     const focus = Math.max(0, 1 - absOffset * 0.54);
     const trackWindow = Math.max(0, 1 - absOffset / STORY_WORK_VISIBLE_RANGE);
-    const paneX = width * (0.52 + orbit.x * 0.255);
+    const paneX = width * (0.52 + orbit.x * 0.082);
     const paneY = height * (0.52 - offset * 0.142 + Math.sin(time * 0.18 + slotIndex) * 0.008);
     const paneWidth = (155 + trackWindow * 126 + focus * 96) * (0.92 + orbit.z * 0.06);
     const paneHeight = 88 + trackWindow * 72 + focus * 48;
@@ -2675,13 +2699,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       cycleBase + normalizedIndex,
       cycleBase + normalizedIndex + storyScenes.length,
     ];
-    let closestTarget = candidates[0];
-
-    for (const candidate of candidates) {
-      if (Math.abs(candidate - scrollTargetRef.current) < Math.abs(closestTarget - scrollTargetRef.current)) {
-        closestTarget = candidate;
-      }
-    }
+    const closestTarget = getClosestScrollableStoryTarget(scrollTargetRef.current, candidates, storyScenes.length);
 
     scrollImpulseRef.current = Math.max(-2.2, Math.min(2.2, (closestTarget - scrollTargetRef.current) * 0.92));
     scrollTargetRef.current = closestTarget;
@@ -2714,17 +2732,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       slotIndex + cycleBase,
       slotIndex + cycleBase + STORY_WORK_ITEM_SLOT_COUNT,
     ];
-    let closestTarget = candidates[0];
+    const closestTarget = getClosestScrollableStoryTarget(scrollTargetRef.current, candidates, STORY_WORK_ITEM_SLOT_COUNT);
 
-    for (const candidate of candidates) {
-      if (Math.abs(candidate - scrollTargetRef.current) < Math.abs(closestTarget - scrollTargetRef.current)) {
-        closestTarget = candidate;
-      }
-    }
-
-    // 源站 WorkItem hover/click 会把滚动位置推到对应 view 的 target。
-    // 这里不能再只按 sceneIndex 跳转，否则 15 个可见 slot 实际上会退化成 5 个按钮；
-    // 每张重复卡都要拥有自己的 progress，点击后队列会沿当前方向滚到那张卡。
+    // 点击才定位到对应 slot：每张重复卡都要拥有自己的 progress，
+    // 但普通 hover 不能抢走 scroll rig，否则鼠标扫过时会重新退化成“单卡吸附”。
     scrollImpulseRef.current = Math.max(-2.4, Math.min(2.4, (closestTarget - scrollTargetRef.current) * 0.92));
     scrollTargetRef.current = closestTarget;
     applyStoryCardDomProgress(scrollTargetRef.current, scrollImpulseRef.current);
@@ -2754,11 +2765,17 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       return;
     }
 
-    // 源站 WorkItem 的 hover 会把滚动 rig 推向对应 view，而不是只高亮当前那一张。
-    // 这里复用同一个 slot progress：鼠标扫过任意可见卡片时，整条队列按真实滚动位置前进，
-    // 不再出现“只有一张卡片可交互、其他卡只是装饰”的错觉。
-    goToStorySlot(slotIndex);
-  }, [goToStorySlot]);
+    const slot = storyWorkItemSlots[slotIndex];
+
+    if (!slot) {
+      return;
+    }
+
+    // 源码普通 hover 只是让对应 WorkItem 进入 hover shader，真正的队列推进仍由 scrollProgress 驱动。
+    // 这里 hover 只同步业务上下文，不滚页、不改 progress，保证所有卡片仍按真实滚动连续穿行。
+    activeIndexRef.current = slot.sceneIndex;
+    setActiveIndex(slot.sceneIndex);
+  }, []);
 
   const handleStoryCardFocus = useCallback((slotIndex: number) => {
     const slot = storyWorkItemSlots[slotIndex];
@@ -4646,8 +4663,6 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const columnParticleMaterial = createVolumetricParticleMaterial(0.7);
     const columnParticles = new THREE.Points(columnParticleGeometry, columnParticleMaterial);
     pillarGroup.add(columnParticles);
-    const workTrackStep = STORY_WORK_TRACK_STEP;
-
     const fleckPalette = ["#6ff0ff", "#5d8bff", "#9b72ff", "#f16bdc", "#ff5c68", "#e0b261", "#f8fbff"];
     const fleckTextures = fleckPalette.map((color) => createGlowTexture(color));
     const spineFlecks = Array.from({ length: 236 }, (_, fleckIndex) => {
@@ -4879,7 +4894,6 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       const scrollFollow = Math.max(-1.9, Math.min(1.9, scrollImpulse));
       const motionProgress = visualProgress + scrollFollow * 0.18;
       const sourceScrollProgress = THREE.MathUtils.euclideanModulo(motionProgress, 1);
-      const sourceScrollSpin = motionProgress * workTrackStep;
       // 源站滚轮会让 spine/flower 有非常明显的纵向穿行；这里把实例队列位移和 shader 相位拆开：
       // 位移负责“骨节从上到下接力”，相位负责“油膜/粒子沿柱体内部滚动”，两者都不改 x/z。
       const sourceSpineTravel = motionProgress * 1.24;
@@ -4943,7 +4957,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       oilTexture.offset.y = time * 0.032;
       // 参考柱体的油膜颗粒会有很慢的内向漂移；专用贴图单独滚动，
       // 避免和通用油膜同步后看起来像一层整齐的页面滤镜。
-      referenceOilTexture.offset.x = Math.sin(time * 0.06) * 0.04 + Math.sin(sourceScrollSpin * 0.18) * 0.012;
+      referenceOilTexture.offset.x = Math.sin(time * 0.06) * 0.04;
       referenceOilTexture.offset.y = time * 0.046 + sourceScrollProgress * 0.62;
       referenceSpineFieldMaterial.opacity = 0.34 + Math.sin(time * 0.2) * 0.024 + Math.min(0.06, Math.abs(scrollImpulse) * 0.015);
       referenceSpineGhostMaterial.opacity = 0.09 + Math.cos(time * 0.18) * 0.014 + Math.min(0.032, Math.abs(scrollImpulse) * 0.009);
@@ -5047,7 +5061,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         link.position.y = chainTravelY + Math.sin(pillarVerticalPhase + linkIndex * 0.28) * 0.012;
         link.position.z = -0.94;
         link.rotation.x = Math.PI / 2;
-        link.rotation.y = Math.PI / 2 * linkIndex + time * 0.055 + scrollFollow * 0.02;
+        link.rotation.y = Math.PI / 2 * linkIndex + time * 0.055;
         link.rotation.z = 0.08 * Math.sin(linkIndex + time * 0.22);
         material.opacity = (0.07 + Math.min(0.08, Math.abs(scrollImpulse) * 0.02)) * edgeFade;
         material.emissiveIntensity = 0.018 + Math.min(0.035, Math.abs(scrollImpulse) * 0.01);
