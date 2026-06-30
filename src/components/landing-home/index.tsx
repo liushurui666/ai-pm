@@ -39,6 +39,8 @@ type StoryScene = {
   signals: string[];
 };
 
+type ReferenceGlassPanelVariant = "left" | "front" | "rear";
+
 const storyScenes: StoryScene[] = [
   {
     key: "command",
@@ -1370,6 +1372,111 @@ function createPanelTexture(scene: StoryScene) {
   return texture;
 }
 
+function createReferenceGlassPanelTexture(variant: ReferenceGlassPanelVariant) {
+  const canvas = document.createElement("canvas");
+  canvas.width = variant === "front" ? 1024 : 760;
+  canvas.height = variant === "front" ? 640 : 920;
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    return new THREE.CanvasTexture(canvas);
+  }
+
+  const width = canvas.width;
+  const height = canvas.height;
+  const inset = variant === "rear" ? 34 : 28;
+  const radius = variant === "front" ? 54 : 62;
+  const accent = variant === "front" ? "#9a8cff" : variant === "left" ? "#8af6ed" : "#74d8ff";
+
+  // 这组纹理专门补参考 mp4 里的“空间玻璃屏”关系：左侧大屏、前景油膜屏、后方暗屏。
+  // 不能直接把第三方录屏截图贴进项目，所以这里用 Canvas 自生成玻璃雾面、边缘厚度和油膜投影；
+  // mesh 再挂到 Three 场景里跟随柱体旋转，既保留自实现，也更接近参考里的层次。
+  context.clearRect(0, 0, width, height);
+  const baseGradient = context.createLinearGradient(0, 0, width, height);
+  baseGradient.addColorStop(0, variant === "front" ? "rgba(39,42,58,0.46)" : "rgba(139,224,218,0.2)");
+  baseGradient.addColorStop(0.42, variant === "rear" ? "rgba(20,34,38,0.14)" : "rgba(154,193,186,0.18)");
+  baseGradient.addColorStop(1, "rgba(8,12,16,0.08)");
+  context.fillStyle = baseGradient;
+  drawRoundedRect(context, inset, inset, width - inset * 2, height - inset * 2, radius);
+  context.fill();
+
+  context.save();
+  drawRoundedRect(context, inset, inset, width - inset * 2, height - inset * 2, radius);
+  context.clip();
+
+  const haze = context.createRadialGradient(width * 0.48, height * 0.34, 0, width * 0.48, height * 0.34, Math.max(width, height) * 0.72);
+  haze.addColorStop(0, variant === "front" ? "rgba(176,158,230,0.2)" : "rgba(215,249,239,0.2)");
+  haze.addColorStop(0.48, "rgba(130,180,174,0.08)");
+  haze.addColorStop(1, "rgba(0,0,0,0)");
+  context.fillStyle = haze;
+  context.fillRect(0, 0, width, height);
+
+  const diagonal = context.createLinearGradient(width * 0.12, height * 0.08, width * 0.88, height * 0.92);
+  diagonal.addColorStop(0, "rgba(255,255,255,0)");
+  diagonal.addColorStop(0.42, "rgba(255,255,255,0.16)");
+  diagonal.addColorStop(0.58, "rgba(122,255,238,0.1)");
+  diagonal.addColorStop(1, "rgba(255,255,255,0)");
+  context.fillStyle = diagonal;
+  context.globalAlpha = variant === "rear" ? 0.32 : 0.52;
+  context.beginPath();
+  context.moveTo(width * 0.04, height * 0.18);
+  context.lineTo(width * 0.78, height * 0.04);
+  context.lineTo(width * 0.62, height * 0.42);
+  context.lineTo(width * 0.16, height * 0.62);
+  context.closePath();
+  context.fill();
+
+  context.globalCompositeOperation = "screen";
+  [
+    { color: "#78efff", x: width * 0.34, y: height * 0.24, r: width * 0.22, sx: 0.82, sy: 0.48 },
+    { color: "#b38aff", x: width * 0.48, y: height * 0.5, r: width * 0.24, sx: 0.55, sy: 1.12 },
+    { color: "#e1c27a", x: width * 0.62, y: height * 0.7, r: width * 0.18, sx: 1.1, sy: 0.42 },
+  ].forEach((spot, spotIndex) => {
+    const spotGradient = context.createRadialGradient(0, 0, 0, 0, 0, spot.r);
+    spotGradient.addColorStop(0, `${spot.color}${variant === "front" ? "88" : "5a"}`);
+    spotGradient.addColorStop(0.34, `${spot.color}24`);
+    spotGradient.addColorStop(1, `${spot.color}00`);
+    context.save();
+    context.translate(spot.x, spot.y);
+    context.rotate(-0.44 + spotIndex * 0.34);
+    context.scale(spot.sx, spot.sy);
+    context.fillStyle = spotGradient;
+    context.fillRect(-spot.r, -spot.r, spot.r * 2, spot.r * 2);
+    context.restore();
+  });
+  context.globalCompositeOperation = "source-over";
+
+  context.globalAlpha = variant === "front" ? 0.16 : 0.22;
+  context.strokeStyle = "rgba(220,255,248,0.66)";
+  context.lineWidth = 1.2;
+  for (let lineIndex = 0; lineIndex < 7; lineIndex += 1) {
+    const y = height * (0.44 + lineIndex * 0.052);
+    context.beginPath();
+    context.moveTo(width * 0.16, y);
+    context.lineTo(width * (0.5 + Math.sin(lineIndex) * 0.08), y - height * 0.035);
+    context.stroke();
+  }
+
+  context.restore();
+
+  context.globalAlpha = variant === "front" ? 0.42 : 0.58;
+  context.strokeStyle = accent;
+  context.lineWidth = variant === "front" ? 4.5 : 5.6;
+  drawRoundedRect(context, inset, inset, width - inset * 2, height - inset * 2, radius);
+  context.stroke();
+
+  context.globalAlpha = variant === "front" ? 0.18 : 0.24;
+  context.strokeStyle = "rgba(255,255,255,0.86)";
+  context.lineWidth = 1.8;
+  drawRoundedRect(context, inset + 7, inset + 7, width - (inset + 7) * 2, height - (inset + 7) * 2, radius - 8);
+  context.stroke();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.needsUpdate = true;
+  return texture;
+}
+
 export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref, workbenchHref }: LandingHomeProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1598,9 +1705,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     stage.add(particles);
 
     const pillarGroup = new THREE.Group();
-    pillarGroup.position.set(-0.1, -0.02, -0.38);
+    pillarGroup.position.set(0.02, -0.02, -0.38);
     pillarGroup.rotation.y = -0.04;
-    pillarGroup.scale.set(1.05, 1.25, 0.96);
+    pillarGroup.scale.set(0.9, 1.18, 0.84);
     stage.add(pillarGroup);
 
     const liquidColumnGeometry = new THREE.CylinderGeometry(0.5, 0.46, 5.8, 128, 72, true);
@@ -2746,6 +2853,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           float lumaMatte = smoothstep(0.04, 0.34, luma);
           float edgeFade = smoothstep(0.012, 0.095, vUv.x) * smoothstep(0.86, 0.58, vUv.x);
           float verticalFade = smoothstep(0.01, 0.075, vUv.y) * smoothstep(1.0, 0.9, vUv.y);
+          vec2 flowUv = vUv + vec2(
+            sin(vUv.y * 7.0 + uTime * 0.34 + uScroll * 0.8) * 0.01,
+            cos(vUv.x * 5.4 - uTime * 0.22) * 0.006
+          );
           float rightPanelCull = 1.0 - smoothstep(0.46, 0.8, vUv.x) * 0.82;
           float scrollBreath = 1.0 + min(0.16, abs(uScroll) * 0.05);
           float scanPulse = 0.94 + sin(uTime * 0.7 + vUv.y * 12.0 + uScroll * 0.8) * 0.06;
@@ -2756,6 +2867,12 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           vec3 oilHighlight = pow(video.rgb, vec3(0.72)) * vec3(1.06, 1.14, 1.26);
           vec3 color = mix(darkBody, oilHighlight, smoothstep(0.045, 0.22, saturation + luma * 0.28 + dynamicMask * 0.08));
           color += vec3(0.03, 0.055, 0.08) * bodyMatte;
+          // 镜像里的 HomeLogoShader 走 normal/refraction/fresnel 多层叠加；
+          // 这里不复制第三方 shader，只补同类型的滚动折射和边缘彩虹，
+          // 让柱体默认保持规则实体，滚轮时能产生参考里的油膜换面。
+          float edgeBand = smoothstep(0.04, 0.22, abs(flowUv.x - 0.42)) * smoothstep(0.96, 0.58, flowUv.x);
+          vec3 rainbow = 0.5 + 0.5 * cos(6.28318 * (vec3(0.0, 0.34, 0.67) + flowUv.y * 0.28 + uTime * 0.025 + uScroll * 0.035));
+          color += rainbow * edgeBand * (0.075 + abs(uScroll) * 0.015) * pillarMask;
 
           gl_FragColor = vec4(color, alpha);
         }
@@ -3002,7 +3119,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     columnParticleGeometry.setAttribute("aSize", new THREE.BufferAttribute(columnParticleSizes, 1));
     columnParticleGeometry.setAttribute("aAlpha", new THREE.BufferAttribute(columnParticleAlphas, 1));
     columnParticleGeometry.setAttribute("aPhase", new THREE.BufferAttribute(columnParticlePhases, 1));
-    const columnParticleMaterial = createVolumetricParticleMaterial(0.56);
+    const columnParticleMaterial = createVolumetricParticleMaterial(0.7);
     const columnParticles = new THREE.Points(columnParticleGeometry, columnParticleMaterial);
     pillarGroup.add(columnParticles);
 
@@ -3015,7 +3132,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         depthTest: false,
         depthWrite: false,
         map: texture,
-        opacity: 0.082 + (fleckIndex % 5) * 0.014,
+        opacity: 0.112 + (fleckIndex % 5) * 0.018,
         rotation: Math.sin(fleckIndex * 1.9) * Math.PI,
         transparent: true,
       });
@@ -3034,13 +3151,68 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       sprite.renderOrder = 9;
       pillarGroup.add(sprite);
       return {
-        baseOpacity: 0.082 + (fleckIndex % 5) * 0.014,
+        baseOpacity: 0.112 + (fleckIndex % 5) * 0.018,
         basePosition: sprite.position.clone(),
         baseScale: sprite.scale.clone(),
         material,
         phase: fleckIndex * 0.47,
         sprite,
       };
+    });
+
+    const referenceGlassPanels = [
+      {
+        angle: -1.26,
+        height: 3.18,
+        opacity: 0.38,
+        radiusX: 2.68,
+        radiusZ: 0.66,
+        renderOrder: 6.05,
+        variant: "left" as const,
+        width: 2.18,
+        y: 0.54,
+      },
+      {
+        angle: 0.08,
+        height: 1.98,
+        opacity: 0.58,
+        radiusX: 1.1,
+        radiusZ: 0.86,
+        renderOrder: 8.76,
+        variant: "front" as const,
+        width: 3.52,
+        y: -0.02,
+      },
+      {
+        angle: 2.62,
+        height: 1.9,
+        opacity: 0.22,
+        radiusX: 1.78,
+        radiusZ: 0.84,
+        renderOrder: 4.9,
+        variant: "rear" as const,
+        width: 1.46,
+        y: 1.16,
+      },
+    ].map((config) => {
+      const texture = createReferenceGlassPanelTexture(config.variant);
+      const geometry = new THREE.PlaneGeometry(config.width, config.height, 12, 8);
+      const material = new THREE.MeshBasicMaterial({
+        depthTest: false,
+        depthWrite: false,
+        map: texture,
+        opacity: config.opacity,
+        side: THREE.DoubleSide,
+        transparent: true,
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+
+      // 这些屏幕不是可读产品卡片，而是参考 mp4 里的空间玻璃层：
+      // 左大屏负责构图比例，前景屏负责“柱体被玻璃压住”的深度关系，后屏负责远景暗框。
+      // 它们挂在 stage 而不是 DOM 背景里，动画里用 storyOrbit 同步推进，避免再次出现“卡片转了、柱子没跟着转”的割裂。
+      mesh.renderOrder = config.renderOrder;
+      stage.add(mesh);
+      return { ...config, geometry, material, mesh, texture };
     });
 
     const panelMeshes = storyScenes.map((sceneItem, index) => {
@@ -3213,18 +3385,41 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceSpineOcclusionMaterial.uniforms.uScroll.value = scrollFollow;
       referenceSpineOcclusionMaterial.uniforms.uOpacity.value = 0.3 + Math.sin(time * 0.22 + 0.2) * 0.022 + Math.min(0.08, Math.abs(scrollFollow) * 0.02);
       referenceSpineRimMaterial.opacity = 0.3 + Math.sin(time * 0.22 + 0.9) * 0.035 + Math.min(0.09, Math.abs(scrollImpulse) * 0.022);
-      referenceSpineField.position.x = -0.56 + Math.sin(storyOrbit * 0.32) * 0.028;
-      referenceSpineGhost.position.x = -0.28 + Math.cos(storyOrbit * 0.28) * 0.024;
-      referenceSpineMotion.position.x = -0.57 + Math.sin(storyOrbit * 0.36 + 0.08) * 0.027;
-      referenceSpineSubject.position.x = -0.94 + Math.sin(storyOrbit * 0.38 + 0.1) * 0.034 + scrollFollow * 0.046;
-      referenceSpineSubject.position.z = 1.34 + Math.cos(storyOrbit * 0.34 + 0.2) * 0.03 + Math.abs(scrollFollow) * 0.018;
-      referenceSpineSubject.rotation.y = -0.078 + Math.sin(storyOrbit * 0.46) * 0.035 + scrollFollow * 0.045;
-      referenceSpineSubject.rotation.z = 0.012 + Math.sin(storyOrbit * 0.32) * 0.012 + scrollFollow * 0.018;
+      referenceSpineField.position.x = -0.36 + Math.sin(storyOrbit * 0.32) * 0.02 + scrollFollow * 0.032;
+      referenceSpineField.rotation.y = -0.075 + Math.sin(storyOrbit * 0.34) * 0.026 + scrollFollow * 0.052;
+      referenceSpineGhost.position.x = -0.16 + Math.cos(storyOrbit * 0.28) * 0.018 + scrollFollow * 0.025;
+      referenceSpineGhost.rotation.y = 0.12 + Math.sin(storyOrbit * 0.3) * 0.02 + scrollFollow * 0.038;
+      referenceSpineMotion.position.x = -0.36 + Math.sin(storyOrbit * 0.36 + 0.08) * 0.022 + scrollFollow * 0.036;
+      referenceSpineMotion.rotation.y = -0.08 + Math.sin(storyOrbit * 0.36 + 0.08) * 0.024 + scrollFollow * 0.05;
+      referenceSpineSubject.position.x = -0.62 + Math.sin(storyOrbit * 0.38 + 0.1) * 0.026 + scrollFollow * 0.068;
+      referenceSpineSubject.position.z = 1.3 + Math.cos(storyOrbit * 0.34 + 0.2) * 0.026 + Math.abs(scrollFollow) * 0.022;
+      referenceSpineSubject.rotation.y = -0.09 + Math.sin(storyOrbit * 0.46) * 0.03 + scrollFollow * 0.084;
+      referenceSpineSubject.rotation.z = 0.006 + Math.sin(storyOrbit * 0.32) * 0.01 + scrollFollow * 0.024;
       referenceSpineSubject.scale.set(1 + Math.min(0.06, Math.abs(scrollFollow) * 0.02), 1 + Math.min(0.035, Math.abs(scrollFollow) * 0.012), 1);
-      referenceSpineOcclusion.position.x = -0.55 + Math.sin(storyOrbit * 0.32 + 0.18) * 0.026 + scrollFollow * 0.034;
+      referenceSpineOcclusion.position.x = -0.38 + Math.sin(storyOrbit * 0.32 + 0.18) * 0.022 + scrollFollow * 0.058;
       referenceSpineOcclusion.position.z = 1.48 + Math.cos(storyOrbit * 0.31 + 0.14) * 0.022;
-      referenceSpineOcclusion.rotation.y = -0.075 + Math.sin(storyOrbit * 0.42 + 0.1) * 0.026 + scrollFollow * 0.032;
-      referenceSpineRim.position.x = -0.58 + Math.sin(storyOrbit * 0.34 + 0.18) * 0.026;
+      referenceSpineOcclusion.rotation.y = -0.08 + Math.sin(storyOrbit * 0.42 + 0.1) * 0.026 + scrollFollow * 0.072;
+      referenceSpineRim.position.x = -0.38 + Math.sin(storyOrbit * 0.34 + 0.18) * 0.022 + scrollFollow * 0.032;
+      referenceSpineRim.rotation.y = -0.08 + Math.sin(storyOrbit * 0.36 + 0.08) * 0.02 + scrollFollow * 0.048;
+      referenceGlassPanels.forEach((panel, panelIndex) => {
+        const orbitAngle = panel.angle + storyOrbit * 0.84 + scrollFollow * 0.28;
+        const depthOffset = panel.variant === "front" ? 0.5 : panel.variant === "rear" ? -0.34 : 0.02;
+        const targetX = Math.sin(orbitAngle) * panel.radiusX + scrollImpulse * (panel.variant === "front" ? 0.038 : 0.028);
+        const targetY = panel.y + Math.sin(time * 0.2 + panelIndex) * 0.018 - scrollFollow * 0.018;
+        const targetZ = Math.cos(orbitAngle) * panel.radiusZ + depthOffset;
+        const targetRotationY = -orbitAngle * (panel.variant === "front" ? 0.5 : 0.68) - 0.08;
+        const targetRotationX = panel.variant === "front" ? -0.02 + scrollFollow * 0.012 : 0.035 * Math.sign(panel.angle);
+        const targetOpacity = panel.opacity + Math.min(0.16, Math.abs(scrollImpulse) * (panel.variant === "front" ? 0.07 : 0.04));
+
+        // 参考里的玻璃屏不是故事进度条，而是围绕柱体的空间装置。
+        // 这里用和 pillarGroup 同源的 storyOrbit 驱动位置、深度和朝向，让滚动时屏幕和柱体像一个整体被推着转。
+        panel.mesh.position.x += (targetX - panel.mesh.position.x) * 0.12;
+        panel.mesh.position.y += (targetY - panel.mesh.position.y) * 0.12;
+        panel.mesh.position.z += (targetZ - panel.mesh.position.z) * 0.12;
+        panel.mesh.rotation.y += (targetRotationY - panel.mesh.rotation.y) * 0.11;
+        panel.mesh.rotation.x += (targetRotationX - panel.mesh.rotation.x) * 0.1;
+        panel.material.opacity += (targetOpacity - panel.material.opacity) * 0.08;
+      });
       stage.rotation.y = Math.sin(storyOrbit) * 0.1;
       particles.rotation.y -= 0.0009;
       particles.rotation.z = Math.sin(time * 0.18) * 0.06;
@@ -3233,12 +3428,15 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       liquidColumn.scale.z = 1 + Math.cos(time * 0.48) * 0.035;
       spine.rotation.x += 0.003;
       spine.rotation.y += 0.006;
-      pillarGroup.position.x = -0.98 + Math.sin(storyOrbit) * 1.06 + scrollImpulse * 0.24;
-      pillarGroup.position.y = -0.02 + Math.sin(storyOrbit * 0.46) * 0.055 - scrollFollow * 0.055;
-      pillarGroup.position.z = -0.34 + Math.cos(storyOrbit) * 0.34;
-      pillarGroup.rotation.y = -0.14 - storyOrbit * 2.62;
-      pillarGroup.rotation.x = Math.sin(storyOrbit * 0.72) * 0.24 + scrollImpulse * 0.14;
-      pillarGroup.rotation.z = Math.sin(storyOrbit * 0.54) * 0.08 + scrollFollow * 0.06;
+      // 参考 mp4 的主柱默认更像固定在画面中轴偏左的一根实体，
+      // 大幅左右漂移会让它不像“同一根柱子”。这里把默认横向漂移压小，
+      // 但保留滚动触发时的整体旋转和轻微位移，让柱体、卡片和玻璃屏作为同一个装置换面。
+      pillarGroup.position.x = -0.62 + Math.sin(storyOrbit) * 0.22 + scrollImpulse * 0.08;
+      pillarGroup.position.y = -0.02 + Math.sin(storyOrbit * 0.46) * 0.04 - scrollFollow * 0.04;
+      pillarGroup.position.z = -0.36 + Math.cos(storyOrbit) * 0.18;
+      pillarGroup.rotation.y = -0.08 - storyOrbit * 1.92 - scrollFollow * 0.22;
+      pillarGroup.rotation.x = Math.sin(storyOrbit * 0.72) * 0.14 + scrollImpulse * 0.12;
+      pillarGroup.rotation.z = Math.sin(storyOrbit * 0.54) * 0.045 + scrollFollow * 0.044;
       pillarShell.scale.x = 1 + Math.sin(time * 1.3) * 0.035;
       pillarShell.scale.z = 1 + Math.cos(time * 1.1) * 0.035;
       pillarCore.scale.x = 1 + Math.sin(time * 1.9) * 0.09;
@@ -3497,6 +3695,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const material = mesh.material as THREE.MeshBasicMaterial;
         material.map?.dispose();
         material.dispose();
+      });
+      referenceGlassPanels.forEach((panel) => {
+        panel.geometry.dispose();
+        panel.texture.dispose();
+        panel.material.dispose();
       });
     };
   }, []);
