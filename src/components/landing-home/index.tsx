@@ -288,9 +288,9 @@ function getStoryWorkItemWebGLLayout(offset: number) {
 
 function getStoryWorkItemHitLayerOpacity(visual: StoryWorkItemVisual) {
   // DOM 层不再只是一个极淡 hit-area：用户明确要看到“所有卡片都在真实滚动并可交互”。
-  // 这里仍然让 WebGL pane 承担主光影，但把 DOM 的透明度抬到能辨认多张卡片的范围，
-  // 否则在暗场里会误读成只有一张卡片在换内容。
-  return Math.min(0.82, visual.opacity * (visual.isFocused ? 0.74 : 0.62));
+  // v132 之后视觉主层重新交给 WebGL/媒体玻璃，DOM 只保留足够的焦点和点击反馈；
+  // 如果 DOM 文案太亮，画面会变成一串 SaaS 卡片，而不是源站那种媒体屏在柱体前后滚动。
+  return Math.min(0.28, visual.opacity * (visual.isFocused ? 0.26 : 0.18));
 }
 
 function getInitialStoryCardStyle(slotIndex: number, progress = 0) {
@@ -2275,7 +2275,7 @@ function createWorkPaneMediaMaterial(mediaTexture: THREE.Texture, logoTexture: T
   // 这里把真实 Hogwarts CMS 素材作为一层低透明投影塞回前景屏，
   // 再由现有 Canvas UI 与折射层压住它，避免继续只靠手绘假卡片。
   return new THREE.ShaderMaterial({
-    blending: THREE.AdditiveBlending,
+    blending: THREE.NormalBlending,
     depthTest: false,
     depthWrite: false,
     side: THREE.DoubleSide,
@@ -2326,9 +2326,10 @@ function createWorkPaneMediaMaterial(mediaTexture: THREE.Texture, logoTexture: T
         vec3 media = sampleSoftMedia(mediaUv);
         float luma = dot(media, vec3(0.299, 0.587, 0.114));
         float saturation = max(media.r, max(media.g, media.b)) - min(media.r, min(media.g, media.b));
-        vec3 cinematic = pow(media, vec3(0.86)) * vec3(0.58, 0.72, 0.72);
+        vec3 cinematic = pow(media, vec3(0.82)) * vec3(0.64, 0.77, 0.76);
         cinematic += vec3(0.1, 0.38, 0.32) * smoothstep(0.18, 0.78, luma + saturation * 0.4) * 0.2;
         cinematic += vec3(0.44, 0.3, 0.68) * smoothstep(0.2, 0.72, saturation) * 0.14;
+        cinematic += vec3(0.035, 0.046, 0.046);
 
         vec2 logoUv = vec2((vUv.x - 0.36) / 0.28, (vUv.y - 0.64) / 0.14);
         vec4 logo = texture2D(tLogo, logoUv);
@@ -2340,7 +2341,7 @@ function createWorkPaneMediaMaterial(mediaTexture: THREE.Texture, logoTexture: T
         float mediaBody = smoothstep(0.08, 0.68, luma + saturation * 0.5);
         float glassFalloff = smoothstep(0.02, 0.16, vUv.x) * smoothstep(0.98, 0.84, vUv.x) * smoothstep(0.02, 0.14, vUv.y) * smoothstep(0.98, 0.84, vUv.y);
         float ripple = 0.88 + sin(uTime * 0.72 + vUv.y * 18.0 + vUv.x * 4.0) * 0.12;
-        float alpha = mask * glassFalloff * uOpacity * ripple * (0.18 + mediaBody * 0.48 + logoAlpha * 0.8);
+        float alpha = mask * glassFalloff * uOpacity * ripple * (0.28 + mediaBody * 0.78 + logoAlpha * 0.9);
 
         gl_FragColor = vec4(cinematic + logoGlow, alpha);
       }
@@ -4380,9 +4381,13 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         varying vec2 vUv;
 
         void main() {
-          vec4 video = texture2D(uMap, vUv);
-          vec4 dynamicMaskSample = texture2D(uDynamicMask, vUv);
-          vec4 organicMaskSample = texture2D(uMask, vUv);
+          // 这张源视频平面是远景里最容易被用户感知到的柱体主体。
+          // 之前它只靠视频自身循环，滚轮推进时可见主体几乎不“从上到下走”；
+          // 这里仅移动采样 UV，不移动 mesh 坐标，既强化滚动跟随，又不会重新制造整根柱子的左右偏移。
+          vec2 sourceUv = vec2(vUv.x, fract(vUv.y + uScroll * 0.18));
+          vec4 video = texture2D(uMap, sourceUv);
+          vec4 dynamicMaskSample = texture2D(uDynamicMask, sourceUv);
+          vec4 organicMaskSample = texture2D(uMask, sourceUv);
           float maxChannel = max(max(video.r, video.g), video.b);
           float minChannel = min(min(video.r, video.g), video.b);
           float saturation = maxChannel - minChannel;
@@ -4456,7 +4461,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         varying vec2 vUv;
 
         void main() {
-          vec4 video = texture2D(uMap, vUv);
+          // 前景遮挡层也跟随同一个纵向采样相位，否则柱体在滚动而遮挡纹理不滚，
+          // 两层会互相打架，看起来不像同一个 ActiveTheory Work 场景里的空间装置。
+          vec2 sourceUv = vec2(vUv.x, fract(vUv.y + uScroll * 0.16));
+          vec4 video = texture2D(uMap, sourceUv);
           float maxChannel = max(max(video.r, video.g), video.b);
           float minChannel = min(min(video.r, video.g), video.b);
           float saturation = maxChannel - minChannel;
@@ -4703,38 +4711,38 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const referenceGlassPanels = [
       {
         angle: -1.26,
-        height: 3.18,
-        opacity: 0.007,
+        height: 3.42,
+        opacity: 0.022,
         radiusX: 2.68,
         radiusZ: 0.66,
-        renderOrder: 3.25,
+        renderOrder: 7.85,
         sourceIndex: -1,
         variant: "left" as const,
-        width: 2.18,
-        y: 0.54,
+        width: 3.72,
+        y: 0.5,
       },
       {
         angle: 0.03,
-        height: 2.42,
-        opacity: 0.009,
+        height: 2.86,
+        opacity: 0.026,
         radiusX: 0.86,
         radiusZ: 0.82,
-        renderOrder: 4.85,
+        renderOrder: 8.82,
         sourceIndex: 0,
         variant: "front" as const,
-        width: 4.18,
-        y: 0.12,
+        width: 4.82,
+        y: 0.16,
       },
       {
         angle: 2.62,
-        height: 1.9,
-        opacity: 0.006,
+        height: 2.24,
+        opacity: 0.011,
         radiusX: 1.78,
         radiusZ: 0.84,
-        renderOrder: 2.9,
+        renderOrder: 6.2,
         sourceIndex: 1,
         variant: "rear" as const,
-        width: 1.46,
+        width: 1.72,
         y: 1.16,
       },
     ].map((config) => {
@@ -4750,23 +4758,29 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       });
       const mesh = new THREE.Mesh(geometry, material);
       const mediaMaterial =
-        config.variant === "front" ? createWorkPaneMediaMaterial(activeTheoryWorkHogwartsThumbTexture, activeTheoryWorkHogwartsLogoTexture) : null;
+        config.variant === "front" || config.variant === "left"
+          ? createWorkPaneMediaMaterial(activeTheoryWorkHogwartsThumbTexture, activeTheoryWorkHogwartsLogoTexture)
+          : null;
       const mediaMesh = mediaMaterial ? new THREE.Mesh(geometry, mediaMaterial) : null;
       const refractionMaterial =
-        config.variant === "front" ? createWorkRefractionPanelMaterial(texture, activeTheoryWorkNormalTexture, activeTheoryWorkEnvTexture, config.opacity * 0.72) : null;
+        config.variant === "front" || config.variant === "left"
+          ? createWorkRefractionPanelMaterial(texture, activeTheoryWorkNormalTexture, activeTheoryWorkEnvTexture, config.opacity * 0.72)
+          : null;
       const refractionMesh = refractionMaterial ? new THREE.Mesh(geometry, refractionMaterial) : null;
 
       // 这些屏幕只保留参考 mp4 里的空间玻璃氛围，不能再冒充主滚动卡片；
       // 真正的 WorkItem 轨道由下方循环 slot 生成，避免用户滚动时只看到一张大卡在切换。
       if (mediaMesh) {
-        // 源站 pane 的真实项目媒体只作为低透明背景投影，不能盖过 AI PM 自己的多卡片滚动轨道。
+        // 源站 Work 页面最强的视觉锚点是巨大项目媒体屏，而不是透明 UI 文案卡。
+        // 左侧和前景屏都接真实媒体纹理，让柱体在屏幕后方被遮挡/折射，空间关系会更接近 mp4。
         mediaMesh.renderOrder = config.renderOrder + 0.025;
         stage.add(mediaMesh);
       }
       mesh.renderOrder = config.renderOrder;
       stage.add(mesh);
       if (refractionMesh) {
-        // 只有前景主屏需要 WorkItem 式厚玻璃折射；左右远景屏保持更轻，避免整屏变成一堆高亮卡片。
+        // 左侧大屏也必须拥有厚玻璃折射，否则源站里最明显的“媒体屏压住柱体”会丢失。
+        // 右后方屏继续保持轻量，避免所有层都同亮度后画面变平。
         refractionMesh.renderOrder = config.renderOrder + 0.08;
         stage.add(refractionMesh);
       }
@@ -4987,12 +5001,12 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceSpineRim.position.x = -0.38;
       referenceSpineRim.rotation.y = -0.08 + Math.sin(time * 0.12 + 0.08) * 0.003;
       referenceGlassPanels.forEach((panel, panelIndex) => {
-        const staticX = panel.variant === "front" ? -0.62 : panel.variant === "left" ? -2.38 : 1.42;
-        const staticZ = panel.variant === "front" ? 1.36 : panel.variant === "left" ? 0.82 : 0.38;
-        const staticRotationY = panel.variant === "front" ? -0.08 : panel.variant === "left" ? 0.48 : -0.62;
-        const staticRotationX = panel.variant === "front" ? -0.02 : 0.026 * Math.sign(panel.angle);
+        const staticX = panel.variant === "front" ? -0.58 : panel.variant === "left" ? -2.18 : 1.48;
+        const staticZ = panel.variant === "front" ? 1.42 : panel.variant === "left" ? 1.05 : 0.42;
+        const staticRotationY = panel.variant === "front" ? -0.1 : panel.variant === "left" ? 0.42 : -0.62;
+        const staticRotationX = panel.variant === "front" ? -0.028 : 0.026 * Math.sign(panel.angle);
         const targetY = panel.y + Math.sin(time * 0.18 + panelIndex) * 0.008;
-        const targetOpacity = panel.opacity * (0.72 + Math.sin(time * 0.22 + panelIndex) * 0.08) + Math.min(0.014, Math.abs(scrollImpulse) * 0.006);
+        const targetOpacity = panel.opacity * (0.94 + Math.sin(time * 0.22 + panelIndex) * 0.08) + Math.min(0.022, Math.abs(scrollImpulse) * 0.008);
 
         // 这三片大玻璃只当作参考图里的环境折射层，不能再吃 WorkItem 轨道。
         // 如果它们继续按卡片 offset 横向移动，视觉上会像“只有一张大卡片在拖着柱体走”；
@@ -5009,7 +5023,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           panel.mediaMesh.scale.copy(panel.mesh.scale);
           panel.mediaMaterial.uniforms.uTime.value = time;
           panel.mediaMaterial.uniforms.uScroll.value = sourceScrollProgress;
-          panel.mediaMaterial.uniforms.uOpacity.value = Math.min(0.036, panel.material.opacity * 0.38 + Math.abs(scrollImpulse) * 0.0035);
+          panel.mediaMaterial.uniforms.uOpacity.value =
+            panel.variant === "front"
+              ? Math.min(0.2, panel.material.opacity * 4.8 + Math.abs(scrollImpulse) * 0.012)
+              : Math.min(0.15, panel.material.opacity * 3.9 + Math.abs(scrollImpulse) * 0.009);
         }
         if (panel.refractionMesh && panel.refractionMaterial) {
           panel.refractionMesh.position.copy(panel.mesh.position);
@@ -5017,7 +5034,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           panel.refractionMesh.scale.copy(panel.mesh.scale);
           panel.refractionMaterial.uniforms.uTime.value = time;
           panel.refractionMaterial.uniforms.uScroll.value = sourceScrollProgress;
-          panel.refractionMaterial.uniforms.uOpacity.value = Math.min(0.044, panel.material.opacity * 0.48 + Math.abs(scrollImpulse) * 0.004);
+          panel.refractionMaterial.uniforms.uOpacity.value =
+            panel.variant === "front"
+              ? Math.min(0.18, panel.material.opacity * 4.2 + Math.abs(scrollImpulse) * 0.01)
+              : Math.min(0.12, panel.material.opacity * 3.4 + Math.abs(scrollImpulse) * 0.007);
         }
       });
       stage.rotation.y = 0;

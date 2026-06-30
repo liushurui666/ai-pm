@@ -3,63 +3,69 @@
 - source visual truth path: `/tmp/ai-pm-at-reference/mp4-02-4.2s.png`
 - source video: `/Users/liushurui/Library/Application Support/LarkShell/screenshot/20260629120942_rec_.mp4`
 - source mirror: `/Users/liushurui/Desktop/workspace/new-jiguangjuzhen/activetheory-work-clone-nav-orb-20260524-121151(1)`
-- implementation default screenshot: `/tmp/ai-pm-v131-scroll-track/top.png`
-- implementation after-scroll screenshot: `/tmp/ai-pm-v131-scroll-track/after-scroll-1320.png`
-- implementation after-click screenshot: `/tmp/ai-pm-v131-scroll-track/after-click-slot4.png`
-- viewport: 1876x992 desktop, Codex in-app browser, `http://localhost:3004/?qa=scroll-track-v131`
+- implementation default screenshot: `/tmp/ai-pm-v132-media-spine/top.png`
+- implementation after-scroll screenshot: `/tmp/ai-pm-v132-media-spine/after-scroll-1320.png`
+- viewport: 1876x992 desktop, Codex in-app browser, `http://localhost:3004/?qa=scroll-track-v132`
 - state: unauthenticated landing page, hydrated WebGL canvas, real in-app browser scroll from `scrollY=0` to `scrollY=1320`
-- full-view comparison evidence: `/tmp/ai-pm-v131-scroll-track/source-vs-after-scroll-1320.png`
+- full-view comparison evidence: `/tmp/ai-pm-v132-media-spine/source-vs-after-scroll-1320.png`
+- focused region comparison evidence: center pillar/media-pane region is visible in the full-view comparison at the same viewport; no extra crop was needed for this pass because the patch target was scene-level media-pane hierarchy and scroll behavior, not small typography.
 - final result: blocked
-- blocking reason: v131 fixes the user's current scroll/card interaction complaint, but literal 100% ActiveTheory visual fidelity is still blocked by remaining media-pane composition, exact WorkItemShader refraction, and material/light differences.
+- blocking reason: v132 moves the scene closer to the ActiveTheory Work reference by strengthening real media panes, refraction, and scroll-coupled spine sampling, but literal 100% reproduction is still blocked by exact source camera/composite pipeline, WorkItem MRT refraction, and source geometry/material differences.
 
 ## Findings
 
-- [P1] Pillar/camera no longer receive scroll-driven lateral or spin phase.
+- [P1] Media-pane hierarchy is closer, but still not source-identical.
   Location: `src/components/landing-home/index.tsx`.
-  Evidence: v131 keeps `pillarGroup` and camera x/z locked, removes scroll-driven oil x drift and chain y-spin, and keeps point-cloud `uRotate` time-only. Browser verification kept the rail center at x `939` before and after `scrollY=1320`.
-  Impact: downward scroll now reads as vertical pillar flow plus card travel, not whole-column side drift.
+  Evidence: v132 side-by-side comparison shows larger left/front media panes and stronger glass occlusion than v131, matching the source direction better. The source still has a more dominant left screen, sharper project-media projection, and cleaner front/back separation.
+  Impact: this is visible in the first viewport and still prevents a 100% match claim.
+  Fix: continue porting the source `WorkItemShader`/MRT refraction and tune pane positions from the mirror camera targets rather than approximating by hand.
 
-- [P1] WorkItem hover no longer steals the scroll rig.
-  Location: `handleStoryCardPointerEnter()` in `src/components/landing-home/index.tsx`.
-  Evidence: in browser, hover over a non-current visible card kept `scrollY` at `1320` and active slot at `2`.
-  Impact: moving the mouse across cards no longer creates the previous "single card吸附" feeling.
+- [P1] Pillar scroll-follow is stronger, but not exact.
+  Location: source video subject and occlusion shaders in `src/components/landing-home/index.tsx`.
+  Evidence: the source video plane and occlusion layer now sample with `uScroll` on the y axis while the mesh x/z remains fixed. This makes the visible pillar layer travel vertically with scroll. The source mp4 still has a deeper true 3D column/composite relationship than the current hybrid source-video + mesh stack.
+  Impact: it addresses the user's "柱子要像 mp4 一样跟随滚动" direction, but exact geometry/material parity is not proven.
+  Fix: replace more of the visible source-video plane with source geometry/shader data, or derive the correct animated camera/composite pass from the mirror.
 
-- [P1] All visible cards remain real scroll targets.
-  Location: DOM WorkItem rail, WebGL panel layout, and slot target normalization in `src/components/landing-home/index.tsx`.
-  Evidence: route rendered 15 DOM slots. At `scrollY=0`, 7 cards were visible and interactive. After real scroll to `scrollY=1320`, 7 cards remained visible and interactive, active slot advanced to `2`. Clicking visible slot `4` scrolled to `scrollY=2857`, active slot became `4`, and 7 cards remained visible.
-  Impact: interaction is now a queue of real slots, not one card swapping text.
+- [P1] DOM business cards no longer dominate the source-like scene.
+  Location: `getStoryWorkItemHitLayerOpacity()` in `src/components/landing-home/index.tsx`.
+  Evidence: browser verification after scroll shows active DOM slot opacity `0.238` and surrounding slots `0.093-0.142`, while all remain pointer-interactive.
+  Impact: the scene reads more like media panes around a pillar instead of a vertical SaaS card stack, while retaining the user's requirement that all cards remain real scroll targets.
+  Fix: keep DOM as hit/focus layer; continue moving visual weight into WebGL pane/media layers.
 
-- [P2] Top-loop slot clicks no longer resolve to negative progress.
-  Location: `getClosestScrollableStoryTarget()` and `goToStorySlot()` in `src/components/landing-home/index.tsx`.
-  Evidence: negative prior-loop candidates are folded into the next scrollable cycle before calling native `window.scrollTo`.
-  Impact: cards visible above the active slot do not snap back to page top after click.
+- [P1] Scroll interaction remains correct after the visual changes.
+  Location: landing route `/`.
+  Evidence: route rendered 15 DOM WorkItem slots. After real in-app browser scroll to `scrollY=1320`, 7 cards remained visible and interactive, active slot was `2`, and rail center x stayed `939`.
+  Impact: v132 did not regress the v131 interaction fix.
+  Fix: keep rail center and scroll target logic unchanged while improving materials.
 
-- [P1] Source fidelity is still not exact.
-  Location: center media panes, pillar material, and WorkItem/refraction passes.
-  Evidence: `/tmp/ai-pm-v131-scroll-track/source-vs-after-scroll-1320.png` still shows the source has heavier real media planes, denser chromatic refraction, darker wet-shell geometry, and sharper project-card light breakup.
-  Impact: do not claim 100% ActiveTheory reproduction yet.
+## Patches Made In This Pass
+
+- Increased left/front reference glass pane size and opacity to better match the source's large media-screen hierarchy.
+- Attached real Hogwarts media and Work-style refraction material to the left screen as well as the front screen.
+- Switched the media pane shader from additive-only blending to normal smoky media blending so panes can actually occlude the pillar.
+- Raised media/refraction uniform opacity limits for source-like thick glass while keeping right/rear panes lighter.
+- Added scroll-coupled y-axis texture sampling to the source-video pillar and occlusion layer so the visible column follows downward scrolling without moving x/z.
+- Lowered DOM WorkItem card opacity so DOM remains an interaction layer rather than the primary visual layer.
 
 ## Validation
 
 - `corepack pnpm lint`: passed.
 - `corepack pnpm build`: passed.
-- Browser route: `http://localhost:3004/?qa=scroll-track-v131`.
+- `git diff --check`: passed.
+- Browser route: `http://localhost:3004/?qa=scroll-track-v132`.
 - Browser screenshots:
-  - `/tmp/ai-pm-v131-scroll-track/top.png`
-  - `/tmp/ai-pm-v131-scroll-track/after-scroll-1320.png`
-  - `/tmp/ai-pm-v131-scroll-track/after-click-slot4.png`
-  - `/tmp/ai-pm-v131-scroll-track/source-vs-after-scroll-1320.png`
+  - `/tmp/ai-pm-v132-media-spine/top.png`
+  - `/tmp/ai-pm-v132-media-spine/after-scroll-1320.png`
+  - `/tmp/ai-pm-v132-media-spine/source-vs-after-scroll-1320.png`
 - Browser checks:
-  - Real in-app browser scroll advanced the page from `scrollY=0` to `scrollY=1320`.
+  - Real in-app browser scroll advanced the page to `scrollY=1320`.
   - DOM rail rendered 15 WorkItem slots.
-  - Before scroll: 7 visible interactive cards, active slot `0`.
   - After scroll: 7 visible interactive cards, active slot `2`, rail center x `939`.
-  - Hover over a visible non-current card did not change `scrollY`.
-  - Click on visible slot `4` changed active slot to `4` and kept 7 cards visible.
+  - Active DOM slot opacity reduced to `0.238`; surrounding visible slots stayed interactive at `0.093-0.142`.
   - Console check found no new runtime errors; only existing Three.js `DRACOLoader.setDecoderConfig` deprecation warnings were present.
 
 ## Follow-up Polish
 
-- Port the source WorkItem media/refraction pass more literally, especially large project panes and chromatic text splitting.
-- Tune pillar material toward darker wet geometry with stronger source-like occlusion.
-- Continue reducing AI PM copy density on floating panes if the target remains a near-literal ActiveTheory Work clone rather than a branded adaptation.
+- Port more of `WorkItemShader.glsl` literally: `tRefraction`, `tEnv`, `tNormal`, RGB split, radial blur, and the separate `WorkRefraction` output.
+- Use mirror camera/pane target data to place left/front/rear panes instead of hand-tuned x/z/rotation constants.
+- Continue replacing source-video planar shortcuts with source geometry/materials where available.
