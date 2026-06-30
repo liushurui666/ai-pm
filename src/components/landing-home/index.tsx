@@ -1663,7 +1663,9 @@ function createSourceSpineShaderMaterial(options: {
   // 而是把镜像里可验证的 uniform 协议落到一个本地 ShaderMaterial：
   // - `uNormalStrength` 固定为源站的 0.19；
   // - `uReflection` 固定为源站的 [2.7, 0.85]；
-  // - `matcap-test` 与 `damaged_road_normal` 参与主色，而不是只做一层很薄的外壳。
+  // - `matcap-test` 与 `damaged_road_normal` 参与主色，而不是只做一层很薄的外壳；
+  // - 源站真实 `tRefraction` 来自 Work 场景的 MRT pass，这里用同一段参考动态柱体材质
+  //   作为近似输入，避免退回静态 env 采样后柱体缺少 mp4 里的湿润流动高光。
   return new THREE.ShaderMaterial({
     depthTest: false,
     depthWrite: false,
@@ -1807,10 +1809,12 @@ function createSourceSpineShaderMaterial(options: {
           0.5 + normal.x * 0.1 * uReflection.x + vWorldPosition.x * 0.012 + uScroll * 0.018,
           0.5 + normal.y * 0.1 * uReflection.x + vWorldPosition.y * 0.006
         );
-        color += texture2D(tRefraction, screenUv).rgb * uReflection.y * 0.5;
         float fresnel = pow(1.0 - clamp(abs(dot(normalize(normal), normalize(vViewDir))), 0.0, 1.0), 2.4);
         float oilBand = smoothstep(0.22, 0.92, sin((vWorldPosition.y + uPhase) * 3.6 + uTime * 0.18) * 0.5 + 0.5);
-        color += uAccent * fresnel * (0.11 + oilBand * 0.08);
+        vec2 refractionUv = clamp(screenUv + vec2(sin(uTime * 0.17 + uPhase) * 0.012, cos(uTime * 0.13 + uPhase) * 0.01), vec2(0.02), vec2(0.98));
+        vec3 refraction = pow(max(texture2D(tRefraction, refractionUv).rgb, 0.0), vec3(0.82));
+        color += refraction * uReflection.y * (0.36 + fresnel * 0.34 + oilBand * 0.08);
+        color += uAccent * fresnel * (0.12 + oilBand * 0.1);
         color = pow(max(color * 1.22, 0.0), vec3(1.18));
 
         float alpha = uOpacity * (0.72 + fresnel * 0.22);
@@ -2766,7 +2770,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
             normalTexture: activeTheorySpineNormalTexture,
             opacity: 0.54,
             phase,
-            refractionTexture: activeTheoryWorkEnvTexture,
+            refractionTexture: referenceSpineMotionTexture,
           });
 
           const mesh = new THREE.Mesh(sourceGeometry, material);
@@ -2785,7 +2789,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           const highlight = new THREE.Mesh(sourceGeometry, highlightMaterial);
           const basePosition = new THREE.Vector3(0, 4 - instanceIndex * 0.65, 1.1);
           const baseRotation = new THREE.Euler(0.08, instanceIndex * 0.4, 0.02);
-          const baseScale = new THREE.Vector3(1.72, 1.38, 1.5);
+          // 镜像里的 `MESH_Element_5_Workscale` 是 [3.5, 3.5, 3.5]，说明源站脊柱不是细柱；
+          // 我们不能直接套 3.5，否则会压住登录入口，但需要比旧版更厚，才能接近参考里的规则实体截面。
+          const baseScale = new THREE.Vector3(2.04, 1.58, 1.82);
           mesh.position.copy(basePosition);
           mesh.rotation.copy(baseRotation);
           mesh.scale.copy(baseScale);
@@ -3269,7 +3275,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     // 这层是 v76 的关键：素材层面改成更宽的 mp4 柱体主体，再由“动态视频 mask + 有机轮廓 mask”共同裁切。
     // 它仍然是 pillarGroup 里的 3D mesh，滚轮推进时会和柱体整体旋转；但视觉主形来自源视频柱子，
     // 从而减少“程序化骨节 + 一层光效”的割裂感，更接近用户要求的同一根规整油膜柱体。
-    const referenceSpineSubjectGeometry = new THREE.PlaneGeometry(1.54, 6.22, 1, 1);
+    const referenceSpineSubjectGeometry = new THREE.PlaneGeometry(1.72, 6.22, 1, 1);
     const referenceSpineSubjectMaterial = new THREE.ShaderMaterial({
       blending: THREE.NormalBlending,
       depthTest: false,
