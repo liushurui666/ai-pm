@@ -3,10 +3,10 @@
 - source visual truth path: `/tmp/ai-pm-at-reference/mp4-02-4.2s.png`
 - source video: `/Users/liushurui/Library/Application Support/LarkShell/screenshot/20260629120942_rec_.mp4`
 - source mirror: `/Users/liushurui/Desktop/workspace/new-jiguangjuzhen/activetheory-work-clone-nav-orb-20260524-121151(1)`
-- implementation default screenshot: `/tmp/ai-pm-latest-landing-qa/final-before.png`
-- implementation after-scroll screenshot: `/tmp/ai-pm-latest-landing-qa/final-after-scroll.png`
+- implementation default screenshot: `/tmp/ai-pm-latest-landing-qa/native-scroll-before.png`
+- implementation after-scroll screenshot: `/tmp/ai-pm-latest-landing-qa/native-scroll-after-900.png`
 - viewport: 1876x992 desktop, Codex in-app browser, `http://localhost:3004/`
-- state: unauthenticated landing page, hydrated WebGL canvas, one wheel gesture after load
+- state: unauthenticated landing page, hydrated WebGL canvas, native page scroll from `scrollY=0` to `scrollY=900`
 - full-view comparison evidence: source frame and implementation screenshots were opened separately in Codex visual inspection; side-by-side image generation was blocked because the local environment lacks PIL/ImageMagick.
 - focused region comparison evidence: center pillar + foreground WorkItem card stack were inspected in the source frame and latest after-scroll screenshot.
 - final result: blocked
@@ -22,8 +22,8 @@
 
 - [P1] WorkItem interaction direction is corrected.
   Location: DOM card rail and WebGL panel track.
-  Evidence: browser verification shows all five cards remain visible after hydration; one wheel gesture moves focus to `fix` while cards keep distinct positions, rotations, and opacity.
-  Impact: this resolves the user's latest complaint that the experience behaved like one card instead of real scrolling cards.
+  Evidence: browser verification on `http://localhost:3004/` shows all five cards remain visible after hydration; native scroll to `scrollY=900` moves focus from `command` to `requirement`, with surrounding cards keeping distinct positions, rotations, and opacity.
+  Impact: this resolves the user's latest complaint that the experience behaved like one static/single-card layer instead of real scrolling cards.
   Fix: no further structural fix needed for this pass; future work should improve visual fidelity without collapsing back to a single-card swap.
 
 - [P1] Pillar no longer drifts horizontally during scroll.
@@ -40,8 +40,10 @@
 
 ## Patches Made In This Pass
 
+- Changed the landing shell from fixed 100vh fake-scroll to a real long-scroll section with a sticky 3D viewport.
+- Switched scroll syncing to an animation-frame read of native `scrollY`, so track progress works for real wheel, touchpad inertia, browser scroll, and QA automation.
+- Kept wheel handling passive and only used it for inertia/glow impulse, avoiding `preventDefault` blocking native scroll.
 - Reworked `getStoryWorkItemVisual()` to keep five DOM cards visible on one 50-degree source-inspired track with stronger rotateY and tighter y spacing.
-- Added a shared `pushWheelDelta()` path so container wheel, window wheel, touch, and card controls advance the same scroll target.
 - Added pointer-down scene selection on story cards so card interaction is not dependent on delayed click dispatch.
 - Changed the source spine instance animation to y-only infinite looping, with x/z and per-segment rotation locked to the source-style base queue.
 - Reversed column particle drift so the pillar reads as top-to-bottom movement on downward scroll.
@@ -50,9 +52,9 @@
 ## Validation
 
 - `corepack pnpm lint`: passed.
-- `corepack pnpm build`: passed after the final opacity/QA update.
+- `corepack pnpm build`: passed.
 - Browser route: `http://localhost:3004/`.
-- Browser checks: hydrated canvas reported 1876x992; after one wheel gesture all five cards remained present, focus moved to `fix`, and console error log was empty.
+- Browser checks: hydrated canvas reported 1876x992; after native scroll to `scrollY=900`, all five cards remained present, focus moved to `requirement`, and the pillar remained horizontally anchored while its internal content advanced vertically.
 
 ## Follow-up Polish
 

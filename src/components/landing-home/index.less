@@ -1,6 +1,21 @@
 .landing-home--story {
   --scene-accent: #6fffe2;
+  --story-scroll-screens: 40;
   position: relative;
+  width: 100vw;
+  height: calc(var(--story-scroll-screens) * 100dvh);
+  min-width: 320px;
+  min-height: calc(var(--story-scroll-screens) * 680px);
+  overflow: visible;
+  color: #f7fbff;
+  background: #020304;
+  isolation: isolate;
+  overscroll-behavior-y: contain;
+}
+
+.landing-story-viewport {
+  position: sticky;
+  top: 0;
   width: 100vw;
   height: 100dvh;
   min-width: 320px;
@@ -13,8 +28,8 @@
   color: #f7fbff;
   outline: none;
   isolation: isolate;
-  overscroll-behavior: none;
-  touch-action: none;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;

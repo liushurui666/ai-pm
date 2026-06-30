@@ -13,7 +13,7 @@ import {
 } from "@ant-design/icons";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, PointerEvent, ReactNode, TouchEvent, WheelEvent as ReactWheelEvent } from "react";
+import type { CSSProperties, PointerEvent, ReactNode, TouchEvent } from "react";
 import * as THREE from "three";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
@@ -2279,8 +2279,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
   const [activeIndex, setActiveIndex] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const experienceRef = useRef<HTMLElement>(null);
+  const scrollSectionRef = useRef<HTMLElement>(null);
   const storyCardRefs = useRef<Array<HTMLElement | null>>([]);
   const activeIndexRef = useRef(0);
+  const nativeScrollProgressRef = useRef(0);
   const scrollTargetRef = useRef(0);
   const scrollImpulseRef = useRef(0);
   const touchStartRef = useRef<number | null>(null);
@@ -2294,6 +2296,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     () => ({
       "--scene-accent": activeScene.accent,
       "--scene-index": activeIndex,
+      "--story-scroll-screens": storyScenes.length * 8,
     }) as CSSProperties,
     [activeIndex, activeScene.accent]
   );
@@ -2333,19 +2336,6 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     syncActiveIndexFromProgress(scrollTargetRef.current);
   }, [applyStoryCardDomProgress, syncActiveIndexFromProgress]);
 
-  const pushWheelDelta = useCallback((deltaY: number) => {
-    const delta = Math.max(-1.35, Math.min(1.35, deltaY / 360));
-
-    if (Math.abs(delta) < 0.018) {
-      return;
-    }
-
-    // 真实用户滚轮、React onWheel 和浏览器自动化的滚动入口要走同一条无界轨道。
-    // 之前只靠 window capture listener，部分自动化环境会把固定视口页面当作“没有可滚动内容”而不派发 wheel；
-    // 抽成这个入口后，容器级 onWheel、原生 wheel 和触摸/按钮推进都能得到一致的卡片/柱体进度。
-    pushInfiniteScroll(delta);
-  }, [pushInfiniteScroll]);
-
   const goToScene = useCallback((nextIndex: number) => {
     const normalizedIndex = ((nextIndex % storyScenes.length) + storyScenes.length) % storyScenes.length;
     const cycleBase = Math.round(scrollTargetRef.current / storyScenes.length) * storyScenes.length;
@@ -2367,6 +2357,17 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     applyStoryCardDomProgress(scrollTargetRef.current, scrollImpulseRef.current);
     activeIndexRef.current = normalizedIndex;
     setActiveIndex(normalizedIndex);
+
+    const scrollSection = scrollSectionRef.current;
+
+    if (scrollSection) {
+      const sectionTop = window.scrollY + scrollSection.getBoundingClientRect().top;
+      const scrollUnit = Math.max(320, window.innerHeight * 0.72);
+      window.scrollTo({
+        behavior: "smooth",
+        top: sectionTop + Math.max(0, closestTarget) * scrollUnit,
+      });
+    }
   }, [applyStoryCardDomProgress]);
 
   const handleTouchStart = useCallback((event: TouchEvent<HTMLElement>) => {
@@ -2385,11 +2386,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     pushInfiniteScroll((start - end) / 240);
   }, [pushInfiniteScroll]);
 
-  const handleTouchMove = useCallback((event: TouchEvent<HTMLElement>) => {
-    if (touchStartRef.current !== null) {
-      event.preventDefault();
-    }
-  }, []);
+  const handleTouchMove = useCallback(() => undefined, []);
 
   const handlePointerDown = useCallback((event: PointerEvent<HTMLElement>) => {
     // 固定视口页面没有原生滚动条，用户点一下空白画面后应能直接用键盘继续推进故事。
@@ -2404,11 +2401,6 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
     pointerStartRef.current = event.clientY;
   }, []);
-
-  const handleStoryWheel = useCallback((event: ReactWheelEvent<HTMLElement>) => {
-    event.preventDefault();
-    pushWheelDelta(event.deltaY);
-  }, [pushWheelDelta]);
 
   const handlePointerUp = useCallback((event: PointerEvent<HTMLElement>) => {
     const start = pointerStartRef.current;
@@ -2445,20 +2437,18 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         return;
       }
 
-      event.preventDefault();
-
-      // React 在部分浏览器会把 wheel 委托成 passive listener，直接 preventDefault 会产生控制台错误；
-      // 固定视口 3D 故事必须拦截原生页面滚动，所以这里用 window capture 的非 passive 监听。
-      // 这样真实触控板、Chrome 自动化和画布/DOM 卡片上方的滚轮都会进入同一条无界 WorkItem 轨道。
-      pushWheelDelta(event.deltaY);
+      // 页面现在提供真实滚动高度，滚轮不再被 preventDefault 拦截；
+      // 这里仅记录滚动速度给光效/卡片惯性用，真正的 progress 由动画帧主动读取 scrollY。
+      const wheelImpulse = Math.max(-1.35, Math.min(1.35, event.deltaY / 360));
+      scrollImpulseRef.current = Math.max(-3.8, Math.min(3.8, scrollImpulseRef.current + wheelImpulse * 1.15));
     };
 
-    window.addEventListener("wheel", handleNativeWheel, { capture: true, passive: false });
+    window.addEventListener("wheel", handleNativeWheel, { capture: true, passive: true });
 
     return () => {
       window.removeEventListener("wheel", handleNativeWheel, { capture: true });
     };
-  }, [pushWheelDelta]);
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -4362,6 +4352,24 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       animationFrame = window.requestAnimationFrame(animate);
       const time = performance.now() * 0.001;
       const activeColor = new THREE.Color(storyScenes[activeIndexRef.current].accent);
+      const scrollSection = scrollSectionRef.current;
+
+      if (scrollSection) {
+        const rect = scrollSection.getBoundingClientRect();
+        const scrollUnit = Math.max(320, window.innerHeight * 0.72);
+        const nativeProgress = Math.max(0, -rect.top / scrollUnit);
+        const nativeDelta = nativeProgress - nativeScrollProgressRef.current;
+
+        if (Math.abs(nativeDelta) > 0.0008) {
+          // 和源站的 Scroll rig 对齐：每一帧主动读取真实 scrollY，而不是等 wheel/click 事件。
+          // 这样用户连续滚、触控板惯性和浏览器自动滚动都会推进同一条多卡片轨道；
+          // 柱体后续只使用这个 progress 的 y 向循环，不再吃 x/z 轨道。
+          nativeScrollProgressRef.current = nativeProgress;
+          scrollTargetRef.current = nativeProgress;
+          scrollImpulseRef.current = Math.max(-3.8, Math.min(3.8, scrollImpulseRef.current + nativeDelta * 1.35));
+        }
+      }
+
       const progressDelta = scrollTargetRef.current - visualProgress;
 
       if (Math.abs(progressDelta) < 0.0008) {
@@ -4916,16 +4924,20 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     <main
       aria-label="AI PM 滚动故事首页"
       className="landing-home landing-home--story"
-      onPointerDown={handlePointerDown}
-      onPointerUp={handlePointerUp}
-      onTouchEnd={handleTouchEnd}
-      onTouchMove={handleTouchMove}
-      onTouchStart={handleTouchStart}
-      onWheel={handleStoryWheel}
-      ref={experienceRef}
+      ref={scrollSectionRef}
       style={sceneStyle}
-      tabIndex={0}
     >
+      <section
+        aria-label="AI PM 滚动故事舞台"
+        className="landing-story-viewport"
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
+        onTouchEnd={handleTouchEnd}
+        onTouchMove={handleTouchMove}
+        onTouchStart={handleTouchStart}
+        ref={experienceRef}
+        tabIndex={0}
+      >
       <div className="landing-story-hero-asset" aria-hidden="true" />
       <canvas aria-hidden="true" className="landing-story-canvas" ref={canvasRef} />
       <div className="landing-story-workitem-rail">
@@ -5026,6 +5038,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         </div>
       </section>
 
+      </section>
     </main>
   );
 }
