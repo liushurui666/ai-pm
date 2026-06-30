@@ -45,6 +45,9 @@ type ReferenceGlassPanelVariant = "left" | "front" | "rear";
 const ACTIVE_THEORY_DRACO_DECODER_PATH = "/landing/draco/";
 const ACTIVE_THEORY_SPINE_GEOMETRY_PATH = "/landing/active-theory-source-spine.bin";
 const ACTIVE_THEORY_SPINE_MATCAP_PATH = "/landing/active-theory-matcap-test.jpg";
+const ACTIVE_THEORY_SPINE_NORMAL_PATH = "/landing/active-theory-damaged-road-normal.jpg";
+const ACTIVE_THEORY_WORK_ENV_PATH = "/landing/active-theory-env1.jpg";
+const ACTIVE_THEORY_WORK_NORMAL_PATH = "/landing/active-theory-waternormals.jpg";
 
 const storyScenes: StoryScene[] = [
   {
@@ -1546,6 +1549,74 @@ function createReferenceGlassPanelTexture(variant: ReferenceGlassPanelVariant) {
   return texture;
 }
 
+function createWorkRefractionPanelMaterial(baseTexture: THREE.Texture, normalTexture: THREE.Texture, envTexture: THREE.Texture, opacity: number) {
+  // 源站 WorkItemShader 的玻璃屏不是单层透明图，而是把 normal、水纹、环境贴图和屏幕纹理做折射混合。
+  // 这里保留 AI PM 自有文案纹理，但用镜像里的 `waternormals` 与 `env1` 重新做一层前景折射；
+  // 这样主屏会有参考里的厚玻璃、油膜和暗色折射，而不是普通半透明 CanvasTexture。
+  return new THREE.ShaderMaterial({
+    depthTest: false,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    transparent: true,
+    uniforms: {
+      uBase: { value: baseTexture },
+      uEnv: { value: envTexture },
+      uNormal: { value: normalTexture },
+      uOpacity: { value: opacity },
+      uScroll: { value: 0 },
+      uTime: { value: 0 },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vNormal;
+      varying vec3 vViewDir;
+
+      void main() {
+        vUv = uv;
+        vNormal = normalize(normalMatrix * normal);
+        vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
+        vViewDir = normalize(-viewPosition.xyz);
+        gl_Position = projectionMatrix * viewPosition;
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D uBase;
+      uniform sampler2D uEnv;
+      uniform sampler2D uNormal;
+      uniform float uOpacity;
+      uniform float uScroll;
+      uniform float uTime;
+      varying vec2 vUv;
+      varying vec3 vNormal;
+      varying vec3 vViewDir;
+
+      float edgeMask(vec2 uv) {
+        float x = smoothstep(0.0, 0.12, uv.x) * smoothstep(1.0, 0.86, uv.x);
+        float y = smoothstep(0.0, 0.12, uv.y) * smoothstep(1.0, 0.86, uv.y);
+        return x * y;
+      }
+
+      void main() {
+        vec2 normalUv = vUv * vec2(1.18, 0.78) + vec2(uTime * 0.012 + uScroll * 0.014, uTime * 0.026);
+        vec3 normalSample = texture2D(uNormal, normalUv).rgb * 2.0 - 1.0;
+        float fresnel = pow(1.0 - max(0.0, dot(normalize(vNormal + normalSample * 0.08), normalize(vViewDir))), 1.18);
+        vec2 refractUv = vUv + normalSample.xy * (0.012 + fresnel * 0.022);
+        vec4 base = texture2D(uBase, refractUv);
+        vec3 env = texture2D(uEnv, vec2(vUv.x + normalSample.x * 0.04 + uTime * 0.006, vUv.y - normalSample.y * 0.035)).rgb;
+        float edge = edgeMask(vUv);
+        float panelBody = smoothstep(0.78, 0.18, length(vUv - vec2(0.5)));
+        float scan = 0.92 + sin(uTime * 0.84 + vUv.y * 16.0 + normalSample.x * 1.4) * 0.08;
+        vec3 glassTint = vec3(0.01, 0.085, 0.08);
+        vec3 color = base.rgb * 0.48 + env * (0.46 + fresnel * 0.58) + glassTint;
+        color += vec3(0.26, 0.92, 0.72) * fresnel * 0.28;
+        color += vec3(0.46, 0.2, 0.7) * smoothstep(0.54, 0.94, abs(normalSample.x)) * 0.1;
+        float alpha = uOpacity * (0.18 + panelBody * 0.5 + fresnel * 0.5) * edge * scan;
+        gl_FragColor = vec4(color, alpha);
+      }
+    `,
+  });
+}
+
 export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref, workbenchHref }: LandingHomeProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1875,6 +1946,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const referenceSpineFieldTexture = new THREE.TextureLoader().load("/landing/reference-spine-field-wide-v67.png");
     const referenceSpineRimTexture = new THREE.TextureLoader().load("/landing/reference-spine-rim-wide-v67.png");
     const activeTheorySpineMatcapTexture = new THREE.TextureLoader().load(ACTIVE_THEORY_SPINE_MATCAP_PATH);
+    const activeTheorySpineNormalTexture = new THREE.TextureLoader().load(ACTIVE_THEORY_SPINE_NORMAL_PATH);
+    const activeTheoryWorkEnvTexture = new THREE.TextureLoader().load(ACTIVE_THEORY_WORK_ENV_PATH);
+    const activeTheoryWorkNormalTexture = new THREE.TextureLoader().load(ACTIVE_THEORY_WORK_NORMAL_PATH);
     // 参考视频里的柱体默认并不是推进故事线，而是有细密的油膜/粒子呼吸。
     // 这里把用户提供 mp4 中同一柱体的短裁切做成 VideoTexture，只作为微弱动态材质层叠加到柱体组内；
     // 这样不会把整张网页截图当背景，也能避免单帧贴图看起来“死”和“不跟视频一个级别”。
@@ -1922,6 +1996,16 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     referenceSpineRimTexture.colorSpace = THREE.SRGBColorSpace;
     activeTheorySpineMatcapTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     activeTheorySpineMatcapTexture.colorSpace = THREE.SRGBColorSpace;
+    activeTheorySpineNormalTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    activeTheorySpineNormalTexture.wrapS = THREE.RepeatWrapping;
+    activeTheorySpineNormalTexture.wrapT = THREE.RepeatWrapping;
+    activeTheoryWorkEnvTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    activeTheoryWorkEnvTexture.colorSpace = THREE.SRGBColorSpace;
+    activeTheoryWorkEnvTexture.wrapS = THREE.RepeatWrapping;
+    activeTheoryWorkEnvTexture.wrapT = THREE.RepeatWrapping;
+    activeTheoryWorkNormalTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    activeTheoryWorkNormalTexture.wrapS = THREE.RepeatWrapping;
+    activeTheoryWorkNormalTexture.wrapT = THREE.RepeatWrapping;
     referenceSpineMotionTexture.colorSpace = THREE.SRGBColorSpace;
     referenceSpineMotionTexture.generateMipmaps = false;
     referenceSpineMotionTexture.magFilter = THREE.LinearFilter;
@@ -1976,6 +2060,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       phase: number;
     }> = [];
     let activeTheorySpineGeometry: THREE.BufferGeometry | null = null;
+    let activeTheorySpineReady = false;
     let sceneDisposed = false;
     const makeOilMaterial = (accentIndex: number) => {
       const material = oilBaseMaterial.clone();
@@ -2432,24 +2517,43 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         }
 
         activeTheorySpineGeometry = sourceGeometry;
+        activeTheorySpineReady = true;
 
         // 参考 Work 场景的 `spine.bin` 只是一枚骨节资产，源站通过 `SpineInstancer` 把它实例化成中轴。
         // 这里不再继续堆手写随机几何，而是把同源 DRACO mesh 复制成一串规则骨节；
         // 这样默认帧的柱体轮廓、滚动时的换面和参考 mp4 的结构关系会更接近。
-        Array.from({ length: 13 }, (_, instanceIndex) => {
-          const phase = instanceIndex * 0.58;
-          const material = makeSourceProfileMaterial(140 + instanceIndex, 0.58);
+        // 源站真实逻辑是 40 个实例、每节 y 方向错开 0.65、每节 y 轴旋转 0.4 弧度。
+        // 上一版只放 17 节且间距过密，虽然可见高度够了，但顶部会变成一根密集光柱；
+        // 这里按镜像里的 SpineInstancer 节奏完整复制，超出视口的节段留作滚动/旋转时的连续体积。
+        sourceProfileSegments.forEach((segment) => {
+          [segment.sideBody, segment.processRoot, segment.sideProcess, segment.processBlade, segment.lowerProcess].forEach((mesh) => {
+            const fallbackMaterial = mesh.material as THREE.MeshPhysicalMaterial;
+            fallbackMaterial.opacity = Math.min(fallbackMaterial.opacity, 0.055);
+            fallbackMaterial.envMapIntensity *= 0.38;
+            fallbackMaterial.emissiveIntensity *= 0.42;
+          });
+          const notchMaterial = segment.notch.material as THREE.MeshPhysicalMaterial;
+          notchMaterial.opacity = Math.min(notchMaterial.opacity, 0.16);
+        });
+        const sourceInstanceCount = 40;
+        Array.from({ length: sourceInstanceCount }, (_, instanceIndex) => {
+          const phase = instanceIndex * 0.4;
+          const material = makeSourceProfileMaterial(140 + instanceIndex, 0.64);
           material.clearcoat = 0.86;
-          material.clearcoatRoughness = 0.3;
+          material.clearcoatNormalMap = activeTheorySpineNormalTexture;
+          material.clearcoatNormalScale = new THREE.Vector2(0.18, 0.18);
+          material.clearcoatRoughness = 0.34;
           material.color = new THREE.Color("#02050a");
           material.depthTest = false;
           material.depthWrite = false;
-          material.emissiveIntensity = 0.2;
-          material.envMapIntensity = 2.9;
-          material.opacity = 0.54;
-          material.roughness = 0.28;
+          material.emissiveIntensity = 0.16;
+          material.envMapIntensity = 2.7;
+          material.normalMap = activeTheorySpineNormalTexture;
+          material.normalScale = new THREE.Vector2(0.19, 0.19);
+          material.opacity = 0.6;
+          material.roughness = 0.34;
           material.side = THREE.DoubleSide;
-          material.specularIntensity = 1.56;
+          material.specularIntensity = 1.42;
           material.transparent = true;
 
           const mesh = new THREE.Mesh(sourceGeometry, material);
@@ -2461,14 +2565,14 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
             depthTest: false,
             depthWrite: false,
             matcap: activeTheorySpineMatcapTexture,
-            opacity: 0.19,
+            opacity: 0.16,
             side: THREE.DoubleSide,
             transparent: true,
           });
           const highlight = new THREE.Mesh(sourceGeometry, highlightMaterial);
-          const basePosition = new THREE.Vector3(Math.sin(phase) * 0.035 - 0.05, -3.04 + instanceIndex * 0.51, 1.1 + Math.cos(phase) * 0.035);
-          const baseRotation = new THREE.Euler(0.18 + Math.sin(phase) * 0.04, 0.42 + instanceIndex * 0.11, (instanceIndex % 2 === 0 ? 0.34 : -0.26) + Math.cos(phase) * 0.04);
-          const baseScale = new THREE.Vector3(1.55 + (instanceIndex % 3) * 0.08, 1.28, 1.42);
+          const basePosition = new THREE.Vector3(0, 4 - instanceIndex * 0.65, 1.1);
+          const baseRotation = new THREE.Euler(0.08, instanceIndex * 0.4, 0.02);
+          const baseScale = new THREE.Vector3(1.72, 1.38, 1.5);
           mesh.position.copy(basePosition);
           mesh.rotation.copy(baseRotation);
           mesh.scale.copy(baseScale);
@@ -3352,13 +3456,21 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         transparent: true,
       });
       const mesh = new THREE.Mesh(geometry, material);
+      const refractionMaterial =
+        config.variant === "front" ? createWorkRefractionPanelMaterial(texture, activeTheoryWorkNormalTexture, activeTheoryWorkEnvTexture, config.opacity * 0.72) : null;
+      const refractionMesh = refractionMaterial ? new THREE.Mesh(geometry, refractionMaterial) : null;
 
       // 这些屏幕不是可读产品卡片，而是参考 mp4 里的空间玻璃层：
       // 左大屏负责构图比例，前景屏负责“柱体被玻璃压住”的深度关系，后屏负责远景暗框。
       // 它们挂在 stage 而不是 DOM 背景里，动画里用 storyOrbit 同步推进，避免再次出现“卡片转了、柱子没跟着转”的割裂。
       mesh.renderOrder = config.renderOrder;
       stage.add(mesh);
-      return { ...config, geometry, material, mesh, texture };
+      if (refractionMesh) {
+        // 只有前景主屏需要 WorkItem 式厚玻璃折射；左右远景屏保持更轻，避免整屏变成一堆高亮卡片。
+        refractionMesh.renderOrder = config.renderOrder + 0.08;
+        stage.add(refractionMesh);
+      }
+      return { ...config, geometry, material, mesh, refractionMaterial, refractionMesh, texture };
     });
 
     const panelMeshes = storyScenes.map((sceneItem, index) => {
@@ -3565,6 +3677,14 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         panel.mesh.rotation.y += (targetRotationY - panel.mesh.rotation.y) * 0.11;
         panel.mesh.rotation.x += (targetRotationX - panel.mesh.rotation.x) * 0.1;
         panel.material.opacity += (targetOpacity - panel.material.opacity) * 0.08;
+        if (panel.refractionMesh && panel.refractionMaterial) {
+          panel.refractionMesh.position.copy(panel.mesh.position);
+          panel.refractionMesh.rotation.copy(panel.mesh.rotation);
+          panel.refractionMesh.scale.copy(panel.mesh.scale);
+          panel.refractionMaterial.uniforms.uTime.value = time;
+          panel.refractionMaterial.uniforms.uScroll.value = scrollFollow;
+          panel.refractionMaterial.uniforms.uOpacity.value = Math.min(0.78, panel.material.opacity * 0.82 + Math.abs(scrollImpulse) * 0.05);
+        }
       });
       stage.rotation.y = Math.sin(storyOrbit) * 0.1;
       particles.rotation.y -= 0.0009;
@@ -3653,32 +3773,40 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         [segment.sideBody, segment.processRoot, segment.sideProcess, segment.processBlade, segment.lowerProcess].forEach((mesh, meshIndex) => {
           const material = mesh.material as THREE.MeshPhysicalMaterial;
           const paletteColor = new THREE.Color(organicPalette[(segmentIndex + meshIndex + activeIndexRef.current) % organicPalette.length]);
-          material.emissive.lerp(paletteColor.multiplyScalar((0.102 + Math.sin(time * 0.5 + segment.phase + meshIndex) * 0.022) * edgeFade), 0.035);
-          material.envMapIntensity = (1.86 + Math.sin(time * 0.25 + segment.phase) * 0.2 + Math.min(0.34, Math.abs(scrollImpulse) * 0.08)) * edgeFade;
+          if (activeTheorySpineReady) {
+            // `spine.bin` 加载成功后，程序化兜底骨块只保留极弱的暗部厚度。
+            // 如果仍按旧动画每帧拉高发光/反射，画面会变成两套柱体叠加，和源站规则 instancer 的整体感相冲突。
+            material.opacity = Math.min(material.opacity, 0.05 * edgeFade);
+            material.emissive.lerp(paletteColor.multiplyScalar(0.018 * edgeFade), 0.035);
+            material.envMapIntensity = (0.42 + Math.min(0.1, Math.abs(scrollImpulse) * 0.025)) * edgeFade;
+          } else {
+            material.emissive.lerp(paletteColor.multiplyScalar((0.102 + Math.sin(time * 0.5 + segment.phase + meshIndex) * 0.022) * edgeFade), 0.035);
+            material.envMapIntensity = (1.86 + Math.sin(time * 0.25 + segment.phase) * 0.2 + Math.min(0.34, Math.abs(scrollImpulse) * 0.08)) * edgeFade;
+          }
         });
 
         const notchMaterial = segment.notch.material as THREE.MeshPhysicalMaterial;
-        notchMaterial.opacity = 0.52 + Math.sin(time * 0.44 + segment.phase) * 0.05;
+        notchMaterial.opacity = activeTheorySpineReady ? 0.12 + Math.sin(time * 0.44 + segment.phase) * 0.018 : 0.52 + Math.sin(time * 0.44 + segment.phase) * 0.05;
       });
       activeTheorySpineInstances.forEach((item, instanceIndex) => {
         const material = item.mesh.material as THREE.MeshPhysicalMaterial;
         const highlightMaterial = item.highlight.material as THREE.MeshMatcapMaterial;
         const pulse = Math.sin(time * 0.38 + item.phase);
-        const scrollLift = Math.max(-0.22, Math.min(0.22, scrollFollow * 0.08));
+        const scrollLift = Math.max(-0.12, Math.min(0.12, scrollFollow * 0.045));
 
         // 源站 Work 页的柱体不是页面固定贴图，而是随滚动相机/卡片轨道一起换角度的 3D instancer。
         // 这段让真实 `spine.bin` 骨节按同一个 storyOrbit 旋转，同时保留很小的默认呼吸；
         // 如果只移动外层玻璃屏，用户滚轮时会感觉柱子仍然卡在背景里。
-        item.mesh.position.x = item.basePosition.x + Math.sin(storyOrbit * 0.5 + item.phase) * 0.028 + scrollLift;
-        item.mesh.position.y = item.basePosition.y + pulse * 0.012 - scrollFollow * 0.018;
-        item.mesh.position.z = item.basePosition.z + Math.cos(storyOrbit * 0.44 + item.phase) * 0.032;
-        item.mesh.rotation.x = item.baseRotation.x + Math.sin(storyOrbit * 0.42 + item.phase) * 0.04 + scrollImpulse * 0.014;
-        item.mesh.rotation.y = item.baseRotation.y + storyOrbit * 0.34 + scrollFollow * 0.12;
-        item.mesh.rotation.z = item.baseRotation.z + Math.cos(storyOrbit * 0.36 + item.phase) * 0.038 + scrollImpulse * 0.02;
+        item.mesh.position.x = item.basePosition.x + Math.sin(storyOrbit * 0.34 + item.phase) * 0.012 + scrollLift;
+        item.mesh.position.y = item.basePosition.y + pulse * 0.006 - scrollFollow * 0.014;
+        item.mesh.position.z = item.basePosition.z + Math.cos(storyOrbit * 0.32 + item.phase) * 0.014;
+        item.mesh.rotation.x = item.baseRotation.x + Math.sin(storyOrbit * 0.3 + item.phase) * 0.018 + scrollImpulse * 0.01;
+        item.mesh.rotation.y = item.baseRotation.y + storyOrbit * 0.44 + scrollFollow * 0.14;
+        item.mesh.rotation.z = item.baseRotation.z + Math.cos(storyOrbit * 0.26 + item.phase) * 0.012 + scrollImpulse * 0.012;
         item.mesh.scale.set(
-          item.baseScale.x * (1 + pulse * 0.014),
-          item.baseScale.y * (1 - pulse * 0.01),
-          item.baseScale.z * (1 + Math.sin(time * 0.25 + instanceIndex) * 0.01)
+          item.baseScale.x * (1 + pulse * 0.006),
+          item.baseScale.y * (1 - pulse * 0.004),
+          item.baseScale.z * (1 + Math.sin(time * 0.25 + instanceIndex) * 0.005)
         );
         item.highlight.position.copy(item.mesh.position);
         item.highlight.rotation.copy(item.mesh.rotation);
@@ -3854,6 +3982,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceSpineRimMaterial.dispose();
       referenceSpineFieldTexture.dispose();
       activeTheorySpineMatcapTexture.dispose();
+      activeTheorySpineNormalTexture.dispose();
+      activeTheoryWorkEnvTexture.dispose();
+      activeTheoryWorkNormalTexture.dispose();
       referenceSpineSubjectMaskTexture.dispose();
       referenceSpineMotionTexture.dispose();
       referenceSpineSubjectTexture.dispose();
@@ -3889,6 +4020,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         panel.geometry.dispose();
         panel.texture.dispose();
         panel.material.dispose();
+        panel.refractionMaterial?.dispose();
       });
     };
   }, []);
