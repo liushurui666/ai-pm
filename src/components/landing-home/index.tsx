@@ -68,6 +68,7 @@ const ACTIVE_THEORY_WORK_NORMAL_PATH = "/landing/active-theory-waternormals.jpg"
 const ACTIVE_THEORY_WORK_HOGWARTS_THUMB_PATH = "/landing/active-theory-hogwarts-thumb.jpg";
 const ACTIVE_THEORY_WORK_HOGWARTS_LOGO_PATH = "/landing/active-theory-hogwarts-logo.jpg";
 const STORY_WORK_TRACK_STEP = THREE.MathUtils.degToRad(50);
+const STORY_WORK_ITEM_REPEAT = 3;
 
 function createSolidDataTexture(r: number, g: number, b: number) {
   const texture = new THREE.DataTexture(new Uint8Array([r, g, b, 255]), 1, 1, THREE.RGBAFormat);
@@ -143,29 +144,28 @@ const storyScenes: StoryScene[] = [
   },
 ];
 
-function getLoopedStoryOffset(index: number, progress: number, length = storyScenes.length) {
-  let offset = index - progress;
-  const absOffset = Math.abs(offset);
+const STORY_WORK_ITEM_SLOT_COUNT = storyScenes.length * STORY_WORK_ITEM_REPEAT;
+const storyWorkItemSlots = Array.from({ length: STORY_WORK_ITEM_SLOT_COUNT }, (_, slotIndex) => {
+  const sceneIndex = slotIndex % storyScenes.length;
 
-  if (absOffset <= length / 2) {
-    return offset;
-  }
+  return {
+    key: `${storyScenes[sceneIndex].key}-${Math.floor(slotIndex / storyScenes.length)}`,
+    scene: storyScenes[sceneIndex],
+    sceneIndex,
+    slotIndex,
+  };
+});
 
-  const half = length / 2;
+function getInfiniteStorySlotOffset(slotIndex: number, progress: number, length = STORY_WORK_ITEM_SLOT_COUNT) {
+  // Active Theory 的 WorkItems 是一串真实 view，而不是单张卡复用文案。
+  // 这里用三轮 slot 做无界最近槽位：滚动持续累加时，同一张业务卡的拷贝会从上到下接力穿场，
+  // 既避免 5 张卡过早折返，也避免靠单卡换内容伪装滚动。
+  const nearestCycle = Math.round((progress - slotIndex) / length);
 
-  while (offset > half) {
-    offset -= length;
-  }
-
-  while (offset < -half) {
-    offset += length;
-  }
-
-  return offset;
+  return slotIndex + nearestCycle * length - progress;
 }
 
-function getStoryWorkItemVisual(index: number, progress: number, impulse = 0): StoryWorkItemVisual {
-  const offset = getLoopedStoryOffset(index, progress);
+function getStoryWorkItemVisualFromOffset(offset: number, impulse = 0): StoryWorkItemVisual {
   const absOffset = Math.abs(offset);
   const angle = -offset * STORY_WORK_TRACK_STEP;
   const focus = Math.max(0, 1 - absOffset * 0.72);
@@ -176,7 +176,7 @@ function getStoryWorkItemVisual(index: number, progress: number, impulse = 0): S
   const rotateY = -angle * 0.82;
   const rotateZ = Math.sin(angle) * 2.15;
   const scale = 0.58 + trackWindow * 0.2 + focus * 0.26;
-  const opacity = Math.min(0.98, 0.22 + trackWindow * 0.48 + focus * 0.26 + Math.min(0.1, Math.abs(impulse) * 0.026));
+  const opacity = Math.min(0.98, 0.055 + trackWindow * 0.5 + focus * 0.35 + Math.min(0.08, Math.abs(impulse) * 0.022));
 
   // 这套公式按 Active Theory `WorkItems.positionViews()` 的思路抽象：
   // 所有卡片一直在同一条 50 度步进的环形轨道上，滚轮只改变相机相对 progress。
@@ -190,8 +190,12 @@ function getStoryWorkItemVisual(index: number, progress: number, impulse = 0): S
   };
 }
 
-function getInitialStoryCardStyle(index: number, progress = 0) {
-  const visual = getStoryWorkItemVisual(index, progress);
+function getStoryWorkItemVisual(slotIndex: number, progress: number, impulse = 0): StoryWorkItemVisual {
+  return getStoryWorkItemVisualFromOffset(getInfiniteStorySlotOffset(slotIndex, progress), impulse);
+}
+
+function getInitialStoryCardStyle(slotIndex: number, progress = 0) {
+  const visual = getStoryWorkItemVisual(slotIndex, progress);
 
   // 首屏默认态不能完全依赖 requestAnimationFrame；
   // 浏览器后台截图或低功耗模式可能会延迟 RAF，若初始 opacity 是 0，用户就会看到“卡片消失”。
@@ -2135,9 +2139,13 @@ function createSourceSpineShaderMaterial(options: {
       uPhase: { value: options.phase },
       uReflection: { value: new THREE.Vector2(2.7, 0.85) },
       uScroll: { value: 0 },
+      uSpineScroll: { value: 0 },
       uTime: { value: 0 },
     },
     vertexShader: `
+      uniform float uPhase;
+      uniform float uSpineScroll;
+      uniform float uTime;
       varying vec2 vUv;
       varying vec3 vEyePos;
       varying vec3 vMPos;
@@ -2148,10 +2156,25 @@ function createSourceSpineShaderMaterial(options: {
 
       void main() {
         vUv = uv;
+        vec3 transformedPosition = position;
+        float sourceScroll = fract(uSpineScroll);
+        float particleSeed = abs(sin(position.x * 7.3 + position.z * 5.1 + uPhase * 1.7));
+        float topLift = smoothstep(0.4, 0.0, sourceScroll) * pow(particleSeed, 12.0) * 0.12;
+        float bottomDrop = pow(sourceScroll, 4.0) * smoothstep(-0.9, 1.8, transformedPosition.y) * 0.22;
+        float verticalPull = sourceScroll * 0.16;
+        float spiralMask = smoothstep(0.0, 0.5, abs(sourceScroll - 0.5)) * 0.018;
+        float spiral = sourceScroll * 5.0 + transformedPosition.y * 0.5 + uPhase * 2.0 + uTime * 0.025;
+
+        // 源站 FlowerParticleShader 会把顶部/底部粒子按 uScroll 纵向推开。
+        // 这里把同样的“上升/下落相位”压到 spine mesh 的顶点里，但振幅只做内部折光，
+        // 绝不改变外层 pillarGroup 的 x/z 坐标，避免用户滚动时误以为整根柱子横向偏移。
+        transformedPosition.y += topLift - bottomDrop - verticalPull;
+        transformedPosition.x -= cos(spiral) * spiralMask;
+        transformedPosition.z -= sin(spiral) * spiralMask;
         vNormal = normalize(normalMatrix * normal);
         vWorldNormal = normalize(mat3(modelMatrix[0].xyz, modelMatrix[1].xyz, modelMatrix[2].xyz) * normal);
-        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-        vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
+        vec4 worldPosition = modelMatrix * vec4(transformedPosition, 1.0);
+        vec4 viewPosition = modelViewMatrix * vec4(transformedPosition, 1.0);
         vMPos = worldPosition.xyz / worldPosition.w;
         vEyePos = viewPosition.xyz;
         vWorldPosition = worldPosition.xyz;
@@ -2312,17 +2335,18 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
   }, []);
 
   const applyStoryCardDomProgress = useCallback((progress: number, impulse = 0) => {
-    storyCardRefs.current.forEach((node, index) => {
+    storyCardRefs.current.forEach((node, slotIndex) => {
       if (!node) {
         return;
       }
 
-      const visual = getStoryWorkItemVisual(index, progress, impulse);
+      const visual = getStoryWorkItemVisual(slotIndex, progress, impulse);
+      const slot = storyWorkItemSlots[slotIndex];
 
       // 前景 DOM 卡片是 WebGL WorkItem 的清晰交互层：滚轮或触摸一到就即时更新，
-      // 不完全等待 RAF 插值。这样弱网、低功耗或截图场景下也能看到多卡片真实滚动，
-      // 同时 `data-active` 只做样式/测试标记，不参与业务状态。
-      node.dataset.active = visual.isFocused ? "true" : "false";
+      // 不完全等待 RAF 插值。这里驱动的是 15 个循环 slot，而不是 5 个业务文案本体；
+      // 这样向下滚动时所有卡片会像源码 WorkItems 一样接力穿过镜头，不会退化成一张卡片换内容。
+      node.dataset.active = visual.isFocused && slot?.sceneIndex === activeIndexRef.current ? "true" : "false";
       node.style.opacity = String(visual.opacity);
       node.style.zIndex = String(visual.zIndex);
       node.style.transform = visual.transform;
@@ -4194,7 +4218,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       {
         angle: -1.26,
         height: 3.18,
-        opacity: 0.18,
+        opacity: 0.038,
         radiusX: 2.68,
         radiusZ: 0.66,
         renderOrder: 3.25,
@@ -4206,7 +4230,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       {
         angle: 0.03,
         height: 2.98,
-        opacity: 0.34,
+        opacity: 0.046,
         radiusX: 0.86,
         radiusZ: 0.82,
         renderOrder: 4.85,
@@ -4218,7 +4242,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       {
         angle: 2.62,
         height: 1.9,
-        opacity: 0.12,
+        opacity: 0.03,
         radiusX: 1.78,
         radiusZ: 0.84,
         renderOrder: 2.9,
@@ -4247,7 +4271,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       const refractionMesh = refractionMaterial ? new THREE.Mesh(geometry, refractionMaterial) : null;
 
       // 这些屏幕只保留参考 mp4 里的空间玻璃氛围，不能再冒充主滚动卡片；
-      // 真正的 WorkItem 轨道由下方 storyScenes 生成的五张业务卡承担，避免用户滚动时只看到一张大卡在切换。
+      // 真正的 WorkItem 轨道由下方循环 slot 生成，避免用户滚动时只看到一张大卡在切换。
       if (mediaMesh) {
         // 源站 pane 的真实项目媒体只作为低透明背景投影，不能盖过 AI PM 自己的多卡片滚动轨道。
         mediaMesh.renderOrder = config.renderOrder + 0.025;
@@ -4263,7 +4287,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       return { ...config, geometry, material, mediaMaterial, mediaMesh, mesh, refractionMaterial, refractionMesh, texture };
     });
 
-    const panelMeshes = storyScenes.map((sceneItem, index) => {
+    const panelMeshes = storyWorkItemSlots.map(({ scene: sceneItem, sceneIndex, slotIndex }) => {
       const geometry = new THREE.PlaneGeometry(THREE_PANEL_WIDTH / 245, THREE_PANEL_HEIGHT / 245, 12, 8);
       const material = new THREE.MeshBasicMaterial({
         depthTest: false,
@@ -4286,7 +4310,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         transparent: true,
       });
       const backplate = new THREE.Mesh(backplateGeometry, backplateMaterial);
-      const initialOffset = index > storyScenes.length / 2 ? index - storyScenes.length : index;
+      const initialOffset = getInfiniteStorySlotOffset(slotIndex, 0);
       const initialAbsOffset = Math.abs(initialOffset);
       const initialAngle = -initialOffset * workTrackStep;
       const initialScale = initialOffset === 0 ? 1.22 : Math.max(0.6, 0.88 - initialAbsOffset * 0.05);
@@ -4298,16 +4322,18 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       backplate.rotation.copy(mesh.rotation);
       backplate.scale.set(initialScale * 1.04, initialScale * 1.04, 1);
       // 这些卡片对应源站 WorkItem：所有项目卡都一直存在于同一条环形轨道上，
-      // 滚动只改变相对 offset 和镜头目标，不能再做成“滚一下才出现的一张演示卡”。
-      material.opacity = initialOffset === 0 ? 0.24 : Math.max(0.06, 0.12 - initialAbsOffset * 0.018);
+      // 滚动只改变相对 offset 和镜头目标。这里用 15 个 slot 接近源站项目列表，
+      // 同一个业务场景会在不同 cycle 里重复出现，保证向下滚时是连续队列而不是 5 张卡折返。
+      material.opacity = initialOffset === 0 ? 0.18 : Math.max(0.018, 0.08 - initialAbsOffset * 0.016);
       mesh.renderOrder = initialOffset === 0 ? 30 : Math.max(20, 28 - initialAbsOffset);
       backplate.renderOrder = mesh.renderOrder - 0.2;
-      mesh.userData.index = index;
+      mesh.userData.index = sceneIndex;
+      mesh.userData.slotIndex = slotIndex;
       // 纹理面本身有烟熏和油膜，离轴时可能被暗背景吃掉；
       // 背板模拟源站 WorkPane 的折射边缘，只负责把所有卡片“托出来”，不改变滚动轨道。
       stage.add(backplate);
       stage.add(mesh);
-      return { backplate, backplateGeometry, backplateMaterial, geometry, material, mesh };
+      return { backplate, backplateGeometry, backplateMaterial, geometry, material, mesh, sceneIndex, slotIndex };
     });
 
     const spineGeometry = new THREE.TorusKnotGeometry(0.76, 0.055, 180, 12, 2, 5);
@@ -4346,8 +4372,6 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       activeTheoryFlowerPointMaterial.uniforms.uPixelRatio.value = renderer.getPixelRatio();
     };
 
-    const getVisualOffset = getLoopedStoryOffset;
-
     const animate = () => {
       animationFrame = window.requestAnimationFrame(animate);
       const time = performance.now() * 0.001;
@@ -4385,7 +4409,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       scrollImpulseRef.current += (0 - scrollImpulseRef.current) * 0.046;
       const scrollFollow = Math.max(-1.9, Math.min(1.9, scrollImpulse));
       const motionProgress = visualProgress + scrollFollow * 0.18;
-      const sourceScrollProgress = THREE.MathUtils.euclideanModulo(motionProgress / Math.max(1, storyScenes.length - 1), 1);
+      const sourceScrollProgress = THREE.MathUtils.euclideanModulo(motionProgress, 1);
       const sourceScrollSpin = motionProgress * workTrackStep;
       const sourceSpineTravel = motionProgress * 0.65;
       const pillarVerticalPhase = motionProgress * 0.2 + scrollFollow * 0.025;
@@ -4474,43 +4498,37 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceSpineRim.position.x = -0.38;
       referenceSpineRim.rotation.y = -0.08 + Math.sin(time * 0.12 + 0.08) * 0.003;
       referenceGlassPanels.forEach((panel, panelIndex) => {
-        const offset = getVisualOffset(panel.sourceIndex, motionProgress, referenceGlassPanels.length);
-        const absOffset = Math.abs(offset);
-        const orbitAngle = offset * workTrackStep;
-        const depthOffset = panel.variant === "front" ? 0.5 : panel.variant === "rear" ? -0.34 : 0.02;
-        const centerOffset = -0.72;
-        const trackLift = -offset * 0.52;
-        const targetX = centerOffset + Math.sin(orbitAngle) * panel.radiusX;
-        const targetY = panel.y + trackLift + Math.sin(time * 0.18 + panelIndex) * 0.008;
-        const targetZ = Math.cos(orbitAngle) * panel.radiusZ + depthOffset - absOffset * 0.16;
-        const targetRotationY = -orbitAngle * (panel.variant === "front" ? 0.42 : 0.54) - 0.08;
-        const targetRotationX = panel.variant === "front" ? -0.02 : 0.026 * Math.sign(offset || panel.angle);
-        const focus = Math.max(0, 1 - absOffset * 0.72);
-        const targetOpacity = panel.opacity * (0.52 + focus * 0.58) + Math.min(0.08, Math.abs(scrollImpulse) * 0.032);
+        const staticX = panel.variant === "front" ? -0.62 : panel.variant === "left" ? -2.38 : 1.42;
+        const staticZ = panel.variant === "front" ? 1.36 : panel.variant === "left" ? 0.82 : 0.38;
+        const staticRotationY = panel.variant === "front" ? -0.08 : panel.variant === "left" ? 0.48 : -0.62;
+        const staticRotationX = panel.variant === "front" ? -0.02 : 0.026 * Math.sign(panel.angle);
+        const targetY = panel.y + Math.sin(time * 0.18 + panelIndex) * 0.008;
+        const targetOpacity = panel.opacity * (0.72 + Math.sin(time * 0.22 + panelIndex) * 0.08) + Math.min(0.014, Math.abs(scrollImpulse) * 0.006);
 
-        // 源站 WorkItems 是固定柱体 + 环绕卡片，滚动时相机在各卡片 target 间插值。
-        // 这里用有界 offset 模拟那段相机相对运动，避免卡片累积旋转到背面或把柱体拖偏。
-        panel.mesh.position.x += (targetX - panel.mesh.position.x) * 0.16;
+        // 这三片大玻璃只当作参考图里的环境折射层，不能再吃 WorkItem 轨道。
+        // 如果它们继续按卡片 offset 横向移动，视觉上会像“只有一张大卡片在拖着柱体走”；
+        // 主交互已经交给下方 15 个 WorkItem slot，这里只保留极轻的景深呼吸。
+        panel.mesh.position.x += (staticX - panel.mesh.position.x) * 0.16;
         panel.mesh.position.y += (targetY - panel.mesh.position.y) * 0.16;
-        panel.mesh.position.z += (targetZ - panel.mesh.position.z) * 0.16;
-        panel.mesh.rotation.y += (targetRotationY - panel.mesh.rotation.y) * 0.14;
-        panel.mesh.rotation.x += (targetRotationX - panel.mesh.rotation.x) * 0.12;
+        panel.mesh.position.z += (staticZ - panel.mesh.position.z) * 0.16;
+        panel.mesh.rotation.y += (staticRotationY - panel.mesh.rotation.y) * 0.14;
+        panel.mesh.rotation.x += (staticRotationX - panel.mesh.rotation.x) * 0.12;
         panel.material.opacity += (targetOpacity - panel.material.opacity) * 0.08;
         if (panel.mediaMesh && panel.mediaMaterial) {
           panel.mediaMesh.position.copy(panel.mesh.position);
           panel.mediaMesh.rotation.copy(panel.mesh.rotation);
           panel.mediaMesh.scale.copy(panel.mesh.scale);
           panel.mediaMaterial.uniforms.uTime.value = time;
-          panel.mediaMaterial.uniforms.uScroll.value = scrollFollow;
-          panel.mediaMaterial.uniforms.uOpacity.value = Math.min(0.58, panel.material.opacity * 0.62 + Math.abs(scrollImpulse) * 0.05);
+          panel.mediaMaterial.uniforms.uScroll.value = sourceScrollProgress;
+          panel.mediaMaterial.uniforms.uOpacity.value = Math.min(0.08, panel.material.opacity * 0.48 + Math.abs(scrollImpulse) * 0.006);
         }
         if (panel.refractionMesh && panel.refractionMaterial) {
           panel.refractionMesh.position.copy(panel.mesh.position);
           panel.refractionMesh.rotation.copy(panel.mesh.rotation);
           panel.refractionMesh.scale.copy(panel.mesh.scale);
           panel.refractionMaterial.uniforms.uTime.value = time;
-          panel.refractionMaterial.uniforms.uScroll.value = scrollFollow;
-          panel.refractionMaterial.uniforms.uOpacity.value = Math.min(0.78, panel.material.opacity * 0.82 + Math.abs(scrollImpulse) * 0.05);
+          panel.refractionMaterial.uniforms.uScroll.value = sourceScrollProgress;
+          panel.refractionMaterial.uniforms.uOpacity.value = Math.min(0.1, panel.material.opacity * 0.58 + Math.abs(scrollImpulse) * 0.007);
         }
       });
       stage.rotation.y = 0;
@@ -4647,6 +4665,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         item.highlight.scale.copy(item.mesh.scale).multiplyScalar(1.014);
         material.uniforms.uTime.value = time;
         material.uniforms.uScroll.value = sourceScrollProgress + scrollFollow * 0.018;
+        material.uniforms.uSpineScroll.value = sourceScrollProgress;
         material.uniforms.uOpacity.value = 0.48 + Math.sin(time * 0.3 + item.phase) * 0.036 + Math.min(0.1, Math.abs(scrollFollow) * 0.032);
         (material.uniforms.uAccent.value as THREE.Color).lerp(
           new THREE.Color(organicPalette[(instanceIndex + activeIndexRef.current) % organicPalette.length]).lerp(new THREE.Color("#d1fff4"), 0.34),
@@ -4710,9 +4729,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       }
       columnPositions.needsUpdate = true;
 
-      panelMeshes.forEach((panel, index) => {
+      panelMeshes.forEach((panel) => {
         const { backplate, backplateMaterial, mesh, material } = panel;
-        const offset = getVisualOffset(index, motionProgress);
+        const offset = getInfiniteStorySlotOffset(panel.slotIndex, motionProgress);
         const absOffset = Math.abs(offset);
         const focus = Math.max(0, 1 - absOffset * 0.72);
         const trackWindow = Math.max(0, 1 - absOffset / 3.55);
@@ -4722,7 +4741,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const targetZ = 1.98 + Math.cos(carouselAngle) * 0.62 - absOffset * 0.07;
         const targetScale = 0.58 + trackWindow * 0.24 + focus * 0.42;
         const scrollBoost = Math.min(0.12, Math.abs(scrollImpulse) * 0.035);
-        const targetOpacity = Math.min(0.28, 0.07 + trackWindow * 0.07 + focus * 0.11 + scrollBoost * 0.2);
+        const targetOpacity = Math.min(0.24, 0.016 + trackWindow * 0.064 + focus * 0.15 + scrollBoost * 0.14);
 
         // 这段直接对应源站 `positionViews`：卡片按 50 度步进围绕柱体排布，并按索引在 y 轴上分层。
         // 用户滚轮只改变无界 progress，所以每张卡都会在同一条紧凑轨道里真实穿场；
@@ -4749,7 +4768,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         // WebGL 里的大 WorkPane 只承担源站式玻璃投影和景深层次；
         // 真正可读、可点击的业务卡片在 DOM 轨道里。这里压低背板/纹理不透明度，
         // 避免 3D 面片变成一整块廉价彩色矩形，把柱体和多卡片关系盖住。
-        backplateMaterial.opacity += ((0.018 + trackWindow * 0.018 + focus * 0.035 + scrollBoost * 0.1) - backplateMaterial.opacity) * 0.12;
+        backplateMaterial.opacity += ((0.006 + trackWindow * 0.012 + focus * 0.026 + scrollBoost * 0.06) - backplateMaterial.opacity) * 0.12;
       });
       // DOM 前景轨道和 WebGL WorkItem 使用同一个无界 progress。
       // 它只改变卡片的 y/rotate/opacity，不改变柱体坐标；这样即使 WebGL 暗场很重，
@@ -4941,28 +4960,29 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       <div className="landing-story-hero-asset" aria-hidden="true" />
       <canvas aria-hidden="true" className="landing-story-canvas" ref={canvasRef} />
       <div className="landing-story-workitem-rail">
-        {storyScenes.map((sceneItem, index) => (
+        {storyWorkItemSlots.map(({ key, scene, sceneIndex, slotIndex }) => (
           <button
-            aria-label={`查看 ${sceneItem.title}`}
-            aria-pressed={activeIndex === index}
+            aria-label={`查看 ${scene.title}`}
+            aria-pressed={activeIndex === sceneIndex}
             className="landing-story-workitem-card"
-            data-active={activeIndex === index ? "true" : "false"}
-            data-story-index={index}
-            data-story-key={sceneItem.key}
-            key={sceneItem.key}
-            onClick={() => goToScene(index)}
-            onFocus={() => goToScene(index)}
-            onPointerDown={() => goToScene(index)}
+            data-active={activeIndex === sceneIndex && Math.abs(getInfiniteStorySlotOffset(slotIndex, activeIndex)) < 0.42 ? "true" : "false"}
+            data-story-index={sceneIndex}
+            data-story-key={scene.key}
+            data-story-slot={slotIndex}
+            key={key}
+            onClick={() => goToScene(sceneIndex)}
+            onFocus={() => goToScene(sceneIndex)}
+            onPointerDown={() => goToScene(sceneIndex)}
             ref={(node) => {
-              storyCardRefs.current[index] = node;
+              storyCardRefs.current[slotIndex] = node;
             }}
-            style={{ "--card-accent": sceneItem.accent, ...getInitialStoryCardStyle(index, activeIndex) } as CSSProperties}
+            style={{ "--card-accent": scene.accent, ...getInitialStoryCardStyle(slotIndex, activeIndex) } as CSSProperties}
             type="button"
           >
-            <span>{sceneItem.label}</span>
-            <strong>{sceneItem.title}</strong>
-            <p>{sceneItem.kicker}</p>
-            <small>{sceneItem.metric}</small>
+            <span>{scene.label}</span>
+            <strong>{scene.title}</strong>
+            <p>{scene.kicker}</p>
+            <small>{scene.metric}</small>
           </button>
         ))}
       </div>
