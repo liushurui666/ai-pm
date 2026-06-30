@@ -174,13 +174,16 @@ function getStoryWorkItemVisualFromOffset(offset: number, impulse = 0): StoryWor
   const trackWindow = Math.max(0, 1 - absOffset / 7.2);
   const sourceRadius = STORY_WORK_CARD_RADIUS_X * (0.76 + trackWindow * 0.24);
   const x = Math.sin(angle) * sourceRadius;
-  const y = -offset * 104;
-  const z = Math.cos(angle) * STORY_WORK_CARD_RADIUS_Z + focus * 260 - absOffset * 30;
+  // 源站 WorkItems 的每张 view 是固定在同一条空间队列里，滚动时相机在 target 间穿行；
+  // AI PM 这里为了不让柱体横向漂移，保留固定相机 x/z，只把卡片自身做更强的 y 向接力。
+  // 相邻卡片间距比旧版拉大，能明确看到“多张卡片从上到下经过柱体”，而不是一张大卡在换内容。
+  const y = -offset * 136;
+  const z = Math.cos(angle) * STORY_WORK_CARD_RADIUS_Z + focus * 190 - absOffset * 34;
   const rotateX = THREE.MathUtils.clamp(offset * -0.044, -0.16, 0.16);
   const rotateY = -angle * 0.9 + THREE.MathUtils.clamp(impulse * 0.026, -0.16, 0.16);
   const rotateZ = Math.sin(angle) * 2.8;
-  const scale = 0.42 + trackWindow * 0.24 + focus * 0.32;
-  const opacity = Math.min(0.98, 0.11 + trackWindow * 0.5 + focus * 0.3 + Math.min(0.08, Math.abs(impulse) * 0.022));
+  const scale = 0.34 + trackWindow * 0.18 + focus * 0.26;
+  const opacity = Math.min(0.92, 0.13 + trackWindow * 0.42 + focus * 0.26 + Math.min(0.06, Math.abs(impulse) * 0.018));
 
   // 这套公式保留 Active Theory `WorkItems.positionViews()` 的核心：15 张真实 view 常驻、
   // 50 度步进、相邻卡片同时出现在一条轨道上。柱体本身仍然锁 x/z，
@@ -2182,7 +2185,7 @@ function createSourceSpineShaderMaterial(options: {
   // 混出“黑色湿润骨体 + 青紫油膜边缘”。这里不再继续调 `MeshPhysicalMaterial` 参数，
   // 而是把镜像里可验证的 uniform 协议落到一个本地 ShaderMaterial：
   // - `uNormalStrength` 固定为源站的 0.19；
-  // - `uReflection` 固定为源站的 [2.7, 0.85]；
+  // - `uReflection` 回到源站 `SpineShader` 的 [1, 1] 系列采样，再在 fragment 内压暗主体；
   // - `matcap-test` 与 `damaged_road_normal` 参与主色，而不是只做一层很薄的外壳；
   // - 源站真实 `tRefraction` 来自 Work 场景的 MRT pass，这里用同一段参考动态柱体材质
   //   作为近似输入，避免退回静态 env 采样后柱体缺少 mp4 里的湿润流动高光。
@@ -2202,7 +2205,8 @@ function createSourceSpineShaderMaterial(options: {
       uNormalStrength: { value: 0.19 },
       uOpacity: { value: options.opacity },
       uPhase: { value: options.phase },
-      uReflection: { value: new THREE.Vector2(2.7, 0.85) },
+      uReflection: { value: new THREE.Vector2(1, 0.82) },
+      uResolution: { value: new THREE.Vector2(1, 1) },
       uScroll: { value: 0 },
       uSpineScroll: { value: 0 },
       uTime: { value: 0 },
@@ -2259,6 +2263,7 @@ function createSourceSpineShaderMaterial(options: {
       uniform float uNormalStrength;
       uniform float uOpacity;
       uniform float uPhase;
+      uniform vec2 uResolution;
       uniform float uScroll;
       uniform float uTime;
       varying vec2 vUv;
@@ -2344,19 +2349,23 @@ function createSourceSpineShaderMaterial(options: {
         vec3 normal = unpackNormalFBR(vEyePos, vWorldNormal, tNormal, uNormalStrength, 1.0, vUv);
         normal.y -= vWorldPosition.y * 0.02;
         vec3 color = getFBR(baseColor, uv, normal);
-        vec2 screenUv = vec2(
-          0.5 + normal.x * 0.1 * uReflection.x + vWorldPosition.x * 0.012 + uScroll * 0.018,
-          0.5 + normal.y * 0.1 * uReflection.x + vWorldPosition.y * 0.006
-        );
+        // 源站 SpineShader 用 gl_FragCoord / resolution 做屏幕折射采样。
+        // 旧版固定围绕 0.5 采样会把整根柱体抹成同一片亮雾；这里改回屏幕采样，
+        // 让每节骨体按自己的屏幕位置吃到不同的油膜/玻璃反射。
+        vec2 screenUv = gl_FragCoord.xy / max(uResolution, vec2(1.0));
+        screenUv += normal.xy * 0.1 * uReflection.x;
+        screenUv += vec2(uScroll * 0.018, vWorldPosition.y * 0.003);
         float fresnel = pow(1.0 - clamp(abs(dot(normalize(normal), normalize(vViewDir))), 0.0, 1.0), 2.4);
         float oilBand = smoothstep(0.22, 0.92, sin((vWorldPosition.y + uPhase) * 3.6 + uTime * 0.18) * 0.5 + 0.5);
         vec2 refractionUv = clamp(screenUv + vec2(sin(uTime * 0.17 + uPhase) * 0.012, cos(uTime * 0.13 + uPhase) * 0.01), vec2(0.02), vec2(0.98));
-        vec3 refraction = pow(max(texture2D(tRefraction, refractionUv).rgb, 0.0), vec3(0.82));
-        color += refraction * uReflection.y * (0.36 + fresnel * 0.34 + oilBand * 0.08);
-        color += uAccent * fresnel * (0.12 + oilBand * 0.1);
-        color = pow(max(color * 1.22, 0.0), vec3(1.18));
+        vec3 refraction = pow(max(texture2D(tRefraction, refractionUv).rgb, 0.0), vec3(0.92));
+        vec3 wetBody = mix(vec3(0.004, 0.007, 0.011), color * 0.72, 0.62);
+        vec3 oilEdge = refraction * uReflection.y * (0.24 + fresnel * 0.34 + oilBand * 0.055);
+        color = wetBody + oilEdge;
+        color += uAccent * fresnel * (0.085 + oilBand * 0.07);
+        color = pow(max(color, 0.0), vec3(1.08));
 
-        float alpha = uOpacity * (0.72 + fresnel * 0.22);
+        float alpha = uOpacity * (0.86 + fresnel * 0.16);
         gl_FragColor = vec4(color, alpha);
       }
     `,
@@ -2413,6 +2422,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 这样向下滚动时所有卡片会像源码 WorkItems 一样接力穿过镜头，不会退化成一张卡片换内容。
       node.dataset.active = visual.isFocused && slot?.sceneIndex === activeIndexRef.current ? "true" : "false";
       node.style.opacity = String(visual.opacity);
+      node.style.pointerEvents = visual.opacity > 0.32 ? "auto" : "none";
       node.style.zIndex = String(visual.zIndex);
       node.style.transform = visual.transform;
     });
@@ -3445,7 +3455,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
             matcapTexture: activeTheorySpineMatcapTexture,
             mroTexture: activeTheorySpineMroTexture,
             normalTexture: activeTheorySpineNormalTexture,
-            opacity: 0.54,
+            opacity: 0.68,
             phase,
             refractionTexture: referenceSpineMotionTexture,
           });
@@ -3459,7 +3469,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
             depthTest: false,
             depthWrite: false,
             matcap: activeTheorySpineMatcapTexture,
-            opacity: 0.065,
+            opacity: 0.042,
             side: THREE.DoubleSide,
             transparent: true,
           });
@@ -3468,7 +3478,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           const baseRotation = new THREE.Euler(0.08, instanceIndex * 0.4, 0.02);
           // 镜像里的 `MESH_Element_5_Workscale` 是 [3.5, 3.5, 3.5]，说明源站脊柱不是细柱；
           // 我们不能直接套 3.5，否则会压住登录入口，但需要比旧版更厚，才能接近参考里的规则实体截面。
-          const baseScale = new THREE.Vector3(2.04, 1.58, 1.82);
+          const baseScale = new THREE.Vector3(2.18, 1.64, 1.94);
           mesh.position.copy(basePosition);
           mesh.rotation.copy(baseRotation);
           mesh.scale.copy(baseScale);
@@ -4311,7 +4321,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       {
         angle: -1.26,
         height: 3.18,
-        opacity: 0.038,
+        opacity: 0.018,
         radiusX: 2.68,
         radiusZ: 0.66,
         renderOrder: 3.25,
@@ -4322,20 +4332,20 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       },
       {
         angle: 0.03,
-        height: 2.98,
-        opacity: 0.046,
+        height: 2.42,
+        opacity: 0.018,
         radiusX: 0.86,
         radiusZ: 0.82,
         renderOrder: 4.85,
         sourceIndex: 0,
         variant: "front" as const,
-        width: 5.05,
+        width: 4.18,
         y: 0.12,
       },
       {
         angle: 2.62,
         height: 1.9,
-        opacity: 0.03,
+        opacity: 0.014,
         radiusX: 1.78,
         radiusZ: 0.84,
         renderOrder: 2.9,
@@ -4409,11 +4419,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       const initialFocus = Math.max(0, 1 - initialAbsOffset * 0.58);
       const initialTrackWindow = Math.max(0, 1 - initialAbsOffset / 7.2);
       const initialCardRadiusX = 0.68 + initialTrackWindow * 0.32;
-      const initialScale = 0.44 + initialTrackWindow * 0.22 + initialFocus * 0.48;
+      const initialScale = 0.36 + initialTrackWindow * 0.2 + initialFocus * 0.36;
       mesh.position.set(
         0.18 + Math.sin(initialAngle) * initialCardRadiusX,
-        0.12 - initialOffset * 0.52,
-        1.55 + Math.cos(initialAngle) * 0.5 + initialFocus * 0.56 - initialAbsOffset * 0.06
+        0.12 - initialOffset * 0.68,
+        1.55 + Math.cos(initialAngle) * 0.5 + initialFocus * 0.42 - initialAbsOffset * 0.07
       );
       mesh.rotation.set(THREE.MathUtils.clamp(initialOffset * -0.044, -0.16, 0.16), -initialAngle * 0.9 - 0.04, Math.sin(initialAngle) * 0.035);
       mesh.scale.set(initialScale, initialScale, 1);
@@ -4424,7 +4434,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 这些卡片对应源站 WorkItem：所有项目卡都一直存在于同一条无界轨道上。
       // v115 把横向半径只还给卡片队列，柱体和 camera x/z 继续锁死；
       // 这样能看到多张卡片沿同一条轨道转面接力，而不是一张卡片在原地换文案。
-      material.opacity = Math.min(0.34, 0.032 + initialTrackWindow * 0.11 + initialFocus * 0.2);
+      material.opacity = Math.min(0.24, 0.03 + initialTrackWindow * 0.095 + initialFocus * 0.13);
       mesh.renderOrder = initialOffset === 0 ? 30 : Math.max(20, 28 - initialAbsOffset);
       backplate.renderOrder = mesh.renderOrder - 0.2;
       mesh.userData.index = sceneIndex;
@@ -4511,12 +4521,15 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       const motionProgress = visualProgress + scrollFollow * 0.18;
       const sourceScrollProgress = THREE.MathUtils.euclideanModulo(motionProgress, 1);
       const sourceScrollSpin = motionProgress * workTrackStep;
-      const sourceSpineTravel = motionProgress * 0.86;
+      // 源站滚轮会让 spine/flower 有非常明显的纵向穿行；这里把实例队列位移和 shader 相位拆开：
+      // 位移负责“骨节从上到下接力”，相位负责“油膜/粒子沿柱体内部滚动”，两者都不改 x/z。
+      const sourceSpineTravel = motionProgress * 1.24;
+      const sourceSpineScrollPhase = THREE.MathUtils.euclideanModulo(motionProgress * 1.18, 1);
       const pillarVerticalPhase = motionProgress * 0.42 + scrollFollow * 0.025;
       particleMaterial.uniforms.uTime.value = time;
       columnParticleMaterial.uniforms.uTime.value = time;
       activeTheoryFlowerPointMaterial.uniforms.uTime.value = time;
-      activeTheoryFlowerPointMaterial.uniforms.uScroll.value = sourceScrollProgress;
+      activeTheoryFlowerPointMaterial.uniforms.uScroll.value = sourceSpineScrollPhase;
       activeTheoryFlowerPointMaterial.uniforms.uRotate.value = sourceScrollSpin;
       activeTheoryFlowerPointMaterial.uniforms.uSparkle.value = time * 0.42 + Math.abs(scrollImpulse) * 0.18;
       activeTheoryFlowerPointMaterial.uniforms.uOpacity.value = 0.28 + Math.min(0.12, Math.abs(scrollImpulse) * 0.034);
@@ -4570,17 +4583,17 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 避免和通用油膜同步后看起来像一层整齐的页面滤镜。
       referenceOilTexture.offset.x = Math.sin(time * 0.06) * 0.04 + Math.sin(sourceScrollSpin * 0.18) * 0.012;
       referenceOilTexture.offset.y = time * 0.046 + sourceScrollProgress * 0.62;
-      referenceSpineFieldMaterial.opacity = 0.47 + Math.sin(time * 0.2) * 0.03 + Math.min(0.08, Math.abs(scrollImpulse) * 0.02);
-      referenceSpineGhostMaterial.opacity = 0.13 + Math.cos(time * 0.18) * 0.018 + Math.min(0.045, Math.abs(scrollImpulse) * 0.012);
+      referenceSpineFieldMaterial.opacity = 0.34 + Math.sin(time * 0.2) * 0.024 + Math.min(0.06, Math.abs(scrollImpulse) * 0.015);
+      referenceSpineGhostMaterial.opacity = 0.09 + Math.cos(time * 0.18) * 0.014 + Math.min(0.032, Math.abs(scrollImpulse) * 0.009);
       referenceSpineMotionMaterial.uniforms.uTime.value = time;
-      referenceSpineMotionMaterial.uniforms.uOpacity.value = 0.22 + Math.sin(time * 0.31 + 0.4) * 0.026 + Math.min(0.08, Math.abs(scrollImpulse) * 0.022);
+      referenceSpineMotionMaterial.uniforms.uOpacity.value = 0.16 + Math.sin(time * 0.31 + 0.4) * 0.02 + Math.min(0.06, Math.abs(scrollImpulse) * 0.016);
       referenceSpineSubjectMaterial.uniforms.uTime.value = time;
-      referenceSpineSubjectMaterial.uniforms.uScroll.value = sourceScrollProgress + scrollFollow * 0.018;
-      referenceSpineSubjectMaterial.uniforms.uOpacity.value = 1.14 + Math.sin(time * 0.26 + 0.7) * 0.04 + Math.min(0.16, Math.abs(scrollFollow) * 0.04);
+      referenceSpineSubjectMaterial.uniforms.uScroll.value = sourceSpineScrollPhase + scrollFollow * 0.018;
+      referenceSpineSubjectMaterial.uniforms.uOpacity.value = 0.82 + Math.sin(time * 0.26 + 0.7) * 0.032 + Math.min(0.12, Math.abs(scrollFollow) * 0.03);
       referenceSpineOcclusionMaterial.uniforms.uTime.value = time;
-      referenceSpineOcclusionMaterial.uniforms.uScroll.value = sourceScrollProgress + scrollFollow * 0.018;
-      referenceSpineOcclusionMaterial.uniforms.uOpacity.value = 0.38 + Math.sin(time * 0.22 + 0.2) * 0.022 + Math.min(0.1, Math.abs(scrollFollow) * 0.026);
-      referenceSpineRimMaterial.opacity = 0.42 + Math.sin(time * 0.22 + 0.9) * 0.04 + Math.min(0.12, Math.abs(scrollImpulse) * 0.028);
+      referenceSpineOcclusionMaterial.uniforms.uScroll.value = sourceSpineScrollPhase + scrollFollow * 0.018;
+      referenceSpineOcclusionMaterial.uniforms.uOpacity.value = 0.28 + Math.sin(time * 0.22 + 0.2) * 0.018 + Math.min(0.074, Math.abs(scrollFollow) * 0.02);
+      referenceSpineRimMaterial.opacity = 0.3 + Math.sin(time * 0.22 + 0.9) * 0.032 + Math.min(0.09, Math.abs(scrollImpulse) * 0.022);
       referenceSpineField.position.x = -0.38;
       referenceSpineField.rotation.y = -0.075 + Math.sin(time * 0.1) * 0.003;
       referenceSpineGhost.position.x = -0.1;
@@ -4620,7 +4633,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           panel.mediaMesh.scale.copy(panel.mesh.scale);
           panel.mediaMaterial.uniforms.uTime.value = time;
           panel.mediaMaterial.uniforms.uScroll.value = sourceScrollProgress;
-          panel.mediaMaterial.uniforms.uOpacity.value = Math.min(0.08, panel.material.opacity * 0.48 + Math.abs(scrollImpulse) * 0.006);
+          panel.mediaMaterial.uniforms.uOpacity.value = Math.min(0.036, panel.material.opacity * 0.38 + Math.abs(scrollImpulse) * 0.0035);
         }
         if (panel.refractionMesh && panel.refractionMaterial) {
           panel.refractionMesh.position.copy(panel.mesh.position);
@@ -4628,7 +4641,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           panel.refractionMesh.scale.copy(panel.mesh.scale);
           panel.refractionMaterial.uniforms.uTime.value = time;
           panel.refractionMaterial.uniforms.uScroll.value = sourceScrollProgress;
-          panel.refractionMaterial.uniforms.uOpacity.value = Math.min(0.1, panel.material.opacity * 0.58 + Math.abs(scrollImpulse) * 0.007);
+          panel.refractionMaterial.uniforms.uOpacity.value = Math.min(0.044, panel.material.opacity * 0.48 + Math.abs(scrollImpulse) * 0.004);
         }
       });
       stage.rotation.y = 0;
@@ -4763,13 +4776,14 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         item.highlight.scale.copy(item.mesh.scale).multiplyScalar(1.014);
         material.uniforms.uTime.value = time;
         material.uniforms.uScroll.value = sourceScrollProgress + scrollFollow * 0.018;
-        material.uniforms.uSpineScroll.value = sourceScrollProgress;
-        material.uniforms.uOpacity.value = 0.48 + Math.sin(time * 0.3 + item.phase) * 0.036 + Math.min(0.1, Math.abs(scrollFollow) * 0.032);
+        material.uniforms.uResolution.value.set(width, height);
+        material.uniforms.uSpineScroll.value = sourceSpineScrollPhase;
+        material.uniforms.uOpacity.value = 0.64 + Math.sin(time * 0.3 + item.phase) * 0.028 + Math.min(0.09, Math.abs(scrollFollow) * 0.028);
         (material.uniforms.uAccent.value as THREE.Color).lerp(
           new THREE.Color(organicPalette[(instanceIndex + activeIndexRef.current) % organicPalette.length]).lerp(new THREE.Color("#d1fff4"), 0.34),
           0.035
         );
-        highlightMaterial.opacity = 0.058 + Math.sin(time * 0.42 + item.phase) * 0.018 + Math.min(0.042, Math.abs(scrollImpulse) * 0.018);
+        highlightMaterial.opacity = 0.034 + Math.sin(time * 0.42 + item.phase) * 0.012 + Math.min(0.028, Math.abs(scrollImpulse) * 0.012);
         highlightMaterial.color.lerp(new THREE.Color(organicPalette[(instanceIndex + activeIndexRef.current) % organicPalette.length]).lerp(new THREE.Color("#bffcff"), 0.42), 0.035);
       });
       spineFlecks.forEach((item, fleckIndex) => {
@@ -4836,11 +4850,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const carouselAngle = -offset * workTrackStep;
         const cardRadiusX = 0.68 + trackWindow * 0.32;
         const targetX = 0.18 + Math.sin(carouselAngle) * cardRadiusX;
-        const targetY = 0.12 - offset * 0.52;
-        const targetZ = 1.55 + Math.cos(carouselAngle) * 0.5 + focus * 0.56 - absOffset * 0.06;
-        const targetScale = 0.44 + trackWindow * 0.22 + focus * 0.48;
+        const targetY = 0.12 - offset * 0.68;
+        const targetZ = 1.55 + Math.cos(carouselAngle) * 0.5 + focus * 0.42 - absOffset * 0.07;
+        const targetScale = 0.36 + trackWindow * 0.2 + focus * 0.36;
         const scrollBoost = Math.min(0.12, Math.abs(scrollImpulse) * 0.035);
-        const targetOpacity = Math.min(0.34, 0.032 + trackWindow * 0.11 + focus * 0.2 + scrollBoost * 0.14);
+        const targetOpacity = Math.min(0.24, 0.03 + trackWindow * 0.095 + focus * 0.13 + scrollBoost * 0.1);
 
         // 这段回到源站 `positionViews` 的多 view / 50 度转面 / 相邻 target 插值逻辑：
         // 卡片在自身轨道上有横向半径和景深，柱体和镜头仍锁 x/z，只沿 y 扫描。
@@ -4867,7 +4881,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         // WebGL 里的大 WorkPane 只承担源站式玻璃投影和景深层次；
         // 真正可读、可点击的业务卡片在 DOM 轨道里。这里压低背板/纹理不透明度，
         // 避免 3D 面片变成一整块廉价彩色矩形，把柱体和多卡片关系盖住。
-        backplateMaterial.opacity += ((0.012 + trackWindow * 0.026 + focus * 0.044 + scrollBoost * 0.06) - backplateMaterial.opacity) * 0.12;
+        backplateMaterial.opacity += ((0.01 + trackWindow * 0.018 + focus * 0.03 + scrollBoost * 0.04) - backplateMaterial.opacity) * 0.12;
       });
       // DOM 前景轨道和 WebGL WorkItem 使用同一个无界 progress。
       // 它只改变卡片自身的轨道坐标/转面/透明度，不改变柱体坐标；这样即使 WebGL 暗场很重，
@@ -5071,7 +5085,6 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
             key={key}
             onClick={() => goToScene(sceneIndex)}
             onFocus={() => goToScene(sceneIndex)}
-            onPointerDown={() => goToScene(sceneIndex)}
             ref={(node) => {
               storyCardRefs.current[slotIndex] = node;
             }}

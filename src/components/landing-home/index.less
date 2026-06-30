@@ -107,9 +107,9 @@
   left: 0;
   display: grid;
   appearance: none;
-  width: clamp(218px, 18vw, 342px);
-  min-height: clamp(122px, 11.4vw, 194px);
-  padding: clamp(13px, 1.12vw, 21px);
+  width: clamp(196px, 15.2vw, 286px);
+  min-height: clamp(108px, 9.5vw, 164px);
+  padding: clamp(11px, 0.96vw, 17px);
   overflow: hidden;
   color: rgba(245, 252, 255, 0.94);
   font: inherit;
@@ -120,8 +120,8 @@
   border: 1px solid color-mix(in srgb, var(--card-accent) 42%, rgba(255, 255, 255, 0.16));
   border-radius: 16px;
   box-shadow:
-    0 22px 80px rgba(0, 0, 0, 0.46),
-    0 0 54px color-mix(in srgb, var(--card-accent) 22%, transparent),
+    0 18px 64px rgba(0, 0, 0, 0.46),
+    0 0 44px color-mix(in srgb, var(--card-accent) 18%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.18);
   opacity: 0;
   pointer-events: auto;
@@ -140,8 +140,8 @@
 .landing-story-workitem-card[data-active="true"] {
   border-color: color-mix(in srgb, var(--card-accent) 64%, rgba(255, 255, 255, 0.24));
   box-shadow:
-    0 30px 110px rgba(0, 0, 0, 0.5),
-    0 0 84px color-mix(in srgb, var(--card-accent) 34%, transparent),
+    0 26px 88px rgba(0, 0, 0, 0.5),
+    0 0 72px color-mix(in srgb, var(--card-accent) 28%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.24);
 }
 
@@ -190,17 +190,17 @@
 
 .landing-story-workitem-card strong {
   max-width: 13em;
-  margin-top: clamp(9px, 1.12vw, 16px);
-  font-size: clamp(1.05rem, 1.35vw, 1.68rem);
+  margin-top: clamp(8px, 0.94vw, 13px);
+  font-size: clamp(0.98rem, 1.14vw, 1.36rem);
   line-height: 1.02;
   letter-spacing: 0;
 }
 
 .landing-story-workitem-card p {
   max-width: 28em;
-  margin: clamp(8px, 0.82vw, 13px) 0 0;
+  margin: clamp(7px, 0.7vw, 11px) 0 0;
   color: rgba(221, 233, 238, 0.76);
-  font-size: clamp(0.72rem, 0.76vw, 0.88rem);
+  font-size: clamp(0.68rem, 0.68vw, 0.8rem);
   font-weight: 700;
   line-height: 1.55;
 }
@@ -208,7 +208,7 @@
 .landing-story-workitem-card small {
   align-self: end;
   justify-self: start;
-  margin-top: clamp(10px, 1.1vw, 18px);
+  margin-top: clamp(8px, 0.92vw, 14px);
   padding: 0.3rem 0.62rem;
   color: #06100f;
   font-size: 0.74rem;
