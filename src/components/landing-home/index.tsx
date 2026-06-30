@@ -70,7 +70,8 @@ const ACTIVE_THEORY_WORK_HOGWARTS_LOGO_PATH = "/landing/active-theory-hogwarts-l
 const STORY_WORK_TRACK_STEP = THREE.MathUtils.degToRad(50);
 const STORY_WORK_ITEM_REPEAT = 3;
 const STORY_WORK_DOM_Y_STEP = 152;
-const STORY_WORK_DOM_LANE_X = 196;
+const STORY_WORK_DOM_ORBIT_X = 212;
+const STORY_WORK_DOM_ORBIT_Z = 126;
 const STORY_WORK_WEBGL_Y_STEP = 0.78;
 
 function createSolidDataTexture(r: number, g: number, b: number) {
@@ -168,40 +169,39 @@ function getInfiniteStorySlotOffset(slotIndex: number, progress: number, length 
   return slotIndex + nearestCycle * length - progress;
 }
 
-function getStoryWorkItemLane(slotIndex: number) {
-  // Active Theory 源码的 WorkItems 不是 5 张业务卡复用文案，而是 15 个真实 view：
-  // `positionViews()` 从 angle=0 开始每张相差 50deg，固定在一圈 target 上。
-  // 这里同样让 15 个 slot 都拥有自己的环形 lane；为了锁住 AI PM 的柱体中轴，只把这组
-  // lane 用在卡片自身的 x/z/rotation，不再把相机或柱体整体推向左右。
-  const angle = -Math.PI / 2 - slotIndex * STORY_WORK_TRACK_STEP;
+function getStoryWorkItemOrbit(offset: number) {
+  // Active Theory 源码里的 WorkItems 是固定在 50deg 间距目标点上的一整串 view，
+  // 滚动时由 camera target 在这些 view 之间推进。AI PM 这版按用户要求把柱体和相机 x/z 锁住，
+  // 因此不能再真的移动 camera，否则柱体会在屏幕上左右漂。这里把“camera 穿过目标点”的相对运动
+  // 转译到每张卡自己的 offset：offset 每变化 1，就沿同样的 50deg 轨道换面一次。
+  // 这样 15 张卡都会真实从上到下旋转穿场，而柱体仍然只做 y 向滚动。
+  const angle = -Math.PI / 2 + offset * STORY_WORK_TRACK_STEP;
 
   return {
-    x: Math.cos(angle) * STORY_WORK_DOM_LANE_X,
-    z: Math.sin(angle) * 74,
-    rotationY: Math.cos(angle) * 0.48,
+    angle,
+    x: Math.cos(angle),
+    z: Math.sin(angle),
+    rotationY: Math.cos(angle),
   };
 }
 
-function getStoryWorkItemVisualFromOffset(offset: number, impulse = 0, slotIndex = 0): StoryWorkItemVisual {
+function getStoryWorkItemVisualFromOffset(offset: number, impulse = 0): StoryWorkItemVisual {
   const absOffset = Math.abs(offset);
-  const focus = Math.max(0, 1 - absOffset * 0.58);
-  const trackWindow = Math.max(0, 1 - absOffset / 7.2);
-  const lane = getStoryWorkItemLane(slotIndex);
-  const x = lane.x;
-  // 源站的 15 个 WorkItem 都是真实 view，且 view 本身固定在空间队列里；
-  // 用户向下滚时是相机在 target 间推进。这里不移动相机 x/z，就必须把卡片队列改成纯 y 轴穿场：
-  // offset 只影响 y、深度和转面，绝不再影响 x，避免柱体或卡片队列看起来一起左右漂移。
+  const focus = Math.max(0, 1 - absOffset * 0.54);
+  const trackWindow = Math.max(0, 1 - absOffset / 7.8);
+  const orbit = getStoryWorkItemOrbit(offset);
+  const x = orbit.x * STORY_WORK_DOM_ORBIT_X;
   const y = -offset * STORY_WORK_DOM_Y_STEP;
-  const z = 168 + lane.z + focus * 174 - absOffset * 34;
-  const rotateX = THREE.MathUtils.clamp(offset * -0.054, -0.2, 0.2);
-  const rotateY = lane.rotationY + THREE.MathUtils.clamp(offset * -0.18 + impulse * 0.026, -0.46, 0.46);
-  const rotateZ = THREE.MathUtils.clamp(lane.x / STORY_WORK_DOM_LANE_X, -1, 1) * 1.6;
-  const scale = 0.34 + trackWindow * 0.2 + focus * 0.28;
-  const opacity = Math.min(0.96, 0.17 + trackWindow * 0.44 + focus * 0.28 + Math.min(0.07, Math.abs(impulse) * 0.018));
+  const z = 188 + orbit.z * STORY_WORK_DOM_ORBIT_Z + focus * 192 - absOffset * 18;
+  const rotateX = THREE.MathUtils.clamp(offset * -0.05, -0.22, 0.22);
+  const rotateY = orbit.rotationY * 0.72 + THREE.MathUtils.clamp(offset * -0.06 + impulse * 0.018, -0.18, 0.18);
+  const rotateZ = orbit.x * 2.4;
+  const scale = 0.36 + trackWindow * 0.24 + focus * 0.23;
+  const opacity = Math.min(0.98, 0.22 + trackWindow * 0.48 + focus * 0.24 + Math.min(0.08, Math.abs(impulse) * 0.018));
 
   // 这套公式保留源码里“15 张真实 view 常驻 + 50 度 target 编排”的交互语义，
-  // 但把滚动位移收敛到纵向。结果是多张卡片会持续从上到下接力经过柱体，
-  // 而不是一张卡换文案，也不是整根柱子在屏幕里横向摆动。
+  // 但不再把横向变化传给 camera 或柱体。结果是用户向下滚动时，卡片按一条连续螺旋轨道
+  // 从上到下换面、排序、可点击；柱体只保持屏幕中轴固定并在内部做纵向滚动。
   return {
     isFocused: absOffset < 0.42,
     opacity,
@@ -211,31 +211,29 @@ function getStoryWorkItemVisualFromOffset(offset: number, impulse = 0, slotIndex
 }
 
 function getStoryWorkItemVisual(slotIndex: number, progress: number, impulse = 0): StoryWorkItemVisual {
-  return getStoryWorkItemVisualFromOffset(getInfiniteStorySlotOffset(slotIndex, progress), impulse, slotIndex);
+  return getStoryWorkItemVisualFromOffset(getInfiniteStorySlotOffset(slotIndex, progress), impulse);
 }
 
-function getStoryWorkItemWebGLLayout(slotIndex: number, offset: number) {
+function getStoryWorkItemWebGLLayout(offset: number) {
   const absOffset = Math.abs(offset);
-  const focus = Math.max(0, 1 - absOffset * 0.58);
-  const trackWindow = Math.max(0, 1 - absOffset / 7.2);
-  const lane = getStoryWorkItemLane(slotIndex);
-  const laneRatio = THREE.MathUtils.clamp(lane.x / STORY_WORK_DOM_LANE_X, -1, 1);
+  const focus = Math.max(0, 1 - absOffset * 0.54);
+  const trackWindow = Math.max(0, 1 - absOffset / 7.8);
+  const orbit = getStoryWorkItemOrbit(offset);
 
-  // WebGL pane 使用和 DOM 卡片同一套“固定 slot lane + y 轴穿场”逻辑。
-  // 参考源码里 WorkItem 的 world position 由 index 决定，scroll 只让 camera 在 target 之间插值；
-  // 这里因为相机 x/z 被锁住，所以把 camera target 的横向变化转译成每个 slot 的固定深度/转面，
-  // 滚动本身只推进 offset 的 y，不再把 pane 左右推来推去。
+  // WebGL pane 和 DOM hit layer 共用同一个 offset 螺旋轨道。
+  // 关键区别是：横向旋转只属于卡片队列，绝不再驱动 camera/pillarGroup。
+  // 这样可以还原源码 WorkItems 的“多张真实项目卡围绕中轴滚动”，同时满足柱体不左右偏移。
   return {
     absOffset,
     focus,
     trackWindow,
-    x: 0.1 + laneRatio * 0.92,
+    x: -0.05 + orbit.x * 1.08,
     y: 0.12 - offset * STORY_WORK_WEBGL_Y_STEP,
-    z: 1.42 + lane.z * 0.007 + focus * 0.58 - absOffset * 0.066,
-    rotationX: THREE.MathUtils.clamp(offset * -0.052, -0.2, 0.2),
-    rotationY: -0.08 + lane.rotationY * 0.82 + THREE.MathUtils.clamp(offset * -0.12, -0.38, 0.38),
-    rotationZ: laneRatio * 0.044,
-    scale: 0.28 + trackWindow * 0.14 + focus * 0.28,
+    z: 1.38 + orbit.z * 0.54 + focus * 0.74 - absOffset * 0.04,
+    rotationX: THREE.MathUtils.clamp(offset * -0.052, -0.22, 0.22),
+    rotationY: -0.08 + orbit.rotationY * 0.74 + THREE.MathUtils.clamp(offset * -0.045, -0.18, 0.18),
+    rotationZ: orbit.x * 0.052,
+    scale: 0.3 + trackWindow * 0.17 + focus * 0.25,
   };
 }
 
@@ -243,7 +241,7 @@ function getStoryWorkItemHitLayerOpacity(visual: StoryWorkItemVisual) {
   // DOM 层不再只是一个极淡 hit-area：用户明确要看到“所有卡片都在真实滚动并可交互”。
   // 这里仍然让 WebGL pane 承担主光影，但把 DOM 的透明度抬到能辨认多张卡片的范围，
   // 否则在暗场里会误读成只有一张卡片在换内容。
-  return Math.min(0.74, visual.opacity * (visual.isFocused ? 0.7 : 0.54));
+  return Math.min(0.82, visual.opacity * (visual.isFocused ? 0.74 : 0.62));
 }
 
 function getInitialStoryCardStyle(slotIndex: number, progress = 0) {
@@ -2477,7 +2475,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       }
 
       const offset = getInfiniteStorySlotOffset(slotIndex, progress);
-      const visual = getStoryWorkItemVisualFromOffset(offset, impulse, slotIndex);
+      const visual = getStoryWorkItemVisualFromOffset(offset, impulse);
       const slot = storyWorkItemSlots[slotIndex];
 
       // 前景 DOM 卡片是 WebGL WorkItem 的清晰交互层：滚轮或触摸一到就即时更新，
@@ -4557,7 +4555,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       });
       const backplate = new THREE.Mesh(backplateGeometry, backplateMaterial);
       const initialOffset = getInfiniteStorySlotOffset(slotIndex, 0);
-      const initialLayout = getStoryWorkItemWebGLLayout(slotIndex, initialOffset);
+      const initialLayout = getStoryWorkItemWebGLLayout(initialOffset);
       mesh.position.set(initialLayout.x, initialLayout.y, initialLayout.z);
       mesh.rotation.set(initialLayout.rotationX, initialLayout.rotationY, initialLayout.rotationZ);
       mesh.scale.set(initialLayout.scale, initialLayout.scale, 1);
@@ -4566,8 +4564,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       backplate.rotation.copy(mesh.rotation);
       backplate.scale.set(initialLayout.scale * 1.04, initialLayout.scale * 1.04, 1);
       // 这些卡片对应源站 WorkItem：所有项目卡都一直存在于同一条无界轨道上。
-      // v121 开始连卡片队列也不再按 progress 做 x 轴环绕，避免滚动时误读成柱体横向位移；
-      // 每个 slot 的 lane 固定，offset 只负责 y 轴接力和转面。
+      // v128 起把“源码 camera 穿过 50deg target”的效果转译到卡片自身；
+      // 卡片会沿 offset 螺旋换面，柱体和相机的 x/z 仍然保持锁定。
       material.opacity = Math.min(0.3, 0.038 + initialLayout.trackWindow * 0.12 + initialLayout.focus * 0.16);
       mesh.renderOrder = initialOffset === 0 ? 30 : Math.max(20, 28 - initialLayout.absOffset);
       backplate.renderOrder = mesh.renderOrder - 0.2;
@@ -4990,15 +4988,15 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       panelMeshes.forEach((panel) => {
         const { backplate, backplateMaterial, mesh, material } = panel;
         const offset = getInfiniteStorySlotOffset(panel.slotIndex, motionProgress);
-        const layout = getStoryWorkItemWebGLLayout(panel.slotIndex, offset);
+        const layout = getStoryWorkItemWebGLLayout(offset);
         const scrollBoost = Math.min(0.12, Math.abs(scrollImpulse) * 0.035);
         const cardWindow = Math.pow(layout.trackWindow, 1.72);
         const cardFocus = Math.pow(layout.focus, 1.35);
         const targetOpacity = Math.min(0.34, 0.018 + cardWindow * 0.08 + cardFocus * 0.22 + scrollBoost * 0.06);
 
         // 这里是这次修正的核心：WorkItem pane 仍有多张、仍会转面和排序，
-        // 但 x 不再随 offset 改变。向下滚动时所有 pane 都沿同一条纵向队列经过柱体，
-        // 和用户给出的“柱子只从上到下通过”的交互预期一致。
+        // x/z 的变化只属于卡片自身的螺旋队列，不再传给 camera 或 pillarGroup。
+        // 向下滚动时用户看到的是卡片围绕固定柱体从上到下穿行，而不是整根柱子横向漂移。
         mesh.position.x += (layout.x - mesh.position.x) * 0.16;
         mesh.position.y += (layout.y - mesh.position.y) * 0.16;
         mesh.position.z += (layout.z - mesh.position.z) * 0.16;
