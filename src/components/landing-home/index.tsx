@@ -168,24 +168,24 @@ function getInfiniteStorySlotOffset(slotIndex: number, progress: number, length 
 function getStoryWorkItemVisualFromOffset(offset: number, impulse = 0): StoryWorkItemVisual {
   const absOffset = Math.abs(offset);
   const angle = -offset * STORY_WORK_TRACK_STEP;
-  const focus = Math.max(0, 1 - absOffset * 0.72);
-  const trackWindow = Math.max(0, 1 - absOffset / 3.55);
-  const x = Math.sin(angle) * 318;
-  const y = -offset * 136 + Math.sin(angle * 0.5) * 18;
-  const rotateX = THREE.MathUtils.clamp(offset * -0.052, -0.16, 0.16);
-  const rotateY = -angle * 0.82;
-  const rotateZ = Math.sin(angle) * 2.15;
-  const scale = 0.58 + trackWindow * 0.2 + focus * 0.26;
-  const opacity = Math.min(0.98, 0.055 + trackWindow * 0.5 + focus * 0.35 + Math.min(0.08, Math.abs(impulse) * 0.022));
+  const focus = Math.max(0, 1 - absOffset * 0.64);
+  const trackWindow = Math.max(0, 1 - absOffset / 5.2);
+  const x = 0;
+  const y = -offset * 178;
+  const z = focus * 240 - absOffset * 48 + Math.cos(angle) * 18;
+  const rotateX = THREE.MathUtils.clamp(offset * -0.036, -0.13, 0.13);
+  const rotateY = -angle * 0.98 + THREE.MathUtils.clamp(impulse * 0.024, -0.16, 0.16);
+  const rotateZ = Math.sin(angle) * 0.72;
+  const scale = 0.48 + trackWindow * 0.24 + focus * 0.34;
+  const opacity = Math.min(0.98, 0.07 + trackWindow * 0.46 + focus * 0.36 + Math.min(0.08, Math.abs(impulse) * 0.022));
 
-  // 这套公式按 Active Theory `WorkItems.positionViews()` 的思路抽象：
-  // 所有卡片一直在同一条 50 度步进的环形轨道上，滚轮只改变相机相对 progress。
-  // 这里把 y 轴步距压回源站那种紧凑层叠，并加大 rotateY，让非焦点卡也能清楚地从上到下穿场；
-  // 这样交互表现为真实多卡片滚动，而不是一张中心卡片换内容。
+  // 这套公式保留 Active Theory `WorkItems.positionViews()` 的核心：每张卡片都是常驻 view，
+  // 以 50 度步进拥有自己的转面和景深；但按用户反馈把轨道改成固定中心轴的上下传送带。
+  // x 轴显式锁为 0，滚轮只推进 y/z/rotateY，避免之前把源码环形半径映射到屏幕 x 后造成“整组卡片和柱子左右偏移”的错觉。
   return {
     isFocused: absOffset < 0.42,
     opacity,
-    transform: `translate(-50%, -50%) translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0) rotateX(${rotateX.toFixed(4)}rad) rotateY(${rotateY.toFixed(4)}rad) rotateZ(${rotateZ.toFixed(2)}deg) scale(${scale.toFixed(3)})`,
+    transform: `translate(-50%, -50%) translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, ${z.toFixed(2)}px) rotateX(${rotateX.toFixed(4)}rad) rotateY(${rotateY.toFixed(4)}rad) rotateZ(${rotateZ.toFixed(2)}deg) scale(${scale.toFixed(3)})`,
     zIndex: Math.round(20 + focus * 20 + trackWindow * 6 - absOffset),
   };
 }
@@ -258,8 +258,11 @@ const particleFragmentShader = `
 `;
 
 const activeTheoryFlowerPointVertexShader = `
+  attribute vec4 random;
+  varying vec4 vRandom;
   varying vec3 vColor;
   varying float vAlpha;
+  varying float vOffset;
   uniform float uFlowHeight;
   uniform float uOpacity;
   uniform float uPixelRatio;
@@ -275,35 +278,54 @@ const activeTheoryFlowerPointVertexShader = `
 
   void main() {
     vec3 transformed = position;
+    vec3 originalPosition = position;
     float halfHeight = uFlowHeight * 0.5;
     float sourceScroll = fract(uScroll);
-    float randomA = activeTheoryHash(position);
-    float randomB = activeTheoryHash(position.zxy + vec3(17.13, 3.41, 9.87));
-    float randomC = activeTheoryHash(position.yzx + vec3(5.31, 21.7, 13.9));
+    float randomA = random.x;
+    float randomB = random.y;
+    float randomC = random.z;
+    float randomD = random.w;
     float verticalProgress = sourceScroll * uFlowHeight + uTime * 0.026;
     transformed.y = mod(transformed.y + verticalProgress + halfHeight, uFlowHeight) - halfHeight;
     transformed.y += sin(position.x * 3.2 + position.z * 2.4 + uTime * 0.24 + uRotate * 0.08) * 0.012;
 
     // 源站 FlowerShader 不是把整组点云平移，而是用 uScroll/uRotate 在柱体内部做上升、下落和绕轴折射。
-    // 这里保留同一类数学结构并缩小幅度：用户滚轮向下时，点云像沿同一根脊柱从上到下流过，
-    // 但世界坐标仍被锁在柱体中心，避免出现整根柱子左右漂移。
-    float topOffset = smoothstep(0.4, 0.0, sourceScroll) * pow(randomA, 22.0) * 0.78;
-    topOffset *= 0.82 + sin(transformed.y * 0.22 + uTime * 0.02 + sourceScroll + randomB * 2.0) * 0.18;
+    // v113 开始不再用 position hash 伪随机，而是给几何写入独立 random attribute；
+    // 这样 top spiral / bottom spiral 的稀疏粒子分布更接近镜像源码，也能让滚动时柱体真的“流动”。
+    // 这些偏移都发生在点云局部坐标里，pillarGroup 和主 spine mesh 的 x/z 仍然保持锁定。
+    if (transformed.x < 0.0) {
+      transformed.z = -transformed.z;
+      transformed.y -= 0.56;
+    }
+    transformed.x += 0.12;
+    transformed.z -= 0.06;
+
+    float topOffset = smoothstep(0.4, 0.0, sourceScroll) * pow(randomA, 28.0) * 1.68;
+    topOffset *= 0.8 + sin(transformed.y * 0.2 + uTime * 0.02 + sourceScroll + randomC * 2.0) * 0.2;
     transformed.y += topOffset;
 
     float spiralMask = smoothstep(0.0, 0.5, abs(sourceScroll - 0.5));
     float spiralAngle = sourceScroll * 5.0 + length(transformed.xz) + transformed.y * 0.5 + uRotate * 2.0;
-    transformed.x -= cos(spiralAngle) * 0.28 * spiralMask;
-    transformed.z -= sin(spiralAngle) * 0.28 * spiralMask;
+    transformed.x -= cos(spiralAngle) * 0.46 * spiralMask;
+    transformed.z -= sin(spiralAngle) * 0.46 * spiralMask;
 
-    float outerMask = step(0.962, randomB);
-    float outerAngle = transformed.y * 0.5 + sin(uTime * 0.05 + randomC * 0.5 - uRotate * 0.2);
-    transformed.x -= cos(outerAngle) * 1.35 * outerMask;
-    transformed.z -= sin(outerAngle) * 1.35 * outerMask;
+    float outerMask = step(0.95, randomB);
+    float outerAngle = transformed.y * 0.5 + sin(uTime * 0.05 + randomD * 0.5 - uRotate * 0.2);
+    transformed.x -= cos(outerAngle) * 3.05 * outerMask;
+    transformed.z -= sin(outerAngle) * 3.05 * outerMask;
 
-    transformed.y -= pow(sourceScroll, 4.0) * 1.14 * pow(randomC, 7.0);
-    transformed.x -= cos(transformed.y) * 0.14 * pow(randomC, 4.0) * pow(sourceScroll, 3.5);
-    transformed.z -= sin(transformed.y) * 0.14 * pow(randomC, 4.0) * pow(sourceScroll, 3.5);
+    if (transformed.x < 0.0) {
+      transformed.x -= cos(-originalPosition.y * 0.06) * 0.34 - 0.4;
+      transformed.z -= sin(-originalPosition.y * 0.06) * 0.34 - 0.22;
+    } else {
+      transformed.x -= cos(-originalPosition.y * 0.06 + 3.0) * 0.34 + 0.4;
+      transformed.z -= sin(-originalPosition.y * 0.06 + 3.0) * 0.34 + 0.12;
+    }
+
+    transformed.y -= pow(sourceScroll, 4.0) * 2.8 * pow(randomD, 12.0);
+    transformed.x -= cos(transformed.y) * 0.18 * pow(randomD, 4.0) * pow(sourceScroll, 3.5);
+    transformed.z -= sin(transformed.y) * 0.18 * pow(randomD, 4.0) * pow(sourceScroll, 3.5);
+    transformed.xz = mix(transformed.xz, vec2(0.0), pow(smoothstep(3.1, -3.1, transformed.y), 3.0) * 0.76);
 
     vec4 mvPosition = modelViewMatrix * vec4(transformed, 1.0);
     float depthScale = 7.6 / max(1.0, -mvPosition.z);
@@ -312,15 +334,19 @@ const activeTheoryFlowerPointVertexShader = `
     float scanBand = smoothstep(0.82, 1.0, sin((position.y + sourceScroll * 5.2) * 4.2 + uTime * 0.7 + uRotate * 0.22) * 0.5 + 0.5);
 
     gl_PointSize = (1.05 + localSparkle * 1.45 + scanBand * 1.8) * uSizeBias * uPixelRatio * depthScale;
-    vColor = mix(color, vec3(0.58, 0.98, 0.94), 0.18 + scanBand * 0.18);
-    vAlpha = uOpacity * (0.18 + localSparkle * 0.3 + scanBand * 0.42);
+    vColor = mix(color, vec3(0.58, 0.98, 0.94), 0.14 + scanBand * 0.2 + outerMask * 0.08);
+    vAlpha = uOpacity * (0.14 + localSparkle * 0.28 + scanBand * 0.42 + outerMask * 0.1);
+    vOffset = length(transformed - originalPosition);
+    vRandom = random;
     gl_Position = projectionMatrix * mvPosition;
   }
 `;
 
 const activeTheoryFlowerPointFragmentShader = `
+  varying vec4 vRandom;
   varying vec3 vColor;
   varying float vAlpha;
+  varying float vOffset;
 
   void main() {
     vec2 uv = gl_PointCoord - vec2(0.5);
@@ -333,7 +359,11 @@ const activeTheoryFlowerPointFragmentShader = `
       discard;
     }
 
-    gl_FragColor = vec4(vColor * (0.72 + core * 0.75), alpha);
+    vec3 sparkle = vec3(0.4 + sin(vRandom.y * 20.0));
+    float displacementLight = smoothstep(0.04, 1.6, vOffset) * 0.16;
+    vec3 color = mix(vColor, sparkle, pow(vRandom.x, 10.0) * displacementLight);
+
+    gl_FragColor = vec4(color * (0.72 + core * 0.75 + displacementLight), alpha);
   }
 `;
 
@@ -1445,6 +1475,17 @@ function buildActiveTheoryFlowerPointGeometry(sourceGeometry: THREE.BufferGeomet
   const violet = new THREE.Color("#a56dff");
   const magenta = new THREE.Color("#f46dcc");
   const gold = new THREE.Color("#e8b35e");
+  const createRandomTuple = (sourceIndex: number, x: number, y: number, z: number) => {
+    // 源站 FlowerParticleShader 依赖 `attribute vec4 random` 控制顶部稀疏拉伸、外侧甩出和底部螺旋。
+    // DRACO 镜像里没有直接暴露这组 attribute，所以这里用源点坐标 + index 做确定性伪随机；
+    // 稳定随机能保证刷新后形态不跳变，同时比 shader 里用 position hash 更接近源码“每粒子独立随机”的行为。
+    const hash = (salt: number) => {
+      const value = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719 + sourceIndex * 0.173 + salt * 19.19) * 43758.5453123;
+      return value - Math.floor(value);
+    };
+
+    return [hash(1), hash(2), hash(3), hash(4)] as const;
+  };
 
   if (stride === 1) {
     if (!sourceColor) {
@@ -1458,6 +1499,17 @@ function buildActiveTheoryFlowerPointGeometry(sourceGeometry: THREE.BufferGeomet
       }
       sourceGeometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     }
+    if (!sourceGeometry.getAttribute("random")) {
+      const randomValues = new Float32Array(position.count * 4);
+      for (let index = 0; index < position.count; index += 1) {
+        const [a, b, c, d] = createRandomTuple(index, position.getX(index), position.getY(index), position.getZ(index));
+        randomValues[index * 4] = a;
+        randomValues[index * 4 + 1] = b;
+        randomValues[index * 4 + 2] = c;
+        randomValues[index * 4 + 3] = d;
+      }
+      sourceGeometry.setAttribute("random", new THREE.BufferAttribute(randomValues, 4));
+    }
 
     sourceGeometry.center();
     sourceGeometry.computeBoundingBox();
@@ -1469,12 +1521,21 @@ function buildActiveTheoryFlowerPointGeometry(sourceGeometry: THREE.BufferGeomet
 
   const positions = new Float32Array(targetCount * 3);
   const colors = new Float32Array(targetCount * 3);
+  const randomValues = new Float32Array(targetCount * 4);
 
   for (let targetIndex = 0; targetIndex < targetCount; targetIndex += 1) {
     const sourceIndex = Math.min(position.count - 1, targetIndex * stride);
-    positions[targetIndex * 3] = position.getX(sourceIndex);
-    positions[targetIndex * 3 + 1] = position.getY(sourceIndex);
-    positions[targetIndex * 3 + 2] = position.getZ(sourceIndex);
+    const x = position.getX(sourceIndex);
+    const y = position.getY(sourceIndex);
+    const z = position.getZ(sourceIndex);
+    positions[targetIndex * 3] = x;
+    positions[targetIndex * 3 + 1] = y;
+    positions[targetIndex * 3 + 2] = z;
+    const [a, b, c, d] = createRandomTuple(sourceIndex, x, y, z);
+    randomValues[targetIndex * 4] = a;
+    randomValues[targetIndex * 4 + 1] = b;
+    randomValues[targetIndex * 4 + 2] = c;
+    randomValues[targetIndex * 4 + 3] = d;
 
     if (sourceColor) {
       colors[targetIndex * 3] = sourceColor.getX(sourceIndex);
@@ -1494,6 +1555,7 @@ function buildActiveTheoryFlowerPointGeometry(sourceGeometry: THREE.BufferGeomet
   const pointGeometry = new THREE.BufferGeometry();
   pointGeometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
   pointGeometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  pointGeometry.setAttribute("random", new THREE.BufferAttribute(randomValues, 4));
   pointGeometry.center();
   pointGeometry.computeBoundingBox();
   const size = pointGeometry.boundingBox?.getSize(new THREE.Vector3()) ?? new THREE.Vector3(1, 1, 1);
@@ -4313,18 +4375,20 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       const initialOffset = getInfiniteStorySlotOffset(slotIndex, 0);
       const initialAbsOffset = Math.abs(initialOffset);
       const initialAngle = -initialOffset * workTrackStep;
-      const initialScale = initialOffset === 0 ? 1.22 : Math.max(0.6, 0.88 - initialAbsOffset * 0.05);
-      mesh.position.set(Math.sin(initialAngle) * 2.06 + 0.1, 0.1 - initialOffset * 0.68, 1.98 + Math.cos(initialAngle) * 0.62 - initialAbsOffset * 0.07);
-      mesh.rotation.set(initialOffset === 0 ? -0.018 : 0.02 * Math.sign(initialOffset), -initialAngle * 0.82 - 0.04, 0);
+      const initialFocus = Math.max(0, 1 - initialAbsOffset * 0.64);
+      const initialTrackWindow = Math.max(0, 1 - initialAbsOffset / 5.2);
+      const initialScale = 0.5 + initialTrackWindow * 0.22 + initialFocus * 0.5;
+      mesh.position.set(0.18, 0.12 - initialOffset * 0.82, 1.74 + initialFocus * 0.7 - initialAbsOffset * 0.1 + Math.cos(initialAngle) * 0.04);
+      mesh.rotation.set(THREE.MathUtils.clamp(initialOffset * -0.036, -0.13, 0.13), -initialAngle * 0.98 - 0.04, Math.sin(initialAngle) * 0.01);
       mesh.scale.set(initialScale, initialScale, 1);
       backplate.position.copy(mesh.position);
       backplate.position.z -= 0.018;
       backplate.rotation.copy(mesh.rotation);
       backplate.scale.set(initialScale * 1.04, initialScale * 1.04, 1);
-      // 这些卡片对应源站 WorkItem：所有项目卡都一直存在于同一条环形轨道上，
-      // 滚动只改变相对 offset 和镜头目标。这里用 15 个 slot 接近源站项目列表，
-      // 同一个业务场景会在不同 cycle 里重复出现，保证向下滚时是连续队列而不是 5 张卡折返。
-      material.opacity = initialOffset === 0 ? 0.18 : Math.max(0.018, 0.08 - initialAbsOffset * 0.016);
+      // 这些卡片对应源站 WorkItem：所有项目卡都一直存在于同一条无界轨道上，
+      // 但为了满足“柱子和卡片都不要横向漂移”，轨道中心固定在同一个 x；
+      // 旋转、景深和 y 轴位移负责表达真实滚动，15 个 slot 保证不是单卡换文案。
+      material.opacity = Math.min(0.26, 0.018 + initialTrackWindow * 0.065 + initialFocus * 0.17);
       mesh.renderOrder = initialOffset === 0 ? 30 : Math.max(20, 28 - initialAbsOffset);
       backplate.renderOrder = mesh.renderOrder - 0.2;
       mesh.userData.index = sceneIndex;
@@ -4411,8 +4475,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       const motionProgress = visualProgress + scrollFollow * 0.18;
       const sourceScrollProgress = THREE.MathUtils.euclideanModulo(motionProgress, 1);
       const sourceScrollSpin = motionProgress * workTrackStep;
-      const sourceSpineTravel = motionProgress * 0.65;
-      const pillarVerticalPhase = motionProgress * 0.2 + scrollFollow * 0.025;
+      const sourceSpineTravel = motionProgress * 0.86;
+      const pillarVerticalPhase = motionProgress * 0.42 + scrollFollow * 0.025;
       particleMaterial.uniforms.uTime.value = time;
       columnParticleMaterial.uniforms.uTime.value = time;
       activeTheoryFlowerPointMaterial.uniforms.uTime.value = time;
@@ -4733,25 +4797,25 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const { backplate, backplateMaterial, mesh, material } = panel;
         const offset = getInfiniteStorySlotOffset(panel.slotIndex, motionProgress);
         const absOffset = Math.abs(offset);
-        const focus = Math.max(0, 1 - absOffset * 0.72);
-        const trackWindow = Math.max(0, 1 - absOffset / 3.55);
+        const focus = Math.max(0, 1 - absOffset * 0.64);
+        const trackWindow = Math.max(0, 1 - absOffset / 5.2);
         const carouselAngle = -offset * workTrackStep;
-        const targetX = Math.sin(carouselAngle) * 2.06 + 0.1;
-        const targetY = 0.1 - offset * 0.68 + Math.sin(carouselAngle * 0.5) * 0.03;
-        const targetZ = 1.98 + Math.cos(carouselAngle) * 0.62 - absOffset * 0.07;
-        const targetScale = 0.58 + trackWindow * 0.24 + focus * 0.42;
+        const targetX = 0.18;
+        const targetY = 0.12 - offset * 0.82;
+        const targetZ = 1.74 + focus * 0.7 - absOffset * 0.1 + Math.cos(carouselAngle) * 0.04;
+        const targetScale = 0.5 + trackWindow * 0.22 + focus * 0.5;
         const scrollBoost = Math.min(0.12, Math.abs(scrollImpulse) * 0.035);
-        const targetOpacity = Math.min(0.24, 0.016 + trackWindow * 0.064 + focus * 0.15 + scrollBoost * 0.14);
+        const targetOpacity = Math.min(0.26, 0.018 + trackWindow * 0.065 + focus * 0.17 + scrollBoost * 0.14);
 
-        // 这段直接对应源站 `positionViews`：卡片按 50 度步进围绕柱体排布，并按索引在 y 轴上分层。
-        // 用户滚轮只改变无界 progress，所以每张卡都会在同一条紧凑轨道里真实穿场；
-        // 柱体本身不吃这个 x/z 轨道，避免再次出现“滚动时柱子整体左右偏移”的错觉。
+        // 这段把源站 `positionViews` 的多 view / 50 度转面 / camera target 插值改造成纵向版本：
+        // targetX 固定，用户滚轮只改变 offset 对应的 y、z 和 rotationY。
+        // 因此卡片会像源码一样一张接一张穿过视口，但不会再沿屏幕左右摆动，柱体也不会被误读成横向漂移。
         mesh.position.x += (targetX - mesh.position.x) * 0.16;
         mesh.position.y += (targetY - mesh.position.y) * 0.16;
         mesh.position.z += (targetZ - mesh.position.z) * 0.16;
-        const targetRotationY = -carouselAngle * 0.82 - 0.04;
-        const targetRotationX = -0.018 * Math.sign(offset || 1);
-        const targetRotationZ = Math.sin(carouselAngle) * 0.012;
+        const targetRotationY = -carouselAngle * 0.98 - 0.04;
+        const targetRotationX = THREE.MathUtils.clamp(offset * -0.036, -0.13, 0.13);
+        const targetRotationZ = Math.sin(carouselAngle) * 0.01;
         mesh.rotation.y += (targetRotationY - mesh.rotation.y) * 0.16;
         mesh.rotation.x += (targetRotationX - mesh.rotation.x) * 0.1;
         mesh.rotation.z += (targetRotationZ - mesh.rotation.z) * 0.1;
