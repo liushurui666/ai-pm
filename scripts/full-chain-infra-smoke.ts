@@ -20,6 +20,10 @@ loadEnv({ path: ".env", quiet: true });
 
 const WORKSPACE_ID = process.env.AI_PM_QA_WORKSPACE_ID || "ws-default";
 
+type SmokeBugFixJobListItem = {
+  id: string;
+};
+
 function createRunLabel() {
   return `infra-e2e-${Date.now()}`;
 }
@@ -379,7 +383,8 @@ async function smokeBugFixRepository(runLabel: string) {
   await failBugFixJob(job.id, "Codex infra smoke expected failure");
 
   const failedJob = await getBugFixJob(job.id);
-  const jobsByBug = await listBugFixJobsByBug(bugId);
+  // Bug 修复仓储列表在脚本构建里可能被推成 any[]；此处只验证返回列表包含测试 job。
+  const jobsByBug = await listBugFixJobsByBug(bugId) as SmokeBugFixJobListItem[];
   const bug = await prisma.bugReport.findUnique({
     where: {
       id: bugId

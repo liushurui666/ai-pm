@@ -16,6 +16,30 @@ process.env.ASSISTANT_ACTION_DISABLE_INLINE_WORKER = "true";
 
 const WORKSPACE_ID = process.env.AI_PM_QA_WORKSPACE_ID || "ws-default";
 
+type AssistantActionEnqueueSmokeResult = {
+  队列任务ID?: unknown;
+};
+
+type AssistantActionPreflightJob = {
+  id: string;
+  requestedBy: string | null;
+  status: string;
+};
+
+type AssistantActionSmokeJob = {
+  actionType: string;
+  failedCount: number;
+  id: string;
+  requestedCount: number;
+  result: unknown;
+  status: string;
+  successCount: number;
+};
+
+type AssistantActionSmokeCreatedTask = {
+  ownerMemberId: string | null;
+};
+
 function createRunLabel() {
   return `assistant-action-e2e-${Date.now()}`;
 }
@@ -48,6 +72,8 @@ async function assertWorkspaceExists() {
 
 async function assertNoUserActionJobsInFlight(runLabel: string) {
   const prisma = getPrismaClient();
+  // Prisma 7 的脚本构建偶发把 findMany 推成 any[]；预检只关心这三个字段，
+  // 用本地结构类型收窄后可以保留严格 TS，同时避免误改 worker/队列逻辑。
   const jobs = await prisma.assistantActionJob.findMany({
     where: {
       status: {
@@ -60,7 +86,7 @@ async function assertNoUserActionJobsInFlight(runLabel: string) {
       status: true
     },
     take: 20
-  });
+  }) as AssistantActionPreflightJob[];
   const foreignJobs = jobs.filter((job) => !String(job.requestedBy ?? "").includes(runLabel));
 
   // assistant action worker 当前是全局按 createdAt 抢任务；如果队列中已有用户任务，冒烟脚本不能继续消费，
@@ -288,7 +314,7 @@ async function enqueueSmokeJobs({
     versionName: "未规划需求池"
   }));
   const requestedBy = targetMember.id;
-  const jobs = await Promise.all([
+  const jobs: AssistantActionEnqueueSmokeResult[] = await Promise.all([
     enqueueAssistantBulkActionJob({
       actionType: "complete_tasks",
       recordIds: [recordIds.completeTaskId],
@@ -360,6 +386,7 @@ async function verifySmokeResult({
   targetMember: Awaited<ReturnType<typeof createSmokeMembers>>["targetMember"];
 }) {
   const prisma = getPrismaClient();
+  // 结果断言只读取动作类型、状态、计数和 result；显式结构类型能挡住 Prisma adapter 推断退化的隐式 any。
   const jobs = await prisma.assistantActionJob.findMany({
     where: {
       id: {
@@ -369,7 +396,7 @@ async function verifySmokeResult({
     orderBy: {
       createdAt: "asc"
     }
-  });
+  }) as AssistantActionSmokeJob[];
 
   assertSmoke(jobs.length === jobIds.length, "AI 助手动作任务数量不完整");
   assertSmoke(jobs.every((job) => job.status === "succeeded"), "AI 助手动作任务未全部成功");
@@ -431,8 +458,12 @@ async function verifySmokeResult({
   assertSmoke(closedBugFlowCount === 1, "关闭 Bug 动作未追加正确流转记录");
   assertSmoke(assignTask?.ownerMemberId === targetMember.id, "转交任务动作未同步 ownerMemberId");
   assertSmoke(assignTask?.owner === targetMember.name, "转交任务动作未同步负责人姓名");
-  assertSmoke(createdTasks.length === createdTaskIds.length, "批量创建任务数量不正确");
-  assertSmoke(createdTasks.every((task) => task.ownerMemberId === targetMember.id), "批量创建任务未解析“我”或目标负责人身份");
+  // Promise.all 的混合返回值在当前 Prisma adapter 类型下会退成宽泛类型；
+  // 单独收窄批量创建任务快照，保证后续 every 回调有明确字段类型。
+  const createdTaskSnapshots = createdTasks as AssistantActionSmokeCreatedTask[];
+
+  assertSmoke(createdTaskSnapshots.length === createdTaskIds.length, "批量创建任务数量不正确");
+  assertSmoke(createdTaskSnapshots.every((task) => task.ownerMemberId === targetMember.id), "批量创建任务未解析“我”或目标负责人身份");
   assertSmoke(notificationJobCount === 0, "无通知渠道测试成员不应产生 Dashboard 通知副作用任务");
   assertSmoke(indexJobCount >= 4, "AI 助手动作未投递足够的索引刷新任务");
 
@@ -448,7 +479,7 @@ async function verifySmokeResult({
       status: job.status,
       successCount: job.successCount
     })),
-    createdTaskCount: createdTasks.length,
+    createdTaskCount: createdTaskSnapshots.length,
     indexJobCount,
     notificationJobCount
   };

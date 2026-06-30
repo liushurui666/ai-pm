@@ -56,6 +56,21 @@ function getRequiredCurrentMember(data: Awaited<ReturnType<typeof getDashboardDa
   return data.meta.currentMember;
 }
 
+function hasProviderUserId(identity: unknown, providerUserId: string | undefined) {
+  // Prisma JSON 字段在脚本构建里只能先当 unknown 处理；
+  // 这个守卫只读取 providerUserId，避免每个断言都重复展开 object/in 判断并触发隐式 any。
+  if (!providerUserId) {
+    return false;
+  }
+
+  return (
+    typeof identity === "object" &&
+    identity !== null &&
+    "providerUserId" in identity &&
+    identity.providerUserId === providerUserId
+  );
+}
+
 function createMemberPayload({
   authProvider = "github",
   authUserId,
@@ -287,17 +302,12 @@ async function verifyUniqueEmailMerge(runLabel: string) {
       id: memberResult.member.id
     }
   });
-  const identities = Array.isArray(mergedMember?.identities) ? mergedMember.identities : [];
+  const identities: unknown[] = Array.isArray(mergedMember?.identities) ? mergedMember.identities : [];
 
   assertSmoke(currentMember?.id === memberResult.member.id, "唯一邮箱成员应被当前登录身份归并");
   assertSmoke(beforeCount === afterCount, "邮箱归并不应创建重复成员");
   assertSmoke(
-    identities.some((identity) =>
-      typeof identity === "object" &&
-      identity !== null &&
-      "providerUserId" in identity &&
-      identity.providerUserId === user.authUserId
-    ),
+    identities.some((identity) => hasProviderUserId(identity, user.authUserId)),
     "邮箱归并后应补齐 SDK authUserId"
   );
   assertSmoke(mergedMember?.registrationChannel === "github", "邮箱归并后注册渠道应更新为本次确认的 OAuth 来源");
@@ -361,28 +371,18 @@ async function verifyLegacyFeishuBridgeAndDuplicateDetach(runLabel: string) {
       id: staleDuplicateMember.id
     }
   });
-  const targetIdentities = Array.isArray(persistedTarget?.identities) ? persistedTarget.identities : [];
-  const duplicateIdentities = Array.isArray(persistedDuplicate?.identities) ? persistedDuplicate.identities : [];
+  const targetIdentities: unknown[] = Array.isArray(persistedTarget?.identities) ? persistedTarget.identities : [];
+  const duplicateIdentities: unknown[] = Array.isArray(persistedDuplicate?.identities) ? persistedDuplicate.identities : [];
 
   assertSmoke(currentMember?.id === targetMember.id, "飞书历史 openId 应优先桥接到唯一历史成员");
   assertSmoke(currentMember.role === "admin", "桥接后应保留历史成员角色而不是命中重复只读行");
   assertSmoke(persistedTarget?.email === undefined || !persistedTarget.email?.endsWith("@feishu.local"), "飞书占位邮箱不应展示到成员邮箱");
   assertSmoke(
-    targetIdentities.some((identity) =>
-      typeof identity === "object" &&
-      identity !== null &&
-      "providerUserId" in identity &&
-      identity.providerUserId === authUserId
-    ),
+    targetIdentities.some((identity) => hasProviderUserId(identity, authUserId)),
     "桥接目标成员应补齐 SDK authUserId"
   );
   assertSmoke(
-    !duplicateIdentities.some((identity) =>
-      typeof identity === "object" &&
-      identity !== null &&
-      "providerUserId" in identity &&
-      identity.providerUserId === authUserId
-    ),
+    !duplicateIdentities.some((identity) => hasProviderUserId(identity, authUserId)),
     "重复成员上的同一个 SDK authUserId 应被移除"
   );
 

@@ -27,6 +27,15 @@ type MemberNotificationSnapshot = {
   requirementChanged?: boolean;
 };
 
+type PersistedMemberSnapshot = {
+  email: string | null;
+  id: string;
+  notification: unknown;
+  registrationChannel: string | null;
+  role: string;
+  status: string;
+};
+
 function assertSmoke(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new Error(message);
@@ -200,6 +209,8 @@ async function main() {
       email: manualEmail
     }), "成员身份已被其他成员绑定");
 
+    // Prisma adapter 在 Next build 扫描脚本时可能无法稳定推断 findMany item；
+    // 这里明确脚本断言所需字段，避免 find 回调退成隐式 any。
     const persistedMembers = await prisma.dashboardMember.findMany({
       where: {
         id: {
@@ -214,7 +225,7 @@ async function main() {
         role: true,
         status: true
       }
-    });
+    }) as PersistedMemberSnapshot[];
     const persistedManual = persistedMembers.find((member) => member.id === manualMemberId);
     const persistedFeishu = persistedMembers.find((member) => member.id === feishuMemberId);
     const manualNotification = asNotification(persistedManual?.notification);

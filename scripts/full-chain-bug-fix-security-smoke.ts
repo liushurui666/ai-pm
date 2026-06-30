@@ -23,6 +23,10 @@ const bugFixJobDetailRoutePath = path.join(repoRoot, "app/api/bug-fix-jobs/[jobI
 const bugFixJobCancelRoutePath = path.join(repoRoot, "app/api/bug-fix-jobs/[jobId]/cancel/route.ts");
 const projectRepositoriesRoutePath = path.join(repoRoot, "app/api/project-repositories/route.ts");
 
+type SmokeListedRepository = {
+  id: string;
+};
+
 // 这个脚本覆盖 Bug AI 修复里“最容易误伤生产代码”的边界：仓库选择、安全白名单、
 // Runner 输出和 MR 文案。它只使用本地/数据库内的确定性断言，不调用真实 GitHub 或 AI Runner，
 // 这样全链路回归可以高频运行而不会创建外部分支、PR 或消耗模型额度。
@@ -135,7 +139,9 @@ async function verifyRepositoryLifecycle(runLabel: string) {
   assertSmoke(projectRepository.defaultBranch === "release/qa", "仓库应保留自定义默认分支");
   assertSmoke(projectRepository.lintCommand === "npm run lint", "仓库应保留 lint 命令");
 
-  const listed = await listProjectRepositories(WORKSPACE_ID);
+  // 项目仓库 server helper 在 Next build 的脚本扫描里可能退成 any[]；
+  // 列表断言只依赖 id，因此用最小结构收窄，避免引入额外业务类型耦合。
+  const listed = await listProjectRepositories(WORKSPACE_ID) as SmokeListedRepository[];
 
   assertSmoke(listed.some((repository) => repository.id === fallbackRepository.id), "列表应包含 active fallback 仓库");
   assertSmoke(listed.some((repository) => repository.id === projectRepository.id), "列表应包含 active 项目仓库");
@@ -158,7 +164,7 @@ async function verifyRepositoryLifecycle(runLabel: string) {
   });
 
   const matchedFallbackRepository = await findRepositoryForBug(WORKSPACE_ID, project.name);
-  const listedAfterDisabled = await listProjectRepositories(WORKSPACE_ID);
+  const listedAfterDisabled = await listProjectRepositories(WORKSPACE_ID) as SmokeListedRepository[];
 
   assertSmoke(matchedFallbackRepository?.id === fallbackRepository.id, "项目仓库禁用后应回退工作区默认仓库");
   assertSmoke(!listedAfterDisabled.some((repository) => repository.id === projectRepository.id), "禁用仓库不应出现在 active 列表");

@@ -39,8 +39,8 @@ async function findSafeOwner() {
       notification: true
     }
   });
-  const candidates = preferredOwner
-    ? [preferredOwner]
+  const candidates: SmokeOwner[] = preferredOwner
+    ? [preferredOwner as SmokeOwner]
     : await prisma.dashboardMember.findMany({
         where: {
           workspaceId: WORKSPACE_ID,
@@ -53,14 +53,14 @@ async function findSafeOwner() {
           notification: true
         },
         take: 100
-      });
+      }) as SmokeOwner[];
 
   // 全链路冒烟会真实走通知入队判断；这里强制选择没有任何通知渠道的测试成员，
   // 避免 QA 脚本误把测试任务或 Bug 推送给真实飞书/邮箱成员。
   const owner = candidates.find((member) => getChannels(member.notification).length === 0) as SmokeOwner | undefined;
 
   if (!owner) {
-    throw new Error(`没有找到工作区 ${WORKSPACE_ID} 下无通知渠道的安全测试成员，请先创建一个无通知渠道成员。`);
+    throw new Error(`工作区 ${WORKSPACE_ID} 缺少无通知渠道测试成员。`);
   }
 
   return owner;

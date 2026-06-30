@@ -20,6 +20,15 @@ type PayloadScope = {
   scope?: unknown;
 };
 
+type SmokeAiIndexJob = {
+  entityId: string;
+  entityType: string;
+  jobType: string;
+  payload: unknown;
+  sourceId: string | null;
+  status: string;
+};
+
 const repoRoot = process.cwd();
 const statusRoutePath = path.join(repoRoot, "app/api/ai-index/status/route.ts");
 const rebuildRoutePath = path.join(repoRoot, "app/api/ai-index/rebuild/route.ts");
@@ -250,6 +259,8 @@ async function verifyWorkspaceRebuild() {
       requestedBy: user.authUserId,
       workspaceId
     });
+    // Prisma 7 + MariaDB adapter 在脚本型 TS 构建里有时会把 findMany 结果退化成 any[]；
+    // 冒烟脚本只读取这些字段做链路断言，所以这里用本地结构类型收窄，避免隐式 any 进入 map/find/reduce。
     const jobs = await prisma.aiIndexJob.findMany({
       where: {
         workspaceId,
@@ -263,7 +274,7 @@ async function verifyWorkspaceRebuild() {
       orderBy: {
         createdAt: "asc"
       }
-    });
+    }) as SmokeAiIndexJob[];
     const jobKeys = jobs.map((job) => `${job.entityType}:${job.jobType}:${job.entityId}`);
     const expectedKeys = [
       `version:index_entity:${seeded.version.id}`,
