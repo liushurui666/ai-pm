@@ -52,6 +52,8 @@ const ACTIVE_THEORY_SPINE_MRO_PATH = "/landing/active-theory-cliffs-mro.ktx2";
 const ACTIVE_THEORY_SPINE_NORMAL_PATH = "/landing/active-theory-damaged-road-normal.jpg";
 const ACTIVE_THEORY_WORK_ENV_PATH = "/landing/active-theory-env1.jpg";
 const ACTIVE_THEORY_WORK_NORMAL_PATH = "/landing/active-theory-waternormals.jpg";
+const ACTIVE_THEORY_WORK_HOGWARTS_THUMB_PATH = "/landing/active-theory-hogwarts-thumb.jpg";
+const ACTIVE_THEORY_WORK_HOGWARTS_LOGO_PATH = "/landing/active-theory-hogwarts-logo.jpg";
 
 function createSolidDataTexture(r: number, g: number, b: number) {
   const texture = new THREE.DataTexture(new Uint8Array([r, g, b, 255]), 1, 1, THREE.RGBAFormat);
@@ -1464,16 +1466,16 @@ function createReferenceGlassPanelTexture(variant: ReferenceGlassPanelVariant) {
   const height = canvas.height;
   const inset = variant === "rear" ? 34 : 28;
   const radius = variant === "front" ? 54 : 62;
-  const accent = variant === "front" ? "#9a8cff" : variant === "left" ? "#8af6ed" : "#74d8ff";
+  const accent = variant === "front" ? "#65d2ba" : variant === "left" ? "#8af6ed" : "#74d8ff";
 
   // 这组纹理专门补参考 mp4 里的“空间玻璃屏”关系：左侧大屏、前景油膜屏、后方暗屏。
   // 镜像证明源站前景屏不是普通文字卡，而是 WorkPaneUI + 项目媒体贴到玻璃 pane 上；
   // 这里用 Canvas 自生成低分辨率媒体投影、油膜和 UI3D 文本层，避免默认帧继续像一张干净产品卡。
   context.clearRect(0, 0, width, height);
   const baseGradient = context.createLinearGradient(0, 0, width, height);
-  baseGradient.addColorStop(0, variant === "front" ? "rgba(48,64,64,0.84)" : "rgba(129,199,187,0.22)");
-  baseGradient.addColorStop(0.42, variant === "front" ? "rgba(31,45,43,0.8)" : variant === "rear" ? "rgba(20,34,38,0.14)" : "rgba(154,193,186,0.18)");
-  baseGradient.addColorStop(1, variant === "front" ? "rgba(7,12,14,0.74)" : "rgba(8,12,16,0.08)");
+  baseGradient.addColorStop(0, variant === "front" ? "rgba(100,110,106,0.78)" : "rgba(129,199,187,0.22)");
+  baseGradient.addColorStop(0.42, variant === "front" ? "rgba(72,82,80,0.72)" : variant === "rear" ? "rgba(20,34,38,0.14)" : "rgba(154,193,186,0.18)");
+  baseGradient.addColorStop(1, variant === "front" ? "rgba(31,38,39,0.64)" : "rgba(8,12,16,0.08)");
   context.fillStyle = baseGradient;
   drawRoundedRect(context, inset, inset, width - inset * 2, height - inset * 2, radius);
   context.fill();
@@ -1483,8 +1485,8 @@ function createReferenceGlassPanelTexture(variant: ReferenceGlassPanelVariant) {
   context.clip();
 
   const haze = context.createRadialGradient(width * 0.48, height * 0.34, 0, width * 0.48, height * 0.34, Math.max(width, height) * 0.72);
-  haze.addColorStop(0, variant === "front" ? "rgba(171,205,205,0.36)" : "rgba(215,249,239,0.2)");
-  haze.addColorStop(0.48, variant === "front" ? "rgba(68,105,96,0.22)" : "rgba(130,180,174,0.08)");
+  haze.addColorStop(0, variant === "front" ? "rgba(224,232,226,0.48)" : "rgba(215,249,239,0.2)");
+  haze.addColorStop(0.48, variant === "front" ? "rgba(130,146,142,0.3)" : "rgba(130,180,174,0.08)");
   haze.addColorStop(1, "rgba(0,0,0,0)");
   context.fillStyle = haze;
   context.fillRect(0, 0, width, height);
@@ -1572,7 +1574,7 @@ function createReferenceGlassPanelTexture(variant: ReferenceGlassPanelVariant) {
     context.fillRect(width * 0.1, height * 0.17, width * 0.8, height * 0.56);
 
     context.globalCompositeOperation = "screen";
-    context.globalAlpha = 0.42;
+    context.globalAlpha = 0.24;
     context.strokeStyle = "rgba(198,255,238,0.42)";
     context.lineWidth = 2;
     for (let bandIndex = 0; bandIndex < 5; bandIndex += 1) {
@@ -1586,23 +1588,23 @@ function createReferenceGlassPanelTexture(variant: ReferenceGlassPanelVariant) {
     context.globalAlpha = 0.96;
     context.textAlign = "center";
     context.textBaseline = "middle";
-    context.font = "600 26px 'Courier New', monospace";
-    context.fillStyle = "rgba(238,255,250,0.6)";
-    context.shadowColor = "rgba(91,225,255,0.6)";
+    context.font = "600 28px Georgia, serif";
+    context.fillStyle = "rgba(255,250,232,0.68)";
+    context.shadowColor = "rgba(151,210,255,0.68)";
     context.shadowBlur = 16;
-    context.fillText("XBOX", width * 0.5, height * 0.27);
+    context.fillText("Harry Potter", width * 0.5, height * 0.27);
 
-    context.font = "500 78px 'Courier New', monospace";
+    context.font = "400 92px 'Helvetica Neue', Arial, sans-serif";
     context.fillStyle = "rgba(244,252,255,0.98)";
     context.shadowColor = "rgba(106,225,255,0.76)";
     context.shadowBlur = 26;
-    context.fillText("20 YEARS", width * 0.5, height * 0.44);
-    context.fillText("OF XBOX", width * 0.5, height * 0.58);
+    context.fillText("WELCOME TO", width * 0.5, height * 0.44);
+    context.fillText("HOGWARTS", width * 0.5, height * 0.58);
 
     context.font = "600 20px 'Courier New', monospace";
     context.fillStyle = "rgba(235,255,246,0.16)";
     context.shadowBlur = 8;
-    context.fillText("AI PM VISUAL REFERENCE", width * 0.5, height * 0.7);
+    context.fillText("ACTIVE THEORY WORK PANE", width * 0.5, height * 0.7);
 
     context.shadowBlur = 0;
     context.globalAlpha = 0.28;
@@ -1633,6 +1635,84 @@ function createReferenceGlassPanelTexture(variant: ReferenceGlassPanelVariant) {
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.needsUpdate = true;
   return texture;
+}
+
+function createWorkPaneMediaMaterial(mediaTexture: THREE.Texture, logoTexture: THREE.Texture) {
+  // 源站 WorkItem 是两层：项目 thumbnail 进入 pane 的 tMap，projectLogo/title 由 WorkPaneUI 再贴到 pane_ui。
+  // 这里把真实 Hogwarts CMS 素材作为一层低透明投影塞回前景屏，
+  // 再由现有 Canvas UI 与折射层压住它，避免继续只靠手绘假卡片。
+  return new THREE.ShaderMaterial({
+    blending: THREE.AdditiveBlending,
+    depthTest: false,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    transparent: true,
+    uniforms: {
+      tLogo: { value: logoTexture },
+      tMedia: { value: mediaTexture },
+      uOpacity: { value: 0.36 },
+      uScroll: { value: 0 },
+      uTime: { value: 0 },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D tLogo;
+      uniform sampler2D tMedia;
+      uniform float uOpacity;
+      uniform float uScroll;
+      uniform float uTime;
+      varying vec2 vUv;
+
+      float roundedPanelMask(vec2 uv) {
+        vec2 p = abs(uv - 0.5) - vec2(0.465, 0.392);
+        float d = length(max(p, 0.0)) + min(max(p.x, p.y), 0.0);
+        return 1.0 - smoothstep(0.0, 0.034, d);
+      }
+
+      vec3 sampleSoftMedia(vec2 uv) {
+        vec3 color = texture2D(tMedia, uv).rgb * 0.48;
+        color += texture2D(tMedia, uv + vec2(0.006, 0.0)).rgb * 0.15;
+        color += texture2D(tMedia, uv - vec2(0.006, 0.0)).rgb * 0.15;
+        color += texture2D(tMedia, uv + vec2(0.0, 0.006)).rgb * 0.11;
+        color += texture2D(tMedia, uv - vec2(0.0, 0.006)).rgb * 0.11;
+        return color;
+      }
+
+      void main() {
+        vec2 mediaUv = vUv;
+        mediaUv.x = 0.5 + (mediaUv.x - 0.5) * 1.04 + sin(uTime * 0.2 + vUv.y * 4.4) * 0.006 + uScroll * 0.01;
+        mediaUv.y = 0.5 + (mediaUv.y - 0.5) * 0.98 + cos(uTime * 0.16 + vUv.x * 3.2) * 0.005;
+
+        vec3 media = sampleSoftMedia(mediaUv);
+        float luma = dot(media, vec3(0.299, 0.587, 0.114));
+        float saturation = max(media.r, max(media.g, media.b)) - min(media.r, min(media.g, media.b));
+        vec3 cinematic = pow(media, vec3(0.86)) * vec3(0.58, 0.72, 0.72);
+        cinematic += vec3(0.1, 0.38, 0.32) * smoothstep(0.18, 0.78, luma + saturation * 0.4) * 0.2;
+        cinematic += vec3(0.44, 0.3, 0.68) * smoothstep(0.2, 0.72, saturation) * 0.14;
+
+        vec2 logoUv = vec2((vUv.x - 0.36) / 0.28, (vUv.y - 0.64) / 0.14);
+        vec4 logo = texture2D(tLogo, logoUv);
+        float inLogo = step(0.0, logoUv.x) * step(logoUv.x, 1.0) * step(0.0, logoUv.y) * step(logoUv.y, 1.0);
+        float logoAlpha = smoothstep(0.24, 0.74, dot(logo.rgb, vec3(0.299, 0.587, 0.114))) * inLogo;
+        vec3 logoGlow = vec3(0.86, 0.96, 1.0) * logoAlpha * 1.18;
+
+        float mask = roundedPanelMask(vUv);
+        float mediaBody = smoothstep(0.08, 0.68, luma + saturation * 0.5);
+        float glassFalloff = smoothstep(0.02, 0.16, vUv.x) * smoothstep(0.98, 0.84, vUv.x) * smoothstep(0.02, 0.14, vUv.y) * smoothstep(0.98, 0.84, vUv.y);
+        float ripple = 0.88 + sin(uTime * 0.72 + vUv.y * 18.0 + vUv.x * 4.0) * 0.12;
+        float alpha = mask * glassFalloff * uOpacity * ripple * (0.18 + mediaBody * 0.48 + logoAlpha * 0.8);
+
+        gl_FragColor = vec4(cinematic + logoGlow, alpha);
+      }
+    `,
+  });
 }
 
 function createWorkRefractionPanelMaterial(baseTexture: THREE.Texture, normalTexture: THREE.Texture, envTexture: THREE.Texture, opacity: number) {
@@ -1692,9 +1772,9 @@ function createWorkRefractionPanelMaterial(baseTexture: THREE.Texture, normalTex
         float edge = edgeMask(vUv);
         float panelBody = smoothstep(0.78, 0.18, length(vUv - vec2(0.5)));
         float scan = 0.92 + sin(uTime * 0.84 + vUv.y * 16.0 + normalSample.x * 1.4) * 0.08;
-        vec3 glassTint = vec3(0.01, 0.085, 0.08);
-        vec3 color = base.rgb * 0.72 + env * (0.32 + fresnel * 0.46) + glassTint;
-        color += vec3(0.26, 0.92, 0.72) * fresnel * 0.22;
+        vec3 glassTint = vec3(0.055, 0.072, 0.07);
+        vec3 color = base.rgb * 0.84 + env * (0.18 + fresnel * 0.32) + glassTint;
+        color += vec3(0.2, 0.68, 0.58) * fresnel * 0.15;
         color += vec3(0.46, 0.2, 0.7) * smoothstep(0.54, 0.94, abs(normalSample.x)) * 0.08;
         float alpha = uOpacity * (0.24 + panelBody * 0.58 + fresnel * 0.42) * edge * scan;
         gl_FragColor = vec4(color, alpha);
@@ -2207,6 +2287,12 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const activeTheorySpineNormalTexture = new THREE.TextureLoader().load(ACTIVE_THEORY_SPINE_NORMAL_PATH);
     const activeTheoryWorkEnvTexture = new THREE.TextureLoader().load(ACTIVE_THEORY_WORK_ENV_PATH);
     const activeTheoryWorkNormalTexture = new THREE.TextureLoader().load(ACTIVE_THEORY_WORK_NORMAL_PATH);
+    const activeTheoryWorkHogwartsThumbTexture = new THREE.TextureLoader().load(ACTIVE_THEORY_WORK_HOGWARTS_THUMB_PATH);
+    const activeTheoryWorkHogwartsLogoTexture = new THREE.TextureLoader().load(ACTIVE_THEORY_WORK_HOGWARTS_LOGO_PATH);
+    activeTheoryWorkHogwartsThumbTexture.colorSpace = THREE.SRGBColorSpace;
+    activeTheoryWorkHogwartsThumbTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    activeTheoryWorkHogwartsLogoTexture.colorSpace = THREE.SRGBColorSpace;
+    activeTheoryWorkHogwartsLogoTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     const activeTheorySpineBaseColorFallbackTexture = createSolidDataTexture(4, 7, 9);
     const activeTheorySpineMroFallbackTexture = createSolidDataTexture(255, 170, 255);
     const activeTheorySpineSourceTexturePromise = loadActiveTheorySpineKtx2Textures(renderer).catch(() => null);
@@ -3698,13 +3784,13 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       },
       {
         angle: 0.03,
-        height: 2.46,
+        height: 2.98,
         opacity: 0.82,
         radiusX: 0.86,
         radiusZ: 0.82,
         renderOrder: 8.76,
         variant: "front" as const,
-        width: 4.2,
+        width: 5.05,
         y: 0.12,
       },
       {
@@ -3730,6 +3816,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         transparent: true,
       });
       const mesh = new THREE.Mesh(geometry, material);
+      const mediaMaterial =
+        config.variant === "front" ? createWorkPaneMediaMaterial(activeTheoryWorkHogwartsThumbTexture, activeTheoryWorkHogwartsLogoTexture) : null;
+      const mediaMesh = mediaMaterial ? new THREE.Mesh(geometry, mediaMaterial) : null;
       const refractionMaterial =
         config.variant === "front" ? createWorkRefractionPanelMaterial(texture, activeTheoryWorkNormalTexture, activeTheoryWorkEnvTexture, config.opacity * 0.72) : null;
       const refractionMesh = refractionMaterial ? new THREE.Mesh(geometry, refractionMaterial) : null;
@@ -3737,6 +3826,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 这些屏幕不是可读产品卡片，而是参考 mp4 里的空间玻璃层：
       // 左大屏负责构图比例，前景屏负责“柱体被玻璃压住”的深度关系，后屏负责远景暗框。
       // 它们挂在 stage 而不是 DOM 背景里，动画里用 storyOrbit 同步推进，避免再次出现“卡片转了、柱子没跟着转”的割裂。
+      if (mediaMesh) {
+        // 源站 pane 的真实项目媒体需要压进 UI 玻璃里，稍微高于底图但低于折射高光。
+        mediaMesh.renderOrder = config.renderOrder + 0.025;
+        stage.add(mediaMesh);
+      }
       mesh.renderOrder = config.renderOrder;
       stage.add(mesh);
       if (refractionMesh) {
@@ -3744,7 +3838,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         refractionMesh.renderOrder = config.renderOrder + 0.08;
         stage.add(refractionMesh);
       }
-      return { ...config, geometry, material, mesh, refractionMaterial, refractionMesh, texture };
+      return { ...config, geometry, material, mediaMaterial, mediaMesh, mesh, refractionMaterial, refractionMesh, texture };
     });
 
     const panelMeshes = storyScenes.map((sceneItem, index) => {
@@ -3952,6 +4046,14 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         panel.mesh.rotation.y += (targetRotationY - panel.mesh.rotation.y) * 0.11;
         panel.mesh.rotation.x += (targetRotationX - panel.mesh.rotation.x) * 0.1;
         panel.material.opacity += (targetOpacity - panel.material.opacity) * 0.08;
+        if (panel.mediaMesh && panel.mediaMaterial) {
+          panel.mediaMesh.position.copy(panel.mesh.position);
+          panel.mediaMesh.rotation.copy(panel.mesh.rotation);
+          panel.mediaMesh.scale.copy(panel.mesh.scale);
+          panel.mediaMaterial.uniforms.uTime.value = time;
+          panel.mediaMaterial.uniforms.uScroll.value = scrollFollow;
+          panel.mediaMaterial.uniforms.uOpacity.value = Math.min(0.58, panel.material.opacity * 0.62 + Math.abs(scrollImpulse) * 0.05);
+        }
         if (panel.refractionMesh && panel.refractionMaterial) {
           panel.refractionMesh.position.copy(panel.mesh.position);
           panel.refractionMesh.rotation.copy(panel.mesh.rotation);
@@ -4265,6 +4367,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       activeTheorySpineNormalTexture.dispose();
       activeTheoryWorkEnvTexture.dispose();
       activeTheoryWorkNormalTexture.dispose();
+      activeTheoryWorkHogwartsThumbTexture.dispose();
+      activeTheoryWorkHogwartsLogoTexture.dispose();
       activeTheorySpineBaseColorTexture.dispose();
       activeTheorySpineMroTexture.dispose();
       if (activeTheorySpineBaseColorTexture !== activeTheorySpineBaseColorFallbackTexture) {
@@ -4315,6 +4419,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         panel.geometry.dispose();
         panel.texture.dispose();
         panel.material.dispose();
+        panel.mediaMaterial?.dispose();
         panel.refractionMaterial?.dispose();
       });
     };
