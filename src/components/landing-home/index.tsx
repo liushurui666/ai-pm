@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent, ReactNode, TouchEvent, WheelEvent } from "react";
 import * as THREE from "three";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
+import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
 import { MarchingCubes } from "three/examples/jsm/objects/MarchingCubes.js";
 import { ThemeToggleButton, useThemePreference } from "@/components/theme-mode";
 
@@ -43,11 +44,20 @@ type StoryScene = {
 type ReferenceGlassPanelVariant = "left" | "front" | "rear";
 
 const ACTIVE_THEORY_DRACO_DECODER_PATH = "/landing/draco/";
+const ACTIVE_THEORY_KTX2_TRANSCODER_PATH = "/landing/basis/";
+const ACTIVE_THEORY_SPINE_BASE_COLOR_PATH = "/landing/active-theory-alien-cracked-basecolor.ktx2";
 const ACTIVE_THEORY_SPINE_GEOMETRY_PATH = "/landing/active-theory-source-spine.bin";
 const ACTIVE_THEORY_SPINE_MATCAP_PATH = "/landing/active-theory-matcap-test.jpg";
+const ACTIVE_THEORY_SPINE_MRO_PATH = "/landing/active-theory-cliffs-mro.ktx2";
 const ACTIVE_THEORY_SPINE_NORMAL_PATH = "/landing/active-theory-damaged-road-normal.jpg";
 const ACTIVE_THEORY_WORK_ENV_PATH = "/landing/active-theory-env1.jpg";
 const ACTIVE_THEORY_WORK_NORMAL_PATH = "/landing/active-theory-waternormals.jpg";
+
+function createSolidDataTexture(r: number, g: number, b: number) {
+  const texture = new THREE.DataTexture(new Uint8Array([r, g, b, 255]), 1, 1, THREE.RGBAFormat);
+  texture.needsUpdate = true;
+  return texture;
+}
 
 const storyScenes: StoryScene[] = [
   {
@@ -1172,6 +1182,27 @@ async function loadActiveTheoryDracoGeometry(source: string) {
   }
 }
 
+async function loadActiveTheorySpineKtx2Textures(renderer: THREE.WebGLRenderer) {
+  const loader = new KTX2Loader();
+  loader.setTranscoderPath(ACTIVE_THEORY_KTX2_TRANSCODER_PATH);
+  loader.detectSupport(renderer);
+
+  try {
+    const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+    const baseColorTexture = await loader.loadAsync(ACTIVE_THEORY_SPINE_BASE_COLOR_PATH);
+    const mroTexture = await loader.loadAsync(ACTIVE_THEORY_SPINE_MRO_PATH);
+    [baseColorTexture, mroTexture].forEach((texture) => {
+      texture.anisotropy = maxAnisotropy;
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+    });
+    baseColorTexture.colorSpace = THREE.SRGBColorSpace;
+    return [baseColorTexture, mroTexture] as const;
+  } finally {
+    loader.dispose();
+  }
+}
+
 function createPanelTexture(scene: StoryScene) {
   const canvas = document.createElement("canvas");
   canvas.width = 1024;
@@ -1617,6 +1648,178 @@ function createWorkRefractionPanelMaterial(baseTexture: THREE.Texture, normalTex
   });
 }
 
+function createSourceSpineShaderMaterial(options: {
+  accent: THREE.Color;
+  baseColorTexture: THREE.Texture;
+  matcapTexture: THREE.Texture;
+  mroTexture: THREE.Texture;
+  normalTexture: THREE.Texture;
+  opacity: number;
+  phase: number;
+  refractionTexture: THREE.Texture;
+}) {
+  // 源站 Work 页的 `SpineShader` 不是标准 PBR 材质：它用 normal、matcap、refraction 和 uReflection
+  // 混出“黑色湿润骨体 + 青紫油膜边缘”。这里不再继续调 `MeshPhysicalMaterial` 参数，
+  // 而是把镜像里可验证的 uniform 协议落到一个本地 ShaderMaterial：
+  // - `uNormalStrength` 固定为源站的 0.19；
+  // - `uReflection` 固定为源站的 [2.7, 0.85]；
+  // - `matcap-test` 与 `damaged_road_normal` 参与主色，而不是只做一层很薄的外壳。
+  return new THREE.ShaderMaterial({
+    depthTest: false,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    transparent: true,
+    uniforms: {
+      tBaseColor: { value: options.baseColorTexture },
+      tMatcap: { value: options.matcapTexture },
+      tMRO: { value: options.mroTexture },
+      tNormal: { value: options.normalTexture },
+      tRefraction: { value: options.refractionTexture },
+      uAccent: { value: options.accent },
+      uLight: { value: new THREE.Vector4(1, 1, 1, 0.4) },
+      uNormalStrength: { value: 0.19 },
+      uOpacity: { value: options.opacity },
+      uPhase: { value: options.phase },
+      uReflection: { value: new THREE.Vector2(2.7, 0.85) },
+      uScroll: { value: 0 },
+      uTime: { value: 0 },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vEyePos;
+      varying vec3 vMPos;
+      varying vec3 vNormal;
+      varying vec3 vViewDir;
+      varying vec3 vWorldNormal;
+      varying vec3 vWorldPosition;
+
+      void main() {
+        vUv = uv;
+        vNormal = normalize(normalMatrix * normal);
+        vWorldNormal = normalize(mat3(modelMatrix[0].xyz, modelMatrix[1].xyz, modelMatrix[2].xyz) * normal);
+        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+        vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
+        vMPos = worldPosition.xyz / worldPosition.w;
+        vEyePos = viewPosition.xyz;
+        vWorldPosition = worldPosition.xyz;
+        vViewDir = normalize(cameraPosition - vMPos);
+        gl_Position = projectionMatrix * viewPosition;
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D tBaseColor;
+      uniform sampler2D tMatcap;
+      uniform sampler2D tMRO;
+      uniform sampler2D tNormal;
+      uniform sampler2D tRefraction;
+      uniform vec2 uReflection;
+      uniform vec3 uAccent;
+      uniform vec4 uLight;
+      uniform float uNormalStrength;
+      uniform float uOpacity;
+      uniform float uPhase;
+      uniform float uScroll;
+      uniform float uTime;
+      varying vec2 vUv;
+      varying vec3 vEyePos;
+      varying vec3 vMPos;
+      varying vec3 vNormal;
+      varying vec3 vViewDir;
+      varying vec3 vWorldNormal;
+      varying vec3 vWorldPosition;
+      const float PI = 3.14159265359;
+
+      float prange(float oldValue, float oldMin, float oldMax, float newMin, float newMax) {
+        float oldRange = oldMax - oldMin;
+        float newRange = newMax - newMin;
+        return (((oldValue - oldMin) * newRange) / oldRange) + newMin;
+      }
+
+      float pcrange(float oldValue, float oldMin, float oldMax, float newMin, float newMax) {
+        return clamp(prange(oldValue, oldMin, oldMax, newMin, newMax), min(newMax, newMin), max(newMin, newMax));
+      }
+
+      vec2 reflectMatcap(vec3 worldPos, vec3 worldNormal) {
+        vec3 viewDir = normalize(cameraPosition - worldPos);
+        vec3 x = normalize(vec3(viewDir.z, 0.0, -viewDir.x));
+        vec3 y = cross(viewDir, x);
+        return vec2(dot(x, worldNormal), dot(y, worldNormal)) * 0.495 + 0.5;
+      }
+
+      vec3 unpackNormalFBR(vec3 eyePos, vec3 surfNorm, sampler2D normalMap, float intensity, float scale, vec2 uv) {
+        vec3 q0 = dFdx(eyePos.xyz);
+        vec3 q1 = dFdy(eyePos.xyz);
+        vec2 st0 = dFdx(uv.st);
+        vec2 st1 = dFdy(uv.st);
+        vec3 n = normalize(surfNorm);
+        vec3 q1perp = cross(q1, n);
+        vec3 q0perp = cross(n, q0);
+        vec3 tangent = q1perp * st0.x + q0perp * st1.x;
+        vec3 bitangent = q1perp * st0.y + q0perp * st1.y;
+        float det = max(dot(tangent, tangent), dot(bitangent, bitangent));
+        float scaleFactor = det == 0.0 ? 0.0 : inversesqrt(det);
+        vec3 mapN = texture2D(normalMap, uv * scale).xyz * 2.0 - 1.0;
+        mapN.xy *= intensity;
+        return normalize(tangent * (mapN.x * scaleFactor) + bitangent * (mapN.y * scaleFactor) + n * mapN.z);
+      }
+
+      float geometricOcclusion(float ndl, float ndv, float roughness) {
+        float r = roughness;
+        float attenuationL = 2.0 * ndl / (ndl + sqrt(r * r + (1.0 - r * r) * (ndl * ndl)));
+        float attenuationV = 2.0 * ndv / (ndv + sqrt(r * r + (1.0 - r * r) * (ndv * ndv)));
+        return attenuationL * attenuationV;
+      }
+
+      float microfacetDistribution(float roughness, float ndh) {
+        float roughnessSq = roughness * roughness;
+        float f = (ndh * roughnessSq - ndh) * ndh + 1.0;
+        return roughnessSq / (PI * f * f);
+      }
+
+      vec3 getFBR(vec3 baseColor, vec2 uv, vec3 normal) {
+        vec3 mro = texture2D(tMRO, uv).rgb;
+        float roughness = mro.g;
+        vec2 aUv = reflectMatcap(vMPos, normal);
+        vec2 bUv = ((aUv - 0.5) * 0.5 - vec2(0.1)) + 0.5;
+        vec2 matcapUv = mix(aUv, bUv, roughness);
+        vec3 view = normalize(cameraPosition - vMPos);
+        vec3 light = normalize(uLight.xyz);
+        vec3 halfVector = normalize((light + view) / 2.0);
+        float ndl = pcrange(clamp(dot(normal, light), 0.001, 1.0), 0.0, 1.0, 0.4, 1.0);
+        float ndv = pcrange(clamp(abs(dot(normal, view)), 0.001, 1.0), 0.0, 1.0, 0.4, 1.0);
+        float ndh = clamp(dot(normal, halfVector), 0.0, 1.0);
+        float g = geometricOcclusion(ndl, ndv, roughness);
+        float d = microfacetDistribution(roughness, ndh);
+        vec3 specular = g * d / (4.0 * ndl * ndv) * uAccent;
+        vec3 lightColor = ndl * specular * uLight.w;
+        return ((baseColor * texture2D(tMatcap, matcapUv).rgb) + lightColor) * max(mro.b, 0.08);
+      }
+
+      void main() {
+        vec2 uv = vUv;
+        uv.x += vWorldPosition.x * 0.2;
+        uv += vec2(uScroll * 0.012 + sin(uTime * 0.08 + uPhase) * 0.004, 0.0);
+        vec3 baseColor = texture2D(tBaseColor, uv).rgb;
+        vec3 normal = unpackNormalFBR(vEyePos, vWorldNormal, tNormal, uNormalStrength, 1.0, vUv);
+        normal.y -= vWorldPosition.y * 0.02;
+        vec3 color = getFBR(baseColor, uv, normal);
+        vec2 screenUv = vec2(
+          0.5 + normal.x * 0.1 * uReflection.x + vWorldPosition.x * 0.012 + uScroll * 0.018,
+          0.5 + normal.y * 0.1 * uReflection.x + vWorldPosition.y * 0.006
+        );
+        color += texture2D(tRefraction, screenUv).rgb * uReflection.y * 0.5;
+        float fresnel = pow(1.0 - clamp(abs(dot(normalize(normal), normalize(vViewDir))), 0.0, 1.0), 2.4);
+        float oilBand = smoothstep(0.22, 0.92, sin((vWorldPosition.y + uPhase) * 3.6 + uTime * 0.18) * 0.5 + 0.5);
+        color += uAccent * fresnel * (0.11 + oilBand * 0.08);
+        color = pow(max(color * 1.22, 0.0), vec3(1.18));
+
+        float alpha = uOpacity * (0.72 + fresnel * 0.22);
+        gl_FragColor = vec4(color, alpha);
+      }
+    `,
+  });
+}
+
 export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref, workbenchHref }: LandingHomeProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1660,10 +1863,6 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
   }, [goToScene]);
 
   const handleWheel = useCallback((event: WheelEvent<HTMLElement>) => {
-    // 首页是固定视口的 3D 故事舞台，滚轮应该驱动场景状态而不是让页面原生滚动；
-    // 不阻止默认滚动时，触控板会把 Three 动画和浏览器滚动混在一起，柱体跟手感会被削弱。
-    event.preventDefault();
-
     const now = performance.now();
     const impulse = Math.max(-1.55, Math.min(1.55, event.deltaY / 240));
 
@@ -1949,6 +2148,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const activeTheorySpineNormalTexture = new THREE.TextureLoader().load(ACTIVE_THEORY_SPINE_NORMAL_PATH);
     const activeTheoryWorkEnvTexture = new THREE.TextureLoader().load(ACTIVE_THEORY_WORK_ENV_PATH);
     const activeTheoryWorkNormalTexture = new THREE.TextureLoader().load(ACTIVE_THEORY_WORK_NORMAL_PATH);
+    const activeTheorySpineBaseColorFallbackTexture = createSolidDataTexture(4, 7, 9);
+    const activeTheorySpineMroFallbackTexture = createSolidDataTexture(255, 170, 255);
+    const activeTheorySpineSourceTexturePromise = loadActiveTheorySpineKtx2Textures(renderer).catch(() => null);
+    let activeTheorySpineBaseColorTexture: THREE.Texture = activeTheorySpineBaseColorFallbackTexture;
+    let activeTheorySpineMroTexture: THREE.Texture = activeTheorySpineMroFallbackTexture;
     // 参考视频里的柱体默认并不是推进故事线，而是有细密的油膜/粒子呼吸。
     // 这里把用户提供 mp4 中同一柱体的短裁切做成 VideoTexture，只作为微弱动态材质层叠加到柱体组内；
     // 这样不会把整张网页截图当背景，也能避免单帧贴图看起来“死”和“不跟视频一个级别”。
@@ -2006,6 +2210,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     activeTheoryWorkNormalTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     activeTheoryWorkNormalTexture.wrapS = THREE.RepeatWrapping;
     activeTheoryWorkNormalTexture.wrapT = THREE.RepeatWrapping;
+    activeTheorySpineBaseColorFallbackTexture.colorSpace = THREE.SRGBColorSpace;
+    activeTheorySpineBaseColorFallbackTexture.wrapS = THREE.RepeatWrapping;
+    activeTheorySpineBaseColorFallbackTexture.wrapT = THREE.RepeatWrapping;
+    activeTheorySpineMroFallbackTexture.wrapS = THREE.RepeatWrapping;
+    activeTheorySpineMroFallbackTexture.wrapT = THREE.RepeatWrapping;
     referenceSpineMotionTexture.colorSpace = THREE.SRGBColorSpace;
     referenceSpineMotionTexture.generateMipmaps = false;
     referenceSpineMotionTexture.magFilter = THREE.LinearFilter;
@@ -2510,9 +2719,20 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     });
 
     void loadActiveTheoryDracoGeometry(ACTIVE_THEORY_SPINE_GEOMETRY_PATH)
-      .then((sourceGeometry) => {
+      .then(async (sourceGeometry) => {
         if (sceneDisposed) {
           sourceGeometry.dispose();
+          return;
+        }
+
+        const sourceTextures = await activeTheorySpineSourceTexturePromise;
+        if (sourceTextures) {
+          [activeTheorySpineBaseColorTexture, activeTheorySpineMroTexture] = sourceTextures;
+        }
+
+        if (sceneDisposed) {
+          sourceGeometry.dispose();
+          sourceTextures?.forEach((texture) => texture.dispose());
           return;
         }
 
@@ -2538,23 +2758,16 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const sourceInstanceCount = 40;
         Array.from({ length: sourceInstanceCount }, (_, instanceIndex) => {
           const phase = instanceIndex * 0.4;
-          const material = makeSourceProfileMaterial(140 + instanceIndex, 0.64);
-          material.clearcoat = 0.86;
-          material.clearcoatNormalMap = activeTheorySpineNormalTexture;
-          material.clearcoatNormalScale = new THREE.Vector2(0.18, 0.18);
-          material.clearcoatRoughness = 0.34;
-          material.color = new THREE.Color("#02050a");
-          material.depthTest = false;
-          material.depthWrite = false;
-          material.emissiveIntensity = 0.16;
-          material.envMapIntensity = 2.7;
-          material.normalMap = activeTheorySpineNormalTexture;
-          material.normalScale = new THREE.Vector2(0.19, 0.19);
-          material.opacity = 0.6;
-          material.roughness = 0.34;
-          material.side = THREE.DoubleSide;
-          material.specularIntensity = 1.42;
-          material.transparent = true;
+          const material = createSourceSpineShaderMaterial({
+            accent: new THREE.Color(organicPalette[(instanceIndex + activeIndexRef.current) % organicPalette.length]).lerp(new THREE.Color("#d1fff4"), 0.32),
+            baseColorTexture: activeTheorySpineBaseColorTexture,
+            matcapTexture: activeTheorySpineMatcapTexture,
+            mroTexture: activeTheorySpineMroTexture,
+            normalTexture: activeTheorySpineNormalTexture,
+            opacity: 0.54,
+            phase,
+            refractionTexture: activeTheoryWorkEnvTexture,
+          });
 
           const mesh = new THREE.Mesh(sourceGeometry, material);
           const highlightMaterial = new THREE.MeshMatcapMaterial({
@@ -2565,7 +2778,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
             depthTest: false,
             depthWrite: false,
             matcap: activeTheorySpineMatcapTexture,
-            opacity: 0.16,
+            opacity: 0.065,
             side: THREE.DoubleSide,
             transparent: true,
           });
@@ -3662,7 +3875,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceGlassPanels.forEach((panel, panelIndex) => {
         const orbitAngle = panel.angle + storyOrbit * 0.84 + scrollFollow * 0.28;
         const depthOffset = panel.variant === "front" ? 0.5 : panel.variant === "rear" ? -0.34 : 0.02;
-        const targetX = Math.sin(orbitAngle) * panel.radiusX + scrollImpulse * (panel.variant === "front" ? 0.038 : 0.028);
+        const centerOffset = panel.variant === "front" ? -0.72 : panel.variant === "left" ? -0.34 : -0.22;
+        const targetX = centerOffset + Math.sin(orbitAngle) * panel.radiusX + scrollImpulse * (panel.variant === "front" ? 0.038 : 0.028);
         const targetY = panel.y + Math.sin(time * 0.2 + panelIndex) * 0.018 - scrollFollow * 0.018;
         const targetZ = Math.cos(orbitAngle) * panel.radiusZ + depthOffset;
         const targetRotationY = -orbitAngle * (panel.variant === "front" ? 0.5 : 0.68) - 0.08;
@@ -3789,7 +4003,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         notchMaterial.opacity = activeTheorySpineReady ? 0.12 + Math.sin(time * 0.44 + segment.phase) * 0.018 : 0.52 + Math.sin(time * 0.44 + segment.phase) * 0.05;
       });
       activeTheorySpineInstances.forEach((item, instanceIndex) => {
-        const material = item.mesh.material as THREE.MeshPhysicalMaterial;
+        const material = item.mesh.material as THREE.ShaderMaterial;
         const highlightMaterial = item.highlight.material as THREE.MeshMatcapMaterial;
         const pulse = Math.sin(time * 0.38 + item.phase);
         const scrollLift = Math.max(-0.12, Math.min(0.12, scrollFollow * 0.045));
@@ -3811,9 +4025,14 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         item.highlight.position.copy(item.mesh.position);
         item.highlight.rotation.copy(item.mesh.rotation);
         item.highlight.scale.copy(item.mesh.scale).multiplyScalar(1.014);
-        material.emissiveIntensity = 0.18 + Math.sin(time * 0.52 + item.phase) * 0.034 + Math.min(0.1, Math.abs(scrollImpulse) * 0.03);
-        material.opacity = 0.5 + Math.sin(time * 0.3 + item.phase) * 0.052 + Math.min(0.14, Math.abs(scrollFollow) * 0.04);
-        highlightMaterial.opacity = 0.14 + Math.sin(time * 0.42 + item.phase) * 0.038 + Math.min(0.08, Math.abs(scrollImpulse) * 0.028);
+        material.uniforms.uTime.value = time;
+        material.uniforms.uScroll.value = scrollFollow;
+        material.uniforms.uOpacity.value = 0.48 + Math.sin(time * 0.3 + item.phase) * 0.036 + Math.min(0.1, Math.abs(scrollFollow) * 0.032);
+        (material.uniforms.uAccent.value as THREE.Color).lerp(
+          new THREE.Color(organicPalette[(instanceIndex + activeIndexRef.current) % organicPalette.length]).lerp(new THREE.Color("#d1fff4"), 0.34),
+          0.035
+        );
+        highlightMaterial.opacity = 0.058 + Math.sin(time * 0.42 + item.phase) * 0.018 + Math.min(0.042, Math.abs(scrollImpulse) * 0.018);
         highlightMaterial.color.lerp(new THREE.Color(organicPalette[(instanceIndex + activeIndexRef.current) % organicPalette.length]).lerp(new THREE.Color("#bffcff"), 0.42), 0.035);
       });
       spineFlecks.forEach((item, fleckIndex) => {
@@ -3985,6 +4204,21 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       activeTheorySpineNormalTexture.dispose();
       activeTheoryWorkEnvTexture.dispose();
       activeTheoryWorkNormalTexture.dispose();
+      activeTheorySpineBaseColorTexture.dispose();
+      activeTheorySpineMroTexture.dispose();
+      if (activeTheorySpineBaseColorTexture !== activeTheorySpineBaseColorFallbackTexture) {
+        activeTheorySpineBaseColorFallbackTexture.dispose();
+      }
+      if (activeTheorySpineMroTexture !== activeTheorySpineMroFallbackTexture) {
+        activeTheorySpineMroFallbackTexture.dispose();
+      }
+      void activeTheorySpineSourceTexturePromise.then((textures) => {
+        textures?.forEach((texture) => {
+          if (texture !== activeTheorySpineBaseColorTexture && texture !== activeTheorySpineMroTexture) {
+            texture.dispose();
+          }
+        });
+      });
       referenceSpineSubjectMaskTexture.dispose();
       referenceSpineMotionTexture.dispose();
       referenceSpineSubjectTexture.dispose();

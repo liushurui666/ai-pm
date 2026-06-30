@@ -3,56 +3,45 @@
 - source visual truth path: `/Users/liushurui/Library/Application Support/LarkShell/screenshot/20260629120942_rec_.mp4`
 - extracted reference frame: `/tmp/ai-pm-video-reference/user-ref-02.png`
 - supplemental mirror path: `/Users/liushurui/Desktop/workspace/new-jiguangjuzhen/activetheory-work-clone-nav-orb-20260524-121151(1)`
-- mirror source assets now used: `spine.bin`, `draco_wasm_wrapper.js`, `draco_decoder.wasm`, `matcap-test.jpg`, `damaged_road_normal.jpg`, `waternormals.jpg`, `env1.jpg`
-- implementation default screenshot: `/tmp/ai-pm-exact-spine/default-v90-source-instancer.png`
-- implementation scroll screenshot: `/tmp/ai-pm-exact-spine/impulse-v90-source-instancer.png`
-- implementation mobile screenshot: `/tmp/ai-pm-exact-spine/mobile-v90-source-instancer.png`
-- full-view comparison evidence: `/tmp/ai-pm-exact-spine/ref-default-impulse-v90.png`
-- focused region comparison evidence: `/tmp/ai-pm-exact-spine/pillar-panel-focused-v90.png`
-- viewport: 1280x720 desktop, 390x844 mobile
+- mirror source assets now used: `spine.bin`, `draco_wasm_wrapper.js`, `draco_decoder.wasm`, `basis_transcoder.js`, `basis_transcoder.wasm`, `alien_cracked_2_basecolor.ktx2`, `cliffs_MRO.ktx2`, `matcap-test.jpg`, `damaged_road_normal.jpg`, `waternormals.jpg`, `env1.jpg`
+- implementation default screenshot: `/tmp/ai-pm-exact-spine/default-v95-final.png`
+- implementation scroll screenshot: `/tmp/ai-pm-exact-spine/impulse-v95-final.png`
+- implementation mobile screenshot: `/tmp/ai-pm-exact-spine/mobile-v95-final.png`
+- full-view comparison evidence: `/tmp/ai-pm-exact-spine/ref-default-impulse-v95.png`
+- focused region comparison evidence: `/tmp/ai-pm-exact-spine/pillar-panel-focused-v95.png`
+- viewport: 1920x1080 desktop capture, 390x844 mobile capture, plus 1280x720 comparison scaling
 - state: unauthenticated landing page; default idle motion, one wheel-driven scroll state, and mobile first viewport
-- final result: blocked
-- blocker: v90 now uses the mirror's real source instancing rhythm and Work textures, but it is still not pixel-identical to the provided reference mp4. The remaining differences are visible in source FBR/refraction shading, front card content density, and exact Work camera framing.
+- final result: blocked for literal 100% pixel match; v95 is a materially closer implementation pass
+- blocker: source geometry and source KTX2/FBR texture inputs are now used, but the original site still has a full multi-render-target refraction/composite pipeline that is not reproduced exactly inside AI PM.
 
 ## Findings
 
-- [P1] Source instancing is closer, but the source FBR material is still approximated
-  Location: `src/components/landing-home/index.tsx` Active Theory spine instance layer.
-  Evidence: `/tmp/ai-pm-exact-spine/pillar-panel-focused-v90.png` shows the column now using the mirror's `40`-instance cadence (`y = 4 - 0.65*i`, `rotation.y = 0.4*i`) and the fallback geometry no longer dominates. The reference frame still has denser wet black surfaces and sharper cyan/purple oil-film highlights.
-  Impact: the mirror materially improves the shape match, but geometry plus physical material is still not the same as the source site's FBR/refraction shader stack.
-  Fix: port a dedicated source-like spine shader using `tRefraction`, `uReflection`, matcap, and the normal map instead of relying on `MeshPhysicalMaterial` plus additive shell.
+- [P1] Spine material now follows the mirror `SpineShader` path more closely
+  Evidence: `/tmp/ai-pm-exact-spine/pillar-panel-focused-v95.png`.
+  Change: added KTX2 baseColor/MRO textures and a source-like FBR shader path over the real `spine.bin` instancer.
+  Remaining gap: the source site's `tRefraction` buffer is approximated with a local environment texture, so oil-film refraction and bloom are close in direction but not pixel-identical.
 
-- [P1] Front Work card refraction is better, but still not the source WorkItem render
-  Location: `createWorkRefractionPanelMaterial` and `referenceGlassPanels`.
-  Evidence: the v90 front panel now uses `waternormals.jpg` and `env1.jpg`, with lower water distortion to match source `uDistortStrength: 0`. The reference panel still has richer video/image content and a heavier green glass body.
-  Impact: users can see the spatial role is the same, but not mistake it for the exact Active Theory Work card.
-  Fix: build a dedicated runtime texture/video-like panel with source-level content density, or wire a closer WorkItem shader pass around the current AI PM texture.
+- [P1] Front glass card is better aligned with the pillar
+  Evidence: `/tmp/ai-pm-exact-spine/ref-default-impulse-v95.png`.
+  Change: moved the front Work glass layer back toward the spine center and kept it coupled to `storyOrbit` on wheel.
+  Remaining gap: the original Work card has source project media/content density; AI PM still uses product-specific generated panel text.
 
-- [P2] Scroll coupling works, but exact camera orbit still differs
-  Location: `activeTheorySpineInstances`, `referenceGlassPanels`, and `pillarGroup` animation.
-  Evidence: `/tmp/ai-pm-exact-spine/impulse-v90-source-instancer.png` shows the pillar and front card rotate together after wheel input. The source reference has a heavier camera move around the column and a different center crop.
-  Impact: behavior direction is correct, but the mp4 timing and perspective are not exact.
-  Fix: tune `storyOrbit`, front-panel radius/rotation, and `pillarGroup` camera-relative position against multiple extracted mp4 frames.
+- [P2] Runtime verification is clean
+  Evidence: `/tmp/ai-pm-exact-spine/v95-report.json`.
+  Result: desktop and mobile canvases are nonblank, KTX2 loads without warnings, shader compilation does not report errors, and wheel interaction no longer emits the passive-listener error.
 
-## Patches Made In V90
+## Patches Made In V95
 
-- Added mirror source textures `damaged_road_normal.jpg`, `waternormals.jpg`, and `env1.jpg` to the landing public assets.
-- Updated the source spine instances to match the mirror `SpineInstancer` cadence: `40` copies, `0.65` vertical spacing, and `0.4` radians per-instance rotation.
-- Reduced the old hand-built fallback vertebrae after `spine.bin` loads so the real source geometry is visually dominant.
-- Tuned the spine material toward source values: lower normal scale (`0.19`), source normal map on base/clearcoat, and darker rougher reflections.
-- Tuned the front glass shader toward `WorkItemShader` behavior by reducing water distortion and leaning more on environment/Fresnel refraction.
-- Verified desktop default, desktop scroll, and mobile first viewport in the in-app browser.
+- Added source KTX2 assets and Basis transcoder runtime under `public/landing`.
+- Added `KTX2Loader` support and excluded static third-party Basis runtime files from ESLint.
+- Reworked `createSourceSpineShaderMaterial` to use source-like `tBaseColor`, `tMRO`, `tMatcap`, `tNormal`, `uLight`, `uNormalStrength`, and `uReflection` uniforms.
+- Preserved the mirror `SpineInstancer` cadence: 40 instances, `0.65` vertical spacing, and `0.4` radians per-instance rotation.
+- Centered the front glass panel closer to the pillar and kept the pillar/card scroll coupling.
+- Removed wheel `preventDefault` to keep console clean while retaining virtual 3D scroll behavior.
 
 ## Required Fidelity Surfaces
 
-- Fonts and typography: AI PM landing copy remains product-specific, not source-identical Work typography; blocked for literal clone, acceptable for product context.
-- Spacing and layout rhythm: central column/card relationship is closer and mobile CTAs remain stable, but source Work camera framing is still different.
-- Colors and visual tokens: mirror normal/env textures improve cyan/green/purple highlights; source bloom and FBR contrast are still stronger.
-- Image quality and asset fidelity: real source `spine.bin`, matcap, normal, water-normal, and env assets are used; the Work card content is still a generated AI PM texture rather than the source site's video/thumbnail stack.
-- Copy and content: intentionally uses AI PM copy; this is acceptable for the product homepage but not for a literal 100% visual clone.
-
-## Implementation Checklist
-
-- Keep v90 evidence as the baseline for the next fidelity pass.
-- Next pass should target a custom source-like `SpineShader` material and a closer WorkItem card render before further layout polish.
-- Do not mark Product Design QA as passed until the pillar silhouette, front card opacity/content, oil-film refraction, and scroll camera motion match the mp4 at the same frame/state.
+- Fonts/copy remain AI PM-specific; acceptable for product landing, not a literal clone.
+- Geometry uses the real source `spine.bin`, but source post-processing and MRT refraction are still approximated.
+- Work card content and exact camera crop remain the biggest visible differences from the provided reference frame.
+- Do not mark Product Design QA as fully passed until pillar silhouette, front-card content density, oil-film refraction, and source camera timing match the mp4 at the same frame/state.
