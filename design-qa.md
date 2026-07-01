@@ -4,10 +4,10 @@
 - source video: `/Users/liushurui/Library/Application Support/LarkShell/screenshot/20260629120942_rec_.mp4`
 - source mirror: `/Users/liushurui/Desktop/workspace/new-jiguangjuzhen/activetheory-work-clone-nav-orb-20260524-121151(1)`
 - implementation mid-scroll screenshot: `/tmp/ai-pm-landing-scroll-v149-readable/scroll-1155.png`
-- implementation deep-scroll screenshot: `/tmp/ai-pm-landing-scroll-v149-readable/scroll-1900.png`
-- metrics evidence: `/tmp/ai-pm-landing-scroll-v149-readable/metrics.json`
+- implementation deep-scroll screenshot: `/tmp/ai-pm-landing-v150-no-rear-glass/scroll-1900-final.png`
+- metrics evidence: `/tmp/ai-pm-landing-v150-no-rear-glass/`
 - mobile evidence: `/tmp/ai-pm-landing-scroll-v149-readable/mobile-720.png`
-- viewport: 1910x1035 desktop and 390x844 mobile, Playwright browser verification, `http://localhost:3004/?qa=v149-readable`
+- viewport: 1706x918 desktop and 390x844 mobile, Playwright browser verification, `http://localhost:3004/?qa=v150-no-rear-glass`
 - state: unauthenticated landing page, hydrated WebGL canvas, programmatic native page scroll through top/mid/deep states.
 - final result: interaction corrected, visual still approximate
 - remaining gap: this is still not a 100% Active Theory shader port. The exact source MRT refraction, WorkItemShader, WorkPaneUI capture, and camera composite are approximated with local Three.js shaders and DOM media layers.
@@ -34,6 +34,10 @@
   Evidence: v149 raises the focused DOM card opacity to `0.620`, with active title/body/metric colors at `0.96/0.86/0.98` alpha and a darker focused media underlay for the text side.
   Impact: the active WorkItem can still feel like a glass media screen, but the user can now read the Chinese title, description, and metric without guessing.
 
+- [P1] Right-side gray ghost layer is reduced.
+  Evidence: v150 removes the rear/front reference glass environment panels from the visible stage, fixes the wide occlusion shader opacity to `0`, and lowers the second-highest DOM card opacity to `0.018` at scroll `1900`.
+  Impact: the current card and pillar remain visible, but the empty right-side area no longer reads as a dirty rectangular overlay.
+
 - [P1] Adjacent cards use different real media textures.
   Evidence: sampled visible slots show media paths rotating through `active-theory-hogwarts-thumb.jpg`, `active-theory-work-lab.jpg`, `active-theory-work-reel-frame.jpg`, `active-theory-work-test.jpg`, and `active-theory-work-local.png`.
   Impact: scrolling no longer looks like one repeated card texture.
@@ -51,22 +55,23 @@
 - Raised focused DOM card opacity and focused text contrast while keeping non-focused cards low-opacity.
 - Added a darker focused media underlay on the text side so the copy stays crisp without increasing card size.
 - Raised the weak WebGL pane UI projection to match the DOM layer's improved readability.
+- Removed visible front/rear reference glass panels, disabled the broad occlusion shader layer, and lowered non-focused DOM/WebGL pane opacity to avoid gray ghost rectangles.
 
 ## Validation
 
 - `git diff --check`: passed.
 - `corepack pnpm lint`: passed.
 - `corepack pnpm build`: passed.
-- Browser route: `http://localhost:3004/?qa=v149-readable`.
+- Browser route: `http://localhost:3004/?qa=v150-no-rear-glass`.
 - Browser screenshots:
   - `/tmp/ai-pm-landing-scroll-v149-readable/scroll-1155.png`
-  - `/tmp/ai-pm-landing-scroll-v149-readable/scroll-1900.png`
+  - `/tmp/ai-pm-landing-v150-no-rear-glass/scroll-1900-final.png`
   - `/tmp/ai-pm-landing-scroll-v149-readable/mobile-720.png`
 - Browser metrics:
   - Top: active card `843x450`, `activeOpacity=0.620`, `pillarDrop=0.000`, `pillarX=-0.620`, `pillarZ=-0.360`, active slot `0`.
   - Scroll 720: active card `858x454`, `activeOpacity=0.620`, `pillarDrop=1.194`, active slot `1`.
   - Scroll 1155: active card `791x444`, `activeOpacity=0.620`, `pillarDrop=1.599`, active slot `2`, title/body/metric alpha `0.96/0.86/0.98`.
-  - Scroll 1900: active card `794x445`, `activeOpacity=0.620`, `pillarDrop=2.033`, active slot `3`, title/body/metric alpha `0.96/0.86/0.98`.
+  - Scroll 1900: active card `756x403`, `activeOpacity=0.620`, `pillarDrop=2.123`, active slot `3`, second DOM opacity `0.018`.
   - Mobile 390px: active card text alpha remains `0.96/0.86/0.98`; existing 3D stage crop is unchanged by this readability pass.
   - Console/page errors: none observed in Playwright run; Fast Refresh still logs the existing WebGL 3D texture warning.
 

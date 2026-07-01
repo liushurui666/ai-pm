@@ -334,8 +334,9 @@ function getStoryWorkItemHitLayerOpacity(visual: StoryWorkItemVisual) {
   // v146 以后 DOM 层不再只是“看不见的点击层”：它承载真实媒体素材，负责让用户直观看到多张大屏滚动。
   // 透明度仍按焦点分层控制，避免 3-4 张大屏叠成整面雾幕；WebGL 继续负责柱体折射和油膜质感。
   // v149 单独修正文案可读性：v148 把整张 DOM 卡透明度压到 0.22，连标题和指标也一起被吃掉。
-  // 这里把焦点卡恢复到可读层级，但非焦点卡继续保持低透明，避免多张媒体背景重新叠成一整块全屏海报。
-  return Math.min(0.62, visual.opacity * (visual.isFocused ? 0.62 : 0.1));
+  // v150 继续收掉用户圈出的“后方虚影涂层”：焦点卡保持可读，非焦点 DOM 媒体只留下极轻轮廓。
+  // 这样仍能表达多张卡在队列里滚动，但不会在右侧叠出一块无内容灰蒙版。
+  return Math.min(0.62, visual.opacity * (visual.isFocused ? 0.62 : 0.018));
 }
 
 function getStoryPillarScrollDrop(progress: number, impulse: number) {
@@ -4746,8 +4747,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     pillarGroup.add(referenceSpineSubject);
 
     // v77 专门补参考视频里的“前景玻璃卡片压住柱体”的遮挡关系。
-    // 之前只抽柱体主体，会让我们的 AI PM 卡片和源视频卡片各自叠一层，柱体剪影就不像同一个 mp4；
-    // 这层仍然采样同一段参考视频，只保留玻璃边缘、烟熏面和轻微彩色折射，作为柱体前方的低透明遮挡。
+    // v150 以后这层只保留生命周期，不再参与可见渲染：用户指出右侧出现灰色虚影涂层，
+    // 根因就是这张宽遮挡贴图和参考玻璃叠加后形成了无内容的烟熏矩形。
+    // 透明度在 RAF 中也会被固定为 0，避免 Fast Refresh 或滚动时又把它抬起来。
     const referenceSpineOcclusionMaterial = new THREE.ShaderMaterial({
       blending: THREE.NormalBlending,
       depthTest: false,
@@ -4756,7 +4758,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       transparent: true,
       uniforms: {
         uMap: { value: referenceSpineMotionTexture },
-        uOpacity: { value: 0.32 },
+        uOpacity: { value: 0 },
         uScroll: { value: 0 },
         uTime: { value: 0 },
       },
@@ -5023,7 +5025,20 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       };
     });
 
-    const referenceGlassPanels = [
+    const referenceGlassPanelConfigs: Array<{
+      angle: number;
+      height: number;
+      opacity: number;
+      radiusX: number;
+      radiusZ: number;
+      renderOrder: number;
+      sourceIndex: number;
+      variant: "front" | "left" | "rear";
+      width: number;
+      y: number;
+    }> = [
+      // 这些参考玻璃只保留左侧远景层，前景/右后方的大灰屏不再渲染。
+      // 主视觉已经由真实 WorkItem 队列承担，继续保留大面积环境玻璃会被用户看成脏的虚影蒙层。
       {
         angle: -1.26,
         height: 3.42,
@@ -5036,31 +5051,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         width: 3.72,
         y: 0.5,
       },
-      {
-        angle: 0.03,
-        height: 2.86,
-        opacity: 0.004,
-        radiusX: 0.86,
-        radiusZ: 0.82,
-        renderOrder: 8.82,
-        sourceIndex: 0,
-        variant: "front" as const,
-        width: 4.82,
-        y: 0.16,
-      },
-      {
-        angle: 2.62,
-        height: 2.24,
-        opacity: 0.0025,
-        radiusX: 1.78,
-        radiusZ: 0.84,
-        renderOrder: 6.2,
-        sourceIndex: 1,
-        variant: "rear" as const,
-        width: 1.72,
-        y: 1.16,
-      },
-    ].map((config) => {
+    ];
+    const referenceGlassPanels = referenceGlassPanelConfigs.map((config) => {
       const texture = createReferenceGlassPanelTexture(config.variant);
       const geometry = new THREE.PlaneGeometry(config.width, config.height, 12, 8);
       const material = new THREE.MeshBasicMaterial({
@@ -5087,15 +5079,14 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 真正的 WorkItem 轨道由下方循环 slot 生成，避免用户滚动时只看到一张大卡在切换。
       if (mediaMesh) {
         // 源站 Work 页面最强的视觉锚点是巨大项目媒体屏，而不是透明 UI 文案卡。
-        // 左侧和前景屏都接真实媒体纹理，让柱体在屏幕后方被遮挡/折射，空间关系会更接近 mp4。
+        // 当前只保留左侧退后的媒体纹理，避免前景大玻璃继续在右侧形成无内容灰雾。
         mediaMesh.renderOrder = config.renderOrder + 0.025;
         stage.add(mediaMesh);
       }
       mesh.renderOrder = config.renderOrder;
       stage.add(mesh);
       if (refractionMesh) {
-        // 左侧大屏也必须拥有厚玻璃折射，否则源站里最明显的“媒体屏压住柱体”会丢失。
-        // 右后方屏继续保持轻量，避免所有层都同亮度后画面变平。
+        // 左侧大屏保留轻量厚玻璃折射；前景和右后方虚影层已移除，避免画面重新变脏。
         refractionMesh.renderOrder = config.renderOrder + 0.08;
         stage.add(refractionMesh);
       }
@@ -5138,7 +5129,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 这些卡片对应源站 WorkItem：所有项目卡都一直存在于同一条无界轨道上。
       // v134 起把“源码 camera 穿过 50deg target”的横向视差还给卡片自身；
       // 但柱体和相机的 x/z 仍保持锁定，避免用户滚动时看到整根柱子左右偏移。
-        material.uniforms.uOpacity.value = Math.min(0.34, 0.04 + initialLayout.trackWindow * 0.12 + initialLayout.focus * 0.18);
+      // v150 首帧也遵循“焦点清楚、远景很淡”的规则，避免刷新瞬间右侧出现灰色玻璃铺底。
+      material.uniforms.uOpacity.value = Math.min(
+        0.32,
+        initialLayout.focus * 0.25 + initialLayout.trackWindow * (initialLayout.focus > 0.08 ? 0.042 : 0.003)
+      );
       mesh.renderOrder = initialOffset === 0 ? 30 : Math.max(20, 28 - initialLayout.absOffset);
       backplate.renderOrder = mesh.renderOrder - 0.2;
       mesh.userData.index = sceneIndex;
@@ -5338,7 +5333,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceSpineSubjectMaterial.uniforms.uOpacity.value = 0.82 + Math.sin(time * 0.26 + 0.7) * 0.032 + Math.min(0.12, Math.abs(scrollFollow) * 0.03);
       referenceSpineOcclusionMaterial.uniforms.uTime.value = time;
       referenceSpineOcclusionMaterial.uniforms.uScroll.value = sourceSpineUvScroll;
-      referenceSpineOcclusionMaterial.uniforms.uOpacity.value = 0.28 + Math.sin(time * 0.22 + 0.2) * 0.018 + Math.min(0.074, Math.abs(scrollFollow) * 0.02);
+      // v150：右侧灰色虚影来自这层宽遮挡贴图的烟熏矩形。
+      // 保留材质更新时间是为了不重写整段 Three.js 生命周期，但可见透明度固定为 0。
+      referenceSpineOcclusionMaterial.uniforms.uOpacity.value = 0;
       referenceSpineRimMaterial.opacity = 0.3 + Math.sin(time * 0.22 + 0.9) * 0.032 + Math.min(0.09, Math.abs(scrollImpulse) * 0.022);
       // v143 以后由外层 pillarGroup 承担主要下穿位移，内部参考视频/边缘层只保留极小的本地跟随。
       // 如果每一层继续按 0.4-0.5 倍额外下移，视觉会变成柱体内部被拉伸，而不是“整根柱体整体向下移”。
@@ -5622,8 +5619,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const cardWindow = Math.pow(layout.trackWindow, 0.94);
         const cardFocus = Math.pow(layout.focus, 1.04);
         // v147 为了补媒体感把牌面推得过满，实际会盖成一整张全屏玻璃。
-        // v148 收回到“围绕柱体滚动的中等尺寸屏”：焦点牌仍可辨认，非焦点牌只保留轨道存在感。
-        const targetOpacity = Math.min(0.34, 0.045 + cardWindow * 0.16 + cardFocus * 0.12 + scrollBoost * 0.025);
+        // v148 收回到“围绕柱体滚动的中等尺寸屏”；v150 再把非焦点 pane 压低，
+        // 否则多张离轴 pane 会在右侧叠成用户截图里的灰色虚影涂层。
+        const backgroundPaneOpacity = cardWindow * (cardFocus > 0.08 ? 0.042 : 0.003);
+        const targetOpacity = Math.min(0.32, backgroundPaneOpacity + cardFocus * 0.25 + scrollBoost * 0.006);
 
         // 这里是这次修正的核心：WorkItem pane 仍有 15 张、仍按源码 50 度队列换面和排序。
         // x/z 的变化只属于卡片自身的环形队列，不再传给 camera 或 pillarGroup；
@@ -5654,7 +5653,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         // 非焦点 pane 如果保持同样大面积高透明度，会叠成一整块雾板，用户会误以为只有一张卡。
         // 因此把 WorkItem 的玻璃背板做成“焦点清楚、远景仍有实体”，让大屏能遮住一部分柱体，
         // 更接近源站里项目牌压在柱体前方的层级，而不是柱体永远盖住卡片。
-        backplateMaterial.opacity += ((0.004 + Math.pow(layout.trackWindow, 1.1) * 0.012 + cardFocus * 0.022 + scrollBoost * 0.005) - backplateMaterial.opacity) * 0.12;
+        const backgroundBackplateOpacity = Math.pow(layout.trackWindow, 1.1) * (cardFocus > 0.08 ? 0.004 : 0.0004);
+        backplateMaterial.opacity += ((backgroundBackplateOpacity + cardFocus * 0.016 + scrollBoost * 0.001) - backplateMaterial.opacity) * 0.12;
       });
       // DOM 前景轨道和 WebGL WorkItem 使用同一个无界 progress。
       // 它只改变卡片自身的轨道坐标/转面/透明度，不改变柱体坐标；这样即使 WebGL 暗场很重，
