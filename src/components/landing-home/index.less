@@ -842,3 +842,20 @@
     display: none;
   }
 }
+
+@media (max-width: 640px) {
+  .landing-story-workitem-rail {
+    // v151 桌面端把卡片推到柱体右侧绕行；小屏如果沿用同一轨道会整张卡跑出视口。
+    // 这里只移动 rail 的视口锚点，不改 Three.js/DOM 的滚动相位，让手机上仍能看到卡片围绕柱体经过。
+    top: 31%;
+    left: -78%;
+    perspective: 780px;
+  }
+
+  .landing-story-workitem-card {
+    width: min(72vw, 280px);
+    min-height: 180px;
+    padding: 18px;
+    border-radius: 24px;
+  }
+}

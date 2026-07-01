@@ -86,9 +86,11 @@ const STORY_WORK_SOURCE_CAMERA_RADIUS = STORY_WORK_SOURCE_RADIUS * 2;
 const STORY_WORK_SOURCE_Y_STEP = 0.84;
 const STORY_WORK_VISIBLE_RANGE = 7.2;
 const STORY_WORK_DOM_ORBIT_X = 68;
+const STORY_WORK_DOM_COLUMN_CLEAR_X = 320;
 const STORY_WORK_DOM_Y_STEP = 312;
 const STORY_WORK_DOM_ORBIT_Z = 126;
 const STORY_WORK_WEBGL_ORBIT_X = 0.28;
+const STORY_WORK_WEBGL_COLUMN_CLEAR_X = 0.96;
 const STORY_WORK_WEBGL_Y_STEP = 1.34;
 
 function createSolidDataTexture(r: number, g: number, b: number) {
@@ -263,24 +265,26 @@ function getStoryWorkItemVisualFromOffset(offset: number, impulse = 0): StoryWor
   const trackWindow = Math.max(0, 1 - absOffset / STORY_WORK_VISIBLE_RANGE);
   const orbit = getStoryWorkItemOrbit(offset);
   const orbitDepth = Math.pow(trackWindow, 0.82);
-  // 源码里 camera 会沿 15 个 target 横向绕柱推进；这里不能照搬 camera x/z，
-  // 否则用户看到的是“柱子被滚轮拖着左右跑”。因此把源码的横向 target 只压成卡片自己的小幅翻面视差：
-  // 所有可见卡片共享一条稳定纵向牌道，滚动时真正明显的变化是 y 轴穿场、z 深度和 rotateY。
-  const laneAnchorX = -82 * Math.pow(trackWindow, 0.62);
-  const orbitXWeight = 0.78 - focus * 0.28;
-  const x = laneAnchorX + orbit.x * STORY_WORK_DOM_ORBIT_X * orbitDepth * orbitXWeight;
+  // v151：用户要求卡片围绕柱体滚动，而不是停在中轴前面挡住柱身。
+  // 这里把 offset 的 50deg 相位拆成两类运动：
+  // - cos(angle) 决定卡片处在柱子左侧还是右侧，焦点卡默认让到柱子右侧；
+  // - sin(angle) 只补少量切向扫动，保留“绕柱”读感但不把柱体本身横向拖走。
+  // 轨道仍随真实 scroll 上下推进，camera/pillar x-z 不参与位移。
+  const aroundSide = Math.cos(orbit.angle);
+  const sideClearance = STORY_WORK_DOM_COLUMN_CLEAR_X * Math.pow(trackWindow, 0.72) * (0.72 + focus * 0.28);
+  const orbitXWeight = 0.34 + (1 - focus) * 0.28;
+  const x = aroundSide * sideClearance + orbit.x * STORY_WORK_DOM_ORBIT_X * orbitDepth * orbitXWeight;
   const y = -offset * STORY_WORK_DOM_Y_STEP;
-  const z = 282 + orbit.z * STORY_WORK_DOM_ORBIT_Z + focus * 152 - absOffset * 12;
+  const z = 256 + orbit.z * STORY_WORK_DOM_ORBIT_Z * 0.82 + focus * 128 - absOffset * 16;
   const rotateX = THREE.MathUtils.clamp(offset * -0.03, -0.15, 0.15);
-  const rotateY = orbit.rotationY * 0.52 + THREE.MathUtils.clamp(offset * -0.03 + impulse * 0.006, -0.12, 0.12);
-  const rotateZ = orbit.x * 0.28;
-  const scale = 0.54 + trackWindow * 0.2 + focus * 0.16;
+  const rotateY = -aroundSide * 0.16 + orbit.rotationY * 0.44 + THREE.MathUtils.clamp(offset * -0.025 + impulse * 0.005, -0.1, 0.1);
+  const rotateZ = orbit.x * 0.2;
+  const scale = 0.5 + trackWindow * 0.18 + focus * 0.14;
   const opacity = Math.min(1, 0.54 + trackWindow * 0.42 + focus * 0.18 + Math.min(0.08, Math.abs(impulse) * 0.018));
 
   // 这套公式保留源码里“15 张真实 view 常驻 + 50 度 target 编排”的交互语义，
   // 横向轨道只作用在 WorkItem 自己身上，camera 与 pillar 仍然锁在固定 x/z。
-  // v145 进一步把整条可见牌道锁稳：不是只有焦点牌锁 x，而是相邻牌也沿同一条纵向轴线接力经过。
-  // 这样用户向下滚动时会看到多张屏牌从上到下换面，柱体自身不会产生横向漂移读感。
+  // v151 以后焦点卡不再压住中轴，柱体中央会持续露出来。
   return {
     isFocused: absOffset < 0.62,
     opacity,
@@ -300,25 +304,23 @@ function getStoryWorkItemWebGLLayout(offset: number) {
   const orbit = getStoryWorkItemOrbit(offset);
 
   // WebGL pane 和 DOM hit layer 共用同一个 offset 轨道。
-  // 用户强调“柱子不能整体左右偏移”，但源码 WorkItems 本身确实有 50 度环形排布；
-  // 所以这里只恢复卡片自身的 x 轨道，camera/pillar/真实 spine 不跟着移动。
-  // 结果是柱体固定纵向滚动，所有卡片按源码队列在它前后左右穿过。
-  // 这层是 WebGL 真正可见的媒体屏。和 DOM 命中层一致，所有屏都先落在固定纵向牌道上；
-  // 源码 50 度轨道只用于深度和翻面，不再把焦点牌大幅甩到左右两侧。
-  const laneAnchorX = -0.42 * Math.pow(trackWindow, 0.62);
-  const orbitXWeight = 0.76 - focus * 0.26;
+  // v151 把 pane 从中轴挪到柱体左右两侧：卡片围绕固定柱体滚动，柱子本体不再被 pane 挡住。
+  // camera/pillar 依然锁 x-z，只有卡片自身按 50deg 相位让出中间通道。
+  const aroundSide = Math.cos(orbit.angle);
+  const sideClearance = STORY_WORK_WEBGL_COLUMN_CLEAR_X * Math.pow(trackWindow, 0.72) * (0.72 + focus * 0.28);
+  const orbitXWeight = 0.34 + (1 - focus) * 0.28;
 
   return {
     absOffset,
     focus,
     trackWindow,
-    x: laneAnchorX + orbit.x * STORY_WORK_WEBGL_ORBIT_X * Math.pow(trackWindow, 0.82) * orbitXWeight,
+    x: aroundSide * sideClearance + orbit.x * STORY_WORK_WEBGL_ORBIT_X * Math.pow(trackWindow, 0.82) * orbitXWeight,
     y: 0.12 - offset * STORY_WORK_WEBGL_Y_STEP,
-    z: 1.08 + orbit.z * 0.48 + focus * 0.82 - absOffset * 0.01,
+    z: 0.98 + orbit.z * 0.38 + focus * 0.68 - absOffset * 0.02,
     rotationX: THREE.MathUtils.clamp(offset * -0.046, -0.18, 0.18),
-    rotationY: -0.06 + orbit.rotationY * 0.58 + THREE.MathUtils.clamp(offset * -0.028, -0.11, 0.11),
+    rotationY: -aroundSide * 0.18 + orbit.rotationY * 0.48 + THREE.MathUtils.clamp(offset * -0.024, -0.1, 0.1),
     rotationZ: orbit.x * 0.012,
-    scale: 0.56 + trackWindow * 0.18 + focus * 0.18,
+    scale: 0.5 + trackWindow * 0.16 + focus * 0.14,
   };
 }
 
