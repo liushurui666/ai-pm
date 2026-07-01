@@ -109,9 +109,9 @@
   left: 0;
   display: grid;
   appearance: none;
-  width: clamp(500px, 42vw, 960px);
-  min-height: clamp(260px, 23vw, 530px);
-  padding: clamp(28px, 2.1vw, 48px);
+  width: clamp(380px, 36vw, 800px);
+  min-height: clamp(220px, 19vw, 420px);
+  padding: clamp(20px, 1.6vw, 34px);
   overflow: hidden;
   color: rgba(245, 252, 255, 0.72);
   font: inherit;
@@ -120,8 +120,8 @@
   border: 1px solid color-mix(in srgb, var(--card-accent) 34%, rgba(255, 255, 255, 0.14));
   border-radius: 30px;
   box-shadow:
-    0 18px 68px rgba(0, 0, 0, 0.34),
-    0 0 42px color-mix(in srgb, var(--card-accent) 12%, transparent),
+    0 14px 48px rgba(0, 0, 0, 0.3),
+    0 0 30px color-mix(in srgb, var(--card-accent) 9%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.14);
   opacity: 0;
   pointer-events: auto;
@@ -151,8 +151,8 @@
 .landing-story-workitem-card[data-active="true"] {
   border-color: color-mix(in srgb, var(--card-accent) 54%, rgba(255, 255, 255, 0.2));
   box-shadow:
-    0 24px 82px rgba(0, 0, 0, 0.42),
-    0 0 64px color-mix(in srgb, var(--card-accent) 18%, transparent),
+    0 18px 58px rgba(0, 0, 0, 0.38),
+    0 0 44px color-mix(in srgb, var(--card-accent) 14%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
@@ -174,7 +174,7 @@
   background-position: center;
   background-size: cover;
   filter: saturate(0.82) contrast(1.12) brightness(0.68);
-  opacity: 0.78;
+  opacity: 0.56;
   transform: translateZ(-1px) scale(1.035);
   animation: landing-story-workitem-media 9s ease-in-out infinite;
 }
@@ -182,7 +182,7 @@
 .landing-story-workitem-card:hover::before,
 .landing-story-workitem-card[data-active="true"]::before {
   filter: saturate(0.9) contrast(1.16) brightness(0.78);
-  opacity: 0.92;
+  opacity: 0.68;
 }
 
 .landing-story-workitem-card::after {
@@ -196,7 +196,7 @@
     inset 0 0 34px rgba(0, 0, 0, 0.38),
     inset 0 0 22px color-mix(in srgb, var(--card-accent) 12%, transparent);
   mix-blend-mode: screen;
-  opacity: 0.4;
+  opacity: 0.26;
   transform: translateX(-10%);
   animation: landing-story-workitem-scan 5.8s ease-in-out infinite;
 }

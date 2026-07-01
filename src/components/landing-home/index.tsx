@@ -85,10 +85,10 @@ const STORY_WORK_SOURCE_RADIUS = 3.8;
 const STORY_WORK_SOURCE_CAMERA_RADIUS = STORY_WORK_SOURCE_RADIUS * 2;
 const STORY_WORK_SOURCE_Y_STEP = 0.84;
 const STORY_WORK_VISIBLE_RANGE = 7.2;
-const STORY_WORK_DOM_ORBIT_X = 42;
-const STORY_WORK_DOM_Y_STEP = 318;
-const STORY_WORK_DOM_ORBIT_Z = 176;
-const STORY_WORK_WEBGL_ORBIT_X = 0.18;
+const STORY_WORK_DOM_ORBIT_X = 68;
+const STORY_WORK_DOM_Y_STEP = 312;
+const STORY_WORK_DOM_ORBIT_Z = 126;
+const STORY_WORK_WEBGL_ORBIT_X = 0.28;
 const STORY_WORK_WEBGL_Y_STEP = 1.34;
 
 function createSolidDataTexture(r: number, g: number, b: number) {
@@ -266,15 +266,15 @@ function getStoryWorkItemVisualFromOffset(offset: number, impulse = 0): StoryWor
   // 源码里 camera 会沿 15 个 target 横向绕柱推进；这里不能照搬 camera x/z，
   // 否则用户看到的是“柱子被滚轮拖着左右跑”。因此把源码的横向 target 只压成卡片自己的小幅翻面视差：
   // 所有可见卡片共享一条稳定纵向牌道，滚动时真正明显的变化是 y 轴穿场、z 深度和 rotateY。
-  const laneAnchorX = -112 * Math.pow(trackWindow, 0.62);
-  const orbitXWeight = 0.72 - focus * 0.34;
+  const laneAnchorX = -82 * Math.pow(trackWindow, 0.62);
+  const orbitXWeight = 0.78 - focus * 0.28;
   const x = laneAnchorX + orbit.x * STORY_WORK_DOM_ORBIT_X * orbitDepth * orbitXWeight;
   const y = -offset * STORY_WORK_DOM_Y_STEP;
-  const z = 420 + orbit.z * STORY_WORK_DOM_ORBIT_Z + focus * 226 - absOffset * 16;
+  const z = 282 + orbit.z * STORY_WORK_DOM_ORBIT_Z + focus * 152 - absOffset * 12;
   const rotateX = THREE.MathUtils.clamp(offset * -0.03, -0.15, 0.15);
   const rotateY = orbit.rotationY * 0.52 + THREE.MathUtils.clamp(offset * -0.03 + impulse * 0.006, -0.12, 0.12);
   const rotateZ = orbit.x * 0.28;
-  const scale = 0.56 + trackWindow * 0.24 + focus * 0.24;
+  const scale = 0.54 + trackWindow * 0.2 + focus * 0.16;
   const opacity = Math.min(1, 0.54 + trackWindow * 0.42 + focus * 0.18 + Math.min(0.08, Math.abs(impulse) * 0.018));
 
   // 这套公式保留源码里“15 张真实 view 常驻 + 50 度 target 编排”的交互语义，
@@ -305,8 +305,8 @@ function getStoryWorkItemWebGLLayout(offset: number) {
   // 结果是柱体固定纵向滚动，所有卡片按源码队列在它前后左右穿过。
   // 这层是 WebGL 真正可见的媒体屏。和 DOM 命中层一致，所有屏都先落在固定纵向牌道上；
   // 源码 50 度轨道只用于深度和翻面，不再把焦点牌大幅甩到左右两侧。
-  const laneAnchorX = -0.56 * Math.pow(trackWindow, 0.62);
-  const orbitXWeight = 0.68 - focus * 0.32;
+  const laneAnchorX = -0.42 * Math.pow(trackWindow, 0.62);
+  const orbitXWeight = 0.76 - focus * 0.26;
 
   return {
     absOffset,
@@ -314,11 +314,11 @@ function getStoryWorkItemWebGLLayout(offset: number) {
     trackWindow,
     x: laneAnchorX + orbit.x * STORY_WORK_WEBGL_ORBIT_X * Math.pow(trackWindow, 0.82) * orbitXWeight,
     y: 0.12 - offset * STORY_WORK_WEBGL_Y_STEP,
-    z: 1.58 + orbit.z * 0.62 + focus * 1.2 - absOffset * 0.01,
+    z: 1.08 + orbit.z * 0.48 + focus * 0.82 - absOffset * 0.01,
     rotationX: THREE.MathUtils.clamp(offset * -0.046, -0.18, 0.18),
     rotationY: -0.06 + orbit.rotationY * 0.58 + THREE.MathUtils.clamp(offset * -0.028, -0.11, 0.11),
     rotationZ: orbit.x * 0.012,
-    scale: 0.64 + trackWindow * 0.24 + focus * 0.28,
+    scale: 0.56 + trackWindow * 0.18 + focus * 0.18,
   };
 }
 
@@ -333,7 +333,9 @@ function getStoryWorkItemHitLayerOpacity(visual: StoryWorkItemVisual) {
   // 让“大媒体屏 + 柱体折射”成为第一视觉，同时保留足够 hover/focus 可见性。
   // v146 以后 DOM 层不再只是“看不见的点击层”：它承载真实媒体素材，负责让用户直观看到多张大屏滚动。
   // 透明度仍按焦点分层控制，避免 3-4 张大屏叠成整面雾幕；WebGL 继续负责柱体折射和油膜质感。
-  return Math.min(0.54, visual.opacity * (visual.isFocused ? 0.5 : 0.24));
+  // v148 把 v147 过强的 DOM 媒体层收回来：DOM 只负责让用户看清当前可点击屏，
+  // 真正的空间层级交给 WebGL pane，否则多张 DOM 背景会叠成一整块全屏海报。
+  return Math.min(0.24, visual.opacity * (visual.isFocused ? 0.22 : 0.09));
 }
 
 function getStoryPillarScrollDrop(progress: number, impulse: number) {
@@ -345,8 +347,8 @@ function getStoryPillarScrollDrop(progress: number, impulse: number) {
   // 3. impulseDrop 只允许向下增加一点惯性，不再用负冲量把柱体拉回。
   // 这样滚动到中段后柱体不会在 slot 边界“自己回正”，视觉上始终是同一根柱子向下穿过视窗。
   const positiveProgress = Math.max(0, progress);
-  const wholeColumnDrop = 2.08 * (1 - Math.exp(-positiveProgress * 0.64));
-  const slowCrawl = Math.min(0.22, positiveProgress * 0.045);
+  const wholeColumnDrop = 2.22 * (1 - Math.exp(-positiveProgress * 0.72));
+  const slowCrawl = Math.min(0.26, positiveProgress * 0.05);
   const impulseDrop = THREE.MathUtils.clamp(Math.max(0, impulse) * 0.11, 0, 0.2);
 
   return THREE.MathUtils.clamp(wholeColumnDrop + slowCrawl + impulseDrop, -0.04, 2.3);
@@ -371,8 +373,8 @@ function isLandingInteractiveTarget(target: EventTarget | null) {
   return target instanceof HTMLElement && Boolean(target.closest("a,button,input,textarea,select,[role='button']"));
 }
 
-const THREE_PANEL_WIDTH = 1500;
-const THREE_PANEL_HEIGHT = 720;
+const THREE_PANEL_WIDTH = 1160;
+const THREE_PANEL_HEIGHT = 610;
 
 const particleVertexShader = `
   attribute float aSize;
@@ -5619,10 +5621,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const scrollBoost = Math.min(0.12, Math.abs(scrollImpulse) * 0.035);
         const cardWindow = Math.pow(layout.trackWindow, 0.94);
         const cardFocus = Math.pow(layout.focus, 1.04);
-        // 用户这轮的优先级是“大屏牌先成立”：焦点 WorkItem 必须像参考图那样有足够面积和实体感。
-        // 因此这版降低远景衰减指数、提高焦点不透明度，让 WebGL pane 成为画面主体；
-        // 仍保留上限，避免所有 15 张牌同时堆成一整块灰雾。
-        const targetOpacity = Math.min(0.46, 0.07 + cardWindow * 0.22 + cardFocus * 0.17 + scrollBoost * 0.035);
+        // v147 为了补媒体感把牌面推得过满，实际会盖成一整张全屏玻璃。
+        // v148 收回到“围绕柱体滚动的中等尺寸屏”：焦点牌仍可辨认，非焦点牌只保留轨道存在感。
+        const targetOpacity = Math.min(0.34, 0.045 + cardWindow * 0.16 + cardFocus * 0.12 + scrollBoost * 0.025);
 
         // 这里是这次修正的核心：WorkItem pane 仍有 15 张、仍按源码 50 度队列换面和排序。
         // x/z 的变化只属于卡片自身的环形队列，不再传给 camera 或 pillarGroup；
@@ -5653,7 +5654,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         // 非焦点 pane 如果保持同样大面积高透明度，会叠成一整块雾板，用户会误以为只有一张卡。
         // 因此把 WorkItem 的玻璃背板做成“焦点清楚、远景仍有实体”，让大屏能遮住一部分柱体，
         // 更接近源站里项目牌压在柱体前方的层级，而不是柱体永远盖住卡片。
-        backplateMaterial.opacity += ((0.006 + Math.pow(layout.trackWindow, 1.1) * 0.018 + cardFocus * 0.032 + scrollBoost * 0.008) - backplateMaterial.opacity) * 0.12;
+        backplateMaterial.opacity += ((0.004 + Math.pow(layout.trackWindow, 1.1) * 0.012 + cardFocus * 0.022 + scrollBoost * 0.005) - backplateMaterial.opacity) * 0.12;
       });
       // DOM 前景轨道和 WebGL WorkItem 使用同一个无界 progress。
       // 它只改变卡片自身的轨道坐标/转面/透明度，不改变柱体坐标；这样即使 WebGL 暗场很重，
