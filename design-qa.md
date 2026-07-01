@@ -4,10 +4,10 @@
 - source video: `/Users/liushurui/Library/Application Support/LarkShell/screenshot/20260629120942_rec_.mp4`
 - source mirror: `/Users/liushurui/Desktop/workspace/new-jiguangjuzhen/activetheory-work-clone-nav-orb-20260524-121151(1)`
 - implementation mid-scroll screenshot: `/tmp/ai-pm-landing-scroll-v149-readable/scroll-1155.png`
-- implementation deep-scroll screenshot: `/tmp/ai-pm-landing-v155-card-behind-canvas/progress-5.png`
-- metrics evidence: `/tmp/ai-pm-landing-v155-card-behind-canvas/progress-*.png` plus sampled DOM rects in this QA note.
-- mobile evidence: `/tmp/ai-pm-landing-v155-card-behind-canvas/mobile.png`
-- viewport: 1706x918 desktop and 390x844 mobile, in-app browser Playwright verification, `http://localhost:3004/?qa=v155-card-behind-canvas`
+- implementation deep-scroll screenshot: `/tmp/ai-pm-landing-v156-cohesive-pillar/refined-progress-5.png`
+- metrics evidence: `/tmp/ai-pm-landing-v156-cohesive-pillar/refined-progress-*.png` plus sampled DOM rects in this QA note.
+- mobile evidence: `/tmp/ai-pm-landing-v156-cohesive-pillar/mobile-progress-5.png`
+- viewport: 1706x918 desktop and 390x844 mobile, in-app browser Playwright verification, `http://localhost:3004/?qa=v156-cohesive-pillar`
 - state: unauthenticated landing page, hydrated WebGL canvas, programmatic native page scroll through top/mid/deep states.
 - final result: interaction corrected, visual still approximate
 - remaining gap: this is still not a 100% Active Theory shader port. The exact source MRT refraction, WorkItemShader, WorkPaneUI capture, and camera composite are approximated with local Three.js shaders and DOM media layers.
@@ -41,6 +41,10 @@
 - [P1] Cards sit behind the real WebGL column without a black fake pillar.
   Evidence: v155 removes the `.landing-story-pillar-occlusion` black overlay entirely, sets the DOM card rail below the canvas (`railZ=1`, `canvasZ=2`), and leaves `canvasPointer=none` so interactions still pass through. Desktop progress `5` shows the card crossing behind the WebGL spine, with `blackStripeExists=false`.
   Impact: the column/card depth now comes from the actual Three.js layer instead of a visible black mask.
+
+- [P1] The pillar now reads as one cohesive WebGL column instead of stacked reference sheets.
+  Evidence: v156 replaces the wide `referenceSpineField`/`rim` mesh-basic planes with a shared narrow cohesion-film shader, disables the old ghost layer, lowers the motion/subject overlays behind the real `spine.bin` instances, and adds a low-opacity cylindrical oil skin. Desktop screenshots `refined-progress-0/3/5/8.png` show the column core stays continuous while cards still pass behind it.
+  Impact: the pillar no longer depends on several offset semi-transparent rectangles to form its body; the visible body comes from the real geometry plus one restrained material skin.
 
 - [P1] Cards no longer cover the full screen.
   Evidence: v153 active card sizes are top `619px` wide, left orbit `765-770px`, center/front pass `458px`, and right return `685px`, instead of v147's `68%-76%` viewport-width full-screen pane.
@@ -77,13 +81,15 @@
 - Reduced DOM/WebGL orbit radius and focus scale after adding true orbit, keeping the side pass visible without letting perspective inflate the card into a full-screen layer.
 - Rebalanced the orbit to prioritize horizontal x-z movement: larger side/depth phase, reduced y-step, and matching refraction-canvas pane projection.
 - Moved the DOM WorkItem rail behind the WebGL canvas and removed the black pillar overlay, so the real column layer occludes cards naturally.
+- Replaced the broad field/ghost/rim reference planes with one shared narrow cohesion-film shader and hid the ghost layer to remove the “stacked flat sheets” reading.
+- Added a subtle continuous oil-skin cylinder behind the real `spine.bin` geometry, lowered subject/motion overlays behind the geometry, and reduced foreground cavity/surface oil sprites so they read as material details instead of pasted layers.
 
 ## Validation
 
 - `git diff --check`: passed.
 - `corepack pnpm lint`: passed.
 - `corepack pnpm build`: passed.
-- Browser route: `http://localhost:3004/?qa=v155-card-behind-canvas`.
+- Browser route: `http://localhost:3004/?qa=v156-cohesive-pillar`.
 - Browser screenshots:
   - `/tmp/ai-pm-landing-scroll-v149-readable/scroll-1155.png`
   - `/tmp/ai-pm-landing-v151-orbit-clear-column/scroll-1900-fit.png`
@@ -103,6 +109,11 @@
   - `/tmp/ai-pm-landing-v155-card-behind-canvas/progress-5.png`
   - `/tmp/ai-pm-landing-v155-card-behind-canvas/progress-8.png`
   - `/tmp/ai-pm-landing-v155-card-behind-canvas/mobile.png`
+  - `/tmp/ai-pm-landing-v156-cohesive-pillar/refined-progress-0.png`
+  - `/tmp/ai-pm-landing-v156-cohesive-pillar/refined-progress-3.png`
+  - `/tmp/ai-pm-landing-v156-cohesive-pillar/refined-progress-5.png`
+  - `/tmp/ai-pm-landing-v156-cohesive-pillar/refined-progress-8.png`
+  - `/tmp/ai-pm-landing-v156-cohesive-pillar/mobile-progress-5.png`
 - Browser metrics:
   - Desktop horizontal orbit centers: active card centerX `1254 -> 1263 -> 594 -> 403 -> 626 -> 818 -> 1016 -> 1170 -> 488` across sampled progress `0/1/2/3/4/5/6/8/11`.
   - Desktop vertical range: active card centerY stays within `379-500px` across those samples, confirming vertical movement is secondary.
@@ -110,6 +121,9 @@
   - Mobile 390px: document width remains `390px`, active card rect `76..508`, `blackStripeExists=false`; no horizontal page overflow observed in the captured viewport.
   - Layering: `canvasZ=2`, `railZ=1`, `canvasPointer=none`, `blackStripeExists=false` across sampled desktop states.
   - Console/page errors: none observed in Playwright run; Fast Refresh still logs the existing WebGL 3D texture warning.
+  - v156 desktop layer metrics: `pillarX=-0.620`, `pillarZ=-0.360`, `canvasZ=2`, `railZ=1`, `canvasPointer=none`, and `docWidth=1706` across refined desktop samples.
+  - v156 mobile 390px: `docWidth=390`, active card rect `left=76/right=508`, and no horizontal document overflow observed.
+  - v156 console/page errors: none observed in the in-app browser run after reload.
 
 ## Follow-up Polish
 
