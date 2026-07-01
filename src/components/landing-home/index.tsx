@@ -85,13 +85,14 @@ const STORY_WORK_SOURCE_RADIUS = 3.8;
 const STORY_WORK_SOURCE_CAMERA_RADIUS = STORY_WORK_SOURCE_RADIUS * 2;
 const STORY_WORK_SOURCE_Y_STEP = 0.84;
 const STORY_WORK_VISIBLE_RANGE = 7.2;
-const STORY_WORK_DOM_ORBIT_X = 68;
-const STORY_WORK_DOM_COLUMN_CLEAR_X = 320;
+const STORY_WORK_DOM_ORBIT_X = 56;
+const STORY_WORK_DOM_COLUMN_CLEAR_X = 276;
 const STORY_WORK_DOM_Y_STEP = 312;
 const STORY_WORK_DOM_ORBIT_Z = 126;
-const STORY_WORK_WEBGL_ORBIT_X = 0.28;
-const STORY_WORK_WEBGL_COLUMN_CLEAR_X = 0.96;
+const STORY_WORK_WEBGL_ORBIT_X = 0.22;
+const STORY_WORK_WEBGL_COLUMN_CLEAR_X = 0.82;
 const STORY_WORK_WEBGL_Y_STEP = 1.34;
+const STORY_WORK_ORBIT_PROGRESS_STEP = THREE.MathUtils.degToRad(22);
 
 function createSolidDataTexture(r: number, g: number, b: number) {
   const texture = new THREE.DataTexture(new Uint8Array([r, g, b, 255]), 1, 1, THREE.RGBAFormat);
@@ -239,13 +240,15 @@ function getClosestScrollableStoryTarget(currentProgress: number, rawTargets: nu
   return closestTarget;
 }
 
-function getStoryWorkItemOrbit(offset: number) {
+function getStoryWorkItemOrbit(offset: number, progress = 0) {
   // Active Theory 源码里的 WorkItems 是固定在 50deg 间距目标点上的一整串 view，
   // 滚动时由 camera target 在这些 view 之间推进。AI PM 这版按用户要求把柱体和相机 x/z 锁住，
   // 因此不能再真的移动 camera，否则柱体会在屏幕上左右漂。这里把“camera 穿过目标点”的相对运动
   // 转译到每张卡自己的 offset：offset 每变化 1，就沿同样的 50deg 轨道换面一次。
-  // 这样 15 张卡都会真实从上到下旋转穿场，而柱体仍然只做 y 向滚动。
-  const angle = offset * STORY_WORK_TRACK_STEP;
+  // v152 修正“当前卡永远在右侧”的根因：当前卡的 offset 会反复接近 0，如果角度只来自 offset，
+  // 最近项每次都会回到同一侧。这里额外把连续 progress 注入一个较慢相位，让焦点卡随滚动
+  // 逐步绕过柱体前后左右；固定柱体仍然不吃 x/z 位移，只有 WorkItem 队列自己环绕。
+  const angle = offset * STORY_WORK_TRACK_STEP + progress * STORY_WORK_ORBIT_PROGRESS_STEP;
   const sourceRelativeX = Math.sin(angle);
   const sourceRelativeZ = -Math.cos(angle);
 
@@ -259,17 +262,15 @@ function getStoryWorkItemOrbit(offset: number) {
   };
 }
 
-function getStoryWorkItemVisualFromOffset(offset: number, impulse = 0): StoryWorkItemVisual {
+function getStoryWorkItemVisualFromOffset(offset: number, progress = 0, impulse = 0): StoryWorkItemVisual {
   const absOffset = Math.abs(offset);
   const focus = Math.max(0, 1 - absOffset * 0.5);
   const trackWindow = Math.max(0, 1 - absOffset / STORY_WORK_VISIBLE_RANGE);
-  const orbit = getStoryWorkItemOrbit(offset);
+  const orbit = getStoryWorkItemOrbit(offset, progress);
   const orbitDepth = Math.pow(trackWindow, 0.82);
-  // v151：用户要求卡片围绕柱体滚动，而不是停在中轴前面挡住柱身。
-  // 这里把 offset 的 50deg 相位拆成两类运动：
-  // - cos(angle) 决定卡片处在柱子左侧还是右侧，焦点卡默认让到柱子右侧；
-  // - sin(angle) 只补少量切向扫动，保留“绕柱”读感但不把柱体本身横向拖走。
-  // 轨道仍随真实 scroll 上下推进，camera/pillar x-z 不参与位移。
+  // v152：卡片不再被固定推到一侧，而是用 progress 相位做完整环绕。
+  // cos(angle) 控制左右投影，sin(angle) 通过 orbit.z 进入景深；当卡片经过柱体前后方时，
+  // DOM 层会略微收透明，避免清晰文字层盖住 WebGL 光柱，真正的遮挡感交给玻璃 pane 和柱体折射表现。
   const aroundSide = Math.cos(orbit.angle);
   const sideClearance = STORY_WORK_DOM_COLUMN_CLEAR_X * Math.pow(trackWindow, 0.72) * (0.72 + focus * 0.28);
   const orbitXWeight = 0.34 + (1 - focus) * 0.28;
@@ -279,12 +280,17 @@ function getStoryWorkItemVisualFromOffset(offset: number, impulse = 0): StoryWor
   const rotateX = THREE.MathUtils.clamp(offset * -0.03, -0.15, 0.15);
   const rotateY = -aroundSide * 0.16 + orbit.rotationY * 0.44 + THREE.MathUtils.clamp(offset * -0.025 + impulse * 0.005, -0.1, 0.1);
   const rotateZ = orbit.x * 0.2;
-  const scale = 0.5 + trackWindow * 0.18 + focus * 0.14;
-  const opacity = Math.min(1, 0.54 + trackWindow * 0.42 + focus * 0.18 + Math.min(0.08, Math.abs(impulse) * 0.018));
+  // 环绕到侧后方时浏览器透视会显著放大 DOM bounding box；
+  // 这里把整体尺寸收回一档，保留大屏读感但避免左侧轨道扫过时整张卡铺满视口。
+  const scale = 0.46 + trackWindow * 0.15 + focus * 0.1;
+  const centerCrossingFade = 0.72 + Math.min(0.28, Math.abs(aroundSide) * 0.48);
+  const opacity =
+    Math.min(1, 0.54 + trackWindow * 0.42 + focus * 0.18 + Math.min(0.08, Math.abs(impulse) * 0.018)) *
+    centerCrossingFade;
 
   // 这套公式保留源码里“15 张真实 view 常驻 + 50 度 target 编排”的交互语义，
   // 横向轨道只作用在 WorkItem 自己身上，camera 与 pillar 仍然锁在固定 x/z。
-  // v151 以后焦点卡不再压住中轴，柱体中央会持续露出来。
+  // v152 以后焦点卡也会随 progress 环绕，不会每到当前项就重新回到屏幕同一侧。
   return {
     isFocused: absOffset < 0.62,
     opacity,
@@ -294,18 +300,18 @@ function getStoryWorkItemVisualFromOffset(offset: number, impulse = 0): StoryWor
 }
 
 function getStoryWorkItemVisual(slotIndex: number, progress: number, impulse = 0): StoryWorkItemVisual {
-  return getStoryWorkItemVisualFromOffset(getInfiniteStorySlotOffset(slotIndex, progress), impulse);
+  return getStoryWorkItemVisualFromOffset(getInfiniteStorySlotOffset(slotIndex, progress), progress, impulse);
 }
 
-function getStoryWorkItemWebGLLayout(offset: number) {
+function getStoryWorkItemWebGLLayout(offset: number, progress = 0) {
   const absOffset = Math.abs(offset);
   const focus = Math.max(0, 1 - absOffset * 0.5);
   const trackWindow = Math.max(0, 1 - absOffset / STORY_WORK_VISIBLE_RANGE);
-  const orbit = getStoryWorkItemOrbit(offset);
+  const orbit = getStoryWorkItemOrbit(offset, progress);
 
   // WebGL pane 和 DOM hit layer 共用同一个 offset 轨道。
-  // v151 把 pane 从中轴挪到柱体左右两侧：卡片围绕固定柱体滚动，柱子本体不再被 pane 挡住。
-  // camera/pillar 依然锁 x-z，只有卡片自身按 50deg 相位让出中间通道。
+  // v152 额外共用 progress 相位：如果 WebGL 仍只看 offset，玻璃 pane 会停在一侧，
+  // DOM 文案却在环绕，用户会立刻看出“双层卡片不同步”。因此两层都使用同一条环形轨道。
   const aroundSide = Math.cos(orbit.angle);
   const sideClearance = STORY_WORK_WEBGL_COLUMN_CLEAR_X * Math.pow(trackWindow, 0.72) * (0.72 + focus * 0.28);
   const orbitXWeight = 0.34 + (1 - focus) * 0.28;
@@ -320,7 +326,7 @@ function getStoryWorkItemWebGLLayout(offset: number) {
     rotationX: THREE.MathUtils.clamp(offset * -0.046, -0.18, 0.18),
     rotationY: -aroundSide * 0.18 + orbit.rotationY * 0.48 + THREE.MathUtils.clamp(offset * -0.024, -0.1, 0.1),
     rotationZ: orbit.x * 0.012,
-    scale: 0.5 + trackWindow * 0.16 + focus * 0.14,
+    scale: 0.46 + trackWindow * 0.13 + focus * 0.11,
   };
 }
 
@@ -1691,7 +1697,7 @@ function updateWorkRefractionCanvasTexture(refraction: WorkRefractionCanvas, pro
       return;
     }
 
-    const orbit = getStoryWorkItemOrbit(offset);
+    const orbit = getStoryWorkItemOrbit(offset, progress);
     const focus = Math.max(0, 1 - absOffset * 0.54);
     const trackWindow = Math.max(0, 1 - absOffset / STORY_WORK_VISIBLE_RANGE);
     const paneX = width * (0.52 + orbit.x * 0.082);
@@ -2968,7 +2974,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       }
 
       const offset = getInfiniteStorySlotOffset(slotIndex, progress);
-      const visual = getStoryWorkItemVisualFromOffset(offset, impulse);
+      const visual = getStoryWorkItemVisualFromOffset(offset, progress, impulse);
       const slot = storyWorkItemSlots[slotIndex];
 
       // 前景 DOM 卡片是 WebGL WorkItem 的清晰交互层：滚轮或触摸一到就即时更新，
@@ -5120,7 +5126,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       });
       const backplate = new THREE.Mesh(backplateGeometry, backplateMaterial);
       const initialOffset = getInfiniteStorySlotOffset(slotIndex, 0);
-      const initialLayout = getStoryWorkItemWebGLLayout(initialOffset);
+      const initialLayout = getStoryWorkItemWebGLLayout(initialOffset, 0);
       mesh.position.set(initialLayout.x, initialLayout.y, initialLayout.z);
       mesh.rotation.set(initialLayout.rotationX, initialLayout.rotationY, initialLayout.rotationZ);
       mesh.scale.set(initialLayout.scale, initialLayout.scale, 1);
@@ -5616,7 +5622,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       panelMeshes.forEach((panel) => {
         const { backplate, backplateMaterial, mesh, material } = panel;
         const offset = getInfiniteStorySlotOffset(panel.slotIndex, motionProgress);
-        const layout = getStoryWorkItemWebGLLayout(offset);
+        const layout = getStoryWorkItemWebGLLayout(offset, motionProgress);
         const scrollBoost = Math.min(0.12, Math.abs(scrollImpulse) * 0.035);
         const cardWindow = Math.pow(layout.trackWindow, 0.94);
         const cardFocus = Math.pow(layout.focus, 1.04);

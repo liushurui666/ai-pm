@@ -4,10 +4,10 @@
 - source video: `/Users/liushurui/Library/Application Support/LarkShell/screenshot/20260629120942_rec_.mp4`
 - source mirror: `/Users/liushurui/Desktop/workspace/new-jiguangjuzhen/activetheory-work-clone-nav-orb-20260524-121151(1)`
 - implementation mid-scroll screenshot: `/tmp/ai-pm-landing-scroll-v149-readable/scroll-1155.png`
-- implementation deep-scroll screenshot: `/tmp/ai-pm-landing-v151-orbit-clear-column/scroll-1900-fit.png`
-- metrics evidence: `/tmp/ai-pm-landing-v151-orbit-clear-column/metrics.json`
-- mobile evidence: `/tmp/ai-pm-landing-v151-orbit-clear-column/mobile-final.png`
-- viewport: 1706x918 desktop and 390x844 mobile, Playwright browser verification, `http://localhost:3004/?qa=v151-orbit-clear-column`
+- implementation deep-scroll screenshot: `/tmp/ai-pm-landing-v152-true-orbit/refined-progress-5.png`
+- metrics evidence: `/tmp/ai-pm-landing-v152-true-orbit/refined-progress-*.png` plus sampled DOM rects in this QA note.
+- mobile evidence: `/tmp/ai-pm-landing-v152-true-orbit/mobile-progress-5.png`
+- viewport: 1706x918 desktop and 390x844 mobile, in-app browser Playwright verification, `http://localhost:3004/?qa=v152-true-orbit`
 - state: unauthenticated landing page, hydrated WebGL canvas, programmatic native page scroll through top/mid/deep states.
 - final result: interaction corrected, visual still approximate
 - remaining gap: this is still not a 100% Active Theory shader port. The exact source MRT refraction, WorkItemShader, WorkPaneUI capture, and camera composite are approximated with local Three.js shaders and DOM media layers.
@@ -30,8 +30,12 @@
   Evidence: v151 moves the focused DOM/WebGL WorkItem to the right side of the pillar using a 50deg `cos(angle)` side-clearance phase. Desktop samples keep an approximate center-column gap of `116-124px` and `rightOverflow=0` at scroll `0/720/1900`.
   Impact: the column remains the primary visual object while the active card reads as a panel moving around it.
 
+- [P1] Cards now orbit around the pillar instead of staying on one side.
+  Evidence: v152 adds continuous scroll progress into the WorkItem orbit phase. Desktop active card center samples move across the viewport `1229 -> 898 -> 386 -> 635 -> 1157 -> 389`, proving the current card crosses right, center, left, and back right instead of resetting to the right on every active item.
+  Impact: the WorkItem queue now reads as a true orbit around the light column while the pillar x/z stays locked.
+
 - [P1] Cards no longer cover the full screen.
-  Evidence: v151 active card sizes are now top `704x371`, scroll `720` `701x371`, scroll `1900` `688x362`, roughly `40%-41%` of the desktop viewport width instead of v147's `68%-76%`.
+  Evidence: v152 active card sizes are now top `602px` wide, middle `568px`, left orbit `825px` at its most perspective-stretched desktop sample, and return-right `597px`, instead of v147's `68%-76%` viewport-width full-screen pane.
   Impact: the foreground screen keeps the Active Theory-like media-panel presence without turning into a full-screen poster.
 
 - [P1] Current card copy is readable instead of washed out.
@@ -61,22 +65,28 @@
 - Added a darker focused media underlay on the text side so the copy stays crisp without increasing card size.
 - Raised the weak WebGL pane UI projection to match the DOM layer's improved readability.
 - Removed visible front/rear reference glass panels, disabled the broad occlusion shader layer, and lowered non-focused DOM/WebGL pane opacity to avoid gray ghost rectangles.
+- Added a continuous progress-driven orbit phase so active cards do not keep returning to the same side of the column.
+- Reduced DOM/WebGL orbit radius and focus scale after adding true orbit, keeping the side pass visible without letting perspective inflate the card into a full-screen layer.
 
 ## Validation
 
 - `git diff --check`: passed.
 - `corepack pnpm lint`: passed.
 - `corepack pnpm build`: passed.
-- Browser route: `http://localhost:3004/?qa=v151-orbit-clear-column`.
+- Browser route: `http://localhost:3004/?qa=v152-true-orbit`.
 - Browser screenshots:
   - `/tmp/ai-pm-landing-scroll-v149-readable/scroll-1155.png`
   - `/tmp/ai-pm-landing-v151-orbit-clear-column/scroll-1900-fit.png`
   - `/tmp/ai-pm-landing-v151-orbit-clear-column/mobile-final.png`
+  - `/tmp/ai-pm-landing-v152-true-orbit/refined-progress-0.png`
+  - `/tmp/ai-pm-landing-v152-true-orbit/refined-progress-3.png`
+  - `/tmp/ai-pm-landing-v152-true-orbit/refined-progress-5.png`
+  - `/tmp/ai-pm-landing-v152-true-orbit/refined-progress-8.png`
+  - `/tmp/ai-pm-landing-v152-true-orbit/mobile-progress-5.png`
 - Browser metrics:
-  - Top: active card `704x371`, `activeOpacity=0.620`, `pillarDrop=0.000`, `pillarX=-0.620`, `pillarZ=-0.360`, active slot `0`, approximate column gap `124px`, right overflow `0`.
-  - Scroll 720: active card `701x371`, `activeOpacity=0.620`, `pillarDrop=1.273`, active slot `1`, approximate column gap `116px`, right overflow `0`.
-  - Scroll 1900: active card `688x362`, `activeOpacity=0.620`, `pillarDrop=2.097`, active slot `3`, approximate column gap `118px`, right overflow `0`, second DOM opacity `0.018`.
-  - Mobile 390px: active card is visible above hero copy with rect `7..398`, visible width `383px`.
+  - Desktop orbit centers: active card centerX `1229 -> 1180 -> 898 -> 386 -> 635 -> 1157 -> 1085 -> 389` across sampled progress `0/1/3/5/8/11/14/18`.
+  - Desktop card widths: active card `602`, `551`, `568`, `825`, `639`, `597`, `530`, `763` across the same samples; the widest side pass stays mostly on-screen with left edge `-27px`.
+  - Mobile 390px: active card remains visible above hero copy with rect `-35..299`, width `334px`; no horizontal page overflow observed in the captured viewport.
   - Console/page errors: none observed in Playwright run; Fast Refresh still logs the existing WebGL 3D texture warning.
 
 ## Follow-up Polish
