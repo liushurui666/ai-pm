@@ -138,6 +138,16 @@
   outline-offset: 5px;
 }
 
+.landing-story-workitem-card:hover {
+  // 3D 轨道的 transform 由 RAF 持续写入，hover 不能再额外 translate/scale，
+  // 否则每张卡扫过时会和源码式 target 队列打架，产生“卡片被吸回中心”的错觉。
+  border-color: color-mix(in srgb, var(--card-accent) 68%, rgba(255, 255, 255, 0.22));
+  box-shadow:
+    0 20px 72px rgba(0, 0, 0, 0.38),
+    0 0 66px color-mix(in srgb, var(--card-accent) 24%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
 .landing-story-workitem-card[data-active="true"] {
   border-color: color-mix(in srgb, var(--card-accent) 52%, rgba(255, 255, 255, 0.16));
   box-shadow:
@@ -162,6 +172,11 @@
   mix-blend-mode: screen;
   transform: translateX(-18%);
   animation: landing-story-workitem-scan 5.8s ease-in-out infinite;
+}
+
+.landing-story-workitem-card:hover::before,
+.landing-story-workitem-card[data-active="true"]::before {
+  opacity: 0.48;
 }
 
 .landing-story-workitem-card::after {

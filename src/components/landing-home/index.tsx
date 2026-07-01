@@ -193,6 +193,16 @@ function getInfiniteStorySlotOffset(slotIndex: number, progress: number, length 
   return offset;
 }
 
+function getNearestStoryWorkItemSlotIndex(progress: number, length = STORY_WORK_ITEM_SLOT_COUNT) {
+  // Active Theory 的 WorkItems 是 15 个真实 view，当前项来自 camera target 所在的最近 view，
+  // 不是业务 sceneIndex 的五项轮播。这里按同一套 15-slot 环取最近整数 slot，
+  // 保证用户停在两个卡片之间时仍然能看到一个“当前 WorkItem”，不会出现 activeCount 为 0、
+  // 看起来像只有一张卡片在换内容的断档状态。
+  const normalizedProgress = THREE.MathUtils.euclideanModulo(progress, length);
+
+  return THREE.MathUtils.euclideanModulo(Math.round(normalizedProgress), length);
+}
+
 function getClosestScrollableStoryTarget(currentProgress: number, rawTargets: number[], repeatPeriod: number) {
   // 页面本身仍然依赖浏览器真实 scrollY，所以进度不能落到负数；
   // 源码的 unlimited scroll 可以在内部跨过 0，但浏览器页面顶部以下没有负向滚动空间。
@@ -300,6 +310,20 @@ function getStoryWorkItemHitLayerOpacity(visual: StoryWorkItemVisual) {
   // 这里把可见上限抬高到多张卡都能被点击和辨认，同时仍低于 WebGL 玻璃主层；
   // 可见窗口本身小于 15-slot 半圈，卡片会先淡出再从顶部接回，避免无限滚动接缝露出来。
   return Math.min(0.88, visual.opacity * (visual.isFocused ? 0.74 : 0.62));
+}
+
+function getStoryPillarScrollDrop(progress: number, impulse: number) {
+  // 用户这轮最在意的是“滚动位置本身让柱体整体向下经过视窗”，而不是只在滚轮瞬间抖一下。
+  // v138 的下落主要来自 scrollFollow，用户一停手它就回到 0，视觉会重新变成“柱体固定、只有内部在流动”。
+  // 这里把下落拆成两层：
+  // 1. settledDrop 由连续 scroll progress 的小数段决定，停在半个卡片之间时仍能看到柱体处在下落位；
+  // 2. impulseDrop 只作为滚轮瞬间的轻微惯性，不能再决定主体位移。
+  // 使用 sin(pi * fraction) 保证每个 slot 边界处位移自然回到 0，避免 native scroll rebasing 或循环接缝时出现硬跳。
+  const cycleProgress = THREE.MathUtils.euclideanModulo(progress, 1);
+  const settledDrop = Math.sin(cycleProgress * Math.PI) * 0.72;
+  const impulseDrop = THREE.MathUtils.clamp(impulse * 0.1, -0.1, 0.18);
+
+  return THREE.MathUtils.clamp(settledDrop + impulseDrop, -0.1, 0.82);
 }
 
 function getInitialStoryCardStyle(slotIndex: number, progress = 0) {
@@ -2892,7 +2916,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
   );
 
   const syncActiveIndexFromProgress = useCallback((progress: number) => {
-    const normalizedIndex = ((Math.round(progress) % storyScenes.length) + storyScenes.length) % storyScenes.length;
+    const nearestSlotIndex = getNearestStoryWorkItemSlotIndex(progress);
+    const normalizedIndex = storyWorkItemSlots[nearestSlotIndex]?.sceneIndex ?? 0;
+
     if (activeIndexRef.current === normalizedIndex) {
       return;
     }
@@ -2902,6 +2928,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
   }, []);
 
   const applyStoryCardDomProgress = useCallback((progress: number, impulse = 0) => {
+    const nearestSlotIndex = getNearestStoryWorkItemSlotIndex(progress);
+
     storyCardRefs.current.forEach((node, slotIndex) => {
       if (!node) {
         return;
@@ -2914,7 +2942,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 前景 DOM 卡片是 WebGL WorkItem 的清晰交互层：滚轮或触摸一到就即时更新，
       // 不完全等待 RAF 插值。这里驱动的是 15 个循环 slot，而不是 5 个业务文案本体；
       // 这样向下滚动时所有卡片会像源码 WorkItems 一样接力穿过镜头，不会退化成一张卡片换内容。
-      node.dataset.active = visual.isFocused && slot?.sceneIndex === activeIndexRef.current ? "true" : "false";
+      // active 标记也使用 15-slot 最近项，而不是小于 0.42 的窄窗口；
+      // 否则用户停在两个 target 之间时页面会没有当前卡，交互读感会退回“单卡内容切换”。
+      node.dataset.active = slotIndex === nearestSlotIndex && Boolean(slot) ? "true" : "false";
+      node.dataset.focusDistance = Math.abs(offset).toFixed(3);
       node.style.opacity = String(getStoryWorkItemHitLayerOpacity(visual));
       node.style.pointerEvents = Math.abs(offset) < STORY_WORK_VISIBLE_RANGE ? "auto" : "none";
       node.tabIndex = Math.abs(offset) < STORY_WORK_VISIBLE_RANGE ? 0 : -1;
@@ -5189,7 +5220,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       const sourceSpineScrollPhase = THREE.MathUtils.euclideanModulo(motionProgress * 1.62 + scrollFollow * 0.04, 1);
       const sourceSpineUvScroll = motionProgress * 0.36 + scrollFollow * 0.055;
       const pillarVerticalPhase = motionProgress * 0.78 + scrollFollow * 0.052;
-      const pillarScrollDrop = THREE.MathUtils.clamp(scrollFollow * 0.18, -0.24, 0.46);
+      const pillarScrollDrop = getStoryPillarScrollDrop(motionProgress, scrollFollow);
+      root.dataset.pillarDrop = pillarScrollDrop.toFixed(3);
+      root.dataset.storyProgress = motionProgress.toFixed(3);
       updateWorkRefractionCanvasTexture(workRefractionCanvas, motionProgress, time, scrollImpulse);
       particleMaterial.uniforms.uTime.value = time;
       columnParticleMaterial.uniforms.uTime.value = time;
@@ -5335,9 +5368,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       liquidColumn.scale.z = 1 + Math.cos(time * 0.48) * 0.035;
       spine.rotation.x += 0.003;
       spine.rotation.y += 0.006;
-      // 源码里的柱体不会被滚轮推到左右两侧；这次只把滚动输入转成 y 轴下落感。
-      // x/z 永远来自 pillarBasePosition，避免产生横向偏移；y 轴会随 scrollFollow 短暂向下压，
-      // 再叠加真实 spine 实例自己的无界 y-loop，于是滚动时读感是“整根柱体向下经过镜头”。
+      // 源码里的柱体不会被滚轮推到左右两侧；这次只把滚动进度转成 y 轴下落感。
+      // x/z 永远来自 pillarBasePosition，避免产生横向偏移；y 轴跟随 motionProgress 的循环位置，
+      // 因此用户停在滚动中段时柱体也仍处在“向下经过视窗”的位置，而不是速度消失后回正。
       pillarGroup.position.set(pillarBasePosition.x, pillarBasePosition.y - pillarScrollDrop, pillarBasePosition.z);
       pillarGroup.rotation.set(0, -0.08, 0);
       if (activeTheoryFlowerPointCloud) {
@@ -5777,7 +5810,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
             aria-label={`查看 ${scene.title}`}
             aria-pressed={activeIndex === sceneIndex}
             className="landing-story-workitem-card"
-            data-active={activeIndex === sceneIndex && Math.abs(getInfiniteStorySlotOffset(slotIndex, activeIndex)) < 0.42 ? "true" : "false"}
+            data-active={getNearestStoryWorkItemSlotIndex(activeIndex) === slotIndex ? "true" : "false"}
             data-story-index={sceneIndex}
             data-story-key={scene.key}
             data-story-slot={slotIndex}
