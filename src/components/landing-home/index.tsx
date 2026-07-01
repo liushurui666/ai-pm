@@ -79,7 +79,7 @@ const STORY_WORK_ITEM_REPEAT = 3;
 const STORY_WORK_SOURCE_RADIUS = 3.8;
 const STORY_WORK_SOURCE_CAMERA_RADIUS = STORY_WORK_SOURCE_RADIUS * 2;
 const STORY_WORK_SOURCE_Y_STEP = 0.84;
-const STORY_WORK_VISIBLE_RANGE = 8.2;
+const STORY_WORK_VISIBLE_RANGE = 6.85;
 const STORY_WORK_DOM_ORBIT_X = 168;
 const STORY_WORK_DOM_Y_STEP = 154;
 const STORY_WORK_DOM_ORBIT_Z = 112;
@@ -295,8 +295,9 @@ function getStoryWorkItemHitLayerOpacity(visual: StoryWorkItemVisual) {
   // DOM 层不再只是一个极淡 hit-area：用户明确要看到“所有卡片都在真实滚动并可交互”。
   // v132 之后视觉主层重新交给 WebGL/媒体玻璃，DOM 只保留足够的焦点和点击反馈；
   // 但非焦点卡不能淡到几乎不可见，否则用户会以为只有一张卡片在换内容。
-  // 这里把可见上限抬高到多张卡都能被点击和辨认，同时仍低于 WebGL 玻璃主层。
-  return Math.min(0.58, visual.opacity * (visual.isFocused ? 0.46 : 0.36));
+  // 这里把可见上限抬高到多张卡都能被点击和辨认，同时仍低于 WebGL 玻璃主层；
+  // 可见窗口本身小于 15-slot 半圈，卡片会先淡出再从顶部接回，避免无限滚动接缝露出来。
+  return Math.min(0.62, visual.opacity * (visual.isFocused ? 0.5 : 0.4));
 }
 
 function getInitialStoryCardStyle(slotIndex: number, progress = 0) {
@@ -2426,6 +2427,7 @@ function createWorkRefractionPanelMaterial(baseTexture: THREE.Texture, normalTex
 function createStoryWorkItemShaderMaterial(options: {
   accent: string;
   envTexture: THREE.Texture;
+  mediaTexture: THREE.Texture;
   normalTexture: THREE.Texture;
   opacity: number;
   paneTexture: THREE.Texture;
@@ -2435,6 +2437,7 @@ function createStoryWorkItemShaderMaterial(options: {
   // 非焦点卡会像一张透明 SaaS 卡被替换内容，和 ActiveTheory 源码的 WorkItemShader 差距很大。
   // 这个材质复用镜像中的 water normal、env 和运行时 Work/refraction canvas：
   // - paneTexture 仍承载 AI PM 的业务文案，但只作为玻璃内部的低清投影；
+  // - mediaTexture 对齐源码 `tVideo/uVideoBlend`，把参考项目媒体作为主玻璃里的运动投影；
   // - refractionTexture 来自当前 15 个 WorkItem slot 的离屏轨道，滚动时每张卡都会互相折射；
   // - x/z 不在材质里参与位移，横向感只来自 pane 自身折光，避免用户看到柱体整体偏移。
   return new THREE.ShaderMaterial({
@@ -2448,6 +2451,7 @@ function createStoryWorkItemShaderMaterial(options: {
       tMap: { value: options.paneTexture },
       tNormal: { value: options.normalTexture },
       tRefraction: { value: options.refractionTexture },
+      tVideo: { value: options.mediaTexture },
       uAccent: { value: new THREE.Color(options.accent) },
       uHover: { value: 0 },
       uImpulse: { value: 0 },
@@ -2455,6 +2459,7 @@ function createStoryWorkItemShaderMaterial(options: {
       uResolution: { value: new THREE.Vector2(1, 1) },
       uScroll: { value: 0 },
       uTime: { value: 0 },
+      uVideoBlend: { value: 0.62 },
     },
     vertexShader: `
       uniform float uHover;
@@ -2491,6 +2496,7 @@ function createStoryWorkItemShaderMaterial(options: {
       uniform sampler2D tMap;
       uniform sampler2D tNormal;
       uniform sampler2D tRefraction;
+      uniform sampler2D tVideo;
       uniform vec3 uAccent;
       uniform float uHover;
       uniform float uImpulse;
@@ -2498,6 +2504,7 @@ function createStoryWorkItemShaderMaterial(options: {
       uniform vec2 uResolution;
       uniform float uScroll;
       uniform float uTime;
+      uniform float uVideoBlend;
       varying vec2 vUv;
       varying vec3 vNormal;
       varying vec3 vViewDir;
@@ -2521,6 +2528,10 @@ function createStoryWorkItemShaderMaterial(options: {
         float g = texture2D(tex, clampedUv).g;
         float b = texture2D(tex, clampedUv - vec2(amount, 0.0)).b;
         return vec3(r, g, b);
+      }
+
+      vec2 scaleUv(vec2 uv, vec2 scale) {
+        return (uv - 0.5) / scale + 0.5;
       }
 
       vec3 softRefraction(vec2 uv) {
@@ -2558,6 +2569,26 @@ function createStoryWorkItemShaderMaterial(options: {
         float paneLuma = dot(pane, vec3(0.299, 0.587, 0.114));
         float paneBody = smoothstep(0.04, 0.52, paneLuma);
 
+        // 源码 WorkItemShader 会把 tVideo 从偏移后的 videoUV 混进玻璃主体，再用屏幕 UV 拉一点折射。
+        // 这里用本地已有的 Hogwarts 媒体纹理作为 tVideo 等价输入，和 AI PM 文案纹理一起混合；
+        // 这样每个真实 slot 都有独立媒体折射，而不是只有一张 DOM 文案卡在切换内容。
+        float sideEnergy = smoothstep(0.08, 0.86, abs(vNormal.x) + abs(normalSample.x) * 0.5);
+        vec2 videoUv = scaleUv(vUv, vec2(0.65, 0.52));
+        videoUv += vec2(0.3, -0.5);
+        videoUv.x += sideEnergy * 0.42;
+        videoUv = (videoUv - 0.5) * 0.8 + 0.5;
+        videoUv = mix(videoUv, scaleUv(screenUv, vec2(0.6)), 0.3);
+        videoUv = scaleUv(videoUv, vec2(1.0 + (1.0 - uVideoBlend) * 0.1));
+        videoUv += normalSample.xy * vec2(0.034, 0.026) + vec2(sin(uTime * 0.18 + uScroll * 3.0) * 0.006, 0.0);
+        vec2 imageUv = videoUv - normalSample.xy * 0.05 * (1.0 - uVideoBlend);
+        vec3 sourceImage = rgbShift(tMap, imageUv, edgeChromatic * sideEnergy) * 0.7;
+        vec3 sourceVideo = rgbShift(tVideo, videoUv, edgeChromatic * 1.25);
+        vec3 media = mix(sourceImage, sourceVideo, uVideoBlend);
+        float mediaMask = smoothstep(0.7, 0.0, abs(videoUv.x - 0.5)) * smoothstep(0.5, 0.4, abs(videoUv.y - 0.5));
+        float mediaLuma = dot(media, vec3(0.299, 0.587, 0.114));
+        float mediaBody = smoothstep(0.035, 0.56, mediaLuma) * mediaMask;
+        media *= mediaMask;
+
         vec2 envUv = vec2(
           vUv.x + normalSample.x * 0.045 + uTime * 0.006,
           vUv.y - normalSample.y * 0.04 + uScroll * 0.026
@@ -2567,10 +2598,11 @@ function createStoryWorkItemShaderMaterial(options: {
         vec3 darkGlass = vec3(0.022, 0.034, 0.038);
         vec3 accentGlow = uAccent * (0.09 + fresnel * 0.22 + uHover * 0.08);
         vec3 oil = vec3(0.38, 0.22, 0.68) * smoothstep(0.34, 0.94, abs(normalSample.x)) * 0.12;
-        vec3 color = darkGlass + pane * (0.34 + uHover * 0.12) + refraction * (0.52 + fresnel * 0.34) + env * (0.12 + fresnel * 0.2) + accentGlow + oil;
+        vec3 color = darkGlass + pane * (0.24 + uHover * 0.1) + media * (0.48 + fresnel * 0.22) + refraction * (0.58 + fresnel * 0.38) + env * (0.14 + fresnel * 0.22) + accentGlow + oil;
+        color = mix(color, color * (0.72 + media * 0.72), mediaBody * smoothstep(0.74, 0.0, length(vUv - 0.5)));
         color = pow(max(color, 0.0), vec3(0.92));
 
-        float alpha = uOpacity * mask * edge * scan * (0.28 + paneBody * 0.58 + fresnel * 0.34 + dot(refraction, vec3(0.2126, 0.7152, 0.0722)) * 0.18);
+        float alpha = uOpacity * mask * edge * scan * (0.24 + paneBody * 0.36 + mediaBody * 0.46 + fresnel * 0.38 + dot(refraction, vec3(0.2126, 0.7152, 0.0722)) * 0.22);
         gl_FragColor = vec4(color, clamp(alpha, 0.0, 0.92));
       }
     `,
@@ -4331,7 +4363,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       sprite.scale.set(1.08 + (veilIndex % 2) * 0.28, 1.34 + (veilIndex % 3) * 0.22, 1);
       sprite.renderOrder = 5;
       pillarGroup.add(sprite);
-      return { material, phase: veilIndex * 0.74, sprite };
+      return { basePosition: sprite.position.clone(), material, phase: veilIndex * 0.74, sprite };
     });
 
     // 参考图里的柱体不是孤立骨块堆叠，而是有暗色油膜中轴把椎骨串在一起。
@@ -4958,6 +4990,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       const material = createStoryWorkItemShaderMaterial({
         accent: sceneItem.accent,
         envTexture: activeTheoryWorkEnvTexture,
+        mediaTexture: activeTheoryWorkHogwartsThumbTexture,
         normalTexture: activeTheoryWorkNormalTexture,
         opacity: 0.18,
         paneTexture: panelTexture,
@@ -4987,7 +5020,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 这些卡片对应源站 WorkItem：所有项目卡都一直存在于同一条无界轨道上。
       // v134 起把“源码 camera 穿过 50deg target”的横向视差还给卡片自身；
       // 但柱体和相机的 x/z 仍保持锁定，避免用户滚动时看到整根柱子左右偏移。
-      material.uniforms.uOpacity.value = Math.min(0.42, 0.056 + initialLayout.trackWindow * 0.16 + initialLayout.focus * 0.22);
+      material.uniforms.uOpacity.value = Math.min(0.5, 0.05 + initialLayout.trackWindow * 0.18 + initialLayout.focus * 0.28);
       mesh.renderOrder = initialOffset === 0 ? 30 : Math.max(20, 28 - initialLayout.absOffset);
       backplate.renderOrder = mesh.renderOrder - 0.2;
       mesh.userData.index = sceneIndex;
@@ -5158,7 +5191,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const pulse = 0.9 + Math.sin(time * 0.28 + item.phase) * 0.1;
         item.material.opacity = (0.045 + veilIndex * 0.007) * pulse;
         item.material.rotation = veilIndex * 0.42 + Math.sin(time * 0.18 + item.phase) * 0.1;
-        item.sprite.position.x = Math.sin(time * 0.16 + item.phase) * 0.12;
+        // 光雾是柱体材质的一部分，不能在 x 轴自行摆动；否则即便真实 spine/camera 已锁定，
+        // 用户仍会把雾面横移看成整根柱子左右漂。这里只保留 y 向呼吸和尺寸变化。
+        item.sprite.position.x = item.basePosition.x;
+        item.sprite.position.y = item.basePosition.y + Math.sin(time * 0.22 + item.phase) * 0.014;
+        item.sprite.position.z = item.basePosition.z;
         item.sprite.scale.set((1.05 + (veilIndex % 2) * 0.28) * pulse, (1.32 + (veilIndex % 3) * 0.24) * pulse, 1);
       });
 
@@ -5452,7 +5489,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const scrollBoost = Math.min(0.12, Math.abs(scrollImpulse) * 0.035);
         const cardWindow = Math.pow(layout.trackWindow, 1.72);
         const cardFocus = Math.pow(layout.focus, 1.35);
-        const targetOpacity = Math.min(0.52, 0.04 + cardWindow * 0.14 + cardFocus * 0.32 + scrollBoost * 0.08);
+        const targetOpacity = Math.min(0.62, 0.036 + cardWindow * 0.18 + cardFocus * 0.4 + scrollBoost * 0.08);
 
         // 这里是这次修正的核心：WorkItem pane 仍有 15 张、仍按源码 50 度队列换面和排序。
         // x/z 的变化只属于卡片自身的环形队列，不再传给 camera 或 pillarGroup；
@@ -5482,7 +5519,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         // 这里比 v118 略微抬高面片和背板，但仍用透明上限控制，避免退回一整块大色卡遮住柱体。
         // 非焦点 pane 如果保持同样大面积高透明度，会叠成一整块雾板，用户会误以为只有一张卡。
         // 因此把 WorkItem 的玻璃背板做成“焦点清楚、远景迅速衰减”，让 15 个真实 slot 的前后关系更像源码。
-        backplateMaterial.opacity += ((0.012 + Math.pow(layout.trackWindow, 2) * 0.024 + cardFocus * 0.064 + scrollBoost * 0.032) - backplateMaterial.opacity) * 0.12;
+        backplateMaterial.opacity += ((0.01 + Math.pow(layout.trackWindow, 2) * 0.022 + cardFocus * 0.052 + scrollBoost * 0.028) - backplateMaterial.opacity) * 0.12;
       });
       // DOM 前景轨道和 WebGL WorkItem 使用同一个无界 progress。
       // 它只改变卡片自身的轨道坐标/转面/透明度，不改变柱体坐标；这样即使 WebGL 暗场很重，
