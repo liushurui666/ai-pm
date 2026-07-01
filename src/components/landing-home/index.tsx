@@ -80,11 +80,11 @@ const STORY_WORK_SOURCE_RADIUS = 3.8;
 const STORY_WORK_SOURCE_CAMERA_RADIUS = STORY_WORK_SOURCE_RADIUS * 2;
 const STORY_WORK_SOURCE_Y_STEP = 0.84;
 const STORY_WORK_VISIBLE_RANGE = 7.2;
-const STORY_WORK_DOM_ORBIT_X = 168;
-const STORY_WORK_DOM_Y_STEP = 252;
+const STORY_WORK_DOM_ORBIT_X = 104;
+const STORY_WORK_DOM_Y_STEP = 388;
 const STORY_WORK_DOM_ORBIT_Z = 258;
-const STORY_WORK_WEBGL_ORBIT_X = 0.68;
-const STORY_WORK_WEBGL_Y_STEP = 1.24;
+const STORY_WORK_WEBGL_ORBIT_X = 0.46;
+const STORY_WORK_WEBGL_Y_STEP = 1.72;
 
 function createSolidDataTexture(r: number, g: number, b: number) {
   const texture = new THREE.DataTexture(new Uint8Array([r, g, b, 255]), 1, 1, THREE.RGBAFormat);
@@ -253,11 +253,13 @@ function getStoryWorkItemVisualFromOffset(offset: number, impulse = 0): StoryWor
   const trackWindow = Math.max(0, 1 - absOffset / STORY_WORK_VISIBLE_RANGE);
   const orbit = getStoryWorkItemOrbit(offset);
   const orbitDepth = Math.pow(trackWindow, 0.8);
-  // 源站 Work 页的中心柱是视觉锚点，大屏牌围绕它经过；焦点牌并不需要死贴屏幕中轴。
-  // 这里给焦点牌一个很轻的左侧基准位，把中轴留给柱体，用户向下滚动时读到的是
-  // “屏幕队列经过固定柱体”，而不是一张正中大卡遮住柱体后造成横漂错觉。
-  const focusAnchorX = -92 * focus;
-  const x = focusAnchorX + orbit.x * STORY_WORK_DOM_ORBIT_X * orbitDepth;
+  // 用户明确指出滚动时不能读成“柱体被卡片拖着左右走”。
+  // 源站 WorkItems 的相机确实会沿 50 度 target 前进，但在 AI PM 页面里柱体是主视觉锚点；
+  // 因此焦点卡进入中心窗口时要锁到稳定左侧屏牌位，只把轻微横向差异留给远处相邻卡。
+  const focusLaneLock = THREE.MathUtils.smoothstep(focus, 0.46, 0.94);
+  const focusAnchorX = -112 * focusLaneLock;
+  const orbitXWeight = 1 - focusLaneLock * 0.64;
+  const x = focusAnchorX + orbit.x * STORY_WORK_DOM_ORBIT_X * orbitDepth * orbitXWeight;
   const y = -offset * STORY_WORK_DOM_Y_STEP;
   const z = 250 + orbit.z * STORY_WORK_DOM_ORBIT_Z + focus * 292 - absOffset * 18;
   const rotateX = THREE.MathUtils.clamp(offset * -0.032, -0.16, 0.16);
@@ -268,9 +270,8 @@ function getStoryWorkItemVisualFromOffset(offset: number, impulse = 0): StoryWor
 
   // 这套公式保留源码里“15 张真实 view 常驻 + 50 度 target 编排”的交互语义，
   // 横向轨道只作用在 WorkItem 自己身上，camera 与 pillar 仍然锁在固定 x/z。
-  // 这样用户向下滚动时，柱体只做纵向推进；卡片虽然仍然沿源码 50 度序列换面，
-  // 但横向振幅被压到很小，画面读感会接近“多张大屏牌从上到下经过中轴”，
-  // 避免再被误判成整根柱子跟着卡片左右漂移。
+  // v144 进一步把焦点牌的 x 锚点锁稳，卡片主要通过 y 轴、z 深度和 rotateY 表达滚动换面；
+  // 这样向下滚动时画面读感是“多张屏牌沿固定柱体从上到下经过”，而不是一整团雾面横漂。
   return {
     isFocused: absOffset < 0.42,
     opacity,
@@ -293,15 +294,17 @@ function getStoryWorkItemWebGLLayout(offset: number) {
   // 用户强调“柱子不能整体左右偏移”，但源码 WorkItems 本身确实有 50 度环形排布；
   // 所以这里只恢复卡片自身的 x 轨道，camera/pillar/真实 spine 不跟着移动。
   // 结果是柱体固定纵向滚动，所有卡片按源码队列在它前后左右穿过。
-  // v142 按源站 `Element_3_Workscale=[4,2,1]` 的宽屏感强化横向牌距，
-  // 同时给焦点牌留出左侧基准位，避免它正中覆盖柱体，让邻近 WorkItem 牌也能被看见。
-  const focusAnchorX = -0.62 * focus;
+  // v144 不再让焦点 WorkItem 随 50 度轨道明显横向换位。
+  // 源码的横向感保留给非焦点牌和 rotateY，焦点牌锁到稳定屏牌位，避免用户看到柱体横向漂移。
+  const focusLaneLock = THREE.MathUtils.smoothstep(focus, 0.46, 0.94);
+  const focusAnchorX = -0.56 * focusLaneLock;
+  const orbitXWeight = 1 - focusLaneLock * 0.7;
 
   return {
     absOffset,
     focus,
     trackWindow,
-    x: focusAnchorX + orbit.x * STORY_WORK_WEBGL_ORBIT_X * Math.pow(trackWindow, 0.78),
+    x: focusAnchorX + orbit.x * STORY_WORK_WEBGL_ORBIT_X * Math.pow(trackWindow, 0.78) * orbitXWeight,
     y: 0.12 - offset * STORY_WORK_WEBGL_Y_STEP,
     z: 1.42 + orbit.z * 0.76 + focus * 1.28 - absOffset * 0.012,
     rotationX: THREE.MathUtils.clamp(offset * -0.05, -0.2, 0.2),
@@ -320,7 +323,7 @@ function getStoryWorkItemHitLayerOpacity(visual: StoryWorkItemVisual) {
   // v140 虽然保证了 15-slot 交互，但 DOM 文字层仍然太像产品说明卡，
   // 会盖住真正的 WebGL 媒体玻璃。这里把 hit layer 透明度降一档，
   // 让“大媒体屏 + 柱体折射”成为第一视觉，同时保留足够 hover/focus 可见性。
-  return Math.min(0.52, visual.opacity * (visual.isFocused ? 0.44 : 0.34));
+  return Math.min(0.28, visual.opacity * (visual.isFocused ? 0.24 : 0.2));
 }
 
 function getStoryPillarScrollDrop(progress: number, impulse: number) {
@@ -328,15 +331,15 @@ function getStoryPillarScrollDrop(progress: number, impulse: number) {
   // v138 的下落主要来自 scrollFollow，用户一停手它就回到 0，视觉会重新变成“柱体固定、只有内部在流动”。
   // 这里把下落拆成三层：
   // 1. wholeColumnDrop 按连续 progress 进入稳定下沉态，不再每个 slot 边界回到 0；
-  // 2. cycleDrift 只提供很小的单卡片过渡下坠感，避免“停住后柱体自己回正”；
-  // 3. impulseDrop 是滚轮瞬间的惯性，不能再成为主体位移。
-  // 这样滚动几次后，用户看到的是整根柱体已经向下穿过视窗，而不是内部油膜/贴图独自流动。
-  const cycleProgress = THREE.MathUtils.euclideanModulo(progress, 1);
-  const wholeColumnDrop = 1.82 * (1 - Math.exp(-Math.max(0, progress) * 0.72));
-  const cycleDrift = THREE.MathUtils.smoothstep(cycleProgress, 0.08, 0.92) * 0.34;
-  const impulseDrop = THREE.MathUtils.clamp(impulse * 0.14, -0.12, 0.34);
+  // 2. slowCrawl 是随真实 scroll progress 单调增加的微位移，不按每张卡片的 fract 重置；
+  // 3. impulseDrop 只允许向下增加一点惯性，不再用负冲量把柱体拉回。
+  // 这样滚动到中段后柱体不会在 slot 边界“自己回正”，视觉上始终是同一根柱子向下穿过视窗。
+  const positiveProgress = Math.max(0, progress);
+  const wholeColumnDrop = 2.08 * (1 - Math.exp(-positiveProgress * 0.64));
+  const slowCrawl = Math.min(0.22, positiveProgress * 0.045);
+  const impulseDrop = THREE.MathUtils.clamp(Math.max(0, impulse) * 0.11, 0, 0.2);
 
-  return THREE.MathUtils.clamp(wholeColumnDrop + cycleDrift + impulseDrop, -0.08, 2.18);
+  return THREE.MathUtils.clamp(wholeColumnDrop + slowCrawl + impulseDrop, -0.04, 2.3);
 }
 
 function getInitialStoryCardStyle(slotIndex: number, progress = 0) {
@@ -2141,28 +2144,28 @@ function createPanelTexture(scene: StoryScene) {
   // v119 以后视觉主层由 WebGL pane 承担，纹理文字不能再像产品说明卡一样抢戏。
   // 源站 WorkPaneUI 的标题是嵌在媒体玻璃里的低分辨率投影；这里保留业务信息，
   // 但把字号、亮度和阴影压低，让柱体油膜和 pane 队列成为第一视觉。
-  context.globalAlpha = 0.46;
-  context.fillStyle = "rgba(245,252,255,0.5)";
+  context.globalAlpha = 0.3;
+  context.fillStyle = "rgba(245,252,255,0.42)";
   context.font = "600 22px monospace";
   context.textAlign = "center";
   context.fillText(`AI PM / ${scene.label.toUpperCase()}`, canvas.width / 2, 220);
 
-  context.globalAlpha = 0.42;
-  context.fillStyle = "rgba(255,255,255,0.64)";
+  context.globalAlpha = 0.24;
+  context.fillStyle = "rgba(255,255,255,0.52)";
   context.shadowColor = "#9fe9ff";
   context.shadowBlur = 14;
   context.font = "700 36px sans-serif";
   context.fillText(scene.title, canvas.width / 2, 318);
 
   context.shadowBlur = 0;
-  context.globalAlpha = 0.3;
-  context.fillStyle = "rgba(246,243,232,0.5)";
+  context.globalAlpha = 0.16;
+  context.fillStyle = "rgba(246,243,232,0.42)";
   context.font = "600 21px sans-serif";
   context.fillText(scene.metric.toUpperCase(), canvas.width / 2, 392);
 
   context.textAlign = "left";
-  context.globalAlpha = 0.2;
-  context.fillStyle = "rgba(255,255,255,0.28)";
+  context.globalAlpha = 0.1;
+  context.fillStyle = "rgba(255,255,255,0.22)";
   context.font = "500 18px monospace";
   scene.signals.forEach((signal, index) => {
     context.fillText(`// ${signal}`, 76 + index * 250, 552);
@@ -5000,7 +5003,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       {
         angle: -1.26,
         height: 3.42,
-        opacity: 0.022,
+        opacity: 0.007,
         radiusX: 2.68,
         radiusZ: 0.66,
         renderOrder: 7.85,
@@ -5012,7 +5015,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       {
         angle: 0.03,
         height: 2.86,
-        opacity: 0.026,
+        opacity: 0.008,
         radiusX: 0.86,
         radiusZ: 0.82,
         renderOrder: 8.82,
@@ -5024,7 +5027,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       {
         angle: 2.62,
         height: 2.24,
-        opacity: 0.011,
+        opacity: 0.005,
         radiusX: 1.78,
         radiusZ: 0.84,
         renderOrder: 6.2,
@@ -5235,6 +5238,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       const pillarVerticalPhase = motionProgress * 0.78 + scrollFollow * 0.052;
       const pillarScrollDrop = getStoryPillarScrollDrop(motionProgress, scrollFollow);
       root.dataset.pillarDrop = pillarScrollDrop.toFixed(3);
+      root.dataset.pillarX = pillarBasePosition.x.toFixed(3);
+      root.dataset.pillarZ = pillarBasePosition.z.toFixed(3);
       root.dataset.storyProgress = motionProgress.toFixed(3);
       updateWorkRefractionCanvasTexture(workRefractionCanvas, motionProgress, time, scrollImpulse);
       particleMaterial.uniforms.uTime.value = time;
@@ -5360,8 +5365,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           panel.mediaMaterial.uniforms.uScroll.value = sourceScrollProgress;
           panel.mediaMaterial.uniforms.uOpacity.value =
             panel.variant === "front"
-              ? Math.min(0.2, panel.material.opacity * 4.8 + Math.abs(scrollImpulse) * 0.012)
-              : Math.min(0.15, panel.material.opacity * 3.9 + Math.abs(scrollImpulse) * 0.009);
+              ? Math.min(0.12, panel.material.opacity * 3.2 + Math.abs(scrollImpulse) * 0.006)
+              : Math.min(0.09, panel.material.opacity * 2.8 + Math.abs(scrollImpulse) * 0.005);
         }
         if (panel.refractionMesh && panel.refractionMaterial) {
           panel.refractionMesh.position.copy(panel.mesh.position);
@@ -5371,8 +5376,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           panel.refractionMaterial.uniforms.uScroll.value = sourceScrollProgress;
           panel.refractionMaterial.uniforms.uOpacity.value =
             panel.variant === "front"
-              ? Math.min(0.18, panel.material.opacity * 4.2 + Math.abs(scrollImpulse) * 0.01)
-              : Math.min(0.12, panel.material.opacity * 3.4 + Math.abs(scrollImpulse) * 0.007);
+              ? Math.min(0.1, panel.material.opacity * 2.8 + Math.abs(scrollImpulse) * 0.005)
+              : Math.min(0.075, panel.material.opacity * 2.4 + Math.abs(scrollImpulse) * 0.004);
         }
       });
       stage.rotation.y = 0;
@@ -5595,7 +5600,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         // 用户这轮的优先级是“大屏牌先成立”：焦点 WorkItem 必须像参考图那样有足够面积和实体感。
         // 因此这版降低远景衰减指数、提高焦点不透明度，让 WebGL pane 成为画面主体；
         // 仍保留上限，避免所有 15 张牌同时堆成一整块灰雾。
-        const targetOpacity = Math.min(0.98, 0.12 + cardWindow * 0.38 + cardFocus * 0.5 + scrollBoost * 0.08);
+        const targetOpacity = Math.min(0.82, 0.1 + cardWindow * 0.3 + cardFocus * 0.42 + scrollBoost * 0.06);
 
         // 这里是这次修正的核心：WorkItem pane 仍有 15 张、仍按源码 50 度队列换面和排序。
         // x/z 的变化只属于卡片自身的环形队列，不再传给 camera 或 pillarGroup；
@@ -5626,7 +5631,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         // 非焦点 pane 如果保持同样大面积高透明度，会叠成一整块雾板，用户会误以为只有一张卡。
         // 因此把 WorkItem 的玻璃背板做成“焦点清楚、远景仍有实体”，让大屏能遮住一部分柱体，
         // 更接近源站里项目牌压在柱体前方的层级，而不是柱体永远盖住卡片。
-        backplateMaterial.opacity += ((0.026 + Math.pow(layout.trackWindow, 1.45) * 0.05 + cardFocus * 0.14 + scrollBoost * 0.022) - backplateMaterial.opacity) * 0.12;
+        backplateMaterial.opacity += ((0.018 + Math.pow(layout.trackWindow, 1.45) * 0.034 + cardFocus * 0.09 + scrollBoost * 0.018) - backplateMaterial.opacity) * 0.12;
       });
       // DOM 前景轨道和 WebGL WorkItem 使用同一个无界 progress。
       // 它只改变卡片自身的轨道坐标/转面/透明度，不改变柱体坐标；这样即使 WebGL 暗场很重，
