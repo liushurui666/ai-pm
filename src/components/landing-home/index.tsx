@@ -333,9 +333,9 @@ function getStoryWorkItemHitLayerOpacity(visual: StoryWorkItemVisual) {
   // 让“大媒体屏 + 柱体折射”成为第一视觉，同时保留足够 hover/focus 可见性。
   // v146 以后 DOM 层不再只是“看不见的点击层”：它承载真实媒体素材，负责让用户直观看到多张大屏滚动。
   // 透明度仍按焦点分层控制，避免 3-4 张大屏叠成整面雾幕；WebGL 继续负责柱体折射和油膜质感。
-  // v148 把 v147 过强的 DOM 媒体层收回来：DOM 只负责让用户看清当前可点击屏，
-  // 真正的空间层级交给 WebGL pane，否则多张 DOM 背景会叠成一整块全屏海报。
-  return Math.min(0.24, visual.opacity * (visual.isFocused ? 0.22 : 0.09));
+  // v149 单独修正文案可读性：v148 把整张 DOM 卡透明度压到 0.22，连标题和指标也一起被吃掉。
+  // 这里把焦点卡恢复到可读层级，但非焦点卡继续保持低透明，避免多张媒体背景重新叠成一整块全屏海报。
+  return Math.min(0.62, visual.opacity * (visual.isFocused ? 0.62 : 0.1));
 }
 
 function getStoryPillarScrollDrop(progress: number, impulse: number) {
@@ -2153,24 +2153,24 @@ function createPanelTexture(scene: StoryScene) {
   drawRoundedRect(context, 31, 31, canvas.width - 62, canvas.height - 62, 49);
   context.stroke();
 
-  // v147 以后 pane texture 只做极弱 UI 投影，主画面改由每个 scene 的真实媒体纹理承担。
-  // 否则中文标题会把滚动屏幕变回“宣传卡”，看起来就不像源码 WorkItem 的媒体玻璃。
-  context.globalAlpha = 0.075;
-  context.fillStyle = "rgba(245,252,255,0.34)";
+  // v149 把 WebGL pane 里的 UI 投影提高到“可辨认但不抢戏”。
+  // 这里不是恢复大宣传标题，而是给玻璃屏内部留一层低清文字，让 DOM 与 WebGL 两层读感一致。
+  context.globalAlpha = 0.16;
+  context.fillStyle = "rgba(245,252,255,0.56)";
   context.font = "600 22px monospace";
   context.textAlign = "center";
   context.fillText(`AI PM / ${scene.label.toUpperCase()}`, canvas.width / 2, 220);
 
-  context.globalAlpha = 0.055;
-  context.fillStyle = "rgba(255,255,255,0.38)";
+  context.globalAlpha = 0.14;
+  context.fillStyle = "rgba(255,255,255,0.62)";
   context.shadowColor = "#9fe9ff";
-  context.shadowBlur = 7;
+  context.shadowBlur = 11;
   context.font = "700 36px sans-serif";
   context.fillText(scene.title, canvas.width / 2, 318);
 
   context.shadowBlur = 0;
-  context.globalAlpha = 0.045;
-  context.fillStyle = "rgba(246,243,232,0.32)";
+  context.globalAlpha = 0.11;
+  context.fillStyle = "rgba(246,243,232,0.52)";
   context.font = "600 21px sans-serif";
   context.fillText(scene.metric.toUpperCase(), canvas.width / 2, 392);
 
