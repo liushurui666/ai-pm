@@ -3,70 +3,64 @@
 - source visual truth path: `/tmp/ai-pm-at-reference/mp4-02-4.2s.png`
 - source video: `/Users/liushurui/Library/Application Support/LarkShell/screenshot/20260629120942_rec_.mp4`
 - source mirror: `/Users/liushurui/Desktop/workspace/new-jiguangjuzhen/activetheory-work-clone-nav-orb-20260524-121151(1)`
-- implementation top screenshot: `/tmp/ai-pm-landing-scroll-v140/scroll-0.png`
-- implementation mid-scroll screenshot: `/tmp/ai-pm-landing-scroll-v140/scroll-1155.png`
-- implementation deep-scroll screenshot: `/tmp/ai-pm-landing-scroll-v140/scroll-1900.png`
-- full-view comparison evidence: `/tmp/ai-pm-landing-scroll-v140/source-vs-scroll-1155.png`
-- focused region comparison evidence: center WorkItem/pillar crop was inspected from the full-view comparison; no separate crop was needed because the pillar, active card, adjacent cards, and x/y relationship are visible at the desktop viewport.
-- viewport: 1910x1035 desktop, local Playwright headless fallback, `http://localhost:3004/?qa=scroll-v140-active-target`
-- state: unauthenticated landing page, hydrated WebGL canvas, programmatic native page scroll through top/mid/deep states; mid-scroll also hovered a non-center visible card to verify the card rail is not center-card-only.
+- implementation mid-scroll screenshot: `/tmp/ai-pm-landing-scroll-v142/ai-pm-v142-scroll-1155.png`
+- implementation deep-scroll screenshot: `/tmp/ai-pm-landing-scroll-v142/ai-pm-v142-scroll-2650.png`
+- metrics evidence: `/tmp/ai-pm-landing-scroll-v142/ai-pm-v142-real-scroll-metrics-viewport.json`
+- viewport: 1910x1035 desktop, Codex Playwright browser, `http://localhost:3004/?qa=v142-real-scroll`
+- state: unauthenticated landing page, hydrated WebGL canvas, programmatic native page scroll through top/mid/deep states.
 - final result: blocked
-- blocking reason: v140 fixes the latest behavior complaints around pillar x/z stability, y-only pillar drop, and 15-slot card interaction continuity, but the source still has stronger exact media-card rendering, WorkItem MRT refraction, source camera composite, and material response than this implementation.
+- blocking reason: v142 addresses the latest interaction complaint by keeping the pillar/camera x-z anchored while a 15-slot WorkItem queue scrolls past it, but the visual is still not a 100% Active Theory clone because the source MRT refraction, source camera composite, project media textures, and exact shader material response are not fully ported.
 
 ## Findings
 
-- [P1] Pillar x/z remains locked while scroll creates a y-only downward pass.
-  Location: `src/components/landing-home/index.tsx`.
-  Evidence: v140 metrics show `pillarDrop` moving from `0.000` to `0.663`, `0.355`, `0.736`, and `0.820` across scroll positions; `pillarGroup.position.x/z` still comes only from `pillarBasePosition`.
-  Impact: this addresses the report that the column should not shift left/right during downward scroll.
-  Fix: keep pillar/camera x-z fixed, derive y drop from continuous `motionProgress`, and use scroll impulse only as a light transient overlay.
+- [P1] Pillar remains the centered visual anchor; scrolling now reads as vertical pass-through, not column lateral drift.
+  Location: `getStoryWorkItemWebGLLayout()`, `getStoryPillarScrollDrop()`, and the render-loop camera update in `src/components/landing-home/index.tsx`.
+  Evidence: WorkItem x/z motion is applied only to pane meshes and DOM hit layers; camera target keeps `cameraBasePosition.x/z` and `cameraBaseLookAt.x/z`. v142 metrics show `pillarDrop` changing with scroll (`0.855`, `0.992`, `0.863`, `0.303`) while the pillar/camera x-z code remains fixed.
+  Impact: addresses the report that scrolling made the column appear to shift left/right.
+  Fix: keep the pillar/camera x-z path locked and drive only y scan/drop plus internal oil/particle phase.
 
-- [P1] Card rail now keeps a true 15-slot nearest target instead of losing active state between cards.
-  Location: `getNearestStoryWorkItemSlotIndex()`, `syncActiveIndexFromProgress()`, and `applyStoryCardDomProgress()` in `src/components/landing-home/index.tsx`.
-  Evidence: v140 metrics show `totalCards=15`, `visibleCount=5`, and `activeCount=1` at all sampled scroll positions. Before this pass, fractional scroll positions could produce `activeCount=0`, making the rail feel like a single card swapping content.
-  Impact: visible cards now behave like a continuous WorkItem target queue rather than a narrow five-scene carousel.
-  Fix: compute the active WorkItem from the nearest 15-slot progress index and attach `data-focus-distance` to every card for QA/debug.
+- [P1] WorkItem is a real 15-slot queue, not one center card swapping content.
+  Location: `storyWorkItemSlots`, `getInfiniteStorySlotOffset()`, `getNearestStoryWorkItemSlotIndex()`, and `applyStoryCardDomProgress()` in `src/components/landing-home/index.tsx`.
+  Evidence: v142 metrics keep `totalCards=15`, `visibleCount=14-15`, and `activeCount=1` across sampled scroll positions. Active slots advance through `1 -> 1 -> 2 -> 3 -> 4` as native scroll advances.
+  Impact: all cards stay mounted and interactive on the same continuous track, so the page behaves like a scrollable Work queue rather than a fake one-card carousel.
+  Fix: preserve the 15-slot modulo queue and nearest-target active slot while writing per-card transform, opacity, pointer, and focus distance every frame.
 
-- [P1] All visible DOM cards retain pointer reachability and hover feedback.
-  Location: `.landing-story-workitem-card` in `src/components/landing-home/index.less`.
-  Evidence: sampled visible cards all have `pointer=auto`; the mid-scroll screenshot was taken after hovering a non-center card. Hover only changes border/glow/scan opacity and does not override the JS-written 3D transform.
-  Impact: this addresses the complaint that only one card appears interactive.
-  Fix: added source-like hover affordance while preserving the scroll-driven 3D transform.
+- [P1] Card motion now follows source-like top-to-bottom passing with stronger side panes.
+  Location: orbit constants and `getStoryWorkItemVisualFromOffset()` / `getStoryWorkItemWebGLLayout()` in `src/components/landing-home/index.tsx`.
+  Evidence: v142 uses wider horizontal card spacing (`STORY_WORK_WEBGL_ORBIT_X=0.74`, `STORY_WORK_DOM_ORBIT_X=184`) and larger vertical travel (`STORY_WORK_WEBGL_Y_STEP=1.2`, `STORY_WORK_DOM_Y_STEP=246`). Metrics show visible card y spread above `3300px`, so cards are not locked to one center position.
+  Impact: adjacent panes remain visible above/below the focused item while the central pillar stays readable.
+  Fix: anchor the focused pane slightly off-center, enlarge the source-inspired widescreen pane ratio, and reduce the DOM text layer so WebGL panes carry the visual.
 
-- [P2] Visual fidelity is improved behaviorally but still not source-identical.
-  Location: source spine/material layers, WorkItem pane shader, and text/card composition in `src/components/landing-home/index.tsx`.
-  Evidence: the full-view comparison shows our card stack is still text-heavy and translucent, while the reference uses stronger media panes, sharper Hogwarts-style content, deeper refraction, and a more precise camera/composite pipeline.
-  Impact: the interaction direction now matches the requested mechanics more closely, but the exact Active Theory visual quality remains open.
-  Fix: continue porting source `WorkItemShader`/`WorkItemUIShader`, `Work/refraction` MRT, and source camera target interpolation where practical.
+- [P2] Visual fidelity remains below the source.
+  Location: WorkItem pane shader, refraction texture emulation, source media content, and glass material layers in `src/components/landing-home/index.tsx`.
+  Evidence: `/tmp/ai-pm-landing-scroll-v142/ai-pm-v142-scroll-1155.png` shows the right behavior pattern, but the result is still foggier and more UI-text heavy than the reference frame.
+  Impact: the interaction is now closer to the requested source behavior, but the final visual still needs shader/media work before it should be called an exact clone.
+  Fix: continue porting the source `WorkItemShader`/`WorkItemUIShader` behavior, true Work/refraction MRT, source project media, and camera composite.
 
 ## Patches Made In This Pass
 
-- Added 15-slot nearest-target active calculation so every scroll stop has one current WorkItem.
-- Kept all 15 DOM/WebGL WorkItem slots on the same continuous progress path.
-- Added `data-focus-distance` metrics for card QA and debugging.
-- Added hover feedback for every visible card without changing its RAF-driven transform.
-- Preserved v139 y-only pillar drop and x/z locked camera/pillar behavior.
+- Strengthened y-only pillar drop and kept pillar/camera x-z locked.
+- Rebalanced the WorkItem track so panes move through a taller y path with clearer side spacing.
+- Converted the DOM card layer into a lighter interaction/hit layer instead of a dominant product card.
+- Changed WebGL pane texture ratio toward the source `Element_3_Workscale=[4,2,1]` widescreen feel.
+- Verified all 15 WorkItem slots remain mounted, visible/interactable in sequence, and keep exactly one active slot.
 
 ## Validation
 
 - `git diff --check`: passed.
-- `corepack pnpm lint`: passed.
-- Browser route: `http://localhost:3004/?qa=scroll-v140-active-target`.
+- Browser route: `http://localhost:3004/?qa=v142-real-scroll`.
 - Browser screenshots:
-  - `/tmp/ai-pm-landing-scroll-v140/scroll-0.png`
-  - `/tmp/ai-pm-landing-scroll-v140/scroll-1155.png`
-  - `/tmp/ai-pm-landing-scroll-v140/scroll-1900.png`
-  - `/tmp/ai-pm-landing-scroll-v140/source-vs-scroll-1155.png`
+  - `/tmp/ai-pm-landing-scroll-v142/ai-pm-v142-scroll-1155.png`
+  - `/tmp/ai-pm-landing-scroll-v142/ai-pm-v142-scroll-2650.png`
 - Browser metrics:
-  - Top: 15 total cards, 5 visible cards, active slot `0`, focused card about `915x555`, x spread `158px`.
-  - Scroll 410: active slot `0`, `pillarDrop=0.663`, 5 visible cards, x spread `151px`.
-  - Scroll 1155: active slot `1`, `pillarDrop=0.355`, 5 visible cards, x spread `158px`.
-  - Scroll 1900: active slot `2`, `pillarDrop=0.736`, 5 visible cards, x spread `152px`.
-  - Scroll 2650: active slot `2`, `pillarDrop=0.820`, 5 visible cards, x spread `154px`.
-  - Console/page errors: none.
+  - Scroll 410: 15 total cards, 14 visible/interactable cards, active slot `1`, `pillarDrop=0.855`, y spread `3322px`.
+  - Scroll 1155: 15 total cards, 14 visible/interactable cards, active slot `2`, `pillarDrop=0.992`, y spread `3359px`.
+  - Scroll 1900: 15 total cards, 14 visible/interactable cards, active slot `3`, `pillarDrop=0.863`, y spread `3359px`.
+  - Scroll 2650: 15 total cards, 15 visible/interactable cards, active slot `4`, `pillarDrop=0.303`, y spread `3341px`.
+  - Console/page errors: none observed in Codex Playwright page run.
 
 ## Follow-up Polish
 
-- Port the source `WorkItemShader.glsl` and `WorkItemUIShader.glsl` more literally, including true MRT `WorkRefraction` output.
-- Replace more text-heavy foreground cards with source-style media panes so the cards read closer to the reference.
-- Tune source pane depth/opacity and exact camera target interpolation after the current y-only pillar constraint is preserved.
+- Port source `WorkItemShader.glsl` and `WorkItemUIShader.glsl` more literally, including true MRT `Work/refraction`.
+- Replace text-heavy AI PM pane content with source-style media texture panes so adjacent cards look like real project screens.
+- Tune glass opacity and source camera target interpolation after preserving the current no-horizontal-pillar-drift constraint.

@@ -80,11 +80,11 @@ const STORY_WORK_SOURCE_RADIUS = 3.8;
 const STORY_WORK_SOURCE_CAMERA_RADIUS = STORY_WORK_SOURCE_RADIUS * 2;
 const STORY_WORK_SOURCE_Y_STEP = 0.84;
 const STORY_WORK_VISIBLE_RANGE = 7.2;
-const STORY_WORK_DOM_ORBIT_X = 108;
-const STORY_WORK_DOM_Y_STEP = 205;
-const STORY_WORK_DOM_ORBIT_Z = 188;
-const STORY_WORK_WEBGL_ORBIT_X = 0.34;
-const STORY_WORK_WEBGL_Y_STEP = 0.98;
+const STORY_WORK_DOM_ORBIT_X = 184;
+const STORY_WORK_DOM_Y_STEP = 246;
+const STORY_WORK_DOM_ORBIT_Z = 248;
+const STORY_WORK_WEBGL_ORBIT_X = 0.74;
+const STORY_WORK_WEBGL_Y_STEP = 1.2;
 
 function createSolidDataTexture(r: number, g: number, b: number) {
   const texture = new THREE.DataTexture(new Uint8Array([r, g, b, 255]), 1, 1, THREE.RGBAFormat);
@@ -253,13 +253,17 @@ function getStoryWorkItemVisualFromOffset(offset: number, impulse = 0): StoryWor
   const trackWindow = Math.max(0, 1 - absOffset / STORY_WORK_VISIBLE_RANGE);
   const orbit = getStoryWorkItemOrbit(offset);
   const orbitDepth = Math.pow(trackWindow, 0.8);
-  const x = orbit.x * STORY_WORK_DOM_ORBIT_X * orbitDepth;
+  // 源站 Work 页的中心柱是视觉锚点，大屏牌围绕它经过；焦点牌并不需要死贴屏幕中轴。
+  // 这里给焦点牌一个很轻的左侧基准位，把中轴留给柱体，用户向下滚动时读到的是
+  // “屏幕队列经过固定柱体”，而不是一张正中大卡遮住柱体后造成横漂错觉。
+  const focusAnchorX = -72 * focus;
+  const x = focusAnchorX + orbit.x * STORY_WORK_DOM_ORBIT_X * orbitDepth;
   const y = -offset * STORY_WORK_DOM_Y_STEP;
   const z = 250 + orbit.z * STORY_WORK_DOM_ORBIT_Z + focus * 292 - absOffset * 18;
   const rotateX = THREE.MathUtils.clamp(offset * -0.032, -0.16, 0.16);
   const rotateY = orbit.rotationY * 0.68 + THREE.MathUtils.clamp(offset * -0.028 + impulse * 0.01, -0.14, 0.14);
   const rotateZ = orbit.x * 0.72;
-  const scale = 0.54 + trackWindow * 0.28 + focus * 0.34;
+  const scale = 0.56 + trackWindow * 0.28 + focus * 0.3;
   const opacity = Math.min(1, 0.48 + trackWindow * 0.46 + focus * 0.24 + Math.min(0.1, Math.abs(impulse) * 0.02));
 
   // 这套公式保留源码里“15 张真实 view 常驻 + 50 度 target 编排”的交互语义，
@@ -289,17 +293,21 @@ function getStoryWorkItemWebGLLayout(offset: number) {
   // 用户强调“柱子不能整体左右偏移”，但源码 WorkItems 本身确实有 50 度环形排布；
   // 所以这里只恢复卡片自身的 x 轨道，camera/pillar/真实 spine 不跟着移动。
   // 结果是柱体固定纵向滚动，所有卡片按源码队列在它前后左右穿过。
+  // v142 按源站 `Element_3_Workscale=[4,2,1]` 的宽屏感强化横向牌距，
+  // 同时给焦点牌留出左侧基准位，避免它正中覆盖柱体，让邻近 WorkItem 牌也能被看见。
+  const focusAnchorX = -0.5 * focus;
+
   return {
     absOffset,
     focus,
     trackWindow,
-    x: -0.05 + orbit.x * STORY_WORK_WEBGL_ORBIT_X * Math.pow(trackWindow, 0.8),
+    x: focusAnchorX + orbit.x * STORY_WORK_WEBGL_ORBIT_X * Math.pow(trackWindow, 0.78),
     y: 0.12 - offset * STORY_WORK_WEBGL_Y_STEP,
-    z: 1.56 + orbit.z * 0.52 + focus * 1.08 - absOffset * 0.024,
-    rotationX: THREE.MathUtils.clamp(offset * -0.044, -0.18, 0.18),
-    rotationY: -0.08 + orbit.rotationY * 0.62 + THREE.MathUtils.clamp(offset * -0.028, -0.12, 0.12),
+    z: 1.48 + orbit.z * 0.72 + focus * 1.2 - absOffset * 0.018,
+    rotationX: THREE.MathUtils.clamp(offset * -0.05, -0.2, 0.2),
+    rotationY: -0.08 + orbit.rotationY * 0.78 + THREE.MathUtils.clamp(offset * -0.026, -0.12, 0.12),
     rotationZ: orbit.x * 0.026,
-    scale: 0.42 + trackWindow * 0.28 + focus * 0.36,
+    scale: 0.5 + trackWindow * 0.24 + focus * 0.3,
   };
 }
 
@@ -309,7 +317,10 @@ function getStoryWorkItemHitLayerOpacity(visual: StoryWorkItemVisual) {
   // 但非焦点卡不能淡到几乎不可见，否则用户会以为只有一张卡片在换内容。
   // 这里把可见上限抬高到多张卡都能被点击和辨认，同时仍低于 WebGL 玻璃主层；
   // 可见窗口本身小于 15-slot 半圈，卡片会先淡出再从顶部接回，避免无限滚动接缝露出来。
-  return Math.min(0.88, visual.opacity * (visual.isFocused ? 0.74 : 0.62));
+  // v140 虽然保证了 15-slot 交互，但 DOM 文字层仍然太像产品说明卡，
+  // 会盖住真正的 WebGL 媒体玻璃。这里把 hit layer 透明度降一档，
+  // 让“大媒体屏 + 柱体折射”成为第一视觉，同时保留足够 hover/focus 可见性。
+  return Math.min(0.42, visual.opacity * (visual.isFocused ? 0.34 : 0.3));
 }
 
 function getStoryPillarScrollDrop(progress: number, impulse: number) {
@@ -320,10 +331,10 @@ function getStoryPillarScrollDrop(progress: number, impulse: number) {
   // 2. impulseDrop 只作为滚轮瞬间的轻微惯性，不能再决定主体位移。
   // 使用 sin(pi * fraction) 保证每个 slot 边界处位移自然回到 0，避免 native scroll rebasing 或循环接缝时出现硬跳。
   const cycleProgress = THREE.MathUtils.euclideanModulo(progress, 1);
-  const settledDrop = Math.sin(cycleProgress * Math.PI) * 0.72;
-  const impulseDrop = THREE.MathUtils.clamp(impulse * 0.1, -0.1, 0.18);
+  const settledDrop = Math.sin(cycleProgress * Math.PI) * 0.98;
+  const impulseDrop = THREE.MathUtils.clamp(impulse * 0.12, -0.12, 0.22);
 
-  return THREE.MathUtils.clamp(settledDrop + impulseDrop, -0.1, 0.82);
+  return THREE.MathUtils.clamp(settledDrop + impulseDrop, -0.12, 1.08);
 }
 
 function getInitialStoryCardStyle(slotIndex: number, progress = 0) {
@@ -345,8 +356,8 @@ function isLandingInteractiveTarget(target: EventTarget | null) {
   return target instanceof HTMLElement && Boolean(target.closest("a,button,input,textarea,select,[role='button']"));
 }
 
-const THREE_PANEL_WIDTH = 880;
-const THREE_PANEL_HEIGHT = 560;
+const THREE_PANEL_WIDTH = 1180;
+const THREE_PANEL_HEIGHT = 590;
 
 const particleVertexShader = `
   attribute float aSize;
@@ -2128,28 +2139,28 @@ function createPanelTexture(scene: StoryScene) {
   // v119 以后视觉主层由 WebGL pane 承担，纹理文字不能再像产品说明卡一样抢戏。
   // 源站 WorkPaneUI 的标题是嵌在媒体玻璃里的低分辨率投影；这里保留业务信息，
   // 但把字号、亮度和阴影压低，让柱体油膜和 pane 队列成为第一视觉。
-  context.globalAlpha = 0.62;
-  context.fillStyle = "rgba(245,252,255,0.58)";
+  context.globalAlpha = 0.46;
+  context.fillStyle = "rgba(245,252,255,0.5)";
   context.font = "600 22px monospace";
   context.textAlign = "center";
   context.fillText(`AI PM / ${scene.label.toUpperCase()}`, canvas.width / 2, 220);
 
-  context.globalAlpha = 0.5;
-  context.fillStyle = "rgba(255,255,255,0.72)";
+  context.globalAlpha = 0.42;
+  context.fillStyle = "rgba(255,255,255,0.64)";
   context.shadowColor = "#9fe9ff";
   context.shadowBlur = 14;
-  context.font = "700 42px sans-serif";
+  context.font = "700 36px sans-serif";
   context.fillText(scene.title, canvas.width / 2, 318);
 
   context.shadowBlur = 0;
-  context.globalAlpha = 0.38;
-  context.fillStyle = "rgba(246,243,232,0.62)";
+  context.globalAlpha = 0.3;
+  context.fillStyle = "rgba(246,243,232,0.5)";
   context.font = "600 21px sans-serif";
   context.fillText(scene.metric.toUpperCase(), canvas.width / 2, 392);
 
   context.textAlign = "left";
-  context.globalAlpha = 0.26;
-  context.fillStyle = "rgba(255,255,255,0.36)";
+  context.globalAlpha = 0.2;
+  context.fillStyle = "rgba(255,255,255,0.28)";
   context.font = "500 18px monospace";
   scene.signals.forEach((signal, index) => {
     context.fillText(`// ${signal}`, 76 + index * 250, 552);
@@ -2529,7 +2540,7 @@ function createStoryWorkItemShaderMaterial(options: {
       uResolution: { value: new THREE.Vector2(1, 1) },
       uScroll: { value: 0 },
       uTime: { value: 0 },
-      uVideoBlend: { value: 0.62 },
+      uVideoBlend: { value: 0.76 },
     },
     vertexShader: `
       uniform float uHover;
@@ -2668,12 +2679,12 @@ function createStoryWorkItemShaderMaterial(options: {
         vec3 darkGlass = vec3(0.022, 0.034, 0.038);
         vec3 accentGlow = uAccent * (0.09 + fresnel * 0.22 + uHover * 0.08);
         vec3 oil = vec3(0.38, 0.22, 0.68) * smoothstep(0.34, 0.94, abs(normalSample.x)) * 0.12;
-        vec3 color = darkGlass + pane * (0.24 + uHover * 0.1) + media * (0.48 + fresnel * 0.22) + refraction * (0.58 + fresnel * 0.38) + env * (0.14 + fresnel * 0.22) + accentGlow + oil;
+        vec3 color = darkGlass + pane * (0.16 + uHover * 0.08) + media * (0.66 + fresnel * 0.3) + refraction * (0.64 + fresnel * 0.42) + env * (0.16 + fresnel * 0.24) + accentGlow + oil;
         color = mix(color, color * (0.72 + media * 0.72), mediaBody * smoothstep(0.74, 0.0, length(vUv - 0.5)));
         color = pow(max(color, 0.0), vec3(0.92));
 
-        float alpha = uOpacity * mask * edge * scan * (0.24 + paneBody * 0.36 + mediaBody * 0.46 + fresnel * 0.38 + dot(refraction, vec3(0.2126, 0.7152, 0.0722)) * 0.22);
-        gl_FragColor = vec4(color, clamp(alpha, 0.0, 0.92));
+        float alpha = uOpacity * mask * edge * scan * (0.3 + paneBody * 0.26 + mediaBody * 0.62 + fresnel * 0.42 + dot(refraction, vec3(0.2126, 0.7152, 0.0722)) * 0.24);
+        gl_FragColor = vec4(color, clamp(alpha, 0.0, 0.96));
       }
     `,
   });
@@ -5575,9 +5586,12 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const offset = getInfiniteStorySlotOffset(panel.slotIndex, motionProgress);
         const layout = getStoryWorkItemWebGLLayout(offset);
         const scrollBoost = Math.min(0.12, Math.abs(scrollImpulse) * 0.035);
-        const cardWindow = Math.pow(layout.trackWindow, 1.72);
+        const cardWindow = Math.pow(layout.trackWindow, 1.46);
         const cardFocus = Math.pow(layout.focus, 1.35);
-        const targetOpacity = Math.min(0.62, 0.036 + cardWindow * 0.18 + cardFocus * 0.4 + scrollBoost * 0.08);
+        // v140 的 DOM 轨道已经稳定，但 WebGL pane 仍偏淡，导致画面读成“文字卡片”。
+        // 这里提高媒体玻璃主层不透明度，让焦点牌更像参考站的大项目屏；
+        // 远景仍按 trackWindow 衰减，避免 15 张 pane 堆成一整块雾墙。
+        const targetOpacity = Math.min(0.9, 0.09 + cardWindow * 0.34 + cardFocus * 0.42 + scrollBoost * 0.1);
 
         // 这里是这次修正的核心：WorkItem pane 仍有 15 张、仍按源码 50 度队列换面和排序。
         // x/z 的变化只属于卡片自身的环形队列，不再传给 camera 或 pillarGroup；
@@ -5607,7 +5621,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         // 这里比 v118 略微抬高面片和背板，但仍用透明上限控制，避免退回一整块大色卡遮住柱体。
         // 非焦点 pane 如果保持同样大面积高透明度，会叠成一整块雾板，用户会误以为只有一张卡。
         // 因此把 WorkItem 的玻璃背板做成“焦点清楚、远景迅速衰减”，让 15 个真实 slot 的前后关系更像源码。
-        backplateMaterial.opacity += ((0.01 + Math.pow(layout.trackWindow, 2) * 0.022 + cardFocus * 0.052 + scrollBoost * 0.028) - backplateMaterial.opacity) * 0.12;
+        backplateMaterial.opacity += ((0.014 + Math.pow(layout.trackWindow, 1.7) * 0.028 + cardFocus * 0.068 + scrollBoost * 0.026) - backplateMaterial.opacity) * 0.12;
       });
       // DOM 前景轨道和 WebGL WorkItem 使用同一个无界 progress。
       // 它只改变卡片自身的轨道坐标/转面/透明度，不改变柱体坐标；这样即使 WebGL 暗场很重，
