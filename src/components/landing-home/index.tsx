@@ -85,14 +85,14 @@ const STORY_WORK_SOURCE_RADIUS = 3.8;
 const STORY_WORK_SOURCE_CAMERA_RADIUS = STORY_WORK_SOURCE_RADIUS * 2;
 const STORY_WORK_SOURCE_Y_STEP = 0.84;
 const STORY_WORK_VISIBLE_RANGE = 7.2;
-const STORY_WORK_DOM_ORBIT_X = 56;
-const STORY_WORK_DOM_COLUMN_CLEAR_X = 276;
-const STORY_WORK_DOM_Y_STEP = 312;
-const STORY_WORK_DOM_ORBIT_Z = 126;
-const STORY_WORK_WEBGL_ORBIT_X = 0.22;
-const STORY_WORK_WEBGL_COLUMN_CLEAR_X = 0.82;
-const STORY_WORK_WEBGL_Y_STEP = 1.34;
-const STORY_WORK_ORBIT_PROGRESS_STEP = THREE.MathUtils.degToRad(22);
+const STORY_WORK_DOM_ORBIT_X = 94;
+const STORY_WORK_DOM_COLUMN_CLEAR_X = 310;
+const STORY_WORK_DOM_Y_STEP = 96;
+const STORY_WORK_DOM_ORBIT_Z = 196;
+const STORY_WORK_WEBGL_ORBIT_X = 0.34;
+const STORY_WORK_WEBGL_COLUMN_CLEAR_X = 0.96;
+const STORY_WORK_WEBGL_Y_STEP = 0.44;
+const STORY_WORK_ORBIT_PROGRESS_STEP = THREE.MathUtils.degToRad(38);
 
 function createSolidDataTexture(r: number, g: number, b: number) {
   const texture = new THREE.DataTexture(new Uint8Array([r, g, b, 255]), 1, 1, THREE.RGBAFormat);
@@ -245,9 +245,8 @@ function getStoryWorkItemOrbit(offset: number, progress = 0) {
   // 滚动时由 camera target 在这些 view 之间推进。AI PM 这版按用户要求把柱体和相机 x/z 锁住，
   // 因此不能再真的移动 camera，否则柱体会在屏幕上左右漂。这里把“camera 穿过目标点”的相对运动
   // 转译到每张卡自己的 offset：offset 每变化 1，就沿同样的 50deg 轨道换面一次。
-  // v152 修正“当前卡永远在右侧”的根因：当前卡的 offset 会反复接近 0，如果角度只来自 offset，
-  // 最近项每次都会回到同一侧。这里额外把连续 progress 注入一个较慢相位，让焦点卡随滚动
-  // 逐步绕过柱体前后左右；固定柱体仍然不吃 x/z 位移，只有 WorkItem 队列自己环绕。
+  // v153 进一步明确“横向环绕”优先级：相位推进速度必须足够让焦点卡在左右之间换位，
+  // 不能只表现成一条上下队列。固定柱体仍然不吃 x/z 位移，只有 WorkItem 队列自己绕柱。
   const angle = offset * STORY_WORK_TRACK_STEP + progress * STORY_WORK_ORBIT_PROGRESS_STEP;
   const sourceRelativeX = Math.sin(angle);
   const sourceRelativeZ = -Math.cos(angle);
@@ -268,17 +267,18 @@ function getStoryWorkItemVisualFromOffset(offset: number, progress = 0, impulse 
   const trackWindow = Math.max(0, 1 - absOffset / STORY_WORK_VISIBLE_RANGE);
   const orbit = getStoryWorkItemOrbit(offset, progress);
   const orbitDepth = Math.pow(trackWindow, 0.82);
-  // v152：卡片不再被固定推到一侧，而是用 progress 相位做完整环绕。
-  // cos(angle) 控制左右投影，sin(angle) 通过 orbit.z 进入景深；当卡片经过柱体前后方时，
-  // DOM 层会略微收透明，避免清晰文字层盖住 WebGL 光柱，真正的遮挡感交给玻璃 pane 和柱体折射表现。
+  // v153：用户明确要“横向环绕”为主，因此这里把轨道拆成标准 x-z 圆轨：
+  // cos(angle) 是左右主位移，sin(angle) 是前后景深；y 轴只保留轻微 slot 交接，
+  // 避免视觉再次退回“卡片从上到下排队”的读法。
   const aroundSide = Math.cos(orbit.angle);
+  const aroundDepth = Math.sin(orbit.angle);
   const sideClearance = STORY_WORK_DOM_COLUMN_CLEAR_X * Math.pow(trackWindow, 0.72) * (0.72 + focus * 0.28);
   const orbitXWeight = 0.34 + (1 - focus) * 0.28;
   const x = aroundSide * sideClearance + orbit.x * STORY_WORK_DOM_ORBIT_X * orbitDepth * orbitXWeight;
   const y = -offset * STORY_WORK_DOM_Y_STEP;
-  const z = 256 + orbit.z * STORY_WORK_DOM_ORBIT_Z * 0.82 + focus * 128 - absOffset * 16;
+  const z = 248 + aroundDepth * STORY_WORK_DOM_ORBIT_Z * 0.86 + focus * 118 - absOffset * 14;
   const rotateX = THREE.MathUtils.clamp(offset * -0.03, -0.15, 0.15);
-  const rotateY = -aroundSide * 0.16 + orbit.rotationY * 0.44 + THREE.MathUtils.clamp(offset * -0.025 + impulse * 0.005, -0.1, 0.1);
+  const rotateY = -aroundSide * 0.24 + orbit.rotationY * 0.5 + THREE.MathUtils.clamp(offset * -0.018 + impulse * 0.004, -0.08, 0.08);
   const rotateZ = orbit.x * 0.2;
   // 环绕到侧后方时浏览器透视会显著放大 DOM bounding box；
   // 这里把整体尺寸收回一档，保留大屏读感但避免左侧轨道扫过时整张卡铺满视口。
@@ -290,7 +290,7 @@ function getStoryWorkItemVisualFromOffset(offset: number, progress = 0, impulse 
 
   // 这套公式保留源码里“15 张真实 view 常驻 + 50 度 target 编排”的交互语义，
   // 横向轨道只作用在 WorkItem 自己身上，camera 与 pillar 仍然锁在固定 x/z。
-  // v152 以后焦点卡也会随 progress 环绕，不会每到当前项就重新回到屏幕同一侧。
+  // v153 以后焦点卡的首要运动是横向绕柱，纵向只做辅助高度差。
   return {
     isFocused: absOffset < 0.62,
     opacity,
@@ -310,9 +310,10 @@ function getStoryWorkItemWebGLLayout(offset: number, progress = 0) {
   const orbit = getStoryWorkItemOrbit(offset, progress);
 
   // WebGL pane 和 DOM hit layer 共用同一个 offset 轨道。
-  // v152 额外共用 progress 相位：如果 WebGL 仍只看 offset，玻璃 pane 会停在一侧，
-  // DOM 文案却在环绕，用户会立刻看出“双层卡片不同步”。因此两层都使用同一条环形轨道。
+  // v153 额外强调横向环绕：WebGL pane 必须和 DOM 文案使用同一套 x-z 圆轨，
+  // 否则会出现文字在绕、玻璃仍像上下列表的错位感。
   const aroundSide = Math.cos(orbit.angle);
+  const aroundDepth = Math.sin(orbit.angle);
   const sideClearance = STORY_WORK_WEBGL_COLUMN_CLEAR_X * Math.pow(trackWindow, 0.72) * (0.72 + focus * 0.28);
   const orbitXWeight = 0.34 + (1 - focus) * 0.28;
 
@@ -322,9 +323,9 @@ function getStoryWorkItemWebGLLayout(offset: number, progress = 0) {
     trackWindow,
     x: aroundSide * sideClearance + orbit.x * STORY_WORK_WEBGL_ORBIT_X * Math.pow(trackWindow, 0.82) * orbitXWeight,
     y: 0.12 - offset * STORY_WORK_WEBGL_Y_STEP,
-    z: 0.98 + orbit.z * 0.38 + focus * 0.68 - absOffset * 0.02,
+    z: 0.98 + aroundDepth * 0.66 + focus * 0.64 - absOffset * 0.018,
     rotationX: THREE.MathUtils.clamp(offset * -0.046, -0.18, 0.18),
-    rotationY: -aroundSide * 0.18 + orbit.rotationY * 0.48 + THREE.MathUtils.clamp(offset * -0.024, -0.1, 0.1),
+    rotationY: -aroundSide * 0.26 + orbit.rotationY * 0.54 + THREE.MathUtils.clamp(offset * -0.018, -0.08, 0.08),
     rotationZ: orbit.x * 0.012,
     scale: 0.46 + trackWindow * 0.13 + focus * 0.11,
   };
@@ -1700,11 +1701,15 @@ function updateWorkRefractionCanvasTexture(refraction: WorkRefractionCanvas, pro
     const orbit = getStoryWorkItemOrbit(offset, progress);
     const focus = Math.max(0, 1 - absOffset * 0.54);
     const trackWindow = Math.max(0, 1 - absOffset / STORY_WORK_VISIBLE_RANGE);
-    const paneX = width * (0.52 + orbit.x * 0.082);
-    const paneY = height * (0.52 - offset * 0.142 + Math.sin(time * 0.18 + slotIndex) * 0.008);
-    const paneWidth = (155 + trackWindow * 126 + focus * 96) * (0.92 + orbit.z * 0.06);
+    const horizontalSide = Math.cos(orbit.angle);
+    const horizontalDepth = Math.sin(orbit.angle);
+    // 折射输入要跟可见卡片同轨道：横向位移明显，纵向只留少量层次。
+    // 否则柱体高光会继续沿上下方向游走，看起来和用户要求的横向环绕不一致。
+    const paneX = width * (0.52 + horizontalSide * 0.13 + orbit.x * 0.045);
+    const paneY = height * (0.52 - offset * 0.06 + Math.sin(time * 0.18 + slotIndex) * 0.008);
+    const paneWidth = (155 + trackWindow * 126 + focus * 96) * (0.92 + horizontalDepth * 0.08);
     const paneHeight = 88 + trackWindow * 72 + focus * 48;
-    const paneRotation = orbit.rotationY * 0.11 + impulse * 0.003;
+    const paneRotation = (horizontalSide * -0.06 + orbit.rotationY * 0.09) + impulse * 0.003;
 
     drawWorkRefractionPane(context, paneX, paneY, paneWidth, paneHeight, paneRotation, scene.accent, focus, time, slotIndex);
   });
