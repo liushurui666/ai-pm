@@ -80,9 +80,11 @@ const STORY_WORK_SOURCE_RADIUS = 3.8;
 const STORY_WORK_SOURCE_CAMERA_RADIUS = STORY_WORK_SOURCE_RADIUS * 2;
 const STORY_WORK_SOURCE_Y_STEP = 0.84;
 const STORY_WORK_VISIBLE_RANGE = 8.2;
-const STORY_WORK_DOM_Y_STEP = 128;
+const STORY_WORK_DOM_ORBIT_X = 168;
+const STORY_WORK_DOM_Y_STEP = 154;
 const STORY_WORK_DOM_ORBIT_Z = 112;
-const STORY_WORK_WEBGL_Y_STEP = 0.78;
+const STORY_WORK_WEBGL_ORBIT_X = 0.64;
+const STORY_WORK_WEBGL_Y_STEP = 0.84;
 
 function createSolidDataTexture(r: number, g: number, b: number) {
   const texture = new THREE.DataTexture(new Uint8Array([r, g, b, 255]), 1, 1, THREE.RGBAFormat);
@@ -240,19 +242,19 @@ function getStoryWorkItemVisualFromOffset(offset: number, impulse = 0): StoryWor
   const focus = Math.max(0, 1 - absOffset * 0.5);
   const trackWindow = Math.max(0, 1 - absOffset / STORY_WORK_VISIBLE_RANGE);
   const orbit = getStoryWorkItemOrbit(offset);
-  const x = 0;
+  const x = orbit.x * STORY_WORK_DOM_ORBIT_X * Math.pow(trackWindow, 0.72);
   const y = -offset * STORY_WORK_DOM_Y_STEP;
-  const z = 188 + orbit.z * STORY_WORK_DOM_ORBIT_Z + focus * 204 - absOffset * 16;
+  const z = 188 + orbit.z * STORY_WORK_DOM_ORBIT_Z + focus * 218 - absOffset * 13;
   const rotateX = THREE.MathUtils.clamp(offset * -0.05, -0.22, 0.22);
-  const rotateY = orbit.rotationY * 0.68 + THREE.MathUtils.clamp(offset * -0.052 + impulse * 0.014, -0.18, 0.18);
-  const rotateZ = orbit.x * 0.9;
-  const scale = 0.36 + trackWindow * 0.24 + focus * 0.23;
-  const opacity = Math.min(0.98, 0.22 + trackWindow * 0.48 + focus * 0.24 + Math.min(0.08, Math.abs(impulse) * 0.018));
+  const rotateY = orbit.rotationY * 0.92 + THREE.MathUtils.clamp(offset * -0.044 + impulse * 0.012, -0.16, 0.16);
+  const rotateZ = orbit.x * 1.2;
+  const scale = 0.34 + trackWindow * 0.2 + focus * 0.24;
+  const opacity = Math.min(1, 0.34 + trackWindow * 0.46 + focus * 0.22 + Math.min(0.1, Math.abs(impulse) * 0.02));
 
   // 这套公式保留源码里“15 张真实 view 常驻 + 50 度 target 编排”的交互语义，
-  // 但不再把横向变化传给 camera、柱体或 DOM hit layer。源码里的横向感来自 camera target 绕场，
-  // AI PM 版本为了让柱体完全锁在屏幕中轴，把它改写成“同一中轴上的上下穿行 + 旋转换面”：
-  // 用户向下滚动会看到多张卡接力经过，而不会看到整根柱子跟着卡片左右晃。
+  // 横向轨道只作用在 WorkItem 自己身上，camera 与 pillar 仍然锁在固定 x/z。
+  // 这样用户向下滚动时，柱体只做从上到下的推进；卡片则像源站一样按 50 度队列换面穿场，
+  // 不会退化成一张中心卡片反复替换内容。
   return {
     isFocused: absOffset < 0.42,
     opacity,
@@ -272,20 +274,20 @@ function getStoryWorkItemWebGLLayout(offset: number) {
   const orbit = getStoryWorkItemOrbit(offset);
 
   // WebGL pane 和 DOM hit layer 共用同一个 offset 轨道。
-  // 这轮进一步取消随滚动变化的 x 位移：源站的 WorkItems 本身绕圆排布，但屏幕里的横向变化主要来自 camera target。
-  // 我们把 camera/pillar 锁定后，如果继续移动 pane.x，就会被用户感知成柱体横漂。
-  // 因此卡片只在 y/z/rotation 上循环，形成“从上到下穿过固定柱体”的真实多卡片队列。
+  // 用户强调“柱子不能整体左右偏移”，但源码 WorkItems 本身确实有 50 度环形排布；
+  // 所以这里只恢复卡片自身的 x 轨道，camera/pillar/真实 spine 不跟着移动。
+  // 结果是柱体固定纵向滚动，所有卡片按源码队列在它前后左右穿过。
   return {
     absOffset,
     focus,
     trackWindow,
-    x: -0.05,
+    x: -0.05 + orbit.x * STORY_WORK_WEBGL_ORBIT_X * Math.pow(trackWindow, 0.72),
     y: 0.12 - offset * STORY_WORK_WEBGL_Y_STEP,
-    z: 1.42 + orbit.z * 0.38 + focus * 0.82 - absOffset * 0.038,
+    z: 1.42 + orbit.z * 0.48 + focus * 0.86 - absOffset * 0.034,
     rotationX: THREE.MathUtils.clamp(offset * -0.052, -0.22, 0.22),
-    rotationY: -0.08 + orbit.rotationY * 0.68 + THREE.MathUtils.clamp(offset * -0.04, -0.18, 0.18),
-    rotationZ: orbit.x * 0.028,
-    scale: 0.3 + trackWindow * 0.17 + focus * 0.25,
+    rotationY: -0.08 + orbit.rotationY * 0.94 + THREE.MathUtils.clamp(offset * -0.034, -0.16, 0.16),
+    rotationZ: orbit.x * 0.038,
+    scale: 0.28 + trackWindow * 0.18 + focus * 0.27,
   };
 }
 
@@ -294,7 +296,7 @@ function getStoryWorkItemHitLayerOpacity(visual: StoryWorkItemVisual) {
   // v132 之后视觉主层重新交给 WebGL/媒体玻璃，DOM 只保留足够的焦点和点击反馈；
   // 但非焦点卡不能淡到几乎不可见，否则用户会以为只有一张卡片在换内容。
   // 这里把可见上限抬高到多张卡都能被点击和辨认，同时仍低于 WebGL 玻璃主层。
-  return Math.min(0.38, visual.opacity * (visual.isFocused ? 0.34 : 0.26));
+  return Math.min(0.58, visual.opacity * (visual.isFocused ? 0.46 : 0.36));
 }
 
 function getInitialStoryCardStyle(slotIndex: number, progress = 0) {
@@ -2471,10 +2473,10 @@ function createStoryWorkItemShaderMaterial(options: {
         float wave = sin(uTime * 0.48 + uScroll * 6.28318 + uv.y * 4.2 + edge * 2.2);
 
         // 源码 WorkItem 顶点会按 hover、mouse 和时间做一点玻璃弯曲。
-        // 这里只弯 z/y，不改 mesh 的世界 x，因此滚动时卡片有厚度，但不会把固定柱体“拽”到左右。
+        // 这里只有外层 source orbit 负责卡片横向队列；顶点层不再接收滚轮冲量改 x，
+        // 否则玻璃边缘会在滚动瞬间横向抖动，用户会把它误判成整根柱体在漂移。
         transformedPosition.z += wave * (0.028 + uHover * 0.022 + min(abs(uImpulse), 2.4) * 0.004);
         transformedPosition.y += (uv.x - 0.5) * (0.024 + uHover * 0.018);
-        transformedPosition.x += (uv.y - 0.5) * uImpulse * 0.006;
 
         vNormal = normalize(normalMatrix * normal);
         vec4 worldPosition = modelMatrix * vec4(transformedPosition, 1.0);
@@ -3081,11 +3083,16 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
     window.addEventListener("scroll", syncNativeScrollProgress, { passive: true });
     window.addEventListener("wheel", handleNativeWheel, { capture: true, passive: true });
+    // Browser/CUA 自动化、部分触控板惯性和 iOS rubber-band 场景可能已经改变 `scrollY`，
+    // 但没有按普通节奏派发 `scroll` 事件；如果只依赖事件，用户就会看到页面在动而 WorkItem 卡片停在首帧。
+    // 这个轻量轮询只读取 rect/top 并最多更新 15 张卡片样式，成本可控，却能保证滚动源始终是真实页面位置。
+    const nativeSyncInterval = window.setInterval(syncNativeScrollProgress, 80);
     syncNativeScrollProgress();
 
     return () => {
       window.removeEventListener("scroll", syncNativeScrollProgress);
       window.removeEventListener("wheel", handleNativeWheel, { capture: true });
+      window.clearInterval(nativeSyncInterval);
     };
   }, [applyStoryCardDomProgress, syncActiveIndexFromProgress]);
 
@@ -4978,9 +4985,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       backplate.rotation.copy(mesh.rotation);
       backplate.scale.set(initialLayout.scale * 1.04, initialLayout.scale * 1.04, 1);
       // 这些卡片对应源站 WorkItem：所有项目卡都一直存在于同一条无界轨道上。
-      // v128 起把“源码 camera 穿过 50deg target”的效果转译到卡片自身；
-      // 卡片会沿 offset 螺旋换面，柱体和相机的 x/z 仍然保持锁定。
-      material.uniforms.uOpacity.value = Math.min(0.3, 0.038 + initialLayout.trackWindow * 0.12 + initialLayout.focus * 0.16);
+      // v134 起把“源码 camera 穿过 50deg target”的横向视差还给卡片自身；
+      // 但柱体和相机的 x/z 仍保持锁定，避免用户滚动时看到整根柱子左右偏移。
+      material.uniforms.uOpacity.value = Math.min(0.42, 0.056 + initialLayout.trackWindow * 0.16 + initialLayout.focus * 0.22);
       mesh.renderOrder = initialOffset === 0 ? 30 : Math.max(20, 28 - initialLayout.absOffset);
       backplate.renderOrder = mesh.renderOrder - 0.2;
       mesh.userData.index = sceneIndex;
@@ -5073,6 +5080,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           nativeScrollProgressRef.current = nativeProgress;
           scrollTargetRef.current = nativeProgress;
           scrollImpulseRef.current = Math.max(-3.8, Math.min(3.8, scrollImpulseRef.current + nativeDelta * 1.35));
+          // 这里必须同步 DOM 卡片和 active slot。旧逻辑只更新 ref，随后 scroll/interval 看到 delta 为 0，
+          // 就不会再推 DOM，导致页面 scrollY 已经前进但用户仍看到第一组卡片，像“只有一个卡片在换内容”。
+          applyStoryCardDomProgress(nativeProgress, scrollImpulseRef.current);
+          syncActiveIndexFromProgress(nativeProgress);
         }
       }
 
@@ -5272,9 +5283,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       });
       vertebraSegments.forEach((segment, segmentIndex) => {
         const verticalBreath = Math.sin(time * 0.18 + pillarVerticalPhase + segment.phase) * 0.012;
-        segment.group.position.x = Math.sin(segment.phase + time * 0.12) * 0.004;
+        // 程序化兜底柱块也遵守同一条规则：x/z 不随时间或滚动漂移，
+        // 只在 y 轴做轻微呼吸，避免它和真实 spine.bin 叠加后制造“柱子横移”的错觉。
+        segment.group.position.x = 0;
         segment.group.position.y = segment.baseY + verticalBreath;
-        segment.group.position.z = Math.cos(segment.phase * 0.8 + time * 0.1) * 0.004;
+        segment.group.position.z = 0;
         segment.group.rotation.x = 0.012 * Math.sin(segment.phase + time * 0.14);
         segment.group.rotation.y = segment.sideBias * 0.055 + segment.phase * 0.032 + Math.sin(time * 0.1 + segment.phase) * 0.006;
         segment.group.rotation.z = 0.012 * Math.cos(segment.phase + time * 0.12);
@@ -5308,14 +5321,12 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       sourceProfileSegments.forEach((segment, segmentIndex) => {
         const localPulse = Math.sin(time * 0.28 + segment.phase);
 
-        // 源帧柱体默认几乎不漂移，只保留油膜呼吸；滚动时由外层 pillarGroup 负责整体换面。
-        // 这里的微动只让单节在同一根柱子里有轻微折光，避免重新变成旧版那种“各飘各的碎片”。
+        // 源帧柱体默认几乎不漂移，只保留油膜呼吸；滚动时由外层纵向队列负责推进。
+        // 单节不再改 x/z，避免旧版那种“各飘各的碎片”重新出现。
         segment.group.position.x = segment.basePosition.x;
         segment.group.position.y = segment.basePosition.y + localPulse * 0.006;
-        segment.group.position.z = segment.basePosition.z + Math.cos(time * 0.22 + segment.phase) * 0.003;
-        segment.group.rotation.x = segment.baseRotation.x + Math.sin(time * 0.14 + segment.phase) * 0.002;
-        segment.group.rotation.y = segment.baseRotation.y + Math.sin(time * 0.16 + segment.phase) * 0.003;
-        segment.group.rotation.z = segment.baseRotation.z + Math.sin(time * 0.18 + segment.phase) * 0.002;
+        segment.group.position.z = segment.basePosition.z;
+        segment.group.rotation.copy(segment.baseRotation);
         segment.group.scale.set(
           segment.baseScale.x * (1 + localPulse * 0.006),
           segment.baseScale.y * (1 - localPulse * 0.005),
@@ -5355,9 +5366,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         item.mesh.position.x = item.basePosition.x;
         item.mesh.position.y = stackY + pulse * 0.006;
         item.mesh.position.z = item.basePosition.z;
-        item.mesh.rotation.x = item.baseRotation.x + Math.sin(time * 0.13 + item.phase) * 0.002;
-        item.mesh.rotation.y = item.baseRotation.y + Math.sin(time * 0.11 + item.phase) * 0.002;
-        item.mesh.rotation.z = item.baseRotation.z + Math.cos(time * 0.1 + item.phase) * 0.002;
+        item.mesh.rotation.copy(item.baseRotation);
         item.mesh.scale.set(
           item.baseScale.x * (1 + pulse * 0.006),
           item.baseScale.y * (1 - pulse * 0.004),
@@ -5370,7 +5379,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         material.uniforms.uScroll.value = sourceScrollProgress + scrollFollow * 0.018;
         material.uniforms.uResolution.value.set(width, height);
         material.uniforms.uSpineScroll.value = sourceSpineScrollPhase;
-        material.uniforms.uOpacity.value = 0.64 + Math.sin(time * 0.3 + item.phase) * 0.028 + Math.min(0.09, Math.abs(scrollFollow) * 0.028);
+        material.uniforms.uOpacity.value = 0.7 + Math.sin(time * 0.3 + item.phase) * 0.032 + Math.min(0.1, Math.abs(scrollFollow) * 0.03);
         (material.uniforms.uAccent.value as THREE.Color).lerp(
           new THREE.Color(organicPalette[(instanceIndex + activeIndexRef.current) % organicPalette.length]).lerp(new THREE.Color("#d1fff4"), 0.34),
           0.035
@@ -5382,7 +5391,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const pulse = 0.62 + Math.sin(time * 1.2 + item.phase) * 0.3 + Math.min(0.32, Math.abs(scrollImpulse) * 0.1);
         item.material.opacity = item.baseOpacity * pulse;
         item.material.rotation = Math.sin(item.phase) * Math.PI + Math.sin(time * 0.32 + item.phase + pillarVerticalPhase) * 0.2;
-        item.sprite.position.x = item.basePosition.x + Math.sin(time * 0.28 + item.phase) * 0.006;
+        // 表面碎光跟随柱体本地坐标，不再做 x 向呼吸；滚动时只有 y 相位推进，
+        // 否则密集高光会让固定柱体看起来像在左右游移。
+        item.sprite.position.x = item.basePosition.x;
         item.sprite.position.y = item.basePosition.y + Math.cos(time * 0.24 + item.phase) * 0.018 + Math.sin(pillarVerticalPhase + fleckIndex * 0.07) * 0.012;
         item.sprite.scale.set(
           item.baseScale.x * (0.88 + pulse * 0.22 + (fleckIndex % 3) * 0.035),
@@ -5394,7 +5405,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const pulse = 0.74 + Math.sin(time * 0.55 + item.phase) * 0.16 + Math.min(0.22, Math.abs(scrollImpulse) * 0.09);
         item.material.opacity = item.opacity * pulse;
         item.material.rotation = item.rotation + Math.sin(time * 0.22 + item.phase + pillarVerticalPhase) * 0.06;
-        item.sprite.position.x = item.position.x + Math.sin(time * 0.18 + item.phase) * 0.006;
+        // 油膜贴片只在纵向和深度上流动，x 轴固定，避免把材质波动误读成柱体偏移。
+        item.sprite.position.x = item.position.x;
         item.sprite.position.y = item.position.y + Math.sin(pillarVerticalPhase + patchIndex * 0.19) * 0.014;
         item.sprite.position.z = item.position.z + Math.cos(time * 0.2 + patchIndex) * 0.025;
         item.sprite.scale.set(item.scaleX * (0.94 + pulse * 0.1), item.scaleY * (0.96 + pulse * 0.08), 1);
@@ -5440,10 +5452,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const scrollBoost = Math.min(0.12, Math.abs(scrollImpulse) * 0.035);
         const cardWindow = Math.pow(layout.trackWindow, 1.72);
         const cardFocus = Math.pow(layout.focus, 1.35);
-        const targetOpacity = Math.min(0.34, 0.018 + cardWindow * 0.08 + cardFocus * 0.22 + scrollBoost * 0.06);
+        const targetOpacity = Math.min(0.52, 0.04 + cardWindow * 0.14 + cardFocus * 0.32 + scrollBoost * 0.08);
 
-        // 这里是这次修正的核心：WorkItem pane 仍有多张、仍会转面和排序，
-        // x/z 的变化只属于卡片自身的螺旋队列，不再传给 camera 或 pillarGroup。
+        // 这里是这次修正的核心：WorkItem pane 仍有 15 张、仍按源码 50 度队列换面和排序。
+        // x/z 的变化只属于卡片自身的环形队列，不再传给 camera 或 pillarGroup；
         // 向下滚动时用户看到的是卡片围绕固定柱体从上到下穿行，而不是整根柱子横向漂移。
         mesh.position.x += (layout.x - mesh.position.x) * 0.16;
         mesh.position.y += (layout.y - mesh.position.y) * 0.16;
@@ -5470,7 +5482,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         // 这里比 v118 略微抬高面片和背板，但仍用透明上限控制，避免退回一整块大色卡遮住柱体。
         // 非焦点 pane 如果保持同样大面积高透明度，会叠成一整块雾板，用户会误以为只有一张卡。
         // 因此把 WorkItem 的玻璃背板做成“焦点清楚、远景迅速衰减”，让 15 个真实 slot 的前后关系更像源码。
-        backplateMaterial.opacity += ((0.006 + Math.pow(layout.trackWindow, 2) * 0.016 + cardFocus * 0.04 + scrollBoost * 0.026) - backplateMaterial.opacity) * 0.12;
+        backplateMaterial.opacity += ((0.012 + Math.pow(layout.trackWindow, 2) * 0.024 + cardFocus * 0.064 + scrollBoost * 0.032) - backplateMaterial.opacity) * 0.12;
       });
       // DOM 前景轨道和 WebGL WorkItem 使用同一个无界 progress。
       // 它只改变卡片自身的轨道坐标/转面/透明度，不改变柱体坐标；这样即使 WebGL 暗场很重，
