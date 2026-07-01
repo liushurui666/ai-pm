@@ -116,9 +116,9 @@
   font: inherit;
   text-align: left;
   background:
-    radial-gradient(circle at 58% 18%, color-mix(in srgb, var(--card-accent) 6%, transparent), transparent 48%),
-    linear-gradient(135deg, rgba(20, 36, 42, 0.08), rgba(4, 9, 13, 0.16));
-  border: 1px solid color-mix(in srgb, var(--card-accent) 24%, rgba(255, 255, 255, 0.1));
+    radial-gradient(circle at 58% 18%, color-mix(in srgb, var(--card-accent) 2%, transparent), transparent 48%),
+    linear-gradient(135deg, rgba(20, 36, 42, 0.018), rgba(4, 9, 13, 0.045));
+  border: 1px solid color-mix(in srgb, var(--card-accent) 18%, rgba(255, 255, 255, 0.08));
   border-radius: 30px;
   box-shadow:
     0 16px 58px rgba(0, 0, 0, 0.2),
@@ -130,7 +130,7 @@
   transform-origin: center;
   transform-style: preserve-3d;
   transition: border-color 220ms ease, box-shadow 220ms ease;
-  backdrop-filter: blur(2px) saturate(1.04);
+  backdrop-filter: blur(0.8px) saturate(1);
   will-change: transform, opacity;
 }
 
@@ -197,7 +197,7 @@
 
 .landing-story-workitem-card span {
   align-self: start;
-  color: color-mix(in srgb, var(--card-accent) 54%, rgba(255, 255, 255, 0.7));
+  color: color-mix(in srgb, var(--card-accent) 30%, rgba(255, 255, 255, 0.26));
   font-family: var(--font-geist-mono), "SFMono-Regular", Consolas, monospace;
   font-size: clamp(0.86rem, 0.8vw, 1.02rem);
   font-weight: 700;
@@ -208,7 +208,7 @@
 .landing-story-workitem-card strong {
   max-width: 14em;
   margin-top: clamp(24px, 2vw, 44px);
-  color: rgba(248, 253, 255, 0.48);
+  color: rgba(248, 253, 255, 0.14);
   font-size: clamp(1.62rem, 2.08vw, 3rem);
   line-height: 1.02;
   letter-spacing: 0;
@@ -217,7 +217,7 @@
 .landing-story-workitem-card p {
   max-width: 28em;
   margin: clamp(12px, 1vw, 20px) 0 0;
-  color: rgba(221, 233, 238, 0.24);
+  color: rgba(221, 233, 238, 0.08);
   font-size: clamp(0.94rem, 0.98vw, 1.16rem);
   font-weight: 700;
   line-height: 1.55;
@@ -228,7 +228,7 @@
   justify-self: start;
   margin-top: clamp(16px, 1.3vw, 26px);
   padding: 0.42rem 0.78rem;
-  color: rgba(231, 255, 249, 0.58);
+  color: rgba(231, 255, 249, 0.28);
   font-size: clamp(0.86rem, 0.82vw, 1.02rem);
   font-weight: 900;
   line-height: 1;

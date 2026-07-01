@@ -80,11 +80,11 @@ const STORY_WORK_SOURCE_RADIUS = 3.8;
 const STORY_WORK_SOURCE_CAMERA_RADIUS = STORY_WORK_SOURCE_RADIUS * 2;
 const STORY_WORK_SOURCE_Y_STEP = 0.84;
 const STORY_WORK_VISIBLE_RANGE = 7.2;
-const STORY_WORK_DOM_ORBIT_X = 104;
-const STORY_WORK_DOM_Y_STEP = 388;
-const STORY_WORK_DOM_ORBIT_Z = 258;
-const STORY_WORK_WEBGL_ORBIT_X = 0.46;
-const STORY_WORK_WEBGL_Y_STEP = 1.72;
+const STORY_WORK_DOM_ORBIT_X = 42;
+const STORY_WORK_DOM_Y_STEP = 318;
+const STORY_WORK_DOM_ORBIT_Z = 176;
+const STORY_WORK_WEBGL_ORBIT_X = 0.18;
+const STORY_WORK_WEBGL_Y_STEP = 1.34;
 
 function createSolidDataTexture(r: number, g: number, b: number) {
   const texture = new THREE.DataTexture(new Uint8Array([r, g, b, 255]), 1, 1, THREE.RGBAFormat);
@@ -252,26 +252,25 @@ function getStoryWorkItemVisualFromOffset(offset: number, impulse = 0): StoryWor
   const focus = Math.max(0, 1 - absOffset * 0.5);
   const trackWindow = Math.max(0, 1 - absOffset / STORY_WORK_VISIBLE_RANGE);
   const orbit = getStoryWorkItemOrbit(offset);
-  const orbitDepth = Math.pow(trackWindow, 0.8);
-  // 用户明确指出滚动时不能读成“柱体被卡片拖着左右走”。
-  // 源站 WorkItems 的相机确实会沿 50 度 target 前进，但在 AI PM 页面里柱体是主视觉锚点；
-  // 因此焦点卡进入中心窗口时要锁到稳定左侧屏牌位，只把轻微横向差异留给远处相邻卡。
-  const focusLaneLock = THREE.MathUtils.smoothstep(focus, 0.46, 0.94);
-  const focusAnchorX = -112 * focusLaneLock;
-  const orbitXWeight = 1 - focusLaneLock * 0.64;
-  const x = focusAnchorX + orbit.x * STORY_WORK_DOM_ORBIT_X * orbitDepth * orbitXWeight;
+  const orbitDepth = Math.pow(trackWindow, 0.82);
+  // 源码里 camera 会沿 15 个 target 横向绕柱推进；这里不能照搬 camera x/z，
+  // 否则用户看到的是“柱子被滚轮拖着左右跑”。因此把源码的横向 target 只压成卡片自己的小幅翻面视差：
+  // 所有可见卡片共享一条稳定纵向牌道，滚动时真正明显的变化是 y 轴穿场、z 深度和 rotateY。
+  const laneAnchorX = -112 * Math.pow(trackWindow, 0.62);
+  const orbitXWeight = 0.72 - focus * 0.34;
+  const x = laneAnchorX + orbit.x * STORY_WORK_DOM_ORBIT_X * orbitDepth * orbitXWeight;
   const y = -offset * STORY_WORK_DOM_Y_STEP;
-  const z = 250 + orbit.z * STORY_WORK_DOM_ORBIT_Z + focus * 292 - absOffset * 18;
-  const rotateX = THREE.MathUtils.clamp(offset * -0.032, -0.16, 0.16);
-  const rotateY = orbit.rotationY * 0.68 + THREE.MathUtils.clamp(offset * -0.028 + impulse * 0.01, -0.14, 0.14);
-  const rotateZ = orbit.x * 0.72;
-  const scale = 0.58 + trackWindow * 0.26 + focus * 0.28;
-  const opacity = Math.min(1, 0.48 + trackWindow * 0.46 + focus * 0.24 + Math.min(0.1, Math.abs(impulse) * 0.02));
+  const z = 420 + orbit.z * STORY_WORK_DOM_ORBIT_Z + focus * 226 - absOffset * 16;
+  const rotateX = THREE.MathUtils.clamp(offset * -0.03, -0.15, 0.15);
+  const rotateY = orbit.rotationY * 0.52 + THREE.MathUtils.clamp(offset * -0.03 + impulse * 0.006, -0.12, 0.12);
+  const rotateZ = orbit.x * 0.28;
+  const scale = 0.56 + trackWindow * 0.24 + focus * 0.24;
+  const opacity = Math.min(1, 0.54 + trackWindow * 0.42 + focus * 0.18 + Math.min(0.08, Math.abs(impulse) * 0.018));
 
   // 这套公式保留源码里“15 张真实 view 常驻 + 50 度 target 编排”的交互语义，
   // 横向轨道只作用在 WorkItem 自己身上，camera 与 pillar 仍然锁在固定 x/z。
-  // v144 进一步把焦点牌的 x 锚点锁稳，卡片主要通过 y 轴、z 深度和 rotateY 表达滚动换面；
-  // 这样向下滚动时画面读感是“多张屏牌沿固定柱体从上到下经过”，而不是一整团雾面横漂。
+  // v145 进一步把整条可见牌道锁稳：不是只有焦点牌锁 x，而是相邻牌也沿同一条纵向轴线接力经过。
+  // 这样用户向下滚动时会看到多张屏牌从上到下换面，柱体自身不会产生横向漂移读感。
   return {
     isFocused: absOffset < 0.42,
     opacity,
@@ -294,23 +293,22 @@ function getStoryWorkItemWebGLLayout(offset: number) {
   // 用户强调“柱子不能整体左右偏移”，但源码 WorkItems 本身确实有 50 度环形排布；
   // 所以这里只恢复卡片自身的 x 轨道，camera/pillar/真实 spine 不跟着移动。
   // 结果是柱体固定纵向滚动，所有卡片按源码队列在它前后左右穿过。
-  // v144 不再让焦点 WorkItem 随 50 度轨道明显横向换位。
-  // 源码的横向感保留给非焦点牌和 rotateY，焦点牌锁到稳定屏牌位，避免用户看到柱体横向漂移。
-  const focusLaneLock = THREE.MathUtils.smoothstep(focus, 0.46, 0.94);
-  const focusAnchorX = -0.56 * focusLaneLock;
-  const orbitXWeight = 1 - focusLaneLock * 0.7;
+  // 这层是 WebGL 真正可见的媒体屏。和 DOM 命中层一致，所有屏都先落在固定纵向牌道上；
+  // 源码 50 度轨道只用于深度和翻面，不再把焦点牌大幅甩到左右两侧。
+  const laneAnchorX = -0.56 * Math.pow(trackWindow, 0.62);
+  const orbitXWeight = 0.68 - focus * 0.32;
 
   return {
     absOffset,
     focus,
     trackWindow,
-    x: focusAnchorX + orbit.x * STORY_WORK_WEBGL_ORBIT_X * Math.pow(trackWindow, 0.78) * orbitXWeight,
+    x: laneAnchorX + orbit.x * STORY_WORK_WEBGL_ORBIT_X * Math.pow(trackWindow, 0.82) * orbitXWeight,
     y: 0.12 - offset * STORY_WORK_WEBGL_Y_STEP,
-    z: 1.42 + orbit.z * 0.76 + focus * 1.28 - absOffset * 0.012,
-    rotationX: THREE.MathUtils.clamp(offset * -0.05, -0.2, 0.2),
-    rotationY: -0.08 + orbit.rotationY * 0.78 + THREE.MathUtils.clamp(offset * -0.026, -0.12, 0.12),
-    rotationZ: orbit.x * 0.026,
-    scale: 0.62 + trackWindow * 0.25 + focus * 0.32,
+    z: 1.58 + orbit.z * 0.62 + focus * 1.2 - absOffset * 0.01,
+    rotationX: THREE.MathUtils.clamp(offset * -0.046, -0.18, 0.18),
+    rotationY: -0.06 + orbit.rotationY * 0.58 + THREE.MathUtils.clamp(offset * -0.028, -0.11, 0.11),
+    rotationZ: orbit.x * 0.012,
+    scale: 0.64 + trackWindow * 0.24 + focus * 0.28,
   };
 }
 
@@ -323,7 +321,7 @@ function getStoryWorkItemHitLayerOpacity(visual: StoryWorkItemVisual) {
   // v140 虽然保证了 15-slot 交互，但 DOM 文字层仍然太像产品说明卡，
   // 会盖住真正的 WebGL 媒体玻璃。这里把 hit layer 透明度降一档，
   // 让“大媒体屏 + 柱体折射”成为第一视觉，同时保留足够 hover/focus 可见性。
-  return Math.min(0.28, visual.opacity * (visual.isFocused ? 0.24 : 0.2));
+  return Math.min(0.14, visual.opacity * (visual.isFocused ? 0.12 : 0.09));
 }
 
 function getStoryPillarScrollDrop(progress: number, impulse: number) {
@@ -2545,7 +2543,7 @@ function createStoryWorkItemShaderMaterial(options: {
       uResolution: { value: new THREE.Vector2(1, 1) },
       uScroll: { value: 0 },
       uTime: { value: 0 },
-      uVideoBlend: { value: 0.76 },
+      uVideoBlend: { value: 0.9 },
     },
     vertexShader: `
       uniform float uHover;
@@ -2667,8 +2665,10 @@ function createStoryWorkItemShaderMaterial(options: {
         videoUv = scaleUv(videoUv, vec2(1.0 + (1.0 - uVideoBlend) * 0.1));
         videoUv += normalSample.xy * vec2(0.034, 0.026) + vec2(sin(uTime * 0.18 + uScroll * 3.0) * 0.006, 0.0);
         vec2 imageUv = videoUv - normalSample.xy * 0.05 * (1.0 - uVideoBlend);
-        vec3 sourceImage = rgbShift(tMap, imageUv, edgeChromatic * sideEnergy) * 0.7;
+        vec3 sourceImage = rgbShift(tMap, imageUv, edgeChromatic * sideEnergy) * 0.08;
         vec3 sourceVideo = rgbShift(tVideo, videoUv, edgeChromatic * 1.25);
+        sourceVideo = pow(max(sourceVideo, 0.0), vec3(0.78));
+        sourceVideo = mix(sourceVideo, sourceVideo * sourceVideo * vec3(1.12, 1.02, 1.08), 0.18);
         vec3 media = mix(sourceImage, sourceVideo, uVideoBlend);
         float mediaMask = smoothstep(0.7, 0.0, abs(videoUv.x - 0.5)) * smoothstep(0.5, 0.4, abs(videoUv.y - 0.5));
         float mediaLuma = dot(media, vec3(0.299, 0.587, 0.114));
@@ -2681,14 +2681,14 @@ function createStoryWorkItemShaderMaterial(options: {
         );
         vec3 env = texture2D(tEnv, envUv).rgb;
         float scan = 0.92 + sin(uTime * 0.84 + vUv.y * 17.0 + normalSample.x * 1.4 + uScroll * 2.2) * 0.08;
-        vec3 darkGlass = vec3(0.022, 0.034, 0.038);
-        vec3 accentGlow = uAccent * (0.09 + fresnel * 0.22 + uHover * 0.08);
+        vec3 darkGlass = vec3(0.012, 0.016, 0.021) + uAccent * 0.022;
+        vec3 accentGlow = uAccent * (0.07 + fresnel * 0.18 + uHover * 0.06);
         vec3 oil = vec3(0.38, 0.22, 0.68) * smoothstep(0.34, 0.94, abs(normalSample.x)) * 0.12;
-        vec3 color = darkGlass + pane * (0.24 + uHover * 0.1) + media * (0.78 + fresnel * 0.34) + refraction * (0.48 + fresnel * 0.34) + env * (0.14 + fresnel * 0.2) + accentGlow + oil;
-        color = mix(color, color * (0.72 + media * 0.72), mediaBody * smoothstep(0.74, 0.0, length(vUv - 0.5)));
+        vec3 color = darkGlass + pane * (0.035 + uHover * 0.02) + media * (1.12 + fresnel * 0.24) + refraction * (0.18 + fresnel * 0.12) + env * (0.052 + fresnel * 0.1) + accentGlow + oil;
+        color = mix(color, media * 1.38 + refraction * 0.16 + accentGlow * 0.62, mediaBody * smoothstep(0.82, 0.0, length(vUv - 0.5)) * 0.52);
         color = pow(max(color, 0.0), vec3(0.92));
 
-        float alpha = uOpacity * mask * edge * scan * (0.42 + paneBody * 0.34 + mediaBody * 0.7 + fresnel * 0.44 + dot(refraction, vec3(0.2126, 0.7152, 0.0722)) * 0.16);
+        float alpha = uOpacity * mask * edge * scan * (0.08 + paneBody * 0.025 + mediaBody * 0.72 + fresnel * 0.24 + dot(refraction, vec3(0.2126, 0.7152, 0.0722)) * 0.028);
         gl_FragColor = vec4(color, clamp(alpha, 0.0, 0.985));
       }
     `,
@@ -5003,7 +5003,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       {
         angle: -1.26,
         height: 3.42,
-        opacity: 0.007,
+        opacity: 0.0035,
         radiusX: 2.68,
         radiusZ: 0.66,
         renderOrder: 7.85,
@@ -5015,7 +5015,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       {
         angle: 0.03,
         height: 2.86,
-        opacity: 0.008,
+        opacity: 0.004,
         radiusX: 0.86,
         radiusZ: 0.82,
         renderOrder: 8.82,
@@ -5027,7 +5027,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       {
         angle: 2.62,
         height: 2.24,
-        opacity: 0.005,
+        opacity: 0.0025,
         radiusX: 1.78,
         radiusZ: 0.84,
         renderOrder: 6.2,
@@ -5114,7 +5114,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 这些卡片对应源站 WorkItem：所有项目卡都一直存在于同一条无界轨道上。
       // v134 起把“源码 camera 穿过 50deg target”的横向视差还给卡片自身；
       // 但柱体和相机的 x/z 仍保持锁定，避免用户滚动时看到整根柱子左右偏移。
-      material.uniforms.uOpacity.value = Math.min(0.5, 0.05 + initialLayout.trackWindow * 0.18 + initialLayout.focus * 0.28);
+        material.uniforms.uOpacity.value = Math.min(0.34, 0.04 + initialLayout.trackWindow * 0.12 + initialLayout.focus * 0.18);
       mesh.renderOrder = initialOffset === 0 ? 30 : Math.max(20, 28 - initialLayout.absOffset);
       backplate.renderOrder = mesh.renderOrder - 0.2;
       mesh.userData.index = sceneIndex;
@@ -5365,8 +5365,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           panel.mediaMaterial.uniforms.uScroll.value = sourceScrollProgress;
           panel.mediaMaterial.uniforms.uOpacity.value =
             panel.variant === "front"
-              ? Math.min(0.12, panel.material.opacity * 3.2 + Math.abs(scrollImpulse) * 0.006)
-              : Math.min(0.09, panel.material.opacity * 2.8 + Math.abs(scrollImpulse) * 0.005);
+              ? Math.min(0.048, panel.material.opacity * 2.4 + Math.abs(scrollImpulse) * 0.003)
+              : Math.min(0.036, panel.material.opacity * 2.2 + Math.abs(scrollImpulse) * 0.0025);
         }
         if (panel.refractionMesh && panel.refractionMaterial) {
           panel.refractionMesh.position.copy(panel.mesh.position);
@@ -5376,8 +5376,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           panel.refractionMaterial.uniforms.uScroll.value = sourceScrollProgress;
           panel.refractionMaterial.uniforms.uOpacity.value =
             panel.variant === "front"
-              ? Math.min(0.1, panel.material.opacity * 2.8 + Math.abs(scrollImpulse) * 0.005)
-              : Math.min(0.075, panel.material.opacity * 2.4 + Math.abs(scrollImpulse) * 0.004);
+              ? Math.min(0.038, panel.material.opacity * 2.1 + Math.abs(scrollImpulse) * 0.0025)
+              : Math.min(0.028, panel.material.opacity * 1.9 + Math.abs(scrollImpulse) * 0.002);
         }
       });
       stage.rotation.y = 0;
@@ -5595,12 +5595,12 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const offset = getInfiniteStorySlotOffset(panel.slotIndex, motionProgress);
         const layout = getStoryWorkItemWebGLLayout(offset);
         const scrollBoost = Math.min(0.12, Math.abs(scrollImpulse) * 0.035);
-        const cardWindow = Math.pow(layout.trackWindow, 1.28);
-        const cardFocus = Math.pow(layout.focus, 1.16);
+        const cardWindow = Math.pow(layout.trackWindow, 0.94);
+        const cardFocus = Math.pow(layout.focus, 1.04);
         // 用户这轮的优先级是“大屏牌先成立”：焦点 WorkItem 必须像参考图那样有足够面积和实体感。
         // 因此这版降低远景衰减指数、提高焦点不透明度，让 WebGL pane 成为画面主体；
         // 仍保留上限，避免所有 15 张牌同时堆成一整块灰雾。
-        const targetOpacity = Math.min(0.82, 0.1 + cardWindow * 0.3 + cardFocus * 0.42 + scrollBoost * 0.06);
+        const targetOpacity = Math.min(0.46, 0.07 + cardWindow * 0.22 + cardFocus * 0.17 + scrollBoost * 0.035);
 
         // 这里是这次修正的核心：WorkItem pane 仍有 15 张、仍按源码 50 度队列换面和排序。
         // x/z 的变化只属于卡片自身的环形队列，不再传给 camera 或 pillarGroup；
@@ -5631,7 +5631,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         // 非焦点 pane 如果保持同样大面积高透明度，会叠成一整块雾板，用户会误以为只有一张卡。
         // 因此把 WorkItem 的玻璃背板做成“焦点清楚、远景仍有实体”，让大屏能遮住一部分柱体，
         // 更接近源站里项目牌压在柱体前方的层级，而不是柱体永远盖住卡片。
-        backplateMaterial.opacity += ((0.018 + Math.pow(layout.trackWindow, 1.45) * 0.034 + cardFocus * 0.09 + scrollBoost * 0.018) - backplateMaterial.opacity) * 0.12;
+        backplateMaterial.opacity += ((0.006 + Math.pow(layout.trackWindow, 1.1) * 0.018 + cardFocus * 0.032 + scrollBoost * 0.008) - backplateMaterial.opacity) * 0.12;
       });
       // DOM 前景轨道和 WebGL WorkItem 使用同一个无界 progress。
       // 它只改变卡片自身的轨道坐标/转面/透明度，不改变柱体坐标；这样即使 WebGL 暗场很重，

@@ -3,77 +3,77 @@
 - source visual truth path: `/tmp/ai-pm-at-reference/mp4-02-4.2s.png`
 - source video: `/Users/liushurui/Library/Application Support/LarkShell/screenshot/20260629120942_rec_.mp4`
 - source mirror: `/Users/liushurui/Desktop/workspace/new-jiguangjuzhen/activetheory-work-clone-nav-orb-20260524-121151(1)`
-- implementation mid-scroll screenshot: `/tmp/ai-pm-landing-scroll-v144-final/scroll-1155.png`
-- implementation deep-scroll screenshot: `/tmp/ai-pm-landing-scroll-v144-final/scroll-2650.png`
-- full-view comparison evidence: `/tmp/ai-pm-landing-scroll-v144-final/source-vs-scroll-1155.png`
-- metrics evidence: `/tmp/ai-pm-landing-scroll-v144-final/metrics.json`
-- mobile evidence: `/tmp/ai-pm-landing-scroll-v144-final/mobile-scroll-900.png`, `/tmp/ai-pm-landing-scroll-v144-final/mobile-metrics.json`
-- viewport: 1910x1035 desktop and 390x844 mobile, Chrome via Codex Node Playwright, `http://localhost:3004/?qa=v144-final`
+- implementation mid-scroll screenshot: `/tmp/ai-pm-landing-scroll-v145-final/scroll-1155.png`
+- implementation deep-scroll screenshot: `/tmp/ai-pm-landing-scroll-v145-final/scroll-2650.png`
+- side-by-side comparison evidence: `/tmp/ai-pm-landing-scroll-v145-final/source-vs-scroll-1155.png`
+- metrics evidence: `/tmp/ai-pm-landing-scroll-v145-final/metrics.json`
+- mobile evidence: `/tmp/ai-pm-landing-scroll-v145-final/mobile-scroll-980.png`
+- viewport: 1910x1035 desktop and 390x844 mobile, Chrome via Codex Node Playwright, `http://localhost:3004/?qa=v145-final`
 - state: unauthenticated landing page, hydrated WebGL canvas, programmatic native page scroll through top/mid/deep states.
 - final result: blocked
-- blocking reason: v144 fixes the current interaction priority, namely no horizontal pillar drift, monotonic whole-column downward motion, and a real multi-card WorkItem queue; however the implementation still looks foggier and more product-text-heavy than the Active Theory source because it does not yet port the exact source MRT refraction, WorkItem shader, camera composite, and project media pipeline.
+- blocking reason: v145 fixes the current interaction priority: the pillar no longer drifts left/right, the pillar moves downward continuously with native scroll, and the WorkItem interaction is a real 15-slot queue. It is still not a 100% Active Theory clone because the exact source MRT refraction, WorkItem shader, media pipeline, and camera composite have not been ported.
 
 ## Findings
 
-- [P1] Pillar x/z now stays locked while scrolling.
-  Location: render loop `pillarGroup.position`, `cameraTargetPosition`, and the new `root.dataset.pillarX/pillarZ` diagnostics in `src/components/landing-home/index.tsx`.
-  Evidence: v144 desktop metrics keep `pillarX=-0.620` and `pillarZ=-0.360` at every sampled scroll position from `0` through `3400`.
-  Impact: this addresses the user-visible complaint that the column appeared to drift left/right when scrolling.
-  Fix: reduced focus-card horizontal drift, kept camera x/z fixed, and kept pillar/flower/spine local x/z independent from scroll.
+- [P1] Pillar x/z stays locked through scroll.
+  Location: render loop `pillarGroup.position`, `cameraTargetPosition`, and `.landing-story-viewport` diagnostics in `src/components/landing-home/index.tsx`.
+  Evidence: v145 desktop metrics keep `pillarX=-0.620` and `pillarZ=-0.360` at every sampled scroll position from `0` through `3400`.
+  Impact: this directly addresses the complaint that the column appeared to slide left/right while scrolling.
+  Fix: kept camera and pillar x/z fixed, removed scroll-driven x/z perturbation from the visible spine/particle layers, and compressed WorkItem x orbit into card-local flip depth.
 
-- [P1] The column no longer returns upward at slot boundaries.
-  Location: `getStoryPillarScrollDrop()` in `src/components/landing-home/index.tsx`.
-  Evidence: sampled `pillarDrop` is monotonic: `0.000 -> 1.060 -> 1.422 -> 1.648 -> 1.813 -> 2.076 -> 2.221`.
-  Impact: the scroll now reads as one column moving downward through the viewport, not an internal effect that resets after each card.
-  Fix: removed the per-slot `cycleDrift` reset and replaced it with a continuous progress-based drop plus one-way downward impulse.
+- [P1] The column reads as downward travel rather than slot reset.
+  Location: `getStoryPillarScrollDrop()` and render-loop `pillarGroup.position` in `src/components/landing-home/index.tsx`.
+  Evidence: sampled `pillarDrop` is monotonic: `0.000 -> 1.088 -> 1.439 -> 1.667 -> 1.830 -> 2.089 -> 2.236`.
+  Impact: stopping mid-scroll no longer causes the pillar to visually “return to center” at slot boundaries.
+  Fix: the whole-column drop is progress-based with only one-way downward impulse; slot cycling no longer resets pillar y.
 
-- [P1] The WorkItem cards remain a real 15-slot queue.
+- [P1] WorkItem cards remain real multi-card scroll interactions.
   Location: `storyWorkItemSlots`, `getInfiniteStorySlotOffset()`, `applyStoryCardDomProgress()`, and `panelMeshes.forEach()` in `src/components/landing-home/index.tsx`.
-  Evidence: v144 metrics keep `totalCards=15` and `activeCount=1`; active slots advance through `0 -> 1 -> 2 -> 3 -> 4 -> 5` across the sampled scroll positions. The viewport normally shows `4-5` card hit layers at once, with offscreen slots cycling back into view.
-  Impact: this avoids regressing to a single card swapping content.
-  Fix: preserved one mesh and one DOM hit layer per slot, increased vertical spacing, and kept click/focus/hover bound to each real slot.
+  Evidence: v145 metrics keep `totalCards=15`, `activeCount=1`, visible cards normally `3-4`, and active slots advance `0 -> 1 -> 2 -> 3 -> 4 -> 5`.
+  Impact: the page no longer behaves like one card swapping content; every slot has its own DOM hit layer and WebGL pane.
+  Fix: kept the 15 repeated WorkItem slots, tightened the stable vertical lane, and drove DOM/WebGL from the same native-scroll progress.
 
-- [P1] Focus-card horizontal drift is reduced and vertical travel is clearer.
+- [P1] Card motion is now top-to-bottom first, lateral second.
   Location: `getStoryWorkItemVisualFromOffset()` and `getStoryWorkItemWebGLLayout()` in `src/components/landing-home/index.tsx`.
-  Evidence: active card center x stays around `803-819px` from top through deep scroll, while adjacent cards sit above/below the focus card. The active card remains large: about `1211x663` at top and about `1073-1086x658` at mid/deep samples.
-  Impact: users should perceive card progression as top-to-bottom travel around a fixed column instead of the whole scene sliding sideways.
-  Fix: locked the focus lane with `focusLaneLock`, reduced orbit x amplitude, and increased y-step spacing.
+  Evidence: active card center x stays in a narrower lane while the active slot advances; visible adjacent slots appear above/below the focus card instead of dragging the column laterally.
+  Impact: the scroll reads as cards rotating through a fixed pillar axis, closer to the source interaction model after removing camera x/z movement.
+  Fix: reduced DOM/WebGL x orbit amplitude, lowered z/rotation side effects, and set a shared vertical lane for visible cards.
 
 - [P2] Visual fidelity remains below the source.
-  Location: WorkItem pane shader, refraction texture emulation, source media content, glass material layers, and camera composite in `src/components/landing-home/index.tsx`.
-  Evidence: `/tmp/ai-pm-landing-scroll-v144-final/source-vs-scroll-1155.png` shows the corrected motion model, but the implementation is still softer, greener, and less media-textured than the Active Theory frame.
-  Impact: this pass should be treated as an interaction/rig correction, not a finished pixel-level clone.
-  Fix: next pass should port the source `WorkItemShader` / `WorkItemUIShader`, true `Work/refraction` MRT, and source-style media panes more literally.
+  Location: WorkItem pane shader, reference glass panes, refraction emulation, media textures, and camera composite in `src/components/landing-home/index.tsx`.
+  Evidence: `/tmp/ai-pm-landing-scroll-v145-final/source-vs-scroll-1155.png` shows the corrected motion model, but the implementation remains softer and more fog-like than the Active Theory frame.
+  Impact: this pass should be treated as a motion/interaction correction, not a finished pixel-level clone.
+  Fix: reduced green-gray veil opacity, pushed DOM text into a low-opacity hit layer, lowered fixed environment pane opacity, and made WorkItem alpha depend more on media/edge/fresnel instead of a full-surface haze.
 
 ## Patches Made In This Pass
 
-- Locked focus-card lane and reduced x-orbit amplitude for both DOM and WebGL WorkItems.
-- Increased card y-step spacing so multiple cards read as a vertical queue instead of one overlapped pane.
-- Replaced the per-slot pillar drop reset with a monotonic downward curve.
-- Added pillar x/z QA diagnostics.
-- Lowered DOM hit-layer text and large environment-glass opacity so the 15 real WorkItem panes are not swallowed by one green fog layer.
+- Compressed WorkItem x orbit for both DOM and WebGL panes so visible cards share a stable vertical lane.
+- Reduced card y-step enough to keep 3-4 real slots visible while preserving top-to-bottom travel.
+- Kept pillar/camera x/z fixed and used diagnostics to prove the values do not move during scroll.
+- Lowered DOM card text/background opacity so the interaction layer does not read as a giant product card.
+- Reduced fixed environment-panel opacity and WorkItem shader full-surface alpha so the card stack no longer becomes one opaque green veil.
 
 ## Validation
 
 - `git diff --check`: passed.
-- Browser route: `http://localhost:3004/?qa=v144-final`.
+- Browser route: `http://localhost:3004/?qa=v145-final`.
 - Browser screenshots:
-  - `/tmp/ai-pm-landing-scroll-v144-final/scroll-1155.png`
-  - `/tmp/ai-pm-landing-scroll-v144-final/scroll-2650.png`
-  - `/tmp/ai-pm-landing-scroll-v144-final/source-vs-scroll-1155.png`
-  - `/tmp/ai-pm-landing-scroll-v144-final/mobile-scroll-900.png`
+  - `/tmp/ai-pm-landing-scroll-v145-final/scroll-1155.png`
+  - `/tmp/ai-pm-landing-scroll-v145-final/scroll-2650.png`
+  - `/tmp/ai-pm-landing-scroll-v145-final/source-vs-scroll-1155.png`
+  - `/tmp/ai-pm-landing-scroll-v145-final/mobile-scroll-980.png`
 - Browser metrics:
-  - Top: active card `1211x663`, `pillarDrop=0.000`, `pillarX=-0.620`, `pillarZ=-0.360`, `totalCards=15`, active slot `0`.
-  - Scroll 720: active card `1209x662`, `pillarDrop=1.060`, active slot `1`.
-  - Scroll 1155: active card `1073x658`, `pillarDrop=1.422`, active slot `2`.
-  - Scroll 1900: active card `1069x657`, `pillarDrop=1.813`, active slot `3`.
-  - Scroll 2650: active card `1082x658`, `pillarDrop=2.076`, active slot `4`.
-  - Scroll 3400: active card `1086x658`, `pillarDrop=2.221`, active slot `5`.
-  - Mobile 390px: document/body `scrollWidth=390`, `totalCards=15`, no horizontal overflow.
+  - Top: active card `1457x798`, `pillarDrop=0.000`, `pillarX=-0.620`, `pillarZ=-0.360`, `totalCards=15`, active slot `0`.
+  - Scroll 720: active card `1453x796`, `pillarDrop=1.088`, active slot `1`.
+  - Scroll 1155: active card `1316x783`, `pillarDrop=1.439`, active slot `2`, visible slots `0,1,2,3`.
+  - Scroll 1900: active card `1314x782`, `pillarDrop=1.830`, active slot `3`, visible slots `1,2,3,4`.
+  - Scroll 2650: active card `1323x783`, `pillarDrop=2.089`, active slot `4`, visible slots `2,3,4,5`.
+  - Scroll 3400: active card `1326x784`, `pillarDrop=2.236`, active slot `5`, visible slots `3,4,5,6`.
+  - Mobile 390px: document `scrollWidth=390`, `totalCards=15`, no horizontal overflow.
   - Console/page errors: none observed in Chrome-based Playwright run.
 
 ## Follow-up Polish
 
-- Port source `WorkItemShader.glsl` and `WorkItemUIShader.glsl` more literally, including true MRT `Work/refraction`.
-- Replace text-heavy AI PM pane content with source-style media texture panes so adjacent cards look like real project screens.
-- Tune glass opacity and camera composite once the current no-horizontal-pillar-drift behavior is preserved.
+- Port source `WorkItemShader` / `WorkItemUIShader` and true `Work/refraction` MRT instead of approximating via canvas.
+- Replace temporary AI PM pane texture content with source-style project media panes so cards look like real media screens rather than internal product labels.
+- Re-tune camera composite and glass thickness after preserving the current no-horizontal-pillar-drift behavior.
