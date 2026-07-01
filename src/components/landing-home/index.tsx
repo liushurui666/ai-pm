@@ -79,12 +79,12 @@ const STORY_WORK_ITEM_REPEAT = 3;
 const STORY_WORK_SOURCE_RADIUS = 3.8;
 const STORY_WORK_SOURCE_CAMERA_RADIUS = STORY_WORK_SOURCE_RADIUS * 2;
 const STORY_WORK_SOURCE_Y_STEP = 0.84;
-const STORY_WORK_VISIBLE_RANGE = 6.85;
-const STORY_WORK_DOM_ORBIT_X = 168;
-const STORY_WORK_DOM_Y_STEP = 154;
-const STORY_WORK_DOM_ORBIT_Z = 112;
-const STORY_WORK_WEBGL_ORBIT_X = 0.64;
-const STORY_WORK_WEBGL_Y_STEP = 0.84;
+const STORY_WORK_VISIBLE_RANGE = 6.45;
+const STORY_WORK_DOM_ORBIT_X = 190;
+const STORY_WORK_DOM_Y_STEP = 136;
+const STORY_WORK_DOM_ORBIT_Z = 128;
+const STORY_WORK_WEBGL_ORBIT_X = 0.78;
+const STORY_WORK_WEBGL_Y_STEP = 0.74;
 
 function createSolidDataTexture(r: number, g: number, b: number) {
   const texture = new THREE.DataTexture(new Uint8Array([r, g, b, 255]), 1, 1, THREE.RGBAFormat);
@@ -242,14 +242,15 @@ function getStoryWorkItemVisualFromOffset(offset: number, impulse = 0): StoryWor
   const focus = Math.max(0, 1 - absOffset * 0.5);
   const trackWindow = Math.max(0, 1 - absOffset / STORY_WORK_VISIBLE_RANGE);
   const orbit = getStoryWorkItemOrbit(offset);
-  const x = orbit.x * STORY_WORK_DOM_ORBIT_X * Math.pow(trackWindow, 0.72);
+  const orbitDepth = Math.pow(trackWindow, 0.68);
+  const x = orbit.x * STORY_WORK_DOM_ORBIT_X * orbitDepth;
   const y = -offset * STORY_WORK_DOM_Y_STEP;
   const z = 188 + orbit.z * STORY_WORK_DOM_ORBIT_Z + focus * 218 - absOffset * 13;
   const rotateX = THREE.MathUtils.clamp(offset * -0.05, -0.22, 0.22);
-  const rotateY = orbit.rotationY * 0.92 + THREE.MathUtils.clamp(offset * -0.044 + impulse * 0.012, -0.16, 0.16);
-  const rotateZ = orbit.x * 1.2;
-  const scale = 0.34 + trackWindow * 0.2 + focus * 0.24;
-  const opacity = Math.min(1, 0.34 + trackWindow * 0.46 + focus * 0.22 + Math.min(0.1, Math.abs(impulse) * 0.02));
+  const rotateY = orbit.rotationY * 1.08 + THREE.MathUtils.clamp(offset * -0.052 + impulse * 0.014, -0.18, 0.18);
+  const rotateZ = orbit.x * 1.45;
+  const scale = 0.3 + trackWindow * 0.22 + focus * 0.26;
+  const opacity = Math.min(1, 0.4 + trackWindow * 0.48 + focus * 0.2 + Math.min(0.12, Math.abs(impulse) * 0.024));
 
   // 这套公式保留源码里“15 张真实 view 常驻 + 50 度 target 编排”的交互语义，
   // 横向轨道只作用在 WorkItem 自己身上，camera 与 pillar 仍然锁在固定 x/z。
@@ -281,13 +282,13 @@ function getStoryWorkItemWebGLLayout(offset: number) {
     absOffset,
     focus,
     trackWindow,
-    x: -0.05 + orbit.x * STORY_WORK_WEBGL_ORBIT_X * Math.pow(trackWindow, 0.72),
+    x: -0.05 + orbit.x * STORY_WORK_WEBGL_ORBIT_X * Math.pow(trackWindow, 0.68),
     y: 0.12 - offset * STORY_WORK_WEBGL_Y_STEP,
-    z: 1.42 + orbit.z * 0.48 + focus * 0.86 - absOffset * 0.034,
-    rotationX: THREE.MathUtils.clamp(offset * -0.052, -0.22, 0.22),
-    rotationY: -0.08 + orbit.rotationY * 0.94 + THREE.MathUtils.clamp(offset * -0.034, -0.16, 0.16),
-    rotationZ: orbit.x * 0.038,
-    scale: 0.28 + trackWindow * 0.18 + focus * 0.27,
+    z: 1.38 + orbit.z * 0.56 + focus * 0.88 - absOffset * 0.026,
+    rotationX: THREE.MathUtils.clamp(offset * -0.062, -0.24, 0.24),
+    rotationY: -0.08 + orbit.rotationY * 1.08 + THREE.MathUtils.clamp(offset * -0.04, -0.18, 0.18),
+    rotationZ: orbit.x * 0.046,
+    scale: 0.26 + trackWindow * 0.2 + focus * 0.28,
   };
 }
 
@@ -297,7 +298,7 @@ function getStoryWorkItemHitLayerOpacity(visual: StoryWorkItemVisual) {
   // 但非焦点卡不能淡到几乎不可见，否则用户会以为只有一张卡片在换内容。
   // 这里把可见上限抬高到多张卡都能被点击和辨认，同时仍低于 WebGL 玻璃主层；
   // 可见窗口本身小于 15-slot 半圈，卡片会先淡出再从顶部接回，避免无限滚动接缝露出来。
-  return Math.min(0.62, visual.opacity * (visual.isFocused ? 0.5 : 0.4));
+  return Math.min(0.72, visual.opacity * (visual.isFocused ? 0.58 : 0.5));
 }
 
 function getInitialStoryCardStyle(slotIndex: number, progress = 0) {
@@ -2666,10 +2667,10 @@ function createSourceSpineShaderMaterial(options: {
         vec3 transformedPosition = position;
         float sourceScroll = fract(uSpineScroll);
         float particleSeed = abs(sin(position.x * 7.3 + position.z * 5.1 + uPhase * 1.7));
-        float topLift = smoothstep(0.4, 0.0, sourceScroll) * pow(particleSeed, 12.0) * 0.12;
-        float bottomDrop = pow(sourceScroll, 4.0) * smoothstep(-0.9, 1.8, transformedPosition.y) * 0.22;
-        float verticalPull = sourceScroll * 0.16;
-        float spiralMask = smoothstep(0.0, 0.5, abs(sourceScroll - 0.5)) * 0.018;
+        float topLift = smoothstep(0.4, 0.0, sourceScroll) * pow(particleSeed, 12.0) * 0.18;
+        float bottomDrop = pow(sourceScroll, 4.0) * smoothstep(-0.9, 1.8, transformedPosition.y) * 0.34;
+        float verticalPull = sourceScroll * 0.28;
+        float spiralMask = smoothstep(0.0, 0.5, abs(sourceScroll - 0.5)) * 0.008;
         float spiral = sourceScroll * 5.0 + transformedPosition.y * 0.5 + uPhase * 2.0 + uTime * 0.025;
 
         // 源站 FlowerParticleShader 会把顶部/底部粒子按 uScroll 纵向推开。
@@ -2786,7 +2787,7 @@ function createSourceSpineShaderMaterial(options: {
         uv.x += vWorldPosition.x * 0.2;
         uv += vec2(
           uScroll * 0.016 + sin(uTime * 0.08 + uPhase) * 0.004,
-          sourceSpinePhase * 0.22 + vWorldPosition.y * 0.018
+          sourceSpinePhase * 0.34 + vWorldPosition.y * 0.018
         );
         vec3 baseColor = texture2D(tBaseColor, uv).rgb;
         vec3 normal = unpackNormalFBR(vEyePos, vWorldNormal, tNormal, uNormalStrength, 1.0, vUv);
@@ -2797,7 +2798,7 @@ function createSourceSpineShaderMaterial(options: {
         // 让每节骨体按自己的屏幕位置吃到不同的油膜/玻璃反射。
         vec2 screenUv = gl_FragCoord.xy / max(uResolution, vec2(1.0));
         screenUv += normal.xy * 0.1 * uReflection.x;
-        screenUv += vec2(uScroll * 0.018, vWorldPosition.y * 0.003 - sourceSpinePhase * 0.075);
+        screenUv += vec2(uScroll * 0.006, vWorldPosition.y * 0.003 - sourceSpinePhase * 0.12);
         float fresnel = pow(1.0 - clamp(abs(dot(normalize(normal), normalize(vViewDir))), 0.0, 1.0), 2.4);
         float scrollBand = sin((vWorldPosition.y + sourceSpinePhase * 3.2 + uPhase) * 3.6 + uTime * 0.18) * 0.5 + 0.5;
         float oilBand = smoothstep(0.22, 0.92, scrollBand);
@@ -4581,7 +4582,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           // 这张源视频平面是远景里最容易被用户感知到的柱体主体。
           // 之前它只靠视频自身循环，滚轮推进时可见主体几乎不“从上到下走”；
           // 这里仅移动采样 UV，不移动 mesh 坐标，既强化滚动跟随，又不会重新制造整根柱子的左右偏移。
-          vec2 sourceUv = vec2(vUv.x, fract(vUv.y + uScroll * 0.18));
+          vec2 sourceUv = vec2(vUv.x, fract(vUv.y + uScroll * 0.34));
           vec4 video = texture2D(uMap, sourceUv);
           vec4 dynamicMaskSample = texture2D(uDynamicMask, sourceUv);
           vec4 organicMaskSample = texture2D(uMask, sourceUv);
@@ -4597,12 +4598,13 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           float edgeFade = smoothstep(0.012, 0.09, vUv.x) * smoothstep(0.93, 0.64, vUv.x);
           float verticalFade = smoothstep(0.01, 0.075, vUv.y) * smoothstep(1.0, 0.9, vUv.y);
           vec2 flowUv = vUv + vec2(
-            sin(vUv.y * 7.0 + uTime * 0.34 + uScroll * 0.8) * 0.01,
-            cos(vUv.x * 5.4 - uTime * 0.22) * 0.006
+            sin(vUv.y * 7.0 + uTime * 0.34 + uScroll * 1.28) * 0.008,
+            cos(vUv.x * 5.4 - uTime * 0.22 + uScroll * 0.4) * 0.008
           );
           float rightPanelCull = 1.0 - smoothstep(0.56, 0.88, vUv.x) * 0.64;
-          float scrollBreath = 1.0 + min(0.16, abs(uScroll) * 0.05);
-          float scanPulse = 0.94 + sin(uTime * 0.7 + vUv.y * 12.0 + uScroll * 0.8) * 0.06;
+          float scrollBreath = 1.0 + min(0.2, abs(uScroll) * 0.06);
+          float scrollScan = smoothstep(0.72, 1.0, sin((vUv.y + uScroll * 0.42) * 18.0 + uTime * 0.65) * 0.5 + 0.5);
+          float scanPulse = 0.94 + sin(uTime * 0.7 + vUv.y * 12.0 + uScroll * 1.2) * 0.06 + scrollScan * 0.035;
           float sourceMatte = max(bodyMatte * 0.9, max(chromaMatte * 0.86, lumaMatte * 0.52));
           float pillarMask = organicMask * mix(0.72, 1.24, dynamicMask);
           float alpha = sourceMatte * pillarMask * edgeFade * verticalFade * rightPanelCull * scanPulse * scrollBreath * uOpacity;
@@ -4615,7 +4617,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           // 让柱体默认保持规则实体，滚轮时能产生参考里的油膜换面。
           float edgeBand = smoothstep(0.04, 0.22, abs(flowUv.x - 0.42)) * smoothstep(0.96, 0.58, flowUv.x);
           vec3 rainbow = 0.5 + 0.5 * cos(6.28318 * (vec3(0.0, 0.34, 0.67) + flowUv.y * 0.28 + uTime * 0.025 + uScroll * 0.035));
-          color += rainbow * edgeBand * (0.075 + abs(uScroll) * 0.015) * pillarMask;
+          color += rainbow * edgeBand * (0.075 + abs(uScroll) * 0.015 + scrollScan * 0.045) * pillarMask;
 
           gl_FragColor = vec4(color, alpha);
         }
@@ -4660,7 +4662,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         void main() {
           // 前景遮挡层也跟随同一个纵向采样相位，否则柱体在滚动而遮挡纹理不滚，
           // 两层会互相打架，看起来不像同一个 ActiveTheory Work 场景里的空间装置。
-          vec2 sourceUv = vec2(vUv.x, fract(vUv.y + uScroll * 0.16));
+          vec2 sourceUv = vec2(vUv.x, fract(vUv.y + uScroll * 0.28));
           vec4 video = texture2D(uMap, sourceUv);
           float maxChannel = max(max(video.r, video.g), video.b);
           float minChannel = min(min(video.r, video.g), video.b);
@@ -4677,8 +4679,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           float smokyInterior = smoothstep(0.025, 0.22, luma + saturation * 0.34);
           float glassMask = roundedPanel * (0.22 + smokyInterior * 0.56 + leftEdge * 0.42 + topBottomEdge * 0.2);
           float verticalFade = smoothstep(0.12, 0.24, vUv.y) * smoothstep(0.95, 0.76, vUv.y);
-          float scrollPulse = 0.94 + min(0.12, abs(uScroll) * 0.04);
-          float scan = 0.96 + sin(uTime * 0.38 + vUv.y * 8.0) * 0.04;
+          float scrollPulse = 0.94 + min(0.14, abs(uScroll) * 0.045);
+          float scan = 0.96 + sin(uTime * 0.38 + vUv.y * 8.0 + uScroll * 0.72) * 0.04;
           vec3 smoke = mix(vec3(0.035, 0.05, 0.06), pow(video.rgb, vec3(0.86)) * vec3(0.9, 1.02, 1.12), 0.56);
           float alpha = glassMask * verticalFade * scrollPulse * scan * uOpacity;
 
@@ -5138,9 +5140,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       const sourceScrollProgress = THREE.MathUtils.euclideanModulo(motionProgress, 1);
       // 源站滚轮会让 spine/flower 有非常明显的纵向穿行；这里把实例队列位移和 shader 相位拆开：
       // 位移负责“骨节从上到下接力”，相位负责“油膜/粒子沿柱体内部滚动”，两者都不改 x/z。
-      const sourceSpineTravel = motionProgress * 1.24;
-      const sourceSpineScrollPhase = THREE.MathUtils.euclideanModulo(motionProgress * 1.18, 1);
-      const pillarVerticalPhase = motionProgress * 0.42 + scrollFollow * 0.025;
+      const sourceSpineTravel = motionProgress * 1.76;
+      const sourceSpineScrollPhase = THREE.MathUtils.euclideanModulo(motionProgress * 1.62 + scrollFollow * 0.04, 1);
+      const sourceSpineUvScroll = motionProgress * 0.36 + scrollFollow * 0.055;
+      const pillarVerticalPhase = motionProgress * 0.78 + scrollFollow * 0.052;
       updateWorkRefractionCanvasTexture(workRefractionCanvas, motionProgress, time, scrollImpulse);
       particleMaterial.uniforms.uTime.value = time;
       columnParticleMaterial.uniforms.uTime.value = time;
@@ -5204,16 +5207,16 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 参考柱体的油膜颗粒会有很慢的内向漂移；专用贴图单独滚动，
       // 避免和通用油膜同步后看起来像一层整齐的页面滤镜。
       referenceOilTexture.offset.x = Math.sin(time * 0.06) * 0.04;
-      referenceOilTexture.offset.y = time * 0.046 + sourceScrollProgress * 0.62;
+      referenceOilTexture.offset.y = time * 0.046 + sourceSpineUvScroll * 1.18;
       referenceSpineFieldMaterial.opacity = 0.34 + Math.sin(time * 0.2) * 0.024 + Math.min(0.06, Math.abs(scrollImpulse) * 0.015);
       referenceSpineGhostMaterial.opacity = 0.09 + Math.cos(time * 0.18) * 0.014 + Math.min(0.032, Math.abs(scrollImpulse) * 0.009);
       referenceSpineMotionMaterial.uniforms.uTime.value = time;
       referenceSpineMotionMaterial.uniforms.uOpacity.value = 0.16 + Math.sin(time * 0.31 + 0.4) * 0.02 + Math.min(0.06, Math.abs(scrollImpulse) * 0.016);
       referenceSpineSubjectMaterial.uniforms.uTime.value = time;
-      referenceSpineSubjectMaterial.uniforms.uScroll.value = sourceSpineScrollPhase + scrollFollow * 0.018;
+      referenceSpineSubjectMaterial.uniforms.uScroll.value = sourceSpineUvScroll;
       referenceSpineSubjectMaterial.uniforms.uOpacity.value = 0.82 + Math.sin(time * 0.26 + 0.7) * 0.032 + Math.min(0.12, Math.abs(scrollFollow) * 0.03);
       referenceSpineOcclusionMaterial.uniforms.uTime.value = time;
-      referenceSpineOcclusionMaterial.uniforms.uScroll.value = sourceSpineScrollPhase + scrollFollow * 0.018;
+      referenceSpineOcclusionMaterial.uniforms.uScroll.value = sourceSpineUvScroll;
       referenceSpineOcclusionMaterial.uniforms.uOpacity.value = 0.28 + Math.sin(time * 0.22 + 0.2) * 0.018 + Math.min(0.074, Math.abs(scrollFollow) * 0.02);
       referenceSpineRimMaterial.opacity = 0.3 + Math.sin(time * 0.22 + 0.9) * 0.032 + Math.min(0.09, Math.abs(scrollImpulse) * 0.022);
       referenceSpineField.position.x = -0.38;
@@ -5303,7 +5306,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       });
       chainLinks.forEach((link, linkIndex) => {
         const chainLoopHeight = Math.max(0.22, chainLinks.length * 0.22);
-        const chainTravelY = 4 - THREE.MathUtils.euclideanModulo(linkIndex * 0.22 + sourceSpineTravel * 0.46, chainLoopHeight);
+        const chainTravelY = 4 - THREE.MathUtils.euclideanModulo(linkIndex * 0.22 + sourceSpineTravel * 0.78, chainLoopHeight);
         const edgeFade = linkIndex < 8 || linkIndex > chainLinks.length - 9 ? 0.38 : 1;
         const material = link.material as THREE.MeshPhysicalMaterial;
 
@@ -5474,7 +5477,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const angle = columnParticleSeeds[index * 4] + time * columnParticleSeeds[index * 4 + 3] * 0.42;
         const radius = columnParticleSeeds[index * 4 + 1] + Math.sin(time * 1.6 + index) * 0.035;
         const verticalSeed = THREE.MathUtils.euclideanModulo(
-          columnParticleSeeds[index * 4 + 2] - time * 0.046 * columnParticleSeeds[index * 4 + 3] - pillarVerticalPhase * 0.12,
+          columnParticleSeeds[index * 4 + 2] - time * 0.046 * columnParticleSeeds[index * 4 + 3] - pillarVerticalPhase * 0.3,
           1
         );
         const y = (verticalSeed * 5.4) - 2.7;
