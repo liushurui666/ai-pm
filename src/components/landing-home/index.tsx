@@ -81,9 +81,8 @@ const STORY_WORK_SOURCE_CAMERA_RADIUS = STORY_WORK_SOURCE_RADIUS * 2;
 const STORY_WORK_SOURCE_Y_STEP = 0.84;
 const STORY_WORK_VISIBLE_RANGE = 8.2;
 const STORY_WORK_DOM_Y_STEP = 128;
-const STORY_WORK_DOM_ORBIT_X = 58;
 const STORY_WORK_DOM_ORBIT_Z = 112;
-const STORY_WORK_WEBGL_Y_STEP = 0.72;
+const STORY_WORK_WEBGL_Y_STEP = 0.78;
 
 function createSolidDataTexture(r: number, g: number, b: number) {
   const texture = new THREE.DataTexture(new Uint8Array([r, g, b, 255]), 1, 1, THREE.RGBAFormat);
@@ -160,6 +159,8 @@ const storyScenes: StoryScene[] = [
 ];
 
 const STORY_WORK_ITEM_SLOT_COUNT = storyScenes.length * STORY_WORK_ITEM_REPEAT;
+const STORY_WORK_SCROLL_REBASE_PERIOD = STORY_WORK_ITEM_SLOT_COUNT * 3;
+const STORY_WORK_SCROLL_REBASE_THRESHOLD = STORY_WORK_ITEM_SLOT_COUNT * 5;
 const storyWorkItemSlots = Array.from({ length: STORY_WORK_ITEM_SLOT_COUNT }, (_, slotIndex) => {
   const sceneIndex = slotIndex % storyScenes.length;
 
@@ -239,18 +240,19 @@ function getStoryWorkItemVisualFromOffset(offset: number, impulse = 0): StoryWor
   const focus = Math.max(0, 1 - absOffset * 0.5);
   const trackWindow = Math.max(0, 1 - absOffset / STORY_WORK_VISIBLE_RANGE);
   const orbit = getStoryWorkItemOrbit(offset);
-  const x = orbit.x * STORY_WORK_DOM_ORBIT_X;
+  const x = 0;
   const y = -offset * STORY_WORK_DOM_Y_STEP;
-  const z = 188 + orbit.z * STORY_WORK_DOM_ORBIT_Z + focus * 192 - absOffset * 18;
+  const z = 188 + orbit.z * STORY_WORK_DOM_ORBIT_Z + focus * 204 - absOffset * 16;
   const rotateX = THREE.MathUtils.clamp(offset * -0.05, -0.22, 0.22);
-  const rotateY = orbit.rotationY * 0.72 + THREE.MathUtils.clamp(offset * -0.06 + impulse * 0.018, -0.18, 0.18);
-  const rotateZ = orbit.x * 2.4;
+  const rotateY = orbit.rotationY * 0.68 + THREE.MathUtils.clamp(offset * -0.052 + impulse * 0.014, -0.18, 0.18);
+  const rotateZ = orbit.x * 0.9;
   const scale = 0.36 + trackWindow * 0.24 + focus * 0.23;
   const opacity = Math.min(0.98, 0.22 + trackWindow * 0.48 + focus * 0.24 + Math.min(0.08, Math.abs(impulse) * 0.018));
 
   // 这套公式保留源码里“15 张真实 view 常驻 + 50 度 target 编排”的交互语义，
-  // 但不再把横向变化传给 camera 或柱体。结果是用户向下滚动时，卡片按一条连续螺旋轨道
-  // 从上到下换面、排序、可点击；柱体只保持屏幕中轴固定并在内部做纵向滚动。
+  // 但不再把横向变化传给 camera、柱体或 DOM hit layer。源码里的横向感来自 camera target 绕场，
+  // AI PM 版本为了让柱体完全锁在屏幕中轴，把它改写成“同一中轴上的上下穿行 + 旋转换面”：
+  // 用户向下滚动会看到多张卡接力经过，而不会看到整根柱子跟着卡片左右晃。
   return {
     isFocused: absOffset < 0.42,
     opacity,
@@ -270,18 +272,19 @@ function getStoryWorkItemWebGLLayout(offset: number) {
   const orbit = getStoryWorkItemOrbit(offset);
 
   // WebGL pane 和 DOM hit layer 共用同一个 offset 轨道。
-  // 这轮把横向位移压到只够产生透视遮挡的范围，主运动改成 y 轴连续穿行；
-  // 否则在相机锁定的 AI PM 版本里，源码的 camera-orbit 会被误读成“柱子跟着卡片左右漂”。
+  // 这轮进一步取消随滚动变化的 x 位移：源站的 WorkItems 本身绕圆排布，但屏幕里的横向变化主要来自 camera target。
+  // 我们把 camera/pillar 锁定后，如果继续移动 pane.x，就会被用户感知成柱体横漂。
+  // 因此卡片只在 y/z/rotation 上循环，形成“从上到下穿过固定柱体”的真实多卡片队列。
   return {
     absOffset,
     focus,
     trackWindow,
-    x: -0.05 + orbit.x * 0.34,
+    x: -0.05,
     y: 0.12 - offset * STORY_WORK_WEBGL_Y_STEP,
-    z: 1.38 + orbit.z * 0.54 + focus * 0.74 - absOffset * 0.04,
+    z: 1.42 + orbit.z * 0.38 + focus * 0.82 - absOffset * 0.038,
     rotationX: THREE.MathUtils.clamp(offset * -0.052, -0.22, 0.22),
-    rotationY: -0.08 + orbit.rotationY * 0.74 + THREE.MathUtils.clamp(offset * -0.045, -0.18, 0.18),
-    rotationZ: orbit.x * 0.052,
+    rotationY: -0.08 + orbit.rotationY * 0.68 + THREE.MathUtils.clamp(offset * -0.04, -0.18, 0.18),
+    rotationZ: orbit.x * 0.028,
     scale: 0.3 + trackWindow * 0.17 + focus * 0.25,
   };
 }
@@ -289,8 +292,9 @@ function getStoryWorkItemWebGLLayout(offset: number) {
 function getStoryWorkItemHitLayerOpacity(visual: StoryWorkItemVisual) {
   // DOM 层不再只是一个极淡 hit-area：用户明确要看到“所有卡片都在真实滚动并可交互”。
   // v132 之后视觉主层重新交给 WebGL/媒体玻璃，DOM 只保留足够的焦点和点击反馈；
-  // 如果 DOM 文案太亮，画面会变成一串 SaaS 卡片，而不是源站那种媒体屏在柱体前后滚动。
-  return Math.min(0.28, visual.opacity * (visual.isFocused ? 0.26 : 0.18));
+  // 但非焦点卡不能淡到几乎不可见，否则用户会以为只有一张卡片在换内容。
+  // 这里把可见上限抬高到多张卡都能被点击和辨认，同时仍低于 WebGL 玻璃主层。
+  return Math.min(0.38, visual.opacity * (visual.isFocused ? 0.34 : 0.26));
 }
 
 function getInitialStoryCardStyle(slotIndex: number, progress = 0) {
@@ -2417,6 +2421,160 @@ function createWorkRefractionPanelMaterial(baseTexture: THREE.Texture, normalTex
   });
 }
 
+function createStoryWorkItemShaderMaterial(options: {
+  accent: string;
+  envTexture: THREE.Texture;
+  normalTexture: THREE.Texture;
+  opacity: number;
+  paneTexture: THREE.Texture;
+  refractionTexture: THREE.Texture;
+}) {
+  // 主滚动卡片不能再用 MeshBasicMaterial 直接贴 Canvas：那样只有焦点卡看得清，
+  // 非焦点卡会像一张透明 SaaS 卡被替换内容，和 ActiveTheory 源码的 WorkItemShader 差距很大。
+  // 这个材质复用镜像中的 water normal、env 和运行时 Work/refraction canvas：
+  // - paneTexture 仍承载 AI PM 的业务文案，但只作为玻璃内部的低清投影；
+  // - refractionTexture 来自当前 15 个 WorkItem slot 的离屏轨道，滚动时每张卡都会互相折射；
+  // - x/z 不在材质里参与位移，横向感只来自 pane 自身折光，避免用户看到柱体整体偏移。
+  return new THREE.ShaderMaterial({
+    blending: THREE.NormalBlending,
+    depthTest: false,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    transparent: true,
+    uniforms: {
+      tEnv: { value: options.envTexture },
+      tMap: { value: options.paneTexture },
+      tNormal: { value: options.normalTexture },
+      tRefraction: { value: options.refractionTexture },
+      uAccent: { value: new THREE.Color(options.accent) },
+      uHover: { value: 0 },
+      uImpulse: { value: 0 },
+      uOpacity: { value: options.opacity },
+      uResolution: { value: new THREE.Vector2(1, 1) },
+      uScroll: { value: 0 },
+      uTime: { value: 0 },
+    },
+    vertexShader: `
+      uniform float uHover;
+      uniform float uImpulse;
+      uniform float uScroll;
+      uniform float uTime;
+      varying vec2 vUv;
+      varying vec3 vNormal;
+      varying vec3 vViewDir;
+      varying vec3 vWorldPosition;
+
+      void main() {
+        vUv = uv;
+        vec3 transformedPosition = position;
+        float edge = pow(abs(uv.x - 0.5) * 2.0, 1.65);
+        float wave = sin(uTime * 0.48 + uScroll * 6.28318 + uv.y * 4.2 + edge * 2.2);
+
+        // 源码 WorkItem 顶点会按 hover、mouse 和时间做一点玻璃弯曲。
+        // 这里只弯 z/y，不改 mesh 的世界 x，因此滚动时卡片有厚度，但不会把固定柱体“拽”到左右。
+        transformedPosition.z += wave * (0.028 + uHover * 0.022 + min(abs(uImpulse), 2.4) * 0.004);
+        transformedPosition.y += (uv.x - 0.5) * (0.024 + uHover * 0.018);
+        transformedPosition.x += (uv.y - 0.5) * uImpulse * 0.006;
+
+        vNormal = normalize(normalMatrix * normal);
+        vec4 worldPosition = modelMatrix * vec4(transformedPosition, 1.0);
+        vec4 viewPosition = modelViewMatrix * vec4(transformedPosition, 1.0);
+        vWorldPosition = worldPosition.xyz;
+        vViewDir = normalize(cameraPosition - worldPosition.xyz);
+        gl_Position = projectionMatrix * viewPosition;
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D tEnv;
+      uniform sampler2D tMap;
+      uniform sampler2D tNormal;
+      uniform sampler2D tRefraction;
+      uniform vec3 uAccent;
+      uniform float uHover;
+      uniform float uImpulse;
+      uniform float uOpacity;
+      uniform vec2 uResolution;
+      uniform float uScroll;
+      uniform float uTime;
+      varying vec2 vUv;
+      varying vec3 vNormal;
+      varying vec3 vViewDir;
+      varying vec3 vWorldPosition;
+
+      float roundedMask(vec2 uv) {
+        vec2 p = abs(uv - 0.5) - vec2(0.462, 0.392);
+        float d = length(max(p, 0.0)) + min(max(p.x, p.y), 0.0);
+        return 1.0 - smoothstep(0.0, 0.036, d);
+      }
+
+      float edgeMask(vec2 uv) {
+        float x = smoothstep(0.0, 0.12, uv.x) * smoothstep(1.0, 0.86, uv.x);
+        float y = smoothstep(0.0, 0.12, uv.y) * smoothstep(1.0, 0.86, uv.y);
+        return x * y;
+      }
+
+      vec3 rgbShift(sampler2D tex, vec2 uv, float amount) {
+        vec2 clampedUv = clamp(uv, vec2(0.012), vec2(0.988));
+        float r = texture2D(tex, clampedUv + vec2(amount, 0.0)).r;
+        float g = texture2D(tex, clampedUv).g;
+        float b = texture2D(tex, clampedUv - vec2(amount, 0.0)).b;
+        return vec3(r, g, b);
+      }
+
+      vec3 softRefraction(vec2 uv) {
+        vec2 clampedUv = clamp(uv, vec2(0.01), vec2(0.99));
+        vec3 color = texture2D(tRefraction, clampedUv).rgb * 0.42;
+        color += texture2D(tRefraction, clampedUv + vec2(0.006, 0.0)).rgb * 0.15;
+        color += texture2D(tRefraction, clampedUv - vec2(0.006, 0.0)).rgb * 0.15;
+        color += texture2D(tRefraction, clampedUv + vec2(0.0, 0.006)).rgb * 0.14;
+        color += texture2D(tRefraction, clampedUv - vec2(0.0, 0.006)).rgb * 0.14;
+        return pow(max(color, 0.0), vec3(1.22));
+      }
+
+      void main() {
+        float mask = roundedMask(vUv);
+        float edge = edgeMask(vUv);
+        if (mask < 0.01 || edge < 0.01) {
+          discard;
+        }
+
+        vec2 normalUv = vUv * vec2(1.18, 0.78) + vec2(uTime * 0.012 + uScroll * 0.022, uTime * 0.026 - uScroll * 0.018);
+        vec3 normalSample = texture2D(tNormal, normalUv).rgb * 2.0 - 1.0;
+        vec3 glassNormal = normalize(vNormal + normalSample * (0.08 + uHover * 0.035));
+        float fresnel = pow(1.0 - clamp(abs(dot(glassNormal, normalize(vViewDir))), 0.0, 1.0), 1.32);
+
+        vec2 screenUv = gl_FragCoord.xy / max(uResolution, vec2(1.0));
+        vec2 refractUv = screenUv - glassNormal.xy * 0.044 - normalSample.xy * (0.018 + uHover * 0.016 + min(abs(uImpulse), 2.8) * 0.003);
+        refractUv += vec2(sin(uTime * 0.16 + vUv.y * 3.0) * 0.004, cos(uTime * 0.13 + vUv.x * 4.0) * 0.004);
+        vec3 refraction = softRefraction(refractUv);
+
+        vec2 paneUv = vUv;
+        paneUv.x = 0.5 + (paneUv.x - 0.5) * (1.02 + uHover * 0.025) + normalSample.x * 0.012;
+        paneUv.y = 0.5 + (paneUv.y - 0.5) * 0.985 + normalSample.y * 0.012 + sin(uTime * 0.2 + uScroll * 3.4) * 0.004;
+        float edgeChromatic = (1.0 - edge) * 0.012 + 0.0028 + uHover * 0.002;
+        vec3 pane = rgbShift(tMap, paneUv, edgeChromatic);
+        float paneLuma = dot(pane, vec3(0.299, 0.587, 0.114));
+        float paneBody = smoothstep(0.04, 0.52, paneLuma);
+
+        vec2 envUv = vec2(
+          vUv.x + normalSample.x * 0.045 + uTime * 0.006,
+          vUv.y - normalSample.y * 0.04 + uScroll * 0.026
+        );
+        vec3 env = texture2D(tEnv, envUv).rgb;
+        float scan = 0.92 + sin(uTime * 0.84 + vUv.y * 17.0 + normalSample.x * 1.4 + uScroll * 2.2) * 0.08;
+        vec3 darkGlass = vec3(0.022, 0.034, 0.038);
+        vec3 accentGlow = uAccent * (0.09 + fresnel * 0.22 + uHover * 0.08);
+        vec3 oil = vec3(0.38, 0.22, 0.68) * smoothstep(0.34, 0.94, abs(normalSample.x)) * 0.12;
+        vec3 color = darkGlass + pane * (0.34 + uHover * 0.12) + refraction * (0.52 + fresnel * 0.34) + env * (0.12 + fresnel * 0.2) + accentGlow + oil;
+        color = pow(max(color, 0.0), vec3(0.92));
+
+        float alpha = uOpacity * mask * edge * scan * (0.28 + paneBody * 0.58 + fresnel * 0.34 + dot(refraction, vec3(0.2126, 0.7152, 0.0722)) * 0.18);
+        gl_FragColor = vec4(color, clamp(alpha, 0.0, 0.92));
+      }
+    `,
+  });
+}
+
 function createSourceSpineShaderMaterial(options: {
   accent: THREE.Color;
   baseColorTexture: THREE.Texture;
@@ -2648,7 +2806,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     () => ({
       "--scene-accent": activeScene.accent,
       "--scene-index": activeIndex,
-      "--story-scroll-screens": storyScenes.length * 8,
+      "--story-scroll-screens": storyScenes.length * 24,
     }) as CSSProperties,
     [activeIndex, activeScene.accent]
   );
@@ -4789,14 +4947,14 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
     const panelMeshes = storyWorkItemSlots.map(({ scene: sceneItem, sceneIndex, slotIndex }) => {
       const geometry = new THREE.PlaneGeometry(THREE_PANEL_WIDTH / 245, THREE_PANEL_HEIGHT / 245, 12, 8);
-      const material = new THREE.MeshBasicMaterial({
-        depthTest: false,
-        depthWrite: false,
-        map: createPanelTexture(sceneItem),
+      const panelTexture = createPanelTexture(sceneItem);
+      const material = createStoryWorkItemShaderMaterial({
+        accent: sceneItem.accent,
+        envTexture: activeTheoryWorkEnvTexture,
+        normalTexture: activeTheoryWorkNormalTexture,
         opacity: 0.18,
-        side: THREE.DoubleSide,
-        toneMapped: false,
-        transparent: true,
+        paneTexture: panelTexture,
+        refractionTexture: workRefractionCanvas.texture,
       });
       const mesh = new THREE.Mesh(geometry, material);
       const backplateGeometry = new THREE.PlaneGeometry(THREE_PANEL_WIDTH / 232, THREE_PANEL_HEIGHT / 232, 1, 1);
@@ -4822,7 +4980,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 这些卡片对应源站 WorkItem：所有项目卡都一直存在于同一条无界轨道上。
       // v128 起把“源码 camera 穿过 50deg target”的效果转译到卡片自身；
       // 卡片会沿 offset 螺旋换面，柱体和相机的 x/z 仍然保持锁定。
-      material.opacity = Math.min(0.3, 0.038 + initialLayout.trackWindow * 0.12 + initialLayout.focus * 0.16);
+      material.uniforms.uOpacity.value = Math.min(0.3, 0.038 + initialLayout.trackWindow * 0.12 + initialLayout.focus * 0.16);
       mesh.renderOrder = initialOffset === 0 ? 30 : Math.max(20, 28 - initialLayout.absOffset);
       backplate.renderOrder = mesh.renderOrder - 0.2;
       mesh.userData.index = sceneIndex;
@@ -4831,7 +4989,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 背板模拟源站 WorkPane 的折射边缘，只负责把所有卡片“托出来”，不改变滚动轨道。
       stage.add(backplate);
       stage.add(mesh);
-      return { backplate, backplateGeometry, backplateMaterial, geometry, material, mesh, sceneIndex, slotIndex };
+      return { backplate, backplateGeometry, backplateMaterial, geometry, material, mesh, panelTexture, sceneIndex, slotIndex };
     });
 
     const spineGeometry = new THREE.TorusKnotGeometry(0.76, 0.055, 180, 12, 2, 5);
@@ -4879,7 +5037,33 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       if (scrollSection) {
         const rect = scrollSection.getBoundingClientRect();
         const scrollUnit = Math.max(320, window.innerHeight * 0.72);
-        const nativeProgress = Math.max(0, -rect.top / scrollUnit);
+        let nativeProgress = Math.max(0, -rect.top / scrollUnit);
+
+        if (nativeProgress > STORY_WORK_SCROLL_REBASE_THRESHOLD) {
+          let rebaseOffset = 0;
+
+          while (nativeProgress - rebaseOffset > STORY_WORK_SCROLL_REBASE_THRESHOLD - 1) {
+            rebaseOffset += STORY_WORK_SCROLL_REBASE_PERIOD;
+          }
+
+          if (rebaseOffset > 0) {
+            const sectionTop = window.scrollY + rect.top;
+            const rebasedProgress = nativeProgress - rebaseOffset;
+
+            // 源站 Work 使用 Scroll.getUnlimited()，浏览器页面没有真正无限高度。
+            // 这里在超过多圈后按 15-slot 的整倍数回写 scrollY，同时把内部 progress 一起减掉同样的圈数；
+            // 因为 WorkItem offset 按 15 取模，画面不会跳，只是避免到底部后滚动条把场景强行拉回。
+            nativeScrollProgressRef.current -= rebaseOffset;
+            scrollTargetRef.current -= rebaseOffset;
+            visualProgress -= rebaseOffset;
+            nativeProgress = rebasedProgress;
+            window.scrollTo({
+              behavior: "instant",
+              top: sectionTop + rebasedProgress * scrollUnit,
+            });
+          }
+        }
+
         const nativeDelta = nativeProgress - nativeScrollProgressRef.current;
 
         if (Math.abs(nativeDelta) > 0.0008) {
@@ -5276,7 +5460,12 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         backplate.scale.set(mesh.scale.x * 1.04, mesh.scale.y * 1.04, 1);
         backplate.renderOrder = mesh.renderOrder - 0.2;
 
-        material.opacity += (targetOpacity - material.opacity) * 0.12;
+        material.uniforms.uTime.value = time;
+        material.uniforms.uScroll.value = sourceScrollProgress;
+        material.uniforms.uImpulse.value = scrollImpulse;
+        material.uniforms.uResolution.value.set(width, height);
+        material.uniforms.uHover.value += (cardFocus - material.uniforms.uHover.value) * 0.12;
+        material.uniforms.uOpacity.value += (targetOpacity - material.uniforms.uOpacity.value) * 0.12;
         // 视觉主层重新交给 WebGL WorkPane：DOM 只负责 hit area，WebGL pane 才负责源站式媒体玻璃。
         // 这里比 v118 略微抬高面片和背板，但仍用透明上限控制，避免退回一整块大色卡遮住柱体。
         // 非焦点 pane 如果保持同样大面积高透明度，会叠成一整块雾板，用户会误以为只有一张卡。
@@ -5443,7 +5632,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       spineMaterial.dispose();
       panelMeshes.forEach((panel) => {
         panel.geometry.dispose();
-        panel.material.map?.dispose();
+        panel.panelTexture.dispose();
         panel.material.dispose();
         panel.backplateGeometry.dispose();
         panel.backplateMaterial.dispose();
