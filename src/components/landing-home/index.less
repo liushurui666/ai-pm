@@ -90,7 +90,7 @@
 
 .landing-story-workitem-rail {
   position: absolute;
-  top: 49%;
+  top: 47%;
   left: 50%;
   z-index: 4;
   width: 1px;
@@ -108,9 +108,9 @@
   left: 0;
   display: grid;
   appearance: none;
-  width: clamp(196px, 15.2vw, 286px);
-  min-height: clamp(108px, 9.5vw, 164px);
-  padding: clamp(11px, 0.96vw, 17px);
+  width: clamp(330px, 28vw, 610px);
+  min-height: clamp(186px, 17vw, 350px);
+  padding: clamp(18px, 1.55vw, 30px);
   overflow: hidden;
   color: rgba(245, 252, 255, 0.72);
   font: inherit;
@@ -119,7 +119,7 @@
     radial-gradient(circle at 58% 18%, color-mix(in srgb, var(--card-accent) 16%, transparent), transparent 46%),
     linear-gradient(135deg, rgba(20, 36, 42, 0.34), rgba(4, 9, 13, 0.48));
   border: 1px solid color-mix(in srgb, var(--card-accent) 32%, rgba(255, 255, 255, 0.1));
-  border-radius: 16px;
+  border-radius: 20px;
   box-shadow:
     0 12px 46px rgba(0, 0, 0, 0.28),
     0 0 34px color-mix(in srgb, var(--card-accent) 12%, transparent),
@@ -165,9 +165,9 @@
 }
 
 .landing-story-workitem-card::after {
-  inset: 10px;
+  inset: 14px;
   border: 1px solid color-mix(in srgb, var(--card-accent) 38%, transparent);
-  border-radius: 11px;
+  border-radius: 15px;
   opacity: 0.42;
 }
 
@@ -183,25 +183,25 @@
   align-self: start;
   color: color-mix(in srgb, var(--card-accent) 68%, #ffffff);
   font-family: var(--font-geist-mono), "SFMono-Regular", Consolas, monospace;
-  font-size: 0.74rem;
+  font-size: clamp(0.74rem, 0.74vw, 0.92rem);
   font-weight: 700;
   letter-spacing: 0;
   text-transform: uppercase;
 }
 
 .landing-story-workitem-card strong {
-  max-width: 13em;
-  margin-top: clamp(8px, 0.94vw, 13px);
-  font-size: clamp(0.98rem, 1.14vw, 1.36rem);
+  max-width: 14em;
+  margin-top: clamp(14px, 1.25vw, 24px);
+  font-size: clamp(1.35rem, 1.92vw, 2.65rem);
   line-height: 1.02;
   letter-spacing: 0;
 }
 
 .landing-story-workitem-card p {
   max-width: 28em;
-  margin: clamp(7px, 0.7vw, 11px) 0 0;
-  color: rgba(221, 233, 238, 0.56);
-  font-size: clamp(0.68rem, 0.68vw, 0.8rem);
+  margin: clamp(12px, 1vw, 20px) 0 0;
+  color: rgba(221, 233, 238, 0.64);
+  font-size: clamp(0.82rem, 0.86vw, 1.02rem);
   font-weight: 700;
   line-height: 1.55;
 }
@@ -209,10 +209,10 @@
 .landing-story-workitem-card small {
   align-self: end;
   justify-self: start;
-  margin-top: clamp(8px, 0.92vw, 14px);
-  padding: 0.3rem 0.62rem;
+  margin-top: clamp(16px, 1.3vw, 26px);
+  padding: 0.42rem 0.78rem;
   color: rgba(231, 255, 249, 0.78);
-  font-size: 0.74rem;
+  font-size: clamp(0.78rem, 0.74vw, 0.94rem);
   font-weight: 900;
   line-height: 1;
   background: color-mix(in srgb, var(--card-accent) 22%, rgba(255, 255, 255, 0.08));

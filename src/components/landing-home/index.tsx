@@ -79,12 +79,12 @@ const STORY_WORK_ITEM_REPEAT = 3;
 const STORY_WORK_SOURCE_RADIUS = 3.8;
 const STORY_WORK_SOURCE_CAMERA_RADIUS = STORY_WORK_SOURCE_RADIUS * 2;
 const STORY_WORK_SOURCE_Y_STEP = 0.84;
-const STORY_WORK_VISIBLE_RANGE = 6.45;
-const STORY_WORK_DOM_ORBIT_X = 190;
-const STORY_WORK_DOM_Y_STEP = 136;
-const STORY_WORK_DOM_ORBIT_Z = 128;
-const STORY_WORK_WEBGL_ORBIT_X = 0.78;
-const STORY_WORK_WEBGL_Y_STEP = 0.74;
+const STORY_WORK_VISIBLE_RANGE = 7.2;
+const STORY_WORK_DOM_ORBIT_X = 108;
+const STORY_WORK_DOM_Y_STEP = 205;
+const STORY_WORK_DOM_ORBIT_Z = 188;
+const STORY_WORK_WEBGL_ORBIT_X = 0.34;
+const STORY_WORK_WEBGL_Y_STEP = 0.98;
 
 function createSolidDataTexture(r: number, g: number, b: number) {
   const texture = new THREE.DataTexture(new Uint8Array([r, g, b, 255]), 1, 1, THREE.RGBAFormat);
@@ -242,20 +242,21 @@ function getStoryWorkItemVisualFromOffset(offset: number, impulse = 0): StoryWor
   const focus = Math.max(0, 1 - absOffset * 0.5);
   const trackWindow = Math.max(0, 1 - absOffset / STORY_WORK_VISIBLE_RANGE);
   const orbit = getStoryWorkItemOrbit(offset);
-  const orbitDepth = Math.pow(trackWindow, 0.68);
+  const orbitDepth = Math.pow(trackWindow, 0.8);
   const x = orbit.x * STORY_WORK_DOM_ORBIT_X * orbitDepth;
   const y = -offset * STORY_WORK_DOM_Y_STEP;
-  const z = 188 + orbit.z * STORY_WORK_DOM_ORBIT_Z + focus * 218 - absOffset * 13;
-  const rotateX = THREE.MathUtils.clamp(offset * -0.05, -0.22, 0.22);
-  const rotateY = orbit.rotationY * 1.08 + THREE.MathUtils.clamp(offset * -0.052 + impulse * 0.014, -0.18, 0.18);
-  const rotateZ = orbit.x * 1.45;
-  const scale = 0.3 + trackWindow * 0.22 + focus * 0.26;
-  const opacity = Math.min(1, 0.4 + trackWindow * 0.48 + focus * 0.2 + Math.min(0.12, Math.abs(impulse) * 0.024));
+  const z = 250 + orbit.z * STORY_WORK_DOM_ORBIT_Z + focus * 292 - absOffset * 18;
+  const rotateX = THREE.MathUtils.clamp(offset * -0.032, -0.16, 0.16);
+  const rotateY = orbit.rotationY * 0.68 + THREE.MathUtils.clamp(offset * -0.028 + impulse * 0.01, -0.14, 0.14);
+  const rotateZ = orbit.x * 0.72;
+  const scale = 0.54 + trackWindow * 0.28 + focus * 0.34;
+  const opacity = Math.min(1, 0.48 + trackWindow * 0.46 + focus * 0.24 + Math.min(0.1, Math.abs(impulse) * 0.02));
 
   // 这套公式保留源码里“15 张真实 view 常驻 + 50 度 target 编排”的交互语义，
   // 横向轨道只作用在 WorkItem 自己身上，camera 与 pillar 仍然锁在固定 x/z。
-  // 这样用户向下滚动时，柱体只做从上到下的推进；卡片则像源站一样按 50 度队列换面穿场，
-  // 不会退化成一张中心卡片反复替换内容。
+  // 这样用户向下滚动时，柱体只做纵向推进；卡片虽然仍然沿源码 50 度序列换面，
+  // 但横向振幅被压到很小，画面读感会接近“多张大屏牌从上到下经过中轴”，
+  // 避免再被误判成整根柱子跟着卡片左右漂移。
   return {
     isFocused: absOffset < 0.42,
     opacity,
@@ -282,13 +283,13 @@ function getStoryWorkItemWebGLLayout(offset: number) {
     absOffset,
     focus,
     trackWindow,
-    x: -0.05 + orbit.x * STORY_WORK_WEBGL_ORBIT_X * Math.pow(trackWindow, 0.68),
+    x: -0.05 + orbit.x * STORY_WORK_WEBGL_ORBIT_X * Math.pow(trackWindow, 0.8),
     y: 0.12 - offset * STORY_WORK_WEBGL_Y_STEP,
-    z: 1.38 + orbit.z * 0.56 + focus * 0.88 - absOffset * 0.026,
-    rotationX: THREE.MathUtils.clamp(offset * -0.062, -0.24, 0.24),
-    rotationY: -0.08 + orbit.rotationY * 1.08 + THREE.MathUtils.clamp(offset * -0.04, -0.18, 0.18),
-    rotationZ: orbit.x * 0.046,
-    scale: 0.26 + trackWindow * 0.2 + focus * 0.28,
+    z: 1.56 + orbit.z * 0.52 + focus * 1.08 - absOffset * 0.024,
+    rotationX: THREE.MathUtils.clamp(offset * -0.044, -0.18, 0.18),
+    rotationY: -0.08 + orbit.rotationY * 0.62 + THREE.MathUtils.clamp(offset * -0.028, -0.12, 0.12),
+    rotationZ: orbit.x * 0.026,
+    scale: 0.42 + trackWindow * 0.28 + focus * 0.36,
   };
 }
 
@@ -298,7 +299,7 @@ function getStoryWorkItemHitLayerOpacity(visual: StoryWorkItemVisual) {
   // 但非焦点卡不能淡到几乎不可见，否则用户会以为只有一张卡片在换内容。
   // 这里把可见上限抬高到多张卡都能被点击和辨认，同时仍低于 WebGL 玻璃主层；
   // 可见窗口本身小于 15-slot 半圈，卡片会先淡出再从顶部接回，避免无限滚动接缝露出来。
-  return Math.min(0.72, visual.opacity * (visual.isFocused ? 0.58 : 0.5));
+  return Math.min(0.88, visual.opacity * (visual.isFocused ? 0.74 : 0.62));
 }
 
 function getInitialStoryCardStyle(slotIndex: number, progress = 0) {
@@ -369,6 +370,7 @@ const activeTheoryFlowerPointVertexShader = `
   varying vec4 vRandom;
   varying vec3 vColor;
   varying float vAlpha;
+  varying float vDist;
   varying float vOffset;
   uniform float uFlowHeight;
   uniform float uOpacity;
@@ -407,34 +409,36 @@ const activeTheoryFlowerPointVertexShader = `
     transformed.x += 0.12;
     transformed.z -= 0.06;
 
-    float topOffset = smoothstep(0.4, 0.0, sourceScroll) * pow(randomA, 28.0) * 1.68;
+    float topOffset = smoothstep(0.4, 0.0, sourceScroll) * pow(randomA, 28.0) * 3.15;
     topOffset *= 0.8 + sin(transformed.y * 0.2 + uTime * 0.02 + sourceScroll + randomC * 2.0) * 0.2;
     transformed.y += topOffset;
 
-    float spiralMask = 0.22 + 0.08 * sin(uTime * 0.08 + randomC * 6.28318);
-    float spiralAngle = uTime * 0.12 + length(transformed.xz) + transformed.y * 0.5 + uRotate * 0.35;
-    transformed.x -= cos(spiralAngle) * 0.46 * spiralMask;
-    transformed.z -= sin(spiralAngle) * 0.46 * spiralMask;
+    float spiralMask = (0.55 + 0.18 * sin(uTime * 0.08 + randomC * 6.28318)) * smoothstep(0.0, 0.5, abs(sourceScroll - 0.5));
+    float spiralAngle = sourceScroll * 5.0 + length(transformed.xz) + transformed.y * 0.5 + uRotate * 1.2;
+    transformed.x -= cos(spiralAngle) * 0.42 * spiralMask;
+    transformed.z -= sin(spiralAngle) * 0.42 * spiralMask;
 
     float outerMask = step(0.95, randomB);
     float outerAngle = transformed.y * 0.5 + sin(uTime * 0.05 + randomD * 0.5 - uRotate * 0.2);
-    transformed.x -= cos(outerAngle) * 3.05 * outerMask;
-    transformed.z -= sin(outerAngle) * 3.05 * outerMask;
+    transformed.x -= cos(outerAngle) * 4.3 * outerMask;
+    transformed.z -= sin(outerAngle) * 4.3 * outerMask;
 
     if (transformed.x < 0.0) {
-      transformed.x -= cos(-originalPosition.y * 0.06) * 0.34 - 0.4;
-      transformed.z -= sin(-originalPosition.y * 0.06) * 0.34 - 0.22;
+      transformed.x -= cos(-originalPosition.y * 0.06) * 0.62 - 0.68;
+      transformed.z -= sin(-originalPosition.y * 0.06) * 0.62 - 0.38;
     } else {
-      transformed.x -= cos(-originalPosition.y * 0.06 + 3.0) * 0.34 + 0.4;
-      transformed.z -= sin(-originalPosition.y * 0.06 + 3.0) * 0.34 + 0.12;
+      transformed.x -= cos(-originalPosition.y * 0.06 + 3.0) * 0.62 + 0.68;
+      transformed.z -= sin(-originalPosition.y * 0.06 + 3.0) * 0.62 + 0.28;
     }
 
-    transformed.y -= pow(sourceScroll, 4.0) * 2.8 * pow(randomD, 12.0);
-    transformed.x -= cos(transformed.y + uTime * 0.16) * 0.045 * pow(randomD, 4.0);
-    transformed.z -= sin(transformed.y + uTime * 0.16) * 0.045 * pow(randomD, 4.0);
+    transformed.y -= pow(sourceScroll, 4.0) * 5.2 * pow(randomD, 12.0);
+    transformed.x -= cos(transformed.y + uTime * 0.16) * 0.11 * pow(randomD, 4.0) * pow(sourceScroll, 3.5);
+    transformed.z -= sin(transformed.y + uTime * 0.16) * 0.11 * pow(randomD, 4.0) * pow(sourceScroll, 3.5);
     transformed.xz = mix(transformed.xz, vec2(0.0), pow(smoothstep(3.1, -3.1, transformed.y), 3.0) * 0.76);
 
+    vec3 worldPosition = (modelMatrix * vec4(transformed, 1.0)).xyz;
     vec4 mvPosition = modelViewMatrix * vec4(transformed, 1.0);
+    vDist = length(worldPosition - cameraPosition);
     float depthScale = 7.6 / max(1.0, -mvPosition.z);
     float localSparkle =
       0.52 + 0.48 * sin(position.x * 8.3 + position.y * 3.7 + position.z * 5.4 + uTime * 2.05 + uSparkle);
@@ -453,7 +457,38 @@ const activeTheoryFlowerPointFragmentShader = `
   varying vec4 vRandom;
   varying vec3 vColor;
   varying float vAlpha;
+  varying float vDist;
   varying float vOffset;
+  uniform sampler2D tMap;
+  uniform float uTime;
+
+  vec3 activeTheoryRgbToHsv(vec3 c) {
+    vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+    vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+    vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+    float d = q.x - min(q.w, q.y);
+    float e = 1.0e-10;
+    return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+  }
+
+  vec3 activeTheoryHsvToRgb(vec3 c) {
+    vec3 p = abs(fract(c.xxx + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0);
+    return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
+  }
+
+  vec3 activeTheoryBlendSoftLight(vec3 base, vec3 blend, float opacity) {
+    vec3 result = mix(
+      2.0 * base * blend + base * base * (1.0 - 2.0 * blend),
+      sqrt(max(base, 0.0)) * (2.0 * blend - 1.0) + 2.0 * base * (1.0 - blend),
+      step(0.5, blend)
+    );
+    return mix(base, result, opacity);
+  }
+
+  vec3 activeTheoryBlendOverlay(vec3 base, vec3 blend, float opacity) {
+    vec3 result = mix(2.0 * base * blend, 1.0 - 2.0 * (1.0 - base) * (1.0 - blend), step(0.5, base));
+    return mix(base, result, opacity);
+  }
 
   void main() {
     vec2 uv = gl_PointCoord - vec2(0.5);
@@ -466,11 +501,20 @@ const activeTheoryFlowerPointFragmentShader = `
       discard;
     }
 
+    vec3 matcap = texture2D(tMap, vec2(gl_PointCoord.x, 1.0 - gl_PointCoord.y)).rgb * 1.3;
+    vec3 color = activeTheoryBlendSoftLight(vColor, matcap, 0.8);
+    color = activeTheoryBlendOverlay(color, matcap, 0.1);
+    vec3 hsv = activeTheoryRgbToHsv(color);
+    hsv.x += sin(vRandom.z * 20.0 + uTime * 0.15) * 0.018 - 0.018;
+    hsv.y *= mix(0.5, 0.8, vRandom.w);
+    color = activeTheoryHsvToRgb(hsv);
     vec3 sparkle = vec3(0.4 + sin(vRandom.y * 20.0));
-    float displacementLight = smoothstep(0.04, 1.6, vOffset) * 0.16;
-    vec3 color = mix(vColor, sparkle, pow(vRandom.x, 10.0) * displacementLight);
+    float displacementLight = smoothstep(0.04, 2.35, vOffset) * 0.22;
+    float distanceFade = mix(0.62, 1.0, smoothstep(15.0, 6.0, vDist));
+    color = mix(color, sparkle, pow(vRandom.x, 10.0) * displacementLight * 0.6);
+    color = pow(color * 1.18, vec3(1.34)) * distanceFade;
 
-    gl_FragColor = vec4(color * (0.72 + core * 0.75 + displacementLight), alpha);
+    gl_FragColor = vec4(color * (0.76 + core * 0.7 + displacementLight), alpha);
   }
 `;
 
@@ -544,7 +588,7 @@ function createVolumetricParticleMaterial(globalOpacity: number) {
   });
 }
 
-function createActiveTheoryFlowerPointMaterial() {
+function createActiveTheoryFlowerPointMaterial(mapTexture: THREE.Texture) {
   // 源站的 `flower_spine` 是围绕柱体的高密度点云，不是普通背景星点。
   // 这层 shader 使用源码同类的 uScroll/uRotate 相位：滚轮会让粒子沿 y 轴穿行并绕轴折射，
   // 但不会把点云整体推向左右，从交互语义上满足“柱子固定，只是从上到下滚动经过镜头”。
@@ -563,6 +607,7 @@ function createActiveTheoryFlowerPointMaterial() {
       uSizeBias: { value: 1.18 },
       uSparkle: { value: 0 },
       uTime: { value: 0 },
+      tMap: { value: mapTexture },
     },
     vertexColors: true,
     vertexShader: activeTheoryFlowerPointVertexShader,
@@ -3473,7 +3518,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
     const organicPalette = ["#6ee7ff", "#8e73ff", "#db5cff", "#ff6fc6", "#d7a261"];
     const organicMeshes: THREE.Mesh[] = [];
-    const activeTheoryFlowerPointMaterial = createActiveTheoryFlowerPointMaterial();
+    const activeTheoryFlowerPointMaterial = createActiveTheoryFlowerPointMaterial(activeTheorySpineMatcapTexture);
     const activeTheorySpineInstances: Array<{
       basePosition: THREE.Vector3;
       baseRotation: THREE.Euler;
@@ -4987,7 +5032,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     });
 
     const panelMeshes = storyWorkItemSlots.map(({ scene: sceneItem, sceneIndex, slotIndex }) => {
-      const geometry = new THREE.PlaneGeometry(THREE_PANEL_WIDTH / 245, THREE_PANEL_HEIGHT / 245, 12, 8);
+      const geometry = new THREE.PlaneGeometry(THREE_PANEL_WIDTH / 188, THREE_PANEL_HEIGHT / 188, 12, 8);
       const panelTexture = createPanelTexture(sceneItem);
       const material = createStoryWorkItemShaderMaterial({
         accent: sceneItem.accent,
@@ -4999,7 +5044,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         refractionTexture: workRefractionCanvas.texture,
       });
       const mesh = new THREE.Mesh(geometry, material);
-      const backplateGeometry = new THREE.PlaneGeometry(THREE_PANEL_WIDTH / 232, THREE_PANEL_HEIGHT / 232, 1, 1);
+      const backplateGeometry = new THREE.PlaneGeometry(THREE_PANEL_WIDTH / 178, THREE_PANEL_HEIGHT / 178, 1, 1);
       const backplateMaterial = new THREE.MeshBasicMaterial({
         color: new THREE.Color(sceneItem.accent).lerp(new THREE.Color("#d8fff7"), 0.34),
         depthTest: false,
@@ -5144,6 +5189,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       const sourceSpineScrollPhase = THREE.MathUtils.euclideanModulo(motionProgress * 1.62 + scrollFollow * 0.04, 1);
       const sourceSpineUvScroll = motionProgress * 0.36 + scrollFollow * 0.055;
       const pillarVerticalPhase = motionProgress * 0.78 + scrollFollow * 0.052;
+      const pillarScrollDrop = THREE.MathUtils.clamp(scrollFollow * 0.18, -0.24, 0.46);
       updateWorkRefractionCanvasTexture(workRefractionCanvas, motionProgress, time, scrollImpulse);
       particleMaterial.uniforms.uTime.value = time;
       columnParticleMaterial.uniforms.uTime.value = time;
@@ -5152,8 +5198,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 用户这轮明确要求“滚动柱子只是从上到下的过程”，所以点云的绕轴扰动不再吃滚动角度。
       // 滚动只进入 uScroll 控制 y 向穿行；uRotate 保留极慢时间呼吸，避免整根柱体因滚轮产生左右偏移错觉。
       activeTheoryFlowerPointMaterial.uniforms.uRotate.value = time * 0.08;
-      activeTheoryFlowerPointMaterial.uniforms.uSparkle.value = time * 0.42 + Math.abs(scrollImpulse) * 0.18;
-      activeTheoryFlowerPointMaterial.uniforms.uOpacity.value = 0.28 + Math.min(0.12, Math.abs(scrollImpulse) * 0.034);
+      activeTheoryFlowerPointMaterial.uniforms.uSparkle.value = time * 0.5 + Math.abs(scrollImpulse) * 0.24;
+      activeTheoryFlowerPointMaterial.uniforms.uOpacity.value = 0.36 + Math.min(0.18, Math.abs(scrollImpulse) * 0.045);
       liquidColumnMaterial.uniforms.uTime.value = time;
       liquidColumnMaterial.uniforms.uAccent.value.lerp(activeColor, 0.03);
       if (organicField.visible) {
@@ -5220,20 +5266,26 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceSpineOcclusionMaterial.uniforms.uOpacity.value = 0.28 + Math.sin(time * 0.22 + 0.2) * 0.018 + Math.min(0.074, Math.abs(scrollFollow) * 0.02);
       referenceSpineRimMaterial.opacity = 0.3 + Math.sin(time * 0.22 + 0.9) * 0.032 + Math.min(0.09, Math.abs(scrollImpulse) * 0.022);
       referenceSpineField.position.x = -0.38;
+      referenceSpineField.position.y = 0.06 - pillarScrollDrop * 0.42;
       referenceSpineField.rotation.y = -0.075 + Math.sin(time * 0.1) * 0.003;
       referenceSpineGhost.position.x = -0.1;
+      referenceSpineGhost.position.y = -0.04 - pillarScrollDrop * 0.36;
       referenceSpineGhost.rotation.y = 0.12 + Math.sin(time * 0.13) * 0.003;
       referenceSpineMotion.position.x = -0.38;
+      referenceSpineMotion.position.y = 0.06 - pillarScrollDrop * 0.44;
       referenceSpineMotion.rotation.y = -0.08 + Math.sin(time * 0.12 + 0.08) * 0.003;
       referenceSpineSubject.position.x = -0.62;
+      referenceSpineSubject.position.y = 0.08 - pillarScrollDrop * 0.48;
       referenceSpineSubject.position.z = 1.36 + Math.cos(time * 0.11 + 0.2) * 0.003;
       referenceSpineSubject.rotation.y = -0.09 + Math.sin(time * 0.12) * 0.004;
       referenceSpineSubject.rotation.z = 0.006 + Math.sin(time * 0.1) * 0.002;
       referenceSpineSubject.scale.set(1.12, 1.025, 1);
       referenceSpineOcclusion.position.x = -0.38;
+      referenceSpineOcclusion.position.y = 0.02 - pillarScrollDrop * 0.46;
       referenceSpineOcclusion.position.z = 1.48 + Math.cos(time * 0.11 + 0.14) * 0.003;
       referenceSpineOcclusion.rotation.y = -0.08 + Math.sin(time * 0.12 + 0.1) * 0.003;
       referenceSpineRim.position.x = -0.38;
+      referenceSpineRim.position.y = 0.06 - pillarScrollDrop * 0.44;
       referenceSpineRim.rotation.y = -0.08 + Math.sin(time * 0.12 + 0.08) * 0.003;
       referenceGlassPanels.forEach((panel, panelIndex) => {
         const staticX = panel.variant === "front" ? -0.58 : panel.variant === "left" ? -2.18 : 1.48;
@@ -5283,10 +5335,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       liquidColumn.scale.z = 1 + Math.cos(time * 0.48) * 0.035;
       spine.rotation.x += 0.003;
       spine.rotation.y += 0.006;
-      // 源码里的柱体不会被滚轮推到左右两侧；滚动感来自 shader 相位、实例队列和 WorkItem target。
-      // 所以这里把 position 和滚动旋转都锁住，只保留时间驱动的极轻微油膜呼吸，保证用户向下滚动时看到的是
-      // “柱内从上到下流动”，而不是整根柱子产生 x/z 漂移或绕屏幕横向回正。
-      pillarGroup.position.copy(pillarBasePosition);
+      // 源码里的柱体不会被滚轮推到左右两侧；这次只把滚动输入转成 y 轴下落感。
+      // x/z 永远来自 pillarBasePosition，避免产生横向偏移；y 轴会随 scrollFollow 短暂向下压，
+      // 再叠加真实 spine 实例自己的无界 y-loop，于是滚动时读感是“整根柱体向下经过镜头”。
+      pillarGroup.position.set(pillarBasePosition.x, pillarBasePosition.y - pillarScrollDrop, pillarBasePosition.z);
       pillarGroup.rotation.set(0, -0.08, 0);
       if (activeTheoryFlowerPointCloud) {
         activeTheoryFlowerPointCloud.position.x = -0.02;
