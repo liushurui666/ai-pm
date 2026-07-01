@@ -38,6 +38,7 @@ type StoryScene = {
   metric: string;
   accent: string;
   icon: ReactNode;
+  mediaPath: string;
   signals: string[];
 };
 
@@ -74,6 +75,10 @@ const ACTIVE_THEORY_WORK_ENV_PATH = "/landing/active-theory-env1.jpg";
 const ACTIVE_THEORY_WORK_NORMAL_PATH = "/landing/active-theory-waternormals.jpg";
 const ACTIVE_THEORY_WORK_HOGWARTS_THUMB_PATH = "/landing/active-theory-hogwarts-thumb.jpg";
 const ACTIVE_THEORY_WORK_HOGWARTS_LOGO_PATH = "/landing/active-theory-hogwarts-logo.jpg";
+const ACTIVE_THEORY_WORK_LAB_PATH = "/landing/active-theory-work-lab.jpg";
+const ACTIVE_THEORY_WORK_LOCAL_PATH = "/landing/active-theory-work-local.png";
+const ACTIVE_THEORY_WORK_REEL_FRAME_PATH = "/landing/active-theory-work-reel-frame.jpg";
+const ACTIVE_THEORY_WORK_TEST_PATH = "/landing/active-theory-work-test.jpg";
 const STORY_WORK_TRACK_STEP = THREE.MathUtils.degToRad(50);
 const STORY_WORK_ITEM_REPEAT = 3;
 const STORY_WORK_SOURCE_RADIUS = 3.8;
@@ -104,6 +109,7 @@ const storyScenes: StoryScene[] = [
     metric: "86% live health",
     accent: "#6fffe2",
     icon: <DashboardOutlined />,
+    mediaPath: ACTIVE_THEORY_WORK_HOGWARTS_THUMB_PATH,
     signals: ["版本健康", "任务流转", "风险自动亮起"],
   },
   {
@@ -117,6 +123,7 @@ const storyScenes: StoryScene[] = [
     metric: "12 acceptance nodes",
     accent: "#7fb7ff",
     icon: <RadarChartOutlined />,
+    mediaPath: ACTIVE_THEORY_WORK_LAB_PATH,
     signals: ["验收点", "边界条件", "需求版本"],
   },
   {
@@ -130,6 +137,7 @@ const storyScenes: StoryScene[] = [
     metric: "24 moves today",
     accent: "#d9ff7a",
     icon: <BranchesOutlined />,
+    mediaPath: ACTIVE_THEORY_WORK_REEL_FRAME_PATH,
     signals: ["阶段看板", "成员负载", "版本大屏"],
   },
   {
@@ -143,6 +151,7 @@ const storyScenes: StoryScene[] = [
     metric: "5 PR pending",
     accent: "#ff8bd5",
     icon: <BugOutlined />,
+    mediaPath: ACTIVE_THEORY_WORK_TEST_PATH,
     signals: ["复现材料", "AI 修复", "PR 确认"],
   },
   {
@@ -156,6 +165,7 @@ const storyScenes: StoryScene[] = [
     metric: "ready to ship",
     accent: "#ffd36a",
     icon: <SafetyCertificateOutlined />,
+    mediaPath: ACTIVE_THEORY_WORK_LOCAL_PATH,
     signals: ["上线校验", "周报导出", "风险回归"],
   },
 ];
@@ -272,7 +282,7 @@ function getStoryWorkItemVisualFromOffset(offset: number, impulse = 0): StoryWor
   // v145 进一步把整条可见牌道锁稳：不是只有焦点牌锁 x，而是相邻牌也沿同一条纵向轴线接力经过。
   // 这样用户向下滚动时会看到多张屏牌从上到下换面，柱体自身不会产生横向漂移读感。
   return {
-    isFocused: absOffset < 0.42,
+    isFocused: absOffset < 0.62,
     opacity,
     transform: `translate(-50%, -50%) translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, ${z.toFixed(2)}px) rotateX(${rotateX.toFixed(4)}rad) rotateY(${rotateY.toFixed(4)}rad) rotateZ(${rotateZ.toFixed(2)}deg) scale(${scale.toFixed(3)})`,
     zIndex: Math.round(20 + focus * 20 + trackWindow * 6 - absOffset),
@@ -321,7 +331,9 @@ function getStoryWorkItemHitLayerOpacity(visual: StoryWorkItemVisual) {
   // v140 虽然保证了 15-slot 交互，但 DOM 文字层仍然太像产品说明卡，
   // 会盖住真正的 WebGL 媒体玻璃。这里把 hit layer 透明度降一档，
   // 让“大媒体屏 + 柱体折射”成为第一视觉，同时保留足够 hover/focus 可见性。
-  return Math.min(0.14, visual.opacity * (visual.isFocused ? 0.12 : 0.09));
+  // v146 以后 DOM 层不再只是“看不见的点击层”：它承载真实媒体素材，负责让用户直观看到多张大屏滚动。
+  // 透明度仍按焦点分层控制，避免 3-4 张大屏叠成整面雾幕；WebGL 继续负责柱体折射和油膜质感。
+  return Math.min(0.54, visual.opacity * (visual.isFocused ? 0.5 : 0.24));
 }
 
 function getStoryPillarScrollDrop(progress: number, impulse: number) {
@@ -2139,31 +2151,30 @@ function createPanelTexture(scene: StoryScene) {
   drawRoundedRect(context, 31, 31, canvas.width - 62, canvas.height - 62, 49);
   context.stroke();
 
-  // v119 以后视觉主层由 WebGL pane 承担，纹理文字不能再像产品说明卡一样抢戏。
-  // 源站 WorkPaneUI 的标题是嵌在媒体玻璃里的低分辨率投影；这里保留业务信息，
-  // 但把字号、亮度和阴影压低，让柱体油膜和 pane 队列成为第一视觉。
-  context.globalAlpha = 0.3;
-  context.fillStyle = "rgba(245,252,255,0.42)";
+  // v147 以后 pane texture 只做极弱 UI 投影，主画面改由每个 scene 的真实媒体纹理承担。
+  // 否则中文标题会把滚动屏幕变回“宣传卡”，看起来就不像源码 WorkItem 的媒体玻璃。
+  context.globalAlpha = 0.075;
+  context.fillStyle = "rgba(245,252,255,0.34)";
   context.font = "600 22px monospace";
   context.textAlign = "center";
   context.fillText(`AI PM / ${scene.label.toUpperCase()}`, canvas.width / 2, 220);
 
-  context.globalAlpha = 0.24;
-  context.fillStyle = "rgba(255,255,255,0.52)";
+  context.globalAlpha = 0.055;
+  context.fillStyle = "rgba(255,255,255,0.38)";
   context.shadowColor = "#9fe9ff";
-  context.shadowBlur = 14;
+  context.shadowBlur = 7;
   context.font = "700 36px sans-serif";
   context.fillText(scene.title, canvas.width / 2, 318);
 
   context.shadowBlur = 0;
-  context.globalAlpha = 0.16;
-  context.fillStyle = "rgba(246,243,232,0.42)";
+  context.globalAlpha = 0.045;
+  context.fillStyle = "rgba(246,243,232,0.32)";
   context.font = "600 21px sans-serif";
   context.fillText(scene.metric.toUpperCase(), canvas.width / 2, 392);
 
   context.textAlign = "left";
-  context.globalAlpha = 0.1;
-  context.fillStyle = "rgba(255,255,255,0.22)";
+  context.globalAlpha = 0.04;
+  context.fillStyle = "rgba(255,255,255,0.18)";
   context.font = "500 18px monospace";
   scene.signals.forEach((signal, index) => {
     context.fillText(`// ${signal}`, 76 + index * 250, 552);
@@ -2665,7 +2676,7 @@ function createStoryWorkItemShaderMaterial(options: {
         videoUv = scaleUv(videoUv, vec2(1.0 + (1.0 - uVideoBlend) * 0.1));
         videoUv += normalSample.xy * vec2(0.034, 0.026) + vec2(sin(uTime * 0.18 + uScroll * 3.0) * 0.006, 0.0);
         vec2 imageUv = videoUv - normalSample.xy * 0.05 * (1.0 - uVideoBlend);
-        vec3 sourceImage = rgbShift(tMap, imageUv, edgeChromatic * sideEnergy) * 0.08;
+        vec3 sourceImage = rgbShift(tMap, imageUv, edgeChromatic * sideEnergy) * 0.035;
         vec3 sourceVideo = rgbShift(tVideo, videoUv, edgeChromatic * 1.25);
         sourceVideo = pow(max(sourceVideo, 0.0), vec3(0.78));
         sourceVideo = mix(sourceVideo, sourceVideo * sourceVideo * vec3(1.12, 1.02, 1.08), 0.18);
@@ -2684,11 +2695,11 @@ function createStoryWorkItemShaderMaterial(options: {
         vec3 darkGlass = vec3(0.012, 0.016, 0.021) + uAccent * 0.022;
         vec3 accentGlow = uAccent * (0.07 + fresnel * 0.18 + uHover * 0.06);
         vec3 oil = vec3(0.38, 0.22, 0.68) * smoothstep(0.34, 0.94, abs(normalSample.x)) * 0.12;
-        vec3 color = darkGlass + pane * (0.035 + uHover * 0.02) + media * (1.12 + fresnel * 0.24) + refraction * (0.18 + fresnel * 0.12) + env * (0.052 + fresnel * 0.1) + accentGlow + oil;
+        vec3 color = darkGlass + pane * (0.014 + uHover * 0.01) + media * (1.18 + fresnel * 0.26) + refraction * (0.18 + fresnel * 0.12) + env * (0.052 + fresnel * 0.1) + accentGlow + oil;
         color = mix(color, media * 1.38 + refraction * 0.16 + accentGlow * 0.62, mediaBody * smoothstep(0.82, 0.0, length(vUv - 0.5)) * 0.52);
         color = pow(max(color, 0.0), vec3(0.92));
 
-        float alpha = uOpacity * mask * edge * scan * (0.08 + paneBody * 0.025 + mediaBody * 0.72 + fresnel * 0.24 + dot(refraction, vec3(0.2126, 0.7152, 0.0722)) * 0.028);
+        float alpha = uOpacity * mask * edge * scan * (0.08 + paneBody * 0.01 + mediaBody * 0.78 + fresnel * 0.24 + dot(refraction, vec3(0.2126, 0.7152, 0.0722)) * 0.028);
         gl_FragColor = vec4(color, clamp(alpha, 0.0, 0.985));
       }
     `,
@@ -3437,18 +3448,29 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const oilTexture = createOilSlickTexture();
     const referenceOilTexture = createReferenceOilFilmTexture();
     const referenceSpineSubjectMaskTexture = createReferenceSpineSubjectMaskTexture();
-    const referenceSpineFieldTexture = new THREE.TextureLoader().load("/landing/reference-spine-field-wide-v67.png");
-    const referenceSpineRimTexture = new THREE.TextureLoader().load("/landing/reference-spine-rim-wide-v67.png");
-    const activeTheorySpineMatcapTexture = new THREE.TextureLoader().load(ACTIVE_THEORY_SPINE_MATCAP_PATH);
-    const activeTheorySpineNormalTexture = new THREE.TextureLoader().load(ACTIVE_THEORY_SPINE_NORMAL_PATH);
-    const activeTheoryWorkEnvTexture = new THREE.TextureLoader().load(ACTIVE_THEORY_WORK_ENV_PATH);
-    const activeTheoryWorkNormalTexture = new THREE.TextureLoader().load(ACTIVE_THEORY_WORK_NORMAL_PATH);
-    const activeTheoryWorkHogwartsThumbTexture = new THREE.TextureLoader().load(ACTIVE_THEORY_WORK_HOGWARTS_THUMB_PATH);
-    const activeTheoryWorkHogwartsLogoTexture = new THREE.TextureLoader().load(ACTIVE_THEORY_WORK_HOGWARTS_LOGO_PATH);
+    const textureLoader = new THREE.TextureLoader();
+    const referenceSpineFieldTexture = textureLoader.load("/landing/reference-spine-field-wide-v67.png");
+    const referenceSpineRimTexture = textureLoader.load("/landing/reference-spine-rim-wide-v67.png");
+    const activeTheorySpineMatcapTexture = textureLoader.load(ACTIVE_THEORY_SPINE_MATCAP_PATH);
+    const activeTheorySpineNormalTexture = textureLoader.load(ACTIVE_THEORY_SPINE_NORMAL_PATH);
+    const activeTheoryWorkEnvTexture = textureLoader.load(ACTIVE_THEORY_WORK_ENV_PATH);
+    const activeTheoryWorkNormalTexture = textureLoader.load(ACTIVE_THEORY_WORK_NORMAL_PATH);
+    const activeTheoryWorkHogwartsThumbTexture = textureLoader.load(ACTIVE_THEORY_WORK_HOGWARTS_THUMB_PATH);
+    const activeTheoryWorkHogwartsLogoTexture = textureLoader.load(ACTIVE_THEORY_WORK_HOGWARTS_LOGO_PATH);
     activeTheoryWorkHogwartsThumbTexture.colorSpace = THREE.SRGBColorSpace;
     activeTheoryWorkHogwartsThumbTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
     activeTheoryWorkHogwartsLogoTexture.colorSpace = THREE.SRGBColorSpace;
     activeTheoryWorkHogwartsLogoTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    const storyMediaTextures = storyScenes.map((scene) => {
+      const texture =
+        scene.mediaPath === ACTIVE_THEORY_WORK_HOGWARTS_THUMB_PATH ? activeTheoryWorkHogwartsThumbTexture : textureLoader.load(scene.mediaPath);
+
+      // 源码 WorkItems 的每个 view 都持有自己的 thumbnail/video 贴图；
+      // 这里按 scene 维度复用媒体纹理，15 个 slot 是真实循环节点，但不会再全部显示同一张屏。
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      return texture;
+    });
     const activeTheorySpineBaseColorFallbackTexture = createSolidDataTexture(4, 7, 9);
     const activeTheorySpineMroFallbackTexture = createSolidDataTexture(255, 170, 255);
     const activeTheorySpineSourceTexturePromise = loadActiveTheorySpineKtx2Textures(renderer).catch(() => null);
@@ -5084,7 +5106,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       const material = createStoryWorkItemShaderMaterial({
         accent: sceneItem.accent,
         envTexture: activeTheoryWorkEnvTexture,
-        mediaTexture: activeTheoryWorkHogwartsThumbTexture,
+        mediaTexture: storyMediaTextures[sceneIndex] ?? activeTheoryWorkHogwartsThumbTexture,
         normalTexture: activeTheoryWorkNormalTexture,
         opacity: 0.18,
         paneTexture: panelTexture,
@@ -5749,6 +5771,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       activeTheorySpineNormalTexture.dispose();
       activeTheoryWorkEnvTexture.dispose();
       activeTheoryWorkNormalTexture.dispose();
+      Array.from(new Set(storyMediaTextures)).forEach((texture) => {
+        if (texture !== activeTheoryWorkHogwartsThumbTexture) {
+          texture.dispose();
+        }
+      });
       activeTheoryWorkHogwartsThumbTexture.dispose();
       activeTheoryWorkHogwartsLogoTexture.dispose();
       activeTheorySpineBaseColorTexture.dispose();
@@ -5845,7 +5872,13 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
             ref={(node) => {
               storyCardRefs.current[slotIndex] = node;
             }}
-            style={{ "--card-accent": scene.accent, ...getInitialStoryCardStyle(slotIndex, activeIndex) } as CSSProperties}
+            style={
+              {
+                "--card-accent": scene.accent,
+                "--card-media": `url("${scene.mediaPath}")`,
+                ...getInitialStoryCardStyle(slotIndex, activeIndex),
+              } as CSSProperties
+            }
             tabIndex={Math.abs(getInfiniteStorySlotOffset(slotIndex, activeIndex)) < STORY_WORK_VISIBLE_RANGE ? 0 : -1}
             type="button"
           >

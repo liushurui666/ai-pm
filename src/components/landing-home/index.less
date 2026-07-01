@@ -103,6 +103,7 @@
 
 .landing-story-workitem-card {
   --card-accent: #6fffe2;
+  --card-media: url("/landing/active-theory-hogwarts-thumb.jpg");
   position: absolute;
   top: 0;
   left: 0;
@@ -110,20 +111,18 @@
   appearance: none;
   width: clamp(500px, 42vw, 960px);
   min-height: clamp(260px, 23vw, 530px);
-  padding: clamp(22px, 1.7vw, 38px);
+  padding: clamp(28px, 2.1vw, 48px);
   overflow: hidden;
   color: rgba(245, 252, 255, 0.72);
   font: inherit;
   text-align: left;
-  background:
-    radial-gradient(circle at 58% 18%, color-mix(in srgb, var(--card-accent) 2%, transparent), transparent 48%),
-    linear-gradient(135deg, rgba(20, 36, 42, 0.018), rgba(4, 9, 13, 0.045));
-  border: 1px solid color-mix(in srgb, var(--card-accent) 18%, rgba(255, 255, 255, 0.08));
+  background: rgba(4, 8, 10, 0.08);
+  border: 1px solid color-mix(in srgb, var(--card-accent) 34%, rgba(255, 255, 255, 0.14));
   border-radius: 30px;
   box-shadow:
-    0 16px 58px rgba(0, 0, 0, 0.2),
-    0 0 34px color-mix(in srgb, var(--card-accent) 7%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.075);
+    0 18px 68px rgba(0, 0, 0, 0.34),
+    0 0 42px color-mix(in srgb, var(--card-accent) 12%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
   opacity: 0;
   pointer-events: auto;
   transform: translate(-50%, -50%);
@@ -150,11 +149,11 @@
 }
 
 .landing-story-workitem-card[data-active="true"] {
-  border-color: color-mix(in srgb, var(--card-accent) 42%, rgba(255, 255, 255, 0.14));
+  border-color: color-mix(in srgb, var(--card-accent) 54%, rgba(255, 255, 255, 0.2));
   box-shadow:
-    0 14px 46px rgba(0, 0, 0, 0.22),
-    0 0 34px color-mix(in srgb, var(--card-accent) 9%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    0 24px 82px rgba(0, 0, 0, 0.42),
+    0 0 64px color-mix(in srgb, var(--card-accent) 18%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
 .landing-story-workitem-card::before,
@@ -166,25 +165,40 @@
 }
 
 .landing-story-workitem-card::before {
+  // 这里使用本地扒下来的真实 Active Theory 项目媒体图，而不是再用半透明 CSS 色块模拟卡片。
+  // 这样用户滚动时看到的是一张张大媒体屏经过柱体，DOM 只负责可见大屏和交互，WebGL 继续做折射/柱体。
   background:
-    linear-gradient(108deg, transparent 0 30%, rgba(255, 255, 255, 0.09) 45%, transparent 58%),
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.016) 0 1px, transparent 1px 13px);
-  opacity: 0.14;
-  mix-blend-mode: screen;
-  transform: translateX(-18%);
-  animation: landing-story-workitem-scan 5.8s ease-in-out infinite;
+    linear-gradient(90deg, rgba(4, 8, 10, 0.26), rgba(6, 18, 20, 0.08) 48%, rgba(2, 6, 8, 0.42)),
+    radial-gradient(circle at 72% 24%, color-mix(in srgb, var(--card-accent) 24%, transparent), transparent 44%),
+    var(--card-media);
+  background-position: center;
+  background-size: cover;
+  filter: saturate(0.82) contrast(1.12) brightness(0.68);
+  opacity: 0.78;
+  transform: translateZ(-1px) scale(1.035);
+  animation: landing-story-workitem-media 9s ease-in-out infinite;
 }
 
 .landing-story-workitem-card:hover::before,
 .landing-story-workitem-card[data-active="true"]::before {
-  opacity: 0.36;
+  filter: saturate(0.9) contrast(1.16) brightness(0.78);
+  opacity: 0.92;
 }
 
 .landing-story-workitem-card::after {
-  inset: 14px;
-  border: 1px solid color-mix(in srgb, var(--card-accent) 28%, transparent);
-  border-radius: 21px;
-  opacity: 0.26;
+  inset: 12px;
+  background:
+    linear-gradient(108deg, transparent 0 32%, rgba(255, 255, 255, 0.12) 44%, transparent 58%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.028) 0 1px, transparent 1px 15px);
+  border: 1px solid color-mix(in srgb, var(--card-accent) 36%, rgba(255, 255, 255, 0.14));
+  border-radius: 22px;
+  box-shadow:
+    inset 0 0 34px rgba(0, 0, 0, 0.38),
+    inset 0 0 22px color-mix(in srgb, var(--card-accent) 12%, transparent);
+  mix-blend-mode: screen;
+  opacity: 0.4;
+  transform: translateX(-10%);
+  animation: landing-story-workitem-scan 5.8s ease-in-out infinite;
 }
 
 .landing-story-workitem-card span,
@@ -197,7 +211,7 @@
 
 .landing-story-workitem-card span {
   align-self: start;
-  color: color-mix(in srgb, var(--card-accent) 30%, rgba(255, 255, 255, 0.26));
+  color: color-mix(in srgb, var(--card-accent) 20%, rgba(255, 255, 255, 0.16));
   font-family: var(--font-geist-mono), "SFMono-Regular", Consolas, monospace;
   font-size: clamp(0.86rem, 0.8vw, 1.02rem);
   font-weight: 700;
@@ -206,18 +220,18 @@
 }
 
 .landing-story-workitem-card strong {
-  max-width: 14em;
+  max-width: 12em;
   margin-top: clamp(24px, 2vw, 44px);
-  color: rgba(248, 253, 255, 0.14);
-  font-size: clamp(1.62rem, 2.08vw, 3rem);
+  color: rgba(248, 253, 255, 0.045);
+  font-size: clamp(1.72rem, 2.28vw, 3.18rem);
   line-height: 1.02;
   letter-spacing: 0;
 }
 
 .landing-story-workitem-card p {
-  max-width: 28em;
+  max-width: 24em;
   margin: clamp(12px, 1vw, 20px) 0 0;
-  color: rgba(221, 233, 238, 0.08);
+  color: rgba(221, 233, 238, 0.03);
   font-size: clamp(0.94rem, 0.98vw, 1.16rem);
   font-weight: 700;
   line-height: 1.55;
@@ -228,13 +242,44 @@
   justify-self: start;
   margin-top: clamp(16px, 1.3vw, 26px);
   padding: 0.42rem 0.78rem;
-  color: rgba(231, 255, 249, 0.28);
+  color: rgba(231, 255, 249, 0.16);
   font-size: clamp(0.86rem, 0.82vw, 1.02rem);
   font-weight: 900;
   line-height: 1;
-  background: color-mix(in srgb, var(--card-accent) 14%, rgba(255, 255, 255, 0.05));
-  border: 1px solid color-mix(in srgb, var(--card-accent) 24%, transparent);
+  background: color-mix(in srgb, var(--card-accent) 20%, rgba(4, 10, 12, 0.5));
+  border: 1px solid color-mix(in srgb, var(--card-accent) 32%, rgba(255, 255, 255, 0.14));
   border-radius: 999px;
+}
+
+.landing-story-workitem-card:hover span,
+.landing-story-workitem-card[data-active="true"] span {
+  color: color-mix(in srgb, var(--card-accent) 32%, rgba(255, 255, 255, 0.28));
+}
+
+.landing-story-workitem-card:hover strong,
+.landing-story-workitem-card[data-active="true"] strong {
+  color: rgba(248, 253, 255, 0.08);
+}
+
+.landing-story-workitem-card:hover p,
+.landing-story-workitem-card[data-active="true"] p {
+  color: rgba(221, 233, 238, 0.05);
+}
+
+.landing-story-workitem-card:hover small,
+.landing-story-workitem-card[data-active="true"] small {
+  color: rgba(231, 255, 249, 0.22);
+}
+
+@keyframes landing-story-workitem-media {
+  0%,
+  100% {
+    background-position: 48% 50%, center, center;
+  }
+
+  50% {
+    background-position: 54% 47%, center, center;
+  }
 }
 
 @keyframes landing-story-workitem-scan {
