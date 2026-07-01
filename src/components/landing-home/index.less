@@ -81,18 +81,23 @@
 }
 
 .landing-story-canvas {
-  z-index: 1;
+  // 卡片必须绕到真实 WebGL 柱体后面，所以 canvas 层级高于 DOM 卡片；
+  // 同时禁用 pointer-events，避免 canvas 挡住下方卡片按钮和固定视口滚动事件。
+  z-index: 2;
   width: 100%;
   height: 100%;
   opacity: 0.98;
   mix-blend-mode: normal;
+  pointer-events: none;
 }
 
 .landing-story-workitem-rail {
   position: absolute;
   top: 47%;
   left: 50%;
-  z-index: 4;
+  // DOM 清晰文案层放在 canvas 后方，让柱体和 WebGL pane 自然压住卡片。
+  // 这样不需要黑色遮挡条，也不会再出现卡片硬盖在柱体前面的错觉。
+  z-index: 1;
   width: 1px;
   height: 1px;
   pointer-events: none;

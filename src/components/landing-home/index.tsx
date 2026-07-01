@@ -5142,12 +5142,14 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       // 这些卡片对应源站 WorkItem：所有项目卡都一直存在于同一条无界轨道上。
       // v134 起把“源码 camera 穿过 50deg target”的横向视差还给卡片自身；
       // 但柱体和相机的 x/z 仍保持锁定，避免用户滚动时看到整根柱子左右偏移。
-      // v150 首帧也遵循“焦点清楚、远景很淡”的规则，避免刷新瞬间右侧出现灰色玻璃铺底。
+      // v154：WorkItem 玻璃需要在柱体后面，而不是盖住柱体。
+      // WebGL 里大部分柱体碎片 renderOrder 在 5-10，因此 pane 首帧必须压到这个区间以下；
+      // DOM 清晰层也会放到 canvas 后面，避免两层卡片都冲到柱体最前面。
       material.uniforms.uOpacity.value = Math.min(
         0.32,
         initialLayout.focus * 0.25 + initialLayout.trackWindow * (initialLayout.focus > 0.08 ? 0.042 : 0.003)
       );
-      mesh.renderOrder = initialOffset === 0 ? 30 : Math.max(20, 28 - initialLayout.absOffset);
+      mesh.renderOrder = 4.2 + initialLayout.focus * 1.35 + initialLayout.trackWindow * 0.45 - initialLayout.absOffset * 0.05;
       backplate.renderOrder = mesh.renderOrder - 0.2;
       mesh.userData.index = sceneIndex;
       mesh.userData.slotIndex = slotIndex;
@@ -5637,9 +5639,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         const backgroundPaneOpacity = cardWindow * (cardFocus > 0.08 ? 0.042 : 0.003);
         const targetOpacity = Math.min(0.32, backgroundPaneOpacity + cardFocus * 0.25 + scrollBoost * 0.006);
 
-        // 这里是这次修正的核心：WorkItem pane 仍有 15 张、仍按源码 50 度队列换面和排序。
-        // x/z 的变化只属于卡片自身的环形队列，不再传给 camera 或 pillarGroup；
-        // 向下滚动时用户看到的是卡片围绕固定柱体从上到下穿行，而不是整根柱子横向漂移。
+        // WorkItem pane 仍有 15 张、仍按源码 50 度队列换面和排序。
+        // x/z 的变化只属于卡片自身的环形队列，不再传给 camera 或 pillarGroup。
+        // v154 这里故意把 pane 的 renderOrder 压到柱体主体之前：
+        // 用户要求卡片在柱子后面，不能再让玻璃 pane 以高 renderOrder 穿到柱体前景。
         mesh.position.x += (layout.x - mesh.position.x) * 0.16;
         mesh.position.y += (layout.y - mesh.position.y) * 0.16;
         mesh.position.z += (layout.z - mesh.position.z) * 0.16;
@@ -5648,7 +5651,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         mesh.rotation.z += (layout.rotationZ - mesh.rotation.z) * 0.1;
         mesh.scale.x += (layout.scale - mesh.scale.x) * 0.1;
         mesh.scale.y += (layout.scale - mesh.scale.y) * 0.1;
-        mesh.renderOrder = Math.round(22 + layout.focus * 10 + layout.trackWindow * 3 - layout.absOffset);
+        mesh.renderOrder = 4.2 + layout.focus * 1.35 + layout.trackWindow * 0.45 - layout.absOffset * 0.05;
         backplate.position.copy(mesh.position);
         backplate.position.z -= 0.018;
         backplate.rotation.copy(mesh.rotation);
@@ -5664,8 +5667,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         // 视觉主层重新交给 WebGL WorkPane：DOM 只负责 hit area，WebGL pane 才负责源站式媒体玻璃。
         // 这里比 v118 略微抬高面片和背板，但仍用透明上限控制，避免退回一整块大色卡遮住柱体。
         // 非焦点 pane 如果保持同样大面积高透明度，会叠成一整块雾板，用户会误以为只有一张卡。
-        // 因此把 WorkItem 的玻璃背板做成“焦点清楚、远景仍有实体”，让大屏能遮住一部分柱体，
-        // 更接近源站里项目牌压在柱体前方的层级，而不是柱体永远盖住卡片。
+        // 因此把 WorkItem 的玻璃背板做成“焦点清楚、远景仍有实体”，但层级留在柱体后方；
+        // 真正的前后关系交给 WebGL 柱体碎片和 canvas/DOM 层级来表达。
         const backgroundBackplateOpacity = Math.pow(layout.trackWindow, 1.1) * (cardFocus > 0.08 ? 0.004 : 0.0004);
         backplateMaterial.opacity += ((backgroundBackplateOpacity + cardFocus * 0.016 + scrollBoost * 0.001) - backplateMaterial.opacity) * 0.12;
       });

@@ -4,10 +4,10 @@
 - source video: `/Users/liushurui/Library/Application Support/LarkShell/screenshot/20260629120942_rec_.mp4`
 - source mirror: `/Users/liushurui/Desktop/workspace/new-jiguangjuzhen/activetheory-work-clone-nav-orb-20260524-121151(1)`
 - implementation mid-scroll screenshot: `/tmp/ai-pm-landing-scroll-v149-readable/scroll-1155.png`
-- implementation deep-scroll screenshot: `/tmp/ai-pm-landing-v153-horizontal-orbit/progress-5.png`
-- metrics evidence: `/tmp/ai-pm-landing-v153-horizontal-orbit/progress-*.png` plus sampled DOM rects in this QA note.
-- mobile evidence: `/tmp/ai-pm-landing-v153-horizontal-orbit/mobile-progress-3.png`
-- viewport: 1706x918 desktop and 390x844 mobile, in-app browser Playwright verification, `http://localhost:3004/?qa=v153-horizontal-orbit`
+- implementation deep-scroll screenshot: `/tmp/ai-pm-landing-v155-card-behind-canvas/progress-5.png`
+- metrics evidence: `/tmp/ai-pm-landing-v155-card-behind-canvas/progress-*.png` plus sampled DOM rects in this QA note.
+- mobile evidence: `/tmp/ai-pm-landing-v155-card-behind-canvas/mobile.png`
+- viewport: 1706x918 desktop and 390x844 mobile, in-app browser Playwright verification, `http://localhost:3004/?qa=v155-card-behind-canvas`
 - state: unauthenticated landing page, hydrated WebGL canvas, programmatic native page scroll through top/mid/deep states.
 - final result: interaction corrected, visual still approximate
 - remaining gap: this is still not a 100% Active Theory shader port. The exact source MRT refraction, WorkItemShader, WorkPaneUI capture, and camera composite are approximated with local Three.js shaders and DOM media layers.
@@ -37,6 +37,10 @@
 - [P1] Horizontal orbit is the primary motion, not a vertical queue.
   Evidence: v153 uses `cos(angle)` for the main left/right projection and `sin(angle)` for front/back depth, while reducing the DOM y-step from `312px` to `96px`. Desktop active card centerX moves `1254 -> 594 -> 403 -> 818 -> 1170 -> 488`, while centerY stays in a narrower `379-500px` band.
   Impact: the interaction reads as horizontal orbit around the light pillar, with only slight vertical layering for handoff between cards.
+
+- [P1] Cards sit behind the real WebGL column without a black fake pillar.
+  Evidence: v155 removes the `.landing-story-pillar-occlusion` black overlay entirely, sets the DOM card rail below the canvas (`railZ=1`, `canvasZ=2`), and leaves `canvasPointer=none` so interactions still pass through. Desktop progress `5` shows the card crossing behind the WebGL spine, with `blackStripeExists=false`.
+  Impact: the column/card depth now comes from the actual Three.js layer instead of a visible black mask.
 
 - [P1] Cards no longer cover the full screen.
   Evidence: v153 active card sizes are top `619px` wide, left orbit `765-770px`, center/front pass `458px`, and right return `685px`, instead of v147's `68%-76%` viewport-width full-screen pane.
@@ -72,13 +76,14 @@
 - Added a continuous progress-driven orbit phase so active cards do not keep returning to the same side of the column.
 - Reduced DOM/WebGL orbit radius and focus scale after adding true orbit, keeping the side pass visible without letting perspective inflate the card into a full-screen layer.
 - Rebalanced the orbit to prioritize horizontal x-z movement: larger side/depth phase, reduced y-step, and matching refraction-canvas pane projection.
+- Moved the DOM WorkItem rail behind the WebGL canvas and removed the black pillar overlay, so the real column layer occludes cards naturally.
 
 ## Validation
 
 - `git diff --check`: passed.
 - `corepack pnpm lint`: passed.
 - `corepack pnpm build`: passed.
-- Browser route: `http://localhost:3004/?qa=v153-horizontal-orbit`.
+- Browser route: `http://localhost:3004/?qa=v155-card-behind-canvas`.
 - Browser screenshots:
   - `/tmp/ai-pm-landing-scroll-v149-readable/scroll-1155.png`
   - `/tmp/ai-pm-landing-v151-orbit-clear-column/scroll-1900-fit.png`
@@ -93,11 +98,17 @@
   - `/tmp/ai-pm-landing-v153-horizontal-orbit/progress-5.png`
   - `/tmp/ai-pm-landing-v153-horizontal-orbit/progress-8.png`
   - `/tmp/ai-pm-landing-v153-horizontal-orbit/mobile-progress-3.png`
+  - `/tmp/ai-pm-landing-v155-card-behind-canvas/progress-0.png`
+  - `/tmp/ai-pm-landing-v155-card-behind-canvas/progress-3.png`
+  - `/tmp/ai-pm-landing-v155-card-behind-canvas/progress-5.png`
+  - `/tmp/ai-pm-landing-v155-card-behind-canvas/progress-8.png`
+  - `/tmp/ai-pm-landing-v155-card-behind-canvas/mobile.png`
 - Browser metrics:
   - Desktop horizontal orbit centers: active card centerX `1254 -> 1263 -> 594 -> 403 -> 626 -> 818 -> 1016 -> 1170 -> 488` across sampled progress `0/1/2/3/4/5/6/8/11`.
   - Desktop vertical range: active card centerY stays within `379-500px` across those samples, confirming vertical movement is secondary.
   - Desktop card bounds: right edge max `1596px` within `1706px` viewport; left orbit sample stays on-screen at `left=20px`.
-  - Mobile 390px: document width remains `390px`, active card rect `76..508`; no horizontal page overflow observed in the captured viewport.
+  - Mobile 390px: document width remains `390px`, active card rect `76..508`, `blackStripeExists=false`; no horizontal page overflow observed in the captured viewport.
+  - Layering: `canvasZ=2`, `railZ=1`, `canvasPointer=none`, `blackStripeExists=false` across sampled desktop states.
   - Console/page errors: none observed in Playwright run; Fast Refresh still logs the existing WebGL 3D texture warning.
 
 ## Follow-up Polish
