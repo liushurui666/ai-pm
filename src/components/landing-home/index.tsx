@@ -3012,6 +3012,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
   const scrollTargetRef = useRef(0);
   const scrollImpulseRef = useRef(0);
   const touchStartRef = useRef<number | null>(null);
+  const [shouldHydrateStoryScene, setShouldHydrateStoryScene] = useState(false);
   const pointerStartRef = useRef<number | null>(null);
   const { cycleMode, effectiveTheme, mode: themeMode } = useThemePreference();
 
@@ -3221,6 +3222,32 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
   }, [activeIndex]);
 
   useEffect(() => {
+    let firstFrameHandle = 0;
+    let secondFrameHandle = 0;
+    let hydrateTimer: number | null = null;
+
+    // 首页刷新卡顿的主要体感来自首帧同时做 React hydration、Three.js 场景创建、视频贴图和 DRACO/KTX2 资源请求。
+    // 这里故意等两帧再启动 WebGL：DOM 标题、CTA 和弱背景先出现，重 3D 再接管画面；
+    // 对用户来说刷新不再像“页面先冻结一下”，最终 3D 效果和滚动交互保持不变。
+    firstFrameHandle = window.requestAnimationFrame(() => {
+      secondFrameHandle = window.requestAnimationFrame(() => {
+        hydrateTimer = window.setTimeout(() => {
+          setShouldHydrateStoryScene(true);
+        }, 180);
+      });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(firstFrameHandle);
+      window.cancelAnimationFrame(secondFrameHandle);
+
+      if (hydrateTimer !== null) {
+        window.clearTimeout(hydrateTimer);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     const root = experienceRef.current;
 
     if (!root) {
@@ -3343,7 +3370,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const root = experienceRef.current;
     const canvas = canvasRef.current;
 
-    if (!root || !canvas || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (!root || !canvas || !shouldHydrateStoryScene || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       return;
     }
 
@@ -3353,7 +3380,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       canvas,
       powerPreference: "high-performance",
     });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    // 首页 3D 舞台本身已经有大量透明层、视频纹理和后续点云。
+    // 高 DPI 设备如果按 2x 创建全屏 canvas，刷新时 GPU 纹理分配会明显卡一下；
+    // 1.5x 在肉眼质量上仍够用，但能显著降低首刷像素填充和显存压力。
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 0.92;
@@ -3692,6 +3722,18 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     let activeTheoryFlowerPointCloud: THREE.Points | null = null;
     let activeTheorySpineReady = false;
     let sceneDisposed = false;
+    const deferredVisualAssetTimers = new Set<number>();
+    const scheduleDeferredVisualAsset = (task: () => void, delayMs: number) => {
+      const timer = window.setTimeout(() => {
+        deferredVisualAssetTimers.delete(timer);
+
+        if (!sceneDisposed) {
+          task();
+        }
+      }, delayMs);
+
+      deferredVisualAssetTimers.add(timer);
+    };
     const makeOilMaterial = (accentIndex: number) => {
       const material = oilBaseMaterial.clone();
       material.emissive = new THREE.Color(organicPalette[accentIndex % organicPalette.length]);
@@ -4139,36 +4181,37 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       });
     });
 
-    void loadActiveTheoryDracoGeometry(ACTIVE_THEORY_FLOWER_SPINE_POINT_CLOUD_PATH)
-      .then((sourceGeometry) => {
-        if (sceneDisposed) {
-          sourceGeometry.dispose();
-          return;
-        }
+    scheduleDeferredVisualAsset(() => {
+      void loadActiveTheoryDracoGeometry(ACTIVE_THEORY_FLOWER_SPINE_POINT_CLOUD_PATH)
+        .then((sourceGeometry) => {
+          if (sceneDisposed) {
+            sourceGeometry.dispose();
+            return;
+          }
 
-        const pointGeometry = buildActiveTheoryFlowerPointGeometry(sourceGeometry);
+          const pointGeometry = buildActiveTheoryFlowerPointGeometry(sourceGeometry);
 
-        if (sceneDisposed) {
-          pointGeometry.dispose();
-          return;
-        }
+          if (sceneDisposed) {
+            pointGeometry.dispose();
+            return;
+          }
 
-        activeTheoryFlowerPointGeometry = pointGeometry;
-        const pointCloud = new THREE.Points(pointGeometry, activeTheoryFlowerPointMaterial);
-        // 源站 Work 场景的 flower 层是固定在柱体纵轴上的点云体积层；
-        // 它只跟随柱体本地坐标和 shader 的 scroll 相位，不参与卡片轨道的 x/z 位移，
-        // 这样用户滚轮向下时看到的是“柱体从上到下穿过”，而不是整根柱子被拖到左右两侧。
-        pointCloud.position.set(-0.02, 0.02, 0.82);
-        pointCloud.rotation.set(-0.04, THREE.MathUtils.degToRad(100), 0.02);
-        pointCloud.scale.set(1.06, 1.08, 0.92);
-        pointCloud.renderOrder = 8.6;
-        pillarGroup.add(pointCloud);
-        activeTheoryFlowerPointCloud = pointCloud;
-      })
-      .catch(() => {
-        // 点云是高保真视觉层，不参与登录、跳转或工作台入口。
-        // 失败时继续使用已有柱体/视频层，避免视觉资产缺失影响未登录用户进入系统。
-      });
+          activeTheoryFlowerPointGeometry = pointGeometry;
+          const pointCloud = new THREE.Points(pointGeometry, activeTheoryFlowerPointMaterial);
+          // 7MB 的 flower spine 点云是最后一层高级体积光，不应该和刷新首帧抢主线程/网络。
+          // 延后加载后，用户先看到可滚动的柱体主体，点云再无感补齐；如果用户很快进入工作台，也不会为装饰资产阻塞。
+          pointCloud.position.set(-0.02, 0.02, 0.82);
+          pointCloud.rotation.set(-0.04, THREE.MathUtils.degToRad(100), 0.02);
+          pointCloud.scale.set(1.06, 1.08, 0.92);
+          pointCloud.renderOrder = 8.6;
+          pillarGroup.add(pointCloud);
+          activeTheoryFlowerPointCloud = pointCloud;
+        })
+        .catch(() => {
+          // 点云是高保真视觉层，不参与登录、跳转或工作台入口。
+          // 失败时继续使用已有柱体/视频层，避免视觉资产缺失影响未登录用户进入系统。
+        });
+    }, 1200);
 
     void loadActiveTheoryDracoGeometry(ACTIVE_THEORY_SPINE_GEOMETRY_PATH)
       .then(async (sourceGeometry) => {
@@ -5773,6 +5816,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
 
     return () => {
       sceneDisposed = true;
+      deferredVisualAssetTimers.forEach((timer) => window.clearTimeout(timer));
+      deferredVisualAssetTimers.clear();
       window.removeEventListener("resize", resize);
       window.cancelAnimationFrame(animationFrame);
       environmentTexture.dispose();
@@ -5929,7 +5974,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         panel.refractionMaterial?.dispose();
       });
     };
-  }, [applyStoryCardDomProgress, syncActiveIndexFromProgress]);
+  }, [applyStoryCardDomProgress, shouldHydrateStoryScene, syncActiveIndexFromProgress]);
 
   return (
     <main
