@@ -13,9 +13,28 @@ export function createCurveFromPoints(points: [number, number, number][]) {
   );
 }
 
-// 星空和云雾是运行时效果，避免把大面积透明粒子烘进 GLB 造成模型难维护。
+export function vectorFromTuple(tuple: [number, number, number]) {
+  return new THREE.Vector3(tuple[0], tuple[1], tuple[2]);
+}
+
+export function sampleTupleKeyframes(
+  keyframes: { progress: number; value: [number, number, number] }[],
+  progress: number
+) {
+  // 滚动镜头必须按关键帧插值，不能用多套散落的 if 分支，否则后续回 Blender 调锚点时很难追踪。
+  const safeProgress = clamp(progress, 0, 1);
+  const nextIndex = keyframes.findIndex((frame) => frame.progress >= safeProgress);
+  const upper = keyframes[nextIndex === -1 ? keyframes.length - 1 : nextIndex];
+  const lower = keyframes[Math.max(0, (nextIndex === -1 ? keyframes.length : nextIndex) - 1)];
+  const span = Math.max(0.0001, upper.progress - lower.progress);
+  const localProgress = clamp((safeProgress - lower.progress) / span, 0, 1);
+
+  return vectorFromTuple(lower.value).lerp(vectorFromTuple(upper.value), localProgress);
+}
+
+// 星空和云雾继续由运行时生成，避免把大面积透明粒子烘进 GLB，导致 Blender 回归成本过高。
 export function createStarField() {
-  const count = 760;
+  const count = 860;
   const positions = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
   const cyan = new THREE.Color("#75e9ff");
@@ -23,12 +42,12 @@ export function createStarField() {
   const amber = new THREE.Color("#ffd078");
 
   for (let index = 0; index < count; index += 1) {
-    const radius = 4.2 + Math.random() * 8.8;
+    const radius = 4.2 + Math.random() * 9.4;
     const angle = Math.random() * Math.PI * 2;
-    const height = (Math.random() - 0.5) * 5.6;
-    const color = (index % 5 === 0 ? amber : index % 2 === 0 ? cyan : white).clone();
+    const height = (Math.random() - 0.5) * 5.9;
+    const color = (index % 7 === 0 ? amber : index % 2 === 0 ? cyan : white).clone();
 
-    color.lerp(new THREE.Color("#ffffff"), Math.random() * 0.2);
+    color.lerp(new THREE.Color("#ffffff"), Math.random() * 0.18);
     positions[index * 3] = Math.cos(angle) * radius + 0.7;
     positions[index * 3 + 1] = height;
     positions[index * 3 + 2] = Math.sin(angle) * radius - 1.9;
@@ -54,9 +73,8 @@ export function createStarField() {
   );
 }
 
-// 参考图的“云海”不能只靠背景渐变，否则 GLB 会像漂在平面上；这里用低成本点云制造纵深。
 export function createCloudBank() {
-  const count = 880;
+  const count = 980;
   const positions = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
   const blue = new THREE.Color("#6edcff");
@@ -64,13 +82,13 @@ export function createCloudBank() {
   const grey = new THREE.Color("#b8c6cf");
 
   for (let index = 0; index < count; index += 1) {
-    const radius = 1.4 + Math.random() * 5.2;
+    const radius = 1.3 + Math.random() * 5.8;
     const angle = Math.random() * Math.PI * 2;
     const color = (index % 4 === 0 ? green : index % 2 === 0 ? blue : grey).clone();
 
-    positions[index * 3] = Math.cos(angle) * radius + 0.42 + (Math.random() - 0.5) * 1.2;
-    positions[index * 3 + 1] = -0.98 + (Math.random() - 0.5) * 0.42;
-    positions[index * 3 + 2] = Math.sin(angle) * radius + 0.3 + (Math.random() - 0.5) * 1.4;
+    positions[index * 3] = Math.cos(angle) * radius + 0.42 + (Math.random() - 0.5) * 1.4;
+    positions[index * 3 + 1] = -1.05 + (Math.random() - 0.5) * 0.42;
+    positions[index * 3 + 2] = Math.sin(angle) * radius + 0.3 + (Math.random() - 0.5) * 1.6;
     colors[index * 3] = color.r;
     colors[index * 3 + 1] = color.g;
     colors[index * 3 + 2] = color.b;
@@ -85,8 +103,8 @@ export function createCloudBank() {
     new THREE.PointsMaterial({
       blending: THREE.AdditiveBlending,
       depthWrite: false,
-      opacity: 0.11,
-      size: 0.11,
+      opacity: 0.12,
+      size: 0.12,
       transparent: true,
       vertexColors: true,
     })
@@ -124,6 +142,7 @@ export function createRunwayGrid() {
 }
 
 export function disposeObject(object: THREE.Object3D) {
+  // Three.js 不会自动释放几何和材质；Aero 首页后续会反复调试刷新，这里必须主动清理。
   object.traverse((node) => {
     const mesh = node as THREE.Mesh;
 

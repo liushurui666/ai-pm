@@ -1,0 +1,42 @@
+{
+  "id": "background-support-stations",
+  "title": "远景支撑空间站",
+  "role": "background-depth",
+  "glb": "/aero-system/models/derived/background-support-stations/model.glb",
+  "preview": "/aero-system/models/derived/background-support-stations/preview.png",
+  "blenderFile": "assets/aero-system/blender/derived/background-support-stations/background-support-stations.blend",
+  "sourceFiles": [
+    "Floating_Island_01_Art.glb",
+    "Aero_Station_Ring_Art.glb",
+    "Aero_Station_Mini_Platform_Art.glb"
+  ],
+  "placement": {
+    "position": [
+      0.64,
+      -0.26,
+      -1.28
+    ],
+    "rotation": [
+      0,
+      0,
+      0
+    ],
+    "scale": [
+      1,
+      1,
+      1
+    ]
+  },
+  "anchors": {
+    "socket.cameraFocus": [
+      0.64,
+      -0.28,
+      -1.24
+    ],
+    "socket.lightKey": [
+      0.64,
+      0.0,
+      -1.24
+    ]
+  }
+}

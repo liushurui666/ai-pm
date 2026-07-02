@@ -1,0 +1,42 @@
+{
+  "id": "bug-repair-dock",
+  "title": "Bug 维修坞",
+  "role": "chapter-node",
+  "glb": "/aero-system/models/derived/bug-repair-dock/model.glb",
+  "preview": "/aero-system/models/derived/bug-repair-dock/preview.png",
+  "blenderFile": "assets/aero-system/blender/derived/bug-repair-dock/bug-repair-dock.blend",
+  "sourceFiles": [
+    "Floating_Island_01_Art.glb",
+    "Aero_Door_01.glb",
+    "Aero_Lampost_01.glb"
+  ],
+  "placement": {
+    "position": [
+      1.34,
+      -0.54,
+      1.22
+    ],
+    "rotation": [
+      0,
+      0,
+      0
+    ],
+    "scale": [
+      1,
+      1,
+      1
+    ]
+  },
+  "anchors": {
+    "socket.card": [
+      1.38,
+      0.14,
+      1.3
+    ],
+    "socket.cameraFocus": [
+      1.34,
+      -0.58,
+      1.22
+    ]
+  }
+}

@@ -1,8 +1,8 @@
 import * as THREE from "three";
 
-// Blender 已经把基础 GLB 派生成统一命名的 processed 材质；这里做运行时二次校色，
-// 让模型在浏览器的 ACES + Bloom 管线里接近目标图的暗色电影感。
-export function tuneProcessedAeroMaterial(item: THREE.Material, emissiveMaterials: THREE.MeshStandardMaterial[]) {
+// Blender 派生模型负责主体形体，浏览器侧只做统一电影化校色和 Bloom 友好的发光强度。
+// 这样前端不会把“模型不像”的问题藏在材质 hack 里，偏差大时仍回 Blender 处理。
+export function tuneDerivedAeroMaterial(item: THREE.Material, emissiveMaterials: THREE.MeshStandardMaterial[]) {
   const materialName = item.name.toLowerCase();
   const flexibleMaterial = item as THREE.Material & {
     color?: THREE.Color;
@@ -15,24 +15,24 @@ export function tuneProcessedAeroMaterial(item: THREE.Material, emissiveMaterial
   };
 
   if ("envMapIntensity" in flexibleMaterial) {
-    flexibleMaterial.envMapIntensity = 1.15;
+    flexibleMaterial.envMapIntensity = 1.24;
   }
 
   if ("metalness" in flexibleMaterial) {
-    flexibleMaterial.metalness = materialName.includes("rock") ? 0.12 : 0.68;
+    flexibleMaterial.metalness = materialName.includes("rock") ? 0.12 : 0.72;
   }
 
   if ("roughness" in flexibleMaterial) {
-    flexibleMaterial.roughness = materialName.includes("rock") ? 0.78 : 0.34;
+    flexibleMaterial.roughness = materialName.includes("rock") ? 0.8 : 0.3;
   }
 
   if ("color" in flexibleMaterial && flexibleMaterial.color) {
     if (materialName.includes("rock")) {
-      flexibleMaterial.color.set("#081115");
+      flexibleMaterial.color.set("#071014");
     } else if (materialName.includes("airship")) {
-      flexibleMaterial.color.set("#8b969b");
+      flexibleMaterial.color.set("#96a2a8");
     } else if (materialName.includes("glass")) {
-      flexibleMaterial.color.set("#7df5ff");
+      flexibleMaterial.color.set("#87f8ff");
     } else if (materialName.includes("orange")) {
       flexibleMaterial.color.set("#ffc15e");
     } else if (materialName.includes("blue") || materialName.includes("cyan")) {
@@ -40,20 +40,20 @@ export function tuneProcessedAeroMaterial(item: THREE.Material, emissiveMaterial
     } else if (materialName.includes("magenta")) {
       flexibleMaterial.color.set("#ff6fdb");
     } else {
-      flexibleMaterial.color.lerp(new THREE.Color("#13212a"), 0.38);
+      flexibleMaterial.color.lerp(new THREE.Color("#12212a"), 0.42);
     }
   }
 
   if ("emissive" in flexibleMaterial && flexibleMaterial.emissive) {
     if (materialName.includes("orange")) {
       flexibleMaterial.emissive.set("#ff9f2d");
-      flexibleMaterial.emissiveIntensity = 1.15;
+      flexibleMaterial.emissiveIntensity = 1.28;
     } else if (materialName.includes("blue") || materialName.includes("cyan")) {
       flexibleMaterial.emissive.set("#42dfff");
-      flexibleMaterial.emissiveIntensity = 1.05;
+      flexibleMaterial.emissiveIntensity = 1.18;
     } else if (materialName.includes("magenta")) {
       flexibleMaterial.emissive.set("#ff54d6");
-      flexibleMaterial.emissiveIntensity = 1.0;
+      flexibleMaterial.emissiveIntensity = 1.16;
     } else {
       flexibleMaterial.emissive.set("#123744");
       flexibleMaterial.emissiveIntensity = 0.08;
@@ -68,7 +68,7 @@ export function tuneProcessedAeroMaterial(item: THREE.Material, emissiveMaterial
   if (materialName.includes("glass")) {
     item.transparent = true;
     item.depthWrite = false;
-    flexibleMaterial.opacity = 0.4;
+    flexibleMaterial.opacity = 0.38;
     item.needsUpdate = true;
   }
 }

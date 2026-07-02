@@ -1,0 +1,40 @@
+{
+  "id": "airship-cruiser",
+  "title": "可飞行飞艇",
+  "role": "flight-vehicle",
+  "glb": "/aero-system/models/derived/airship-cruiser/model.glb",
+  "preview": "/aero-system/models/derived/airship-cruiser/preview.png",
+  "blenderFile": "assets/aero-system/blender/derived/airship-cruiser/airship-cruiser.blend",
+  "sourceFiles": [
+    "Aero_Airship_01.glb"
+  ],
+  "placement": {
+    "position": [
+      1.48,
+      0.28,
+      0.88
+    ],
+    "rotation": [
+      0,
+      0,
+      0
+    ],
+    "scale": [
+      0.38,
+      0.38,
+      0.38
+    ]
+  },
+  "anchors": {
+    "socket.nose": [
+      0.48,
+      0.02,
+      0
+    ],
+    "socket.thruster": [
+      -0.56,
+      -0.02,
+      0
+    ]
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "id": "route-beacon-kit",
+  "title": "航线灯塔与锚点套件",
+  "role": "runtime-route-sockets",
+  "glb": "/aero-system/models/derived/route-beacon-kit/model.glb",
+  "preview": "/aero-system/models/derived/route-beacon-kit/preview.png",
+  "blenderFile": "assets/aero-system/blender/derived/route-beacon-kit/route-beacon-kit.blend",
+  "sourceFiles": [],
+  "placement": {
+    "position": [
+      0,
+      0,
+      0
+    ],
+    "rotation": [
+      0,
+      0,
+      0
+    ],
+    "scale": [
+      1,
+      1,
+      1
+    ]
+  },
+  "anchors": {
+    "socket.cameraFocus": [
+      0.68,
+      0.08,
+      0.42
+    ],
+    "socket.lightKey": [
+      0.68,
+      0.48,
+      0.42
+    ]
+  }
+}

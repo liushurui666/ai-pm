@@ -13,11 +13,11 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent } from "react";
 import { aeroHeroStats, aeroSceneCards } from "./story-data";
-import { clamp } from "./scene-helpers";
-import { useAeroCinematicScene } from "./use-aero-cinematic-scene";
+import { clamp } from "./three/scene-utils";
+import { useAeroFlightScene } from "./three/use-aero-flight-scene";
 
-// `/aero-system` 是基于 processed GLB 的电影化首页样机。
-// React 层只负责真实可点的产品文案和业务节点，Three.js 层只负责模型、航线和光效。
+// `/aero-system` 是基于 Blender 派生 GLB 的电影化首页样机。
+// React 层只负责真实可点的产品文案和业务节点，Three.js 层只负责模型装配、航线和光效。
 export function AeroSystemShowcase() {
   const rootRef = useRef<HTMLElement>(null);
   const stageRef = useRef<HTMLElement>(null);
@@ -100,12 +100,32 @@ export function AeroSystemShowcase() {
     return () => context.revert();
   }, [activeCardIndex]);
 
-  useAeroCinematicScene({
+  useAeroFlightScene({
     activeCardRef,
     canvasRef,
     pointerRef,
+    rootRef,
+    setActiveCardIndex,
     setLoadedCount,
   });
+
+  const scrollToChapter = (cardIndex: number) => {
+    const root = rootRef.current;
+
+    if (!root) {
+      setActiveCardIndex(cardIndex);
+      return;
+    }
+
+    // 底部节点点击时滚动到对应章节，让 HTML 状态、飞船轨迹和镜头进度保持同一套来源。
+    const rootTop = window.scrollY + root.getBoundingClientRect().top;
+    const scrollableHeight = Math.max(1, root.offsetHeight - window.innerHeight);
+    const targetProgress = cardIndex / Math.max(1, aeroSceneCards.length - 1);
+    window.scrollTo({
+      behavior: "smooth",
+      top: rootTop + scrollableHeight * targetProgress,
+    });
+  };
 
   const handleStagePointerMove = (event: PointerEvent<HTMLElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -241,7 +261,7 @@ export function AeroSystemShowcase() {
                 className="aero-system-showcase__route-node"
                 data-active={isActive}
                 key={card.id}
-                onClick={() => setActiveCardIndex(cardIndex)}
+                onClick={() => scrollToChapter(cardIndex)}
                 style={{ "--chapter-node-accent": card.accent } as CSSProperties}
                 type="button"
               >

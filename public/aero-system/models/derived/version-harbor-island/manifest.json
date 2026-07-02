@@ -1,0 +1,42 @@
+{
+  "id": "version-harbor-island",
+  "title": "版本航站岛",
+  "role": "chapter-node",
+  "glb": "/aero-system/models/derived/version-harbor-island/model.glb",
+  "preview": "/aero-system/models/derived/version-harbor-island/preview.png",
+  "blenderFile": "assets/aero-system/blender/derived/version-harbor-island/version-harbor-island.blend",
+  "sourceFiles": [
+    "Floating_Island_01_Art.glb",
+    "Aero_Station_Ring_Art.glb",
+    "Aero_Ground_Hexagons_02_Art.glb"
+  ],
+  "placement": {
+    "position": [
+      -0.42,
+      -0.52,
+      1.04
+    ],
+    "rotation": [
+      0,
+      0,
+      0
+    ],
+    "scale": [
+      1,
+      1,
+      1
+    ]
+  },
+  "anchors": {
+    "socket.card": [
+      -0.37,
+      0.2,
+      1.12
+    ],
+    "socket.cameraFocus": [
+      -0.42,
+      -0.54,
+      1.04
+    ]
+  }
+}

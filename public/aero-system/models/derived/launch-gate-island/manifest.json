@@ -1,0 +1,42 @@
+{
+  "id": "launch-gate-island",
+  "title": "上线闸口岛",
+  "role": "chapter-node",
+  "glb": "/aero-system/models/derived/launch-gate-island/model.glb",
+  "preview": "/aero-system/models/derived/launch-gate-island/preview.png",
+  "blenderFile": "assets/aero-system/blender/derived/launch-gate-island/launch-gate-island.blend",
+  "sourceFiles": [
+    "Floating_Island_01_Art.glb",
+    "Aero_Station_YellowRing_Art.glb",
+    "Aero_Ground_Hexagon_Art.glb"
+  ],
+  "placement": {
+    "position": [
+      2.34,
+      -0.28,
+      0.16
+    ],
+    "rotation": [
+      0,
+      0,
+      0
+    ],
+    "scale": [
+      1,
+      1,
+      1
+    ]
+  },
+  "anchors": {
+    "socket.card": [
+      2.26,
+      0.52,
+      0.26
+    ],
+    "socket.cameraFocus": [
+      2.34,
+      -0.26,
+      0.16
+    ]
+  }
+}

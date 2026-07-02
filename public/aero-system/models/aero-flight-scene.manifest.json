@@ -1,0 +1,552 @@
+{
+  "generatedBy": "scripts/aero-system/derive-aero-scene.py",
+  "sourceDirectory": "/aero-system/models/source",
+  "derivedDirectory": "/aero-system/models/derived",
+  "models": [
+    {
+      "id": "background-support-stations",
+      "title": "远景支撑空间站",
+      "role": "background-depth",
+      "glb": "/aero-system/models/derived/background-support-stations/model.glb",
+      "preview": "/aero-system/models/derived/background-support-stations/preview.png",
+      "blenderFile": "assets/aero-system/blender/derived/background-support-stations/background-support-stations.blend",
+      "sourceFiles": [
+        "Floating_Island_01_Art.glb",
+        "Aero_Station_Ring_Art.glb",
+        "Aero_Station_Mini_Platform_Art.glb"
+      ],
+      "placement": {
+        "position": [
+          0.64,
+          -0.26,
+          -1.28
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "anchors": {
+        "socket.cameraFocus": [
+          0.64,
+          -0.28,
+          -1.24
+        ],
+        "socket.lightKey": [
+          0.64,
+          0.0,
+          -1.24
+        ]
+      }
+    },
+    {
+      "id": "central-command-station",
+      "title": "中央主空间站",
+      "role": "hero-station",
+      "glb": "/aero-system/models/derived/central-command-station/model.glb",
+      "preview": "/aero-system/models/derived/central-command-station/preview.png",
+      "blenderFile": "assets/aero-system/blender/derived/central-command-station/central-command-station.blend",
+      "sourceFiles": [
+        "Floating_Island_01_Art.glb",
+        "Aero_Station_01_Art.glb",
+        "Aero_Station_PinkRing_Art.glb"
+      ],
+      "placement": {
+        "position": [
+          0.78,
+          -0.08,
+          -0.08
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "anchors": {
+        "socket.cameraFocus": [
+          0.78,
+          0.26,
+          -0.08
+        ],
+        "socket.lightKey": [
+          0.78,
+          1.14,
+          -0.08
+        ]
+      }
+    },
+    {
+      "id": "requirements-tower-island",
+      "title": "需求塔台岛",
+      "role": "chapter-node",
+      "glb": "/aero-system/models/derived/requirements-tower-island/model.glb",
+      "preview": "/aero-system/models/derived/requirements-tower-island/preview.png",
+      "blenderFile": "assets/aero-system/blender/derived/requirements-tower-island/requirements-tower-island.blend",
+      "sourceFiles": [
+        "Floating_Island_01_Art.glb",
+        "Aero_Ground_Hexagons_01_Art.glb",
+        "Aero_Station_Mini_Platform_Art.glb",
+        "Aero_Lampost_01.glb"
+      ],
+      "placement": {
+        "position": [
+          -1.34,
+          -0.22,
+          -0.08
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "anchors": {
+        "socket.card": [
+          -1.42,
+          0.56,
+          -0.1
+        ],
+        "socket.cameraFocus": [
+          -1.34,
+          -0.14,
+          -0.08
+        ]
+      }
+    },
+    {
+      "id": "version-harbor-island",
+      "title": "版本航站岛",
+      "role": "chapter-node",
+      "glb": "/aero-system/models/derived/version-harbor-island/model.glb",
+      "preview": "/aero-system/models/derived/version-harbor-island/preview.png",
+      "blenderFile": "assets/aero-system/blender/derived/version-harbor-island/version-harbor-island.blend",
+      "sourceFiles": [
+        "Floating_Island_01_Art.glb",
+        "Aero_Station_Ring_Art.glb",
+        "Aero_Ground_Hexagons_02_Art.glb"
+      ],
+      "placement": {
+        "position": [
+          -0.42,
+          -0.52,
+          1.04
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "anchors": {
+        "socket.card": [
+          -0.37,
+          0.2,
+          1.12
+        ],
+        "socket.cameraFocus": [
+          -0.42,
+          -0.54,
+          1.04
+        ]
+      }
+    },
+    {
+      "id": "bug-repair-dock",
+      "title": "Bug 维修坞",
+      "role": "chapter-node",
+      "glb": "/aero-system/models/derived/bug-repair-dock/model.glb",
+      "preview": "/aero-system/models/derived/bug-repair-dock/preview.png",
+      "blenderFile": "assets/aero-system/blender/derived/bug-repair-dock/bug-repair-dock.blend",
+      "sourceFiles": [
+        "Floating_Island_01_Art.glb",
+        "Aero_Door_01.glb",
+        "Aero_Lampost_01.glb"
+      ],
+      "placement": {
+        "position": [
+          1.34,
+          -0.54,
+          1.22
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "anchors": {
+        "socket.card": [
+          1.38,
+          0.14,
+          1.3
+        ],
+        "socket.cameraFocus": [
+          1.34,
+          -0.58,
+          1.22
+        ]
+      }
+    },
+    {
+      "id": "launch-gate-island",
+      "title": "上线闸口岛",
+      "role": "chapter-node",
+      "glb": "/aero-system/models/derived/launch-gate-island/model.glb",
+      "preview": "/aero-system/models/derived/launch-gate-island/preview.png",
+      "blenderFile": "assets/aero-system/blender/derived/launch-gate-island/launch-gate-island.blend",
+      "sourceFiles": [
+        "Floating_Island_01_Art.glb",
+        "Aero_Station_YellowRing_Art.glb",
+        "Aero_Ground_Hexagon_Art.glb"
+      ],
+      "placement": {
+        "position": [
+          2.34,
+          -0.28,
+          0.16
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "anchors": {
+        "socket.card": [
+          2.26,
+          0.52,
+          0.26
+        ],
+        "socket.cameraFocus": [
+          2.34,
+          -0.26,
+          0.16
+        ]
+      }
+    },
+    {
+      "id": "route-beacon-kit",
+      "title": "航线灯塔与锚点套件",
+      "role": "runtime-route-sockets",
+      "glb": "/aero-system/models/derived/route-beacon-kit/model.glb",
+      "preview": "/aero-system/models/derived/route-beacon-kit/preview.png",
+      "blenderFile": "assets/aero-system/blender/derived/route-beacon-kit/route-beacon-kit.blend",
+      "sourceFiles": [],
+      "placement": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "anchors": {
+        "socket.cameraFocus": [
+          0.68,
+          0.08,
+          0.42
+        ],
+        "socket.lightKey": [
+          0.68,
+          0.48,
+          0.42
+        ]
+      }
+    },
+    {
+      "id": "airship-cruiser",
+      "title": "可飞行飞艇",
+      "role": "flight-vehicle",
+      "glb": "/aero-system/models/derived/airship-cruiser/model.glb",
+      "preview": "/aero-system/models/derived/airship-cruiser/preview.png",
+      "blenderFile": "assets/aero-system/blender/derived/airship-cruiser/airship-cruiser.blend",
+      "sourceFiles": [
+        "Aero_Airship_01.glb"
+      ],
+      "placement": {
+        "position": [
+          1.48,
+          0.28,
+          0.88
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.38,
+          0.38,
+          0.38
+        ]
+      },
+      "anchors": {
+        "socket.nose": [
+          0.48,
+          0.02,
+          0
+        ],
+        "socket.thruster": [
+          -0.56,
+          -0.02,
+          0
+        ]
+      }
+    }
+  ],
+  "cards": [
+    {
+      "accent": "#55f0c7",
+      "id": "requirements",
+      "index": "01",
+      "metric": "进行中 12/20",
+      "position": [
+        -1.58,
+        0.72,
+        -0.18
+      ],
+      "status": "进行中",
+      "summary": "收集需求，拆解任务",
+      "title": "需求塔台"
+    },
+    {
+      "accent": "#48a8ff",
+      "id": "versions",
+      "index": "02",
+      "metric": "进行中 v1.2.3",
+      "position": [
+        -0.42,
+        0.16,
+        1.04
+      ],
+      "status": "进行中",
+      "summary": "规划版本，分配资源",
+      "title": "版本航站"
+    },
+    {
+      "accent": "#ffbb55",
+      "id": "bugs",
+      "index": "03",
+      "metric": "进行中 5 个待处理",
+      "position": [
+        1.36,
+        0.08,
+        1.26
+      ],
+      "status": "进行中",
+      "summary": "发现问题，修复验证",
+      "title": "Bug 维修坞"
+    },
+    {
+      "accent": "#57e2a2",
+      "id": "launch",
+      "index": "04",
+      "metric": "准备就绪 v1.2.3",
+      "position": [
+        2.36,
+        0.7,
+        0.18
+      ],
+      "status": "准备就绪",
+      "summary": "验收合规，发布上线",
+      "title": "上线闸口"
+    }
+  ],
+  "routes": {
+    "blue": {
+      "color": "#4bd8ff",
+      "points": [
+        [
+          -1.34,
+          0.06,
+          -0.08
+        ],
+        [
+          -1.02,
+          -0.08,
+          0.36
+        ],
+        [
+          -0.42,
+          -0.16,
+          1.04
+        ],
+        [
+          0.34,
+          0.02,
+          0.62
+        ],
+        [
+          0.78,
+          0.22,
+          -0.08
+        ]
+      ]
+    },
+    "orange": {
+      "color": "#ffc35c",
+      "points": [
+        [
+          0.78,
+          0.22,
+          -0.08
+        ],
+        [
+          1.08,
+          -0.02,
+          0.74
+        ],
+        [
+          1.36,
+          -0.12,
+          1.26
+        ],
+        [
+          1.9,
+          0.08,
+          0.78
+        ],
+        [
+          2.36,
+          0.22,
+          0.18
+        ]
+      ]
+    }
+  },
+  "flightPath": [
+    [
+      -1.28,
+      0.22,
+      -0.1
+    ],
+    [
+      -0.64,
+      0.16,
+      0.72
+    ],
+    [
+      0.38,
+      0.36,
+      0.48
+    ],
+    [
+      1.34,
+      0.24,
+      1.14
+    ],
+    [
+      2.18,
+      0.4,
+      0.28
+    ]
+  ],
+  "cameraKeyframes": [
+    {
+      "progress": 0.0,
+      "position": [
+        0.2,
+        1.55,
+        6.25
+      ],
+      "target": [
+        0.72,
+        0.05,
+        0.22
+      ]
+    },
+    {
+      "progress": 0.28,
+      "position": [
+        -0.18,
+        1.35,
+        5.92
+      ],
+      "target": [
+        -0.72,
+        -0.1,
+        0.55
+      ]
+    },
+    {
+      "progress": 0.55,
+      "position": [
+        0.76,
+        1.34,
+        5.82
+      ],
+      "target": [
+        0.78,
+        -0.08,
+        0.74
+      ]
+    },
+    {
+      "progress": 0.78,
+      "position": [
+        1.42,
+        1.38,
+        5.7
+      ],
+      "target": [
+        1.5,
+        -0.1,
+        0.86
+      ]
+    },
+    {
+      "progress": 1.0,
+      "position": [
+        1.75,
+        1.48,
+        5.92
+      ],
+      "target": [
+        1.8,
+        0.02,
+        0.2
+      ]
+    }
+  ]
+}

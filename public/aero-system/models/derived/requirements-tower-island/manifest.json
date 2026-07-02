@@ -1,0 +1,43 @@
+{
+  "id": "requirements-tower-island",
+  "title": "需求塔台岛",
+  "role": "chapter-node",
+  "glb": "/aero-system/models/derived/requirements-tower-island/model.glb",
+  "preview": "/aero-system/models/derived/requirements-tower-island/preview.png",
+  "blenderFile": "assets/aero-system/blender/derived/requirements-tower-island/requirements-tower-island.blend",
+  "sourceFiles": [
+    "Floating_Island_01_Art.glb",
+    "Aero_Ground_Hexagons_01_Art.glb",
+    "Aero_Station_Mini_Platform_Art.glb",
+    "Aero_Lampost_01.glb"
+  ],
+  "placement": {
+    "position": [
+      -1.34,
+      -0.22,
+      -0.08
+    ],
+    "rotation": [
+      0,
+      0,
+      0
+    ],
+    "scale": [
+      1,
+      1,
+      1
+    ]
+  },
+  "anchors": {
+    "socket.card": [
+      -1.42,
+      0.56,
+      -0.1
+    ],
+    "socket.cameraFocus": [
+      -1.34,
+      -0.14,
+      -0.08
+    ]
+  }
+}

@@ -1,6 +1,6 @@
 import * as THREE from "three";
-import type { AeroRouteDefinition, AeroSceneCard } from "./story-data";
-import { createCurveFromPoints } from "./scene-helpers";
+import type { AeroRouteDefinition, AeroSceneCard } from "../story-data";
+import { createCurveFromPoints } from "./scene-utils";
 
 export type RuntimeRoute = {
   color: THREE.Color;
@@ -19,26 +19,26 @@ export function createRouteNetwork(routes: AeroRouteDefinition[]) {
       blending: THREE.AdditiveBlending,
       color,
       depthWrite: false,
-      opacity: 0.86,
+      opacity: 0.9,
       transparent: true,
     });
     const glowMaterial = new THREE.MeshBasicMaterial({
       blending: THREE.AdditiveBlending,
       color,
       depthWrite: false,
-      opacity: 0.16,
+      opacity: 0.18,
       transparent: true,
     });
 
-    group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 150, 0.014, 8, false), coreMaterial));
-    group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 150, 0.065, 12, false), glowMaterial));
+    // 航线光轨保留在运行时生成，因为它需要随滚动和时间流动；Blender 只提供灯塔和锚点。
+    group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 180, 0.014, 8, false), coreMaterial));
+    group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 180, 0.07, 12, false), glowMaterial));
     runtimeRoutes.push({ color, curve, id: route.id });
   });
 
   return { group, routes: runtimeRoutes };
 }
 
-// 业务节点卡片是 HTML，但 WebGL 里仍要有对应的空间信标，否则卡片和模型会像两套系统。
 export function createCardBeaconField(cards: AeroSceneCard[]) {
   const group = new THREE.Group();
 
@@ -48,22 +48,22 @@ export function createCardBeaconField(cards: AeroSceneCard[]) {
       blending: THREE.AdditiveBlending,
       color,
       depthWrite: false,
-      opacity: 0.72,
+      opacity: 0.7,
       transparent: true,
     });
     const ringMaterial = beaconMaterial.clone();
-    ringMaterial.opacity = 0.34;
+    ringMaterial.opacity = 0.32;
 
     const root = new THREE.Group();
     root.position.set(...card.position);
     root.userData.cardId = card.id;
-    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.052, 18, 18), beaconMaterial);
+    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.05, 18, 18), beaconMaterial);
     const ring = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.008, 8, 72), ringMaterial);
     ring.rotation.x = Math.PI / 2;
     root.add(beacon);
     root.add(ring);
 
-    const light = new THREE.PointLight(color, 1.6, 2.2);
+    const light = new THREE.PointLight(color, 1.5, 2.4);
     light.position.y = 0.08;
     root.add(light);
     group.add(root);
@@ -76,7 +76,7 @@ export function createRoutePulseFleet(runtimeRoutes: RuntimeRoute[]) {
   const group = new THREE.Group();
 
   runtimeRoutes.forEach((route, routeIndex) => {
-    for (let index = 0; index < 7; index += 1) {
+    for (let index = 0; index < 8; index += 1) {
       const material = new THREE.MeshBasicMaterial({
         blending: THREE.AdditiveBlending,
         color: route.color,
@@ -87,8 +87,8 @@ export function createRoutePulseFleet(runtimeRoutes: RuntimeRoute[]) {
       const pulse = new THREE.Mesh(new THREE.SphereGeometry(0.028 + (index % 2) * 0.008, 14, 14), material);
       pulse.userData.routeId = route.id;
       pulse.userData.routeIndex = routeIndex;
-      pulse.userData.routeOffset = index / 7;
-      pulse.userData.routeSpeed = 0.04 + routeIndex * 0.014 + index * 0.001;
+      pulse.userData.routeOffset = index / 8;
+      pulse.userData.routeSpeed = 0.038 + routeIndex * 0.012 + index * 0.001;
       group.add(pulse);
     }
   });
@@ -97,7 +97,7 @@ export function createRoutePulseFleet(runtimeRoutes: RuntimeRoute[]) {
 }
 
 export function createShipExhaustTrail() {
-  const count = 90;
+  const count = 100;
   const positions = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
   const cyan = new THREE.Color("#65eaff");
@@ -119,8 +119,8 @@ export function createShipExhaustTrail() {
     new THREE.PointsMaterial({
       blending: THREE.AdditiveBlending,
       depthWrite: false,
-      opacity: 0.64,
-      size: 0.033,
+      opacity: 0.66,
+      size: 0.034,
       transparent: true,
       vertexColors: true,
     })
@@ -137,7 +137,7 @@ export function createSoftNebulaPlanes() {
       color: index % 2 === 0 ? "#65eaff" : "#ffba65",
       depthWrite: false,
       map: texture,
-      opacity: 0.028 + index * 0.004,
+      opacity: 0.03 + index * 0.004,
       transparent: true,
     });
     const sprite = new THREE.Sprite(material);

@@ -1,0 +1,42 @@
+{
+  "id": "central-command-station",
+  "title": "中央主空间站",
+  "role": "hero-station",
+  "glb": "/aero-system/models/derived/central-command-station/model.glb",
+  "preview": "/aero-system/models/derived/central-command-station/preview.png",
+  "blenderFile": "assets/aero-system/blender/derived/central-command-station/central-command-station.blend",
+  "sourceFiles": [
+    "Floating_Island_01_Art.glb",
+    "Aero_Station_01_Art.glb",
+    "Aero_Station_PinkRing_Art.glb"
+  ],
+  "placement": {
+    "position": [
+      0.78,
+      -0.08,
+      -0.08
+    ],
+    "rotation": [
+      0,
+      0,
+      0
+    ],
+    "scale": [
+      1,
+      1,
+      1
+    ]
+  },
+  "anchors": {
+    "socket.cameraFocus": [
+      0.78,
+      0.26,
+      -0.08
+    ],
+    "socket.lightKey": [
+      0.78,
+      1.14,
+      -0.08
+    ]
+  }
+}
