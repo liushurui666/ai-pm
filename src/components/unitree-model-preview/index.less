@@ -1,0 +1,135 @@
+.unitree-preview {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  color: #edf6ff;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(77, 183, 255, 0.2), transparent 30%),
+    radial-gradient(circle at 78% 16%, rgba(255, 193, 110, 0.13), transparent 28%),
+    linear-gradient(135deg, #05070b 0%, #0d1420 46%, #090d12 100%);
+}
+
+.unitree-preview__stage {
+  position: absolute;
+  inset: 0;
+}
+
+.unitree-preview__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+
+.unitree-preview__canvas:active {
+  cursor: grabbing;
+}
+
+.unitree-preview__vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(5, 7, 11, 0.82), transparent 34%, rgba(5, 7, 11, 0.2)),
+    linear-gradient(180deg, rgba(5, 7, 11, 0.2), rgba(5, 7, 11, 0.72));
+}
+
+.unitree-preview__panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: min(380px, calc(100vw - 32px));
+  min-height: 100vh;
+  flex-direction: column;
+  justify-content: center;
+  gap: 22px;
+  padding: 28px 0 28px 28px;
+}
+
+.unitree-preview__topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.unitree-preview__identity {
+  display: grid;
+  gap: 8px;
+}
+
+.unitree-preview__identity span {
+  color: rgba(237, 246, 255, 0.68);
+  font-size: 13px;
+}
+
+.unitree-preview__identity h1 {
+  margin: 0;
+  color: #fff;
+  font-size: 44px;
+  font-weight: 760;
+  letter-spacing: 0;
+  line-height: 1.05;
+}
+
+.unitree-preview__select {
+  width: 100%;
+}
+
+.unitree-preview__stats {
+  display: grid;
+  gap: 10px;
+}
+
+.unitree-preview__stats div {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: center;
+  min-height: 46px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.unitree-preview__stats span {
+  color: rgba(237, 246, 255, 0.56);
+  font-size: 13px;
+}
+
+.unitree-preview__stats strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #f8fbff;
+  font-size: 16px;
+  font-weight: 680;
+}
+
+.unitree-preview__actions {
+  display: flex;
+  gap: 10px;
+}
+
+.unitree-preview__actions .ant-btn {
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .unitree-preview__vignette {
+    background:
+      linear-gradient(180deg, rgba(5, 7, 11, 0.84), transparent 42%, rgba(5, 7, 11, 0.72)),
+      linear-gradient(90deg, rgba(5, 7, 11, 0.38), transparent);
+  }
+
+  .unitree-preview__panel {
+    width: auto;
+    min-height: 0;
+    justify-content: flex-start;
+    padding: 18px;
+  }
+
+  .unitree-preview__identity h1 {
+    font-size: 34px;
+  }
+
+  .unitree-preview__actions {
+    flex-wrap: wrap;
+  }
+}
