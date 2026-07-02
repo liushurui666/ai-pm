@@ -1,7 +1,21 @@
 import { useEffect, type Dispatch, type RefObject, type SetStateAction } from "react";
 import * as THREE from "three";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { aeroAssets, aeroStoryChapters } from "./story-data";
+import {
+  createDeliveryRouteNetwork,
+  createElectronicTowerField,
+  createGlbAssetEnhancementLayer,
+  createHoverParticleField,
+  createRoutePulseFleet,
+  createShipExhaustTrail,
+  createVolumetricFog,
+} from "./scene-effects";
 import {
   clamp,
   createCinematicCloudBank,
@@ -13,10 +27,18 @@ import {
   getStoryState,
   type LoadedAeroModel,
 } from "./scene-helpers";
+import { tuneAeroGlbMaterial } from "./scene-materials";
+
+type AeroPointerState = {
+  active: number;
+  x: number;
+  y: number;
+};
 
 type UseAeroCinematicSceneOptions = {
   activeChapterRef: RefObject<number>;
   canvasRef: RefObject<HTMLCanvasElement | null>;
+  pointerRef: RefObject<AeroPointerState>;
   setLoadedCount: Dispatch<SetStateAction<number>>;
   storyProgressRef: RefObject<number>;
   yawOffsetRef: RefObject<number>;
@@ -26,6 +48,7 @@ type UseAeroCinematicSceneOptions = {
 export function useAeroCinematicScene({
   activeChapterRef,
   canvasRef,
+  pointerRef,
   setLoadedCount,
   storyProgressRef,
   yawOffsetRef,
@@ -53,15 +76,30 @@ export function useAeroCinematicScene({
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.45));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.14;
+    renderer.toneMappingExposure = 0.98;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;
 
     const scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2("#040915", 0.072);
 
+    // PMREM + RoomEnvironment 提供接近 HDRI 的环境反射底座；如果后续替换为真实 `.hdr/.exr`，
+    // 只需要把这里的 envMap 生成逻辑换成 RGBELoader/EXRLoader，不影响场景主体。
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    const roomEnvironment = new RoomEnvironment();
+    const environmentMap = pmremGenerator.fromScene(roomEnvironment, 0.04).texture;
+    scene.environment = environmentMap;
+
     const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 80);
     camera.position.set(0, 2.55, 8.35);
+
+    const composer = new EffectComposer(renderer);
+    const renderPass = new RenderPass(scene, camera);
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.24, 0.46, 0.64);
+    const outputPass = new OutputPass();
+    composer.addPass(renderPass);
+    composer.addPass(bloomPass);
+    composer.addPass(outputPass);
 
     const rig = new THREE.Group();
     rig.position.set(0.25, 0.02, 0);
@@ -69,30 +107,34 @@ export function useAeroCinematicScene({
 
     // 夜景霓虹需要压暗主光、加强补色光，避免模型呈现成普通白天资产预览。
     scene.add(new THREE.HemisphereLight(0xd7f3ff, 0x120c08, 1.85));
-    const moonKey = new THREE.DirectionalLight(0xeaf8ff, 4.2);
+    const moonKey = new THREE.DirectionalLight(0xeaf8ff, 2.9);
     moonKey.position.set(-4.6, 5.4, 4.2);
     moonKey.castShadow = true;
     moonKey.shadow.mapSize.set(2048, 2048);
     scene.add(moonKey);
 
-    const magenta = new THREE.PointLight(0xff6bd8, 12, 12);
+    const magenta = new THREE.PointLight(0xff6bd8, 6.8, 12);
     magenta.position.set(2.1, 1.8, 1.8);
     scene.add(magenta);
 
-    const amber = new THREE.PointLight(0xffc96d, 9, 14);
+    const amber = new THREE.PointLight(0xffc96d, 5.8, 14);
     amber.position.set(-2.4, 1.3, 1.3);
     scene.add(amber);
 
-    const cyan = new THREE.PointLight(0x6eeeff, 8, 13);
+    const cyan = new THREE.PointLight(0x6eeeff, 5.6, 13);
     cyan.position.set(-1.8, 1.0, -0.7);
     scene.add(cyan);
 
     const starField = createStarField();
     const cloudBank = createCinematicCloudBank();
+    const volumetricFog = createVolumetricFog();
+    const hoverParticles = createHoverParticleField();
     const runwayGrid = createRunwayGrid();
     scene.add(starField);
     scene.add(cloudBank);
+    scene.add(volumetricFog);
     scene.add(runwayGrid);
+    scene.add(hoverParticles);
 
     const routeMaterial = new THREE.MeshBasicMaterial({
       blending: THREE.AdditiveBlending,
@@ -111,7 +153,7 @@ export function useAeroCinematicScene({
       blending: THREE.AdditiveBlending,
       color: new THREE.Color(aeroStoryChapters[0].accent),
       depthWrite: false,
-      opacity: 0.16,
+      opacity: 0.11,
       transparent: true,
     });
     const routeGlowMesh = new THREE.Mesh(
@@ -121,7 +163,20 @@ export function useAeroCinematicScene({
     rig.add(routeGlowMesh);
 
     const routeSparkles = createRouteSparkles(storyCurve);
+    const routePulseFleet = createRoutePulseFleet(storyCurve);
+    const shipExhaustTrail = createShipExhaustTrail();
     rig.add(routeSparkles);
+    rig.add(routePulseFleet);
+    rig.add(shipExhaustTrail);
+
+    const deliveryRouteGroup = createDeliveryRouteNetwork();
+    rig.add(deliveryRouteGroup);
+
+    const electronicTowerField = createElectronicTowerField();
+    rig.add(electronicTowerField);
+
+    const glbAssetEnhancementLayer = createGlbAssetEnhancementLayer();
+    rig.add(glbAssetEnhancementLayer);
 
     const pulseMaterial = new THREE.MeshBasicMaterial({
       blending: THREE.AdditiveBlending,
@@ -131,7 +186,7 @@ export function useAeroCinematicScene({
       transparent: true,
     });
     const routePulse = new THREE.Mesh(new THREE.SphereGeometry(0.078, 24, 24), pulseMaterial);
-    const pulseLight = new THREE.PointLight(0x72e4ff, 3.2, 4.5);
+    const pulseLight = new THREE.PointLight(0x72e4ff, 1.8, 4.2);
     routePulse.add(pulseLight);
     rig.add(routePulse);
 
@@ -183,6 +238,7 @@ export function useAeroCinematicScene({
           const size = box.getSize(new THREE.Vector3());
           const maxDimension = Math.max(size.x, size.y, size.z, 0.001);
           const baseScale = asset.scale / maxDimension;
+          const emissiveMaterials: THREE.MeshStandardMaterial[] = [];
 
           // 第三方 GLB 的原点和单位不统一，先按包围盒居中归一，再放进叙事航线坐标。
           modelRoot.position.sub(center);
@@ -204,8 +260,8 @@ export function useAeroCinematicScene({
             const material = mesh.material;
             const materials = Array.isArray(material) ? material : [material];
             materials.forEach((item) => {
-              if (item && "envMapIntensity" in item) {
-                (item as THREE.MeshStandardMaterial).envMapIntensity = 0.82;
+              if (item) {
+                tuneAeroGlbMaterial(asset, item, emissiveMaterials);
               }
             });
           });
@@ -215,6 +271,7 @@ export function useAeroCinematicScene({
             asset,
             baseRotation: new THREE.Euler(...asset.rotation),
             baseScale,
+            emissiveMaterials,
             homePosition: new THREE.Vector3(...asset.position),
             wrapper,
           });
@@ -232,6 +289,8 @@ export function useAeroCinematicScene({
       const width = Math.max(1, rect.width);
       const height = Math.max(1, rect.height);
       renderer.setSize(width, height, false);
+      composer.setSize(width, height);
+      bloomPass.setSize(width, height);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
     };
@@ -244,15 +303,53 @@ export function useAeroCinematicScene({
       const storyState = getStoryState(progress);
       const accentColor = new THREE.Color(storyState.accent);
       const focus = new THREE.Vector3(...storyState.focus);
+      const pointer = pointerRef.current;
       const desiredYaw = storyState.yaw + yawOffsetRef.current;
 
       currentYaw += (desiredYaw - currentYaw) * 0.045;
-      rig.rotation.y = currentYaw + Math.sin(elapsed * 0.18) * 0.014;
-      rig.rotation.x = Math.sin(elapsed * 0.13) * 0.012;
+      rig.rotation.y = currentYaw + pointer.x * 0.028 + Math.sin(elapsed * 0.18) * 0.014;
+      rig.rotation.x = pointer.y * 0.018 + Math.sin(elapsed * 0.13) * 0.012;
 
       starField.rotation.y = elapsed * 0.014;
       cloudBank.rotation.y = -elapsed * 0.01;
       cloudBank.position.y = Math.sin(elapsed * 0.28) * 0.025;
+      volumetricFog.rotation.y = -elapsed * 0.006 + pointer.x * 0.018;
+      volumetricFog.children.forEach((child, index) => {
+        const phase = (child.userData.phase as number | undefined) ?? index;
+        child.position.y += Math.sin(elapsed * 0.16 + phase) * 0.0008;
+      });
+      electronicTowerField.children.forEach((tower, towerIndex) => {
+        const phase = (tower.userData.phase as number | undefined) ?? towerIndex;
+        tower.rotation.y += 0.0015 + towerIndex * 0.0002;
+        tower.children.forEach((child) => {
+          if (child.userData.spinSpeed) {
+            child.rotation.z = elapsed * child.userData.spinSpeed;
+          }
+        });
+        tower.scale.setScalar(1 + Math.sin(elapsed * 1.2 + phase) * 0.025);
+      });
+      glbAssetEnhancementLayer.children.forEach((enhancement, enhancementIndex) => {
+        const phase = (enhancement.userData.phase as number | undefined) ?? enhancementIndex;
+        enhancement.children.forEach((child) => {
+          const spinSpeed = child.userData.glbSpinSpeed as number | undefined;
+          const pulsePhase = child.userData.glbPulsePhase as number | undefined;
+
+          if (spinSpeed) {
+            child.rotation.z = elapsed * spinSpeed;
+          }
+
+          if (pulsePhase !== undefined) {
+            child.scale.setScalar(1 + Math.sin(elapsed * 2.4 + pulsePhase) * 0.2);
+          }
+        });
+        enhancement.position.y += Math.sin(elapsed * 0.7 + phase) * 0.0008;
+      });
+      hoverParticles.position.x += (pointer.x * 2.25 - hoverParticles.position.x) * 0.09;
+      hoverParticles.position.y += (0.3 - pointer.y * 1.25 - hoverParticles.position.y) * 0.09;
+      hoverParticles.position.z = 1.2;
+      hoverParticles.rotation.z = elapsed * 0.24;
+      (hoverParticles.material as THREE.PointsMaterial).opacity +=
+        (pointer.active * 0.72 - (hoverParticles.material as THREE.PointsMaterial).opacity) * 0.12;
       runwayGrid.position.y = -1.42 + Math.sin(elapsed * 0.6) * 0.01;
       routeSparkles.rotation.y = Math.sin(elapsed * 0.18) * 0.018;
       routeMaterial.color.lerp(accentColor, 0.06);
@@ -262,7 +359,15 @@ export function useAeroCinematicScene({
       pulseLight.color.lerp(accentColor, 0.08);
 
       const routePoint = storyCurve.getPointAt(clamp(progress, 0, 1));
-      const routeTangent = storyCurve.getTangentAt(clamp(progress, 0.001, 0.999));
+      routePulseFleet.children.forEach((pulse, pulseIndex) => {
+        const mesh = pulse as THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
+        const offset = (mesh.userData.routeOffset as number) ?? 0;
+        const speed = (mesh.userData.routeSpeed as number) ?? 0.035;
+        const point = storyCurve.getPointAt((offset + elapsed * speed + progress * 0.18) % 1);
+        mesh.position.copy(point);
+        mesh.position.y += Math.sin(elapsed * 2.5 + pulseIndex) * 0.025;
+        mesh.material.opacity = 0.32 + Math.sin(elapsed * 2 + pulseIndex) * 0.22;
+      });
       routePulse.position.copy(routePoint);
       routePulse.position.y += 0.1 + Math.sin(elapsed * 3.2) * 0.025;
       routePulse.scale.setScalar(1 + Math.sin(elapsed * 3.4) * 0.18);
@@ -280,13 +385,37 @@ export function useAeroCinematicScene({
 
       loadedModels.forEach((item, modelIndex) => {
         const selected = item.asset.name === active.assetName;
+        const materialTarget =
+          item.asset.name === "Aero Airship" ? (selected ? 0.018 : 0.01) : selected ? 0.32 : 0.07;
+        item.emissiveMaterials.forEach((material) => {
+          material.emissiveIntensity += (materialTarget - material.emissiveIntensity) * 0.08;
+        });
 
         if (item.asset.name === "Aero Airship") {
-          item.wrapper.position.lerp(routePoint.clone().add(new THREE.Vector3(0, 0.38, 0)), 0.13);
+          const shipProgress = (0.36 + progress * 0.52 + elapsed * 0.012) % 1;
+          const shipPoint = storyCurve.getPointAt(shipProgress);
+          const shipTangent = storyCurve.getTangentAt(clamp(shipProgress, 0.001, 0.999));
+
+          item.wrapper.position.lerp(shipPoint.clone().add(new THREE.Vector3(0, 0.38, 0)), 0.13);
           item.wrapper.rotation.x = 0.03 + Math.sin(elapsed * 0.72) * 0.025;
-          item.wrapper.rotation.y = Math.atan2(routeTangent.x, routeTangent.z) + Math.PI * 0.5;
+          item.wrapper.rotation.y = Math.atan2(shipTangent.x, shipTangent.z) + Math.PI * 0.5;
           item.wrapper.rotation.z = Math.sin(elapsed * 0.9) * 0.035;
-          item.wrapper.scale.setScalar(item.baseScale * (1.04 + Math.sin(elapsed * 1.4) * 0.025));
+          item.wrapper.scale.setScalar(item.baseScale * (0.72 + Math.sin(elapsed * 1.4) * 0.018));
+
+          const trailPositions = (shipExhaustTrail.geometry as THREE.BufferGeometry).getAttribute("position") as THREE.BufferAttribute;
+          for (let trailIndex = 0; trailIndex < trailPositions.count; trailIndex += 1) {
+            const distance = 0.14 + trailIndex * 0.022;
+            const spread = (trailIndex / trailPositions.count) * 0.28;
+            const side = Math.sin(elapsed * 5 + trailIndex * 1.7) * spread;
+            const lift = Math.cos(elapsed * 4.2 + trailIndex) * spread * 0.55;
+            trailPositions.setXYZ(
+              trailIndex,
+              item.wrapper.position.x - shipTangent.x * distance + shipTangent.z * side,
+              item.wrapper.position.y - 0.04 - lift,
+              item.wrapper.position.z - shipTangent.z * distance - shipTangent.x * side
+            );
+          }
+          trailPositions.needsUpdate = true;
           return;
         }
 
@@ -305,7 +434,7 @@ export function useAeroCinematicScene({
       camera.position.y += (2.42 + progress * 0.32 - camera.position.y) * 0.035;
       camera.position.z += (8.35 - progress * 0.52 - camera.position.z) * 0.035;
       camera.lookAt(focus.x * 0.22, 0.12 + progress * 0.18, focus.z * 0.16);
-      renderer.render(scene, camera);
+      composer.render();
     };
 
     resize();
@@ -320,13 +449,24 @@ export function useAeroCinematicScene({
       disposeObject(routeMesh);
       disposeObject(routeGlowMesh);
       disposeObject(routeSparkles);
+      disposeObject(routePulseFleet);
+      disposeObject(deliveryRouteGroup);
+      disposeObject(shipExhaustTrail);
       disposeObject(routePulse);
       disposeObject(focusMarker);
       disposeObject(waypointGroup);
+      disposeObject(electronicTowerField);
+      disposeObject(glbAssetEnhancementLayer);
       disposeObject(starField);
       disposeObject(cloudBank);
+      disposeObject(volumetricFog);
+      disposeObject(hoverParticles);
       disposeObject(runwayGrid);
+      environmentMap.dispose();
+      pmremGenerator.dispose();
+      (roomEnvironment as unknown as { dispose?: () => void }).dispose?.();
+      composer.dispose();
       renderer.dispose();
     };
-  }, [activeChapterRef, canvasRef, setLoadedCount, storyProgressRef, yawOffsetRef]);
+  }, [activeChapterRef, canvasRef, pointerRef, setLoadedCount, storyProgressRef, yawOffsetRef]);
 }

@@ -5,6 +5,7 @@ export type LoadedAeroModel = {
   asset: AeroAsset;
   baseRotation: THREE.Euler;
   baseScale: number;
+  emissiveMaterials: THREE.MeshStandardMaterial[];
   homePosition: THREE.Vector3;
   wrapper: THREE.Group;
 };
@@ -165,7 +166,7 @@ export function createCinematicCloudBank() {
     new THREE.PointsMaterial({
       blending: THREE.AdditiveBlending,
       depthWrite: false,
-      opacity: 0.22,
+      opacity: 0.1,
       size: 0.085,
       transparent: true,
       vertexColors: true,
@@ -225,4 +226,7 @@ export function disposeObject(object: THREE.Object3D) {
       material.dispose();
     }
   });
+
+  const fogTexture = object.userData?.fogTexture as THREE.Texture | undefined;
+  fogTexture?.dispose();
 }

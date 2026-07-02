@@ -8,6 +8,7 @@ import {
   RocketOutlined,
   SendOutlined,
 } from "@ant-design/icons";
+import gsap from "gsap";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent } from "react";
@@ -19,11 +20,16 @@ import { useAeroCinematicScene } from "./use-aero-cinematic-scene";
 // 主组件只负责滚动叙事和 DOM 层级，WebGL 生命周期下沉到 `useAeroCinematicScene`，避免 UI 与渲染逻辑混在一起。
 export function AeroSystemShowcase() {
   const rootRef = useRef<HTMLElement>(null);
+  const stageRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const activeChapterRef = useRef(0);
+  const cursorOrbRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ pointerId: number; startX: number; yaw: number } | null>(
     null
   );
+  const cursorXToRef = useRef<((value: number) => void) | null>(null);
+  const cursorYToRef = useRef<((value: number) => void) | null>(null);
+  const pointerRef = useRef({ active: 0, x: 0, y: 0 });
   const scrollFrameRef = useRef(0);
   const storyProgressRef = useRef(0);
   const yawOffsetRef = useRef(0);
@@ -56,6 +62,91 @@ export function AeroSystemShowcase() {
   }, [activeChapterIndex]);
 
   useEffect(() => {
+    const root = rootRef.current;
+    const cursorOrb = cursorOrbRef.current;
+
+    if (!root || !cursorOrb) {
+      return;
+    }
+
+    // GSAP 只负责 DOM 叙事层的入场和鼠标光晕，不参与 WebGL RAF，避免两套动画抢同一份渲染状态。
+    const context = gsap.context(() => {
+      gsap.fromTo(
+        [
+          ".aero-system-showcase__brand",
+          ".aero-system-showcase__nav-menu a",
+          ".aero-system-showcase__copy > *",
+          ".aero-system-showcase__floating-card",
+          ".aero-system-showcase__story-rail",
+        ],
+        { autoAlpha: 0, y: 18 },
+        {
+          autoAlpha: 1,
+          duration: 0.9,
+          ease: "power3.out",
+          stagger: 0.045,
+          y: 0,
+        }
+      );
+    }, root);
+
+    cursorXToRef.current = gsap.quickTo(cursorOrb, "x", {
+      duration: 0.55,
+      ease: "power3.out",
+    });
+    cursorYToRef.current = gsap.quickTo(cursorOrb, "y", {
+      duration: 0.55,
+      ease: "power3.out",
+    });
+
+    return () => {
+      context.revert();
+      cursorXToRef.current = null;
+      cursorYToRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const root = rootRef.current;
+
+    if (!root) {
+      return;
+    }
+
+    // 分镜切换时用 GSAP 做轻微字幕推进，增强电影剪辑感；内容仍由 React 状态驱动，动画只是表现层。
+    const context = gsap.context(() => {
+      const copyTargets = root.querySelectorAll(
+        ".aero-system-showcase__copy h1, .aero-system-showcase__summary, .aero-system-showcase__chapter-card"
+      );
+      const activeCards = root.querySelectorAll(".aero-system-showcase__floating-card[data-active='true']");
+
+      if (copyTargets.length > 0) {
+        gsap.fromTo(
+          copyTargets,
+          { autoAlpha: 0.76, filter: "blur(3px)", y: 12 },
+          {
+            autoAlpha: 1,
+            duration: 0.52,
+            ease: "power2.out",
+            filter: "blur(0px)",
+            y: 0,
+          }
+        );
+      }
+
+      if (activeCards.length > 0) {
+        gsap.fromTo(
+          activeCards,
+          { scale: 0.96 },
+          { duration: 0.42, ease: "back.out(1.7)", scale: 1 }
+        );
+      }
+    }, root);
+
+    return () => context.revert();
+  }, [activeChapterIndex]);
+
+  useEffect(() => {
     const handleScroll = () => {
       if (scrollFrameRef.current) {
         return;
@@ -81,6 +172,7 @@ export function AeroSystemShowcase() {
   useAeroCinematicScene({
     activeChapterRef,
     canvasRef,
+    pointerRef,
     setLoadedCount,
     storyProgressRef,
     yawOffsetRef,
@@ -126,6 +218,24 @@ export function AeroSystemShowcase() {
     }
   };
 
+  const handleStagePointerMove = (event: PointerEvent<HTMLElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const normalizedX = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
+    const normalizedY = ((event.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1;
+
+    pointerRef.current.x = clamp(normalizedX, -1, 1);
+    pointerRef.current.y = clamp(normalizedY, -1, 1);
+    pointerRef.current.active = 1;
+    stageRef.current?.setAttribute("data-pointer-active", "true");
+    cursorXToRef.current?.(event.clientX - rect.left);
+    cursorYToRef.current?.(event.clientY - rect.top);
+  };
+
+  const handleStagePointerLeave = () => {
+    pointerRef.current.active = 0;
+    stageRef.current?.setAttribute("data-pointer-active", "false");
+  };
+
   return (
     <main
       className="aero-system-showcase"
@@ -137,10 +247,35 @@ export function AeroSystemShowcase() {
         } as CSSProperties
       }
     >
-      <section className="aero-system-showcase__stage">
+      <section
+        className="aero-system-showcase__stage"
+        onPointerLeave={handleStagePointerLeave}
+        onPointerMove={handleStagePointerMove}
+        ref={stageRef}
+      >
         <div className="aero-system-showcase__backdrop" aria-hidden="true" />
         <div className="aero-system-showcase__cloud-veil" aria-hidden="true" />
         <div className="aero-system-showcase__cinema-grade" aria-hidden="true" />
+        <div className="aero-system-showcase__cursor-orb" aria-hidden="true" ref={cursorOrbRef} />
+        <div className="aero-system-showcase__hover-particles" aria-hidden="true">
+          {Array.from({ length: 18 }).map((_, particleIndex) => {
+            const particleTop = 18 + (particleIndex % 6) * 10;
+            const particleLeft = 24 + (particleIndex % 9) * 7;
+
+            return (
+              <span
+                key={particleIndex}
+                style={
+                  {
+                    "--particle-delay": `${particleIndex * -90}ms`,
+                    "--particle-left": `${particleLeft}%`,
+                    "--particle-top": `${particleTop}%`,
+                  } as CSSProperties
+                }
+              />
+            );
+          })}
+        </div>
         <canvas
           aria-label="Aero System 3D 叙事场景"
           className="aero-system-showcase__canvas"
@@ -218,6 +353,10 @@ export function AeroSystemShowcase() {
                 className="aero-system-showcase__floating-card"
                 data-active={isActive}
                 key={chapter.key}
+                onMouseEnter={() => {
+                  pointerRef.current.active = 1;
+                  stageRef.current?.setAttribute("data-pointer-active", "true");
+                }}
                 onClick={() => goToChapter(chapterIndex)}
                 style={{ "--chapter-node-accent": chapter.accent } as CSSProperties}
                 type="button"
