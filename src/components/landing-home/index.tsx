@@ -583,6 +583,7 @@ const activeTheoryFlowerPointFragmentShader = `
 
 const liquidPillarVertexShader = `
   uniform float uTime;
+  uniform float uScroll;
   varying vec2 vUv;
   varying vec3 vNormalView;
   varying vec3 vPosition;
@@ -591,13 +592,14 @@ const liquidPillarVertexShader = `
     vUv = uv;
     vec3 transformed = position;
     float angle = atan(position.z, position.x);
+    float scrollPhase = uScroll * 6.28318;
     float wave =
-      sin(position.y * 3.2 + uTime * 0.9 + angle * 1.4) * 0.075 +
-      sin(position.y * 6.1 - uTime * 0.52 + angle * 3.0) * 0.038 +
-      cos(angle * 7.0 + uTime * 0.42) * 0.032;
+      sin(position.y * 3.2 + uTime * 0.9 + angle * 1.4 + scrollPhase * 0.42) * 0.058 +
+      sin(position.y * 6.1 - uTime * 0.52 + angle * 3.0 - scrollPhase * 0.28) * 0.03 +
+      cos(angle * 7.0 + uTime * 0.42 + scrollPhase * 0.18) * 0.022;
     transformed.xz *= 1.0 + wave;
-    transformed.x += sin(position.y * 2.4 + uTime * 0.34) * 0.035;
-    transformed.z += cos(position.y * 2.1 - uTime * 0.28) * 0.03;
+    transformed.x += sin(position.y * 2.4 + uTime * 0.34 + scrollPhase * 0.22) * 0.018;
+    transformed.z += cos(position.y * 2.1 - uTime * 0.28 + scrollPhase * 0.18) * 0.016;
     vPosition = transformed;
     vNormalView = normalize(normalMatrix * normal);
     gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);
@@ -606,6 +608,7 @@ const liquidPillarVertexShader = `
 
 const liquidPillarFragmentShader = `
   uniform float uTime;
+  uniform float uScroll;
   uniform float uOpacity;
   uniform vec3 uAccent;
   varying vec2 vUv;
@@ -615,9 +618,9 @@ const liquidPillarFragmentShader = `
   void main() {
     float rim = pow(1.0 - abs(dot(normalize(vNormalView), vec3(0.0, 0.0, 1.0))), 2.2);
     float oil =
-      sin(vUv.y * 36.0 + uTime * 1.45 + vPosition.x * 4.0) * 0.5 + 0.5;
+      sin(vUv.y * 36.0 + uTime * 1.45 + vPosition.x * 4.0 + uScroll * 5.2) * 0.5 + 0.5;
     float fracture =
-      sin((vPosition.x + vPosition.z) * 18.0 - vUv.y * 12.0 + uTime * 0.72) * 0.5 + 0.5;
+      sin((vPosition.x + vPosition.z) * 18.0 - vUv.y * 12.0 + uTime * 0.72 - uScroll * 3.4) * 0.5 + 0.5;
     float thinOil = pow(smoothstep(0.78, 1.0, oil), 2.4);
     float thinFracture = pow(smoothstep(0.84, 1.0, fracture), 2.8);
     float pulse = thinOil * 0.34 + thinFracture * 0.28;
@@ -628,8 +631,8 @@ const liquidPillarFragmentShader = `
     vec3 slick = mix(cyan, violet, smoothstep(0.24, 0.86, oil));
     slick = mix(slick, gold, smoothstep(0.84, 0.99, fracture) * 0.52);
     slick = mix(slick, uAccent, 0.16);
-    vec3 color = dark + slick * (rim * 0.54 + pulse);
-    float alpha = uOpacity * (0.18 + rim * 0.5 + thinOil * 0.24 + thinFracture * 0.18);
+    vec3 color = dark * 0.42 + slick * (0.08 + rim * 0.46 + pulse);
+    float alpha = uOpacity * (0.3 + rim * 0.48 + thinOil * 0.22 + thinFracture * 0.16);
     gl_FragColor = vec4(color, alpha);
   }
 `;
@@ -3573,6 +3576,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const liquidColumnGeometry = new THREE.CylinderGeometry(0.5, 0.46, 5.8, 128, 72, true);
     const liquidColumnMaterial = new THREE.ShaderMaterial({
       blending: THREE.AdditiveBlending,
+      depthTest: false,
       depthWrite: false,
       fragmentShader: liquidPillarFragmentShader,
       side: THREE.DoubleSide,
@@ -3580,6 +3584,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       uniforms: {
         uAccent: { value: new THREE.Color(storyScenes[0].accent) },
         uOpacity: { value: 0.12 },
+        uScroll: { value: 0 },
         uTime: { value: 0 },
       },
       vertexShader: liquidPillarVertexShader,
@@ -3587,9 +3592,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const liquidColumn = new THREE.Mesh(liquidColumnGeometry, liquidColumnMaterial);
     // v156：增加一层极轻的连续油膜圆柱，作为 spine 几何和参考光效之间的“共同皮肤”。
     // 它只提供统一的湿润反射，不承担遮挡，避免再靠几张平面贴片把柱体拼出来。
-    liquidColumn.position.set(-0.02, 0, 0.94);
-    liquidColumn.scale.set(0.86, 1.02, 0.68);
-    liquidColumn.renderOrder = 6.35;
+    liquidColumn.position.set(-0.02, 0, 1.04);
+    const liquidColumnBaseScale = new THREE.Vector3(1.28, 1.06, 1.02);
+    liquidColumn.scale.copy(liquidColumnBaseScale);
+    liquidColumn.renderOrder = 7.98;
     liquidColumn.visible = true;
     pillarGroup.add(liquidColumn);
 
@@ -3817,6 +3823,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       mesh: THREE.Mesh;
       phase: number;
     }> = [];
+    const activeTheorySpineObjects = new WeakSet<THREE.Object3D>();
     let activeTheorySpineGeometry: THREE.BufferGeometry | null = null;
     let activeTheoryFlowerPointGeometry: THREE.BufferGeometry | null = null;
     let activeTheoryFlowerPointCloud: THREE.Points | null = null;
@@ -4393,6 +4400,8 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
           highlight.renderOrder = 8.08;
           pillarGroup.add(mesh);
           pillarGroup.add(highlight);
+          activeTheorySpineObjects.add(mesh);
+          activeTheorySpineObjects.add(highlight);
           activeTheorySpineInstances.push({ basePosition, baseRotation, baseScale, highlight, mesh, phase });
           organicMeshes.push(mesh);
           organicMeshes.push(highlight);
@@ -4817,7 +4826,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const referenceSpineFieldMaterial = createReferenceSpineCohesionFilmMaterial({
       centerX: 0.4,
       map: referenceSpineFieldTexture,
-      opacity: 0.072,
+      opacity: 0,
       rightFade: 0.76,
       tint: "#d8ffff",
     });
@@ -4825,6 +4834,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     referenceSpineField.position.set(-0.36, 0.05, 1.12);
     referenceSpineField.rotation.set(0.014, -0.082, 0.006);
     referenceSpineField.renderOrder = 6.55;
+    // v160：field/rim/motion 这些从参考帧抠出的平面层已经成为“贴片感”的主要来源。
+    // 真实主体交给 spine.bin 实例；平面对象只保留生命周期，不参与最终可见柱体。
+    referenceSpineField.visible = false;
     pillarGroup.add(referenceSpineField);
 
     const referenceSpineGhostMaterial = createReferenceSpineCohesionFilmMaterial({
@@ -4854,7 +4866,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       transparent: true,
       uniforms: {
         uMap: { value: referenceSpineMotionTexture },
-        uOpacity: { value: 0.052 },
+        uOpacity: { value: 0 },
         uTime: { value: 0 },
       },
       vertexShader: `
@@ -4895,6 +4907,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     referenceSpineMotion.position.set(-0.36, 0.05, 1.16);
     referenceSpineMotion.rotation.set(0.014, -0.082, 0.006);
     referenceSpineMotion.renderOrder = 6.74;
+    referenceSpineMotion.visible = false;
     pillarGroup.add(referenceSpineMotion);
 
     // 这层是 v76 的关键：素材层面改成更宽的 mp4 柱体主体，再由“动态视频 mask + 有机轮廓 mask”共同裁切。
@@ -4911,7 +4924,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         uDynamicMask: { value: referenceSpineSubjectDynamicMaskTexture },
         uMap: { value: referenceSpineSubjectTexture },
         uMask: { value: referenceSpineSubjectMaskTexture },
-        uOpacity: { value: 0.62 },
+        uOpacity: { value: 0 },
         uScroll: { value: 0 },
         uTime: { value: 0 },
       },
@@ -4986,6 +4999,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     referenceSpineSubject.position.set(-0.42, 0.07, 1.24);
     referenceSpineSubject.rotation.set(0.014, -0.084, 0.006);
     referenceSpineSubject.renderOrder = 7.18;
+    referenceSpineSubject.visible = false;
     pillarGroup.add(referenceSpineSubject);
 
     // v77 专门补参考视频里的“前景玻璃卡片压住柱体”的遮挡关系。
@@ -5052,6 +5066,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     referenceSpineOcclusion.position.set(-0.55, 0.02, 1.48);
     referenceSpineOcclusion.rotation.set(0.018, -0.075, 0.012);
     referenceSpineOcclusion.renderOrder = 8.5;
+    referenceSpineOcclusion.visible = false;
     pillarGroup.add(referenceSpineOcclusion);
 
     // 第二张参考贴图只保留彩色骨节棱线。v156 也走同一套窄柱体光膜，
@@ -5059,7 +5074,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     const referenceSpineRimMaterial = createReferenceSpineCohesionFilmMaterial({
       centerX: 0.42,
       map: referenceSpineRimTexture,
-      opacity: 0.09,
+      opacity: 0,
       rightFade: 0.74,
       tint: "#f1ffff",
     });
@@ -5067,6 +5082,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     referenceSpineRim.position.set(-0.36, 0.05, 1.22);
     referenceSpineRim.rotation.set(0.014, -0.082, 0.006);
     referenceSpineRim.renderOrder = 7.34;
+    referenceSpineRim.visible = false;
     pillarGroup.add(referenceSpineRim);
 
     const fieldNodes = Array.from({ length: 10 }, (_, nodeIndex) => ({
@@ -5392,6 +5408,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     let width = 1;
     let height = 1;
     let visualProgress = 0;
+    let sourceSpineBodyMode = false;
     const pillarBasePosition = new THREE.Vector3(-0.62, -0.02, -0.36);
     const cameraBasePosition = new THREE.Vector3(0, 0.2, 7.2);
     const cameraTargetPosition = cameraBasePosition.clone();
@@ -5489,6 +5506,19 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       const sourceSpineUvScroll = motionProgress * 0.36 + scrollFollow * 0.055;
       const pillarVerticalPhase = motionProgress * 0.78 + scrollFollow * 0.052;
       const pillarScrollDrop = getStoryPillarScrollDrop(motionProgress, scrollFollow);
+      const usingSourceSpineBody = activeTheorySpineReady && activeTheorySpineInstances.length > 0;
+      const cohesionAuxiliaryFade = usingSourceSpineBody ? 0.28 : 1;
+
+      if (sourceSpineBodyMode !== usingSourceSpineBody) {
+        sourceSpineBodyMode = usingSourceSpineBody;
+        organicMeshes.forEach((mesh) => {
+          mesh.visible = !usingSourceSpineBody || activeTheorySpineObjects.has(mesh);
+        });
+        cavityMeshes.forEach((mesh) => {
+          mesh.visible = !usingSourceSpineBody;
+        });
+      }
+
       root.dataset.pillarDrop = pillarScrollDrop.toFixed(3);
       root.dataset.pillarX = pillarBasePosition.x.toFixed(3);
       root.dataset.pillarZ = pillarBasePosition.z.toFixed(3);
@@ -5504,9 +5534,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       activeTheoryFlowerPointMaterial.uniforms.uSparkle.value = time * 0.5 + Math.abs(scrollImpulse) * 0.24;
       activeTheoryFlowerPointMaterial.uniforms.uOpacity.value = 0.36 + Math.min(0.18, Math.abs(scrollImpulse) * 0.045);
       liquidColumnMaterial.uniforms.uTime.value = time;
+      liquidColumnMaterial.uniforms.uScroll.value = pillarVerticalPhase;
       liquidColumnMaterial.uniforms.uAccent.value.lerp(activeColor, 0.03);
-      liquidColumnMaterial.uniforms.uOpacity.value = 0.1 + Math.sin(time * 0.22) * 0.012 + Math.min(0.035, Math.abs(scrollImpulse) * 0.01);
+      liquidColumnMaterial.uniforms.uOpacity.value = 0.24 + Math.sin(time * 0.22) * 0.014 + Math.min(0.055, Math.abs(scrollImpulse) * 0.014);
       if (organicField.visible) {
+        fieldMaterial.opacity = usingSourceSpineBody ? 0.044 : 0.02;
         updateOrganicField(time, activeColor);
       }
       pointLight.color.lerp(activeColor, 0.035);
@@ -5542,7 +5574,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       });
       pillarVeils.forEach((item, veilIndex) => {
         const pulse = 0.9 + Math.sin(time * 0.28 + item.phase) * 0.1;
-        item.material.opacity = (0.045 + veilIndex * 0.007) * pulse;
+        item.material.opacity = (0.045 + veilIndex * 0.007) * pulse * cohesionAuxiliaryFade;
         item.material.rotation = veilIndex * 0.42 + Math.sin(time * 0.18 + item.phase) * 0.1;
         // 光雾是柱体材质的一部分，不能在 x 轴自行摆动；否则即便真实 spine/camera 已锁定，
         // 用户仍会把雾面横移看成整根柱子左右漂。这里只保留 y 向呼吸和尺寸变化。
@@ -5560,9 +5592,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceOilTexture.offset.y = time * 0.046 + sourceSpineUvScroll * 1.18;
       referenceSpineFieldMaterial.uniforms.uTime.value = time;
       referenceSpineFieldMaterial.uniforms.uScroll.value = sourceSpineUvScroll;
-      // v159：参考视频/贴图片面只能做极弱油膜补光。
-      // 如果继续用它们当主体，横向玻璃卡片会被裁进柱体里，用户会看到“不属于同一根柱子”的蓝紫切片。
-      referenceSpineFieldMaterial.uniforms.uOpacity.value = 0.012 + Math.sin(time * 0.2) * 0.002 + Math.min(0.006, Math.abs(scrollImpulse) * 0.002);
+      // v160：参考平面层完全退出可见主体。柱体只能由真实 3D spine、连续油膜和体积粒子组成，
+      // 否则滚动时透明排序会把 field/rim 读成几张贴在柱子上的片。
+      referenceSpineFieldMaterial.uniforms.uOpacity.value = 0;
       referenceSpineGhostMaterial.uniforms.uTime.value = time;
       referenceSpineGhostMaterial.uniforms.uScroll.value = sourceSpineUvScroll;
       referenceSpineGhostMaterial.uniforms.uOpacity.value = 0;
@@ -5580,7 +5612,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceSpineOcclusionMaterial.uniforms.uOpacity.value = 0;
       referenceSpineRimMaterial.uniforms.uTime.value = time;
       referenceSpineRimMaterial.uniforms.uScroll.value = sourceSpineUvScroll;
-      referenceSpineRimMaterial.uniforms.uOpacity.value = 0.018 + Math.sin(time * 0.22 + 0.9) * 0.003 + Math.min(0.006, Math.abs(scrollImpulse) * 0.002);
+      referenceSpineRimMaterial.uniforms.uOpacity.value = 0;
       // v156：所有参考光膜共用同一个本地锚点和近似旋转，只允许极小纵向跟随。
       // 这能保留滚动时的油膜流动，同时避免 field/subject/rim 互相错位，看起来像几张透明图层拼接。
       const referenceLayerY = 0.055 - pillarScrollDrop * 0.075;
@@ -5642,8 +5674,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       particles.rotation.y -= 0.0009;
       particles.rotation.z = Math.sin(time * 0.18) * 0.06;
       liquidColumn.rotation.y = Math.sin(time * 0.2) * 0.18;
-      liquidColumn.scale.x = 1 + Math.sin(time * 0.52) * 0.035;
-      liquidColumn.scale.z = 1 + Math.cos(time * 0.48) * 0.035;
+      liquidColumn.scale.x = liquidColumnBaseScale.x * (1 + Math.sin(time * 0.52) * 0.024);
+      liquidColumn.scale.y = liquidColumnBaseScale.y;
+      liquidColumn.scale.z = liquidColumnBaseScale.z * (1 + Math.cos(time * 0.48) * 0.024);
       spine.rotation.x += 0.003;
       spine.rotation.y += 0.006;
       // 源码里的柱体不会被滚轮推到左右两侧；这次只把滚动进度转成 y 轴下落感。
@@ -5782,7 +5815,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         material.uniforms.uScroll.value = sourceScrollProgress + scrollFollow * 0.018;
         material.uniforms.uResolution.value.set(width, height);
         material.uniforms.uSpineScroll.value = sourceSpineScrollPhase;
-        material.uniforms.uOpacity.value = 0.7 + Math.sin(time * 0.3 + item.phase) * 0.032 + Math.min(0.1, Math.abs(scrollFollow) * 0.03);
+        material.uniforms.uOpacity.value = 0.84 + Math.sin(time * 0.3 + item.phase) * 0.028 + Math.min(0.08, Math.abs(scrollFollow) * 0.024);
         (material.uniforms.uAccent.value as THREE.Color).lerp(
           new THREE.Color(organicPalette[(instanceIndex + activeIndexRef.current) % organicPalette.length]).lerp(new THREE.Color("#d1fff4"), 0.34),
           0.035
@@ -5792,7 +5825,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       });
       spineFlecks.forEach((item, fleckIndex) => {
         const pulse = 0.62 + Math.sin(time * 1.2 + item.phase) * 0.3 + Math.min(0.32, Math.abs(scrollImpulse) * 0.1);
-        item.material.opacity = item.baseOpacity * pulse;
+        item.material.opacity = item.baseOpacity * pulse * (usingSourceSpineBody ? 0.72 : 1);
         item.material.rotation = Math.sin(item.phase) * Math.PI + Math.sin(time * 0.32 + item.phase + pillarVerticalPhase) * 0.2;
         // 表面碎光跟随柱体本地坐标，不再做 x 向呼吸；滚动时只有 y 相位推进，
         // 否则密集高光会让固定柱体看起来像在左右游移。
@@ -5806,7 +5839,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       });
       surfaceOilPatches.forEach((item, patchIndex) => {
         const pulse = 0.74 + Math.sin(time * 0.55 + item.phase) * 0.16 + Math.min(0.22, Math.abs(scrollImpulse) * 0.09);
-        item.material.opacity = item.opacity * pulse;
+        item.material.opacity = item.opacity * pulse * cohesionAuxiliaryFade;
         item.material.rotation = item.rotation + Math.sin(time * 0.22 + item.phase + pillarVerticalPhase) * 0.06;
         // 油膜贴片只在纵向和深度上流动，x 轴固定，避免把材质波动误读成柱体偏移。
         item.sprite.position.x = item.position.x;
@@ -5815,6 +5848,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         item.sprite.scale.set(item.scaleX * (0.94 + pulse * 0.1), item.scaleY * (0.96 + pulse * 0.08), 1);
       });
       referenceCrownPieces.forEach((item) => {
+        if (!item.mesh.visible) {
+          return;
+        }
+
         const material = item.mesh.material as THREE.MeshPhysicalMaterial;
         const slowPulse = Math.sin(time * 0.32 + item.phase);
         item.mesh.position.y = item.basePosition.y + slowPulse * 0.012;
@@ -5831,7 +5868,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       oilGlints.forEach((item) => {
         const material = item.sprite.material as THREE.SpriteMaterial;
         const pulse = 0.62 + Math.sin(time * 1.05 + item.phase) * 0.28;
-        material.opacity = Math.max(0.016, pulse * 0.072);
+        material.opacity = Math.max(usingSourceSpineBody ? 0.004 : 0.016, pulse * 0.072 * cohesionAuxiliaryFade);
         item.sprite.scale.x += ((0.32 + pulse * 0.14) - item.sprite.scale.x) * 0.08;
       });
 

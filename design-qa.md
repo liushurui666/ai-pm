@@ -103,13 +103,14 @@
 - Deferred the 7MB flower-spine point cloud load by `1200ms`, keeping the core pillar and card interaction available before the final particle detail layer arrives.
 - Disabled browser scroll restoration while the landing story is mounted and added a short refresh guard that resets `scrollY`, story progress, impulse, active index, and DOM WorkItem transforms to `0` before restored scroll can enter the 3D rig.
 - Removed visible stage reference glass panels, disabled the subject mp4 plane, tightened column-only masks for reference film/rim layers, and reduced WorkItem/refraction/DOM media opacity so card glass does not read as part of the pillar.
+- v160: made the loaded `spine.bin` instances the only visible hard pillar body after source assets are ready, hid legacy hand-built vertebra/cavity/crown fallback meshes in that mode, fully disabled field/motion/subject/rim reference planes, and enlarged the shared 3D oil-shell cylinder so the scrolled pillar reads as one continuous object instead of pasted layers.
 
 ## Validation
 
 - `git diff --check`: passed.
 - `corepack pnpm lint`: passed.
 - `corepack pnpm build`: passed.
-- Browser route: `http://localhost:3004/?qa=v156-cohesive-pillar`.
+- Browser route: `http://localhost:3004/?qa=v160-cohesive-pillar-body` for the latest v160 check.
 - Browser screenshots:
   - `/tmp/ai-pm-landing-scroll-v149-readable/scroll-1155.png`
   - `/tmp/ai-pm-landing-v151-orbit-clear-column/scroll-1900-fit.png`
@@ -138,6 +139,8 @@
   - `/tmp/ai-pm-refresh-perf-v157/late-webgl.png`
   - `/tmp/ai-pm-scroll-restore-v158/after-reload-top.png`
   - `/tmp/ai-pm-landing-v159-final-muted/mid-scroll.png`
+  - `/tmp/ai-pm-landing-v160-cohesive-body/mid-scroll.png`
+  - `/tmp/ai-pm-landing-v160-cohesive-body/mid-scroll-after-oil-shell.png`
 - Browser metrics:
   - Desktop horizontal orbit centers: active card centerX `1254 -> 1263 -> 594 -> 403 -> 626 -> 818 -> 1016 -> 1170 -> 488` across sampled progress `0/1/2/3/4/5/6/8/11`.
   - Desktop vertical range: active card centerY stays within `379-500px` across those samples, confirming vertical movement is secondary.
@@ -151,6 +154,7 @@
   - v157 refresh performance: clean built-in browser route `http://localhost:3004/?qa=refresh-perf-v157-clean` showed `hasLanding=true`, `storyProgress=0.000`, `pillarDrop=0.000`, `docWidth=1280`, and `viewportWidth=1280`; a stale Fast Refresh dependency warning from an earlier hot update remained in cached dev logs but was not reproduced in the clean state sample.
   - v158 refresh scroll restoration: built-in browser route `http://localhost:3004/?qa=scroll-restore-v158` was scrolled to `scrollY=2200` / `storyProgress=4.296`, then reloaded; samples at roughly `120ms` plus six `260ms` intervals all stayed at `scrollY=0`, `storyProgress=0.000`, `pillarDrop=0.000`.
   - v159 glass-layer separation: built-in browser route `http://localhost:3004/?qa=v159-final-muted` scrolled to `scrollY=2200`, `storyProgress=4.260`, `pillarDrop=2.300`, active card `上线前最后锁定`, DOM active media `::before` opacity `0.2`, and `docWidth=1280`.
+  - v160 cohesive pillar body: built-in browser route `http://localhost:3004/?qa=v160-cohesive-pillar-body` scrolled to `scrollY=2200`, `storyProgress=4.244`, `pillarDrop=2.300`, `pillarX=-0.620`, `pillarZ=-0.360`, active card `Launch Lock`, and browser console `error/warn=[]`; screenshot after strengthening the oil shell is `/tmp/ai-pm-landing-v160-cohesive-body/mid-scroll-after-oil-shell.png`.
 
 ## Follow-up Polish
 
