@@ -1,0 +1,110 @@
+{
+  "generatedBy": "scripts/aero-system/derive-aero-scene.py",
+  "scene": "/aero-system/models/processed/aero-harbor-scene.glb",
+  "airship": "/aero-system/models/processed/aero-airship-hero.glb",
+  "sourceDirectory": "/aero-system/models/source",
+  "cards": [
+    {
+      "accent": "#55f0c7",
+      "id": "requirements",
+      "index": "01",
+      "metric": "进行中 12/20",
+      "position": [
+        -1.72,
+        0.7,
+        -0.18
+      ],
+      "status": "进行中",
+      "summary": "收集需求，拆解任务",
+      "title": "需求塔台"
+    },
+    {
+      "accent": "#48a8ff",
+      "id": "versions",
+      "index": "02",
+      "metric": "进行中 v1.2.3",
+      "position": [
+        -0.42,
+        0.02,
+        1.08
+      ],
+      "status": "进行中",
+      "summary": "规划版本，分配资源",
+      "title": "版本航站"
+    },
+    {
+      "accent": "#ffbb55",
+      "id": "bugs",
+      "index": "03",
+      "metric": "进行中 5 个待处理",
+      "position": [
+        1.38,
+        -0.02,
+        1.28
+      ],
+      "status": "进行中",
+      "summary": "发现问题，修复验证",
+      "title": "Bug 维修坞"
+    },
+    {
+      "accent": "#57e2a2",
+      "id": "launch",
+      "index": "04",
+      "metric": "准备就绪 v1.2.3",
+      "position": [
+        2.42,
+        0.72,
+        0.18
+      ],
+      "status": "准备就绪",
+      "summary": "验收合规，发布上线",
+      "title": "上线闸口"
+    }
+  ],
+  "routes": {
+    "blue": [
+      [
+        -1.55,
+        -0.08,
+        -0.08
+      ],
+      [
+        -1.0,
+        -0.12,
+        0.46
+      ],
+      [
+        -0.42,
+        -0.2,
+        1.08
+      ],
+      [
+        0.44,
+        -0.08,
+        0.62
+      ]
+    ],
+    "orange": [
+      [
+        0.44,
+        -0.08,
+        0.62
+      ],
+      [
+        1.12,
+        -0.18,
+        1.22
+      ],
+      [
+        1.78,
+        0.02,
+        0.92
+      ],
+      [
+        2.42,
+        0.1,
+        0.18
+      ]
+    ]
+  }
+}
