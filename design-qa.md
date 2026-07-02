@@ -8,6 +8,7 @@
 - metrics evidence: `/tmp/ai-pm-landing-v156-cohesive-pillar/refined-progress-*.png` plus sampled DOM rects in this QA note.
 - refresh performance evidence: `/tmp/ai-pm-refresh-perf-v157/early-120ms.png` and `/tmp/ai-pm-refresh-perf-v157/late-webgl.png`
 - refresh scroll-restore evidence: `/tmp/ai-pm-scroll-restore-v158/after-reload-top.png`
+- non-integrated glass layer evidence: `/tmp/ai-pm-landing-v159-final-muted/mid-scroll.png`
 - mobile evidence: `/tmp/ai-pm-landing-v156-cohesive-pillar/mobile-progress-5.png`
 - viewport: 1706x918 desktop and 390x844 mobile, in-app browser Playwright verification, `http://localhost:3004/?qa=v156-cohesive-pillar`
 - state: unauthenticated landing page, hydrated WebGL canvas, programmatic native page scroll through top/mid/deep states.
@@ -56,6 +57,10 @@
   Evidence: v158 reproduces the failure path by scrolling to `scrollY=2200` (`storyProgress=4.296`, active card `上线前最后锁定`) and then reloading. Seven post-reload samples stayed at `scrollY=0`, `storyProgress=0.000`, `pillarDrop=0.000`, active card `AI PM 项目作战舱`.
   Impact: browser scroll restoration no longer looks like the user rolled several times on refresh, so the landing page avoids the accidental WorkItem/pillar jump that felt like a freeze.
 
+- [P1] The blue/purple block selected by the user is not treated as pillar body.
+  Evidence: v159 identifies the selected area as WorkItem/refraction/reference-pane content bleeding through the transparent pillar, not actual `spine.bin` geometry. The pass removes visible stage reference glass, shuts off the subject mp4 plane, reduces reference film/rim to weak oil highlights, weakens Work/refraction pane rectangles, cuts WebGL pane opacity, and lowers DOM media background opacity while preserving text readability. Mid-scroll evidence: `/tmp/ai-pm-landing-v159-final-muted/mid-scroll.png`.
+  Impact: the pillar reads more from real geometry and point cloud instead of a card/media plane pasted through it; WorkItem cards still scroll separately as cards rather than pretending to be part of the column.
+
 - [P1] Cards no longer cover the full screen.
   Evidence: v153 active card sizes are top `619px` wide, left orbit `765-770px`, center/front pass `458px`, and right return `685px`, instead of v147's `68%-76%` viewport-width full-screen pane.
   Impact: the foreground screen keeps the Active Theory-like media-panel presence without turning into a full-screen poster.
@@ -97,6 +102,7 @@
 - Capped the landing renderer pixel ratio at `1.5` to reduce full-screen canvas allocation cost on high-DPI displays.
 - Deferred the 7MB flower-spine point cloud load by `1200ms`, keeping the core pillar and card interaction available before the final particle detail layer arrives.
 - Disabled browser scroll restoration while the landing story is mounted and added a short refresh guard that resets `scrollY`, story progress, impulse, active index, and DOM WorkItem transforms to `0` before restored scroll can enter the 3D rig.
+- Removed visible stage reference glass panels, disabled the subject mp4 plane, tightened column-only masks for reference film/rim layers, and reduced WorkItem/refraction/DOM media opacity so card glass does not read as part of the pillar.
 
 ## Validation
 
@@ -131,6 +137,7 @@
   - `/tmp/ai-pm-refresh-perf-v157/early-120ms.png`
   - `/tmp/ai-pm-refresh-perf-v157/late-webgl.png`
   - `/tmp/ai-pm-scroll-restore-v158/after-reload-top.png`
+  - `/tmp/ai-pm-landing-v159-final-muted/mid-scroll.png`
 - Browser metrics:
   - Desktop horizontal orbit centers: active card centerX `1254 -> 1263 -> 594 -> 403 -> 626 -> 818 -> 1016 -> 1170 -> 488` across sampled progress `0/1/2/3/4/5/6/8/11`.
   - Desktop vertical range: active card centerY stays within `379-500px` across those samples, confirming vertical movement is secondary.
@@ -143,6 +150,7 @@
   - v156 console/page errors: none observed in the in-app browser run after reload.
   - v157 refresh performance: clean built-in browser route `http://localhost:3004/?qa=refresh-perf-v157-clean` showed `hasLanding=true`, `storyProgress=0.000`, `pillarDrop=0.000`, `docWidth=1280`, and `viewportWidth=1280`; a stale Fast Refresh dependency warning from an earlier hot update remained in cached dev logs but was not reproduced in the clean state sample.
   - v158 refresh scroll restoration: built-in browser route `http://localhost:3004/?qa=scroll-restore-v158` was scrolled to `scrollY=2200` / `storyProgress=4.296`, then reloaded; samples at roughly `120ms` plus six `260ms` intervals all stayed at `scrollY=0`, `storyProgress=0.000`, `pillarDrop=0.000`.
+  - v159 glass-layer separation: built-in browser route `http://localhost:3004/?qa=v159-final-muted` scrolled to `scrollY=2200`, `storyProgress=4.260`, `pillarDrop=2.300`, active card `上线前最后锁定`, DOM active media `::before` opacity `0.2`, and `docWidth=1280`.
 
 ## Follow-up Polish
 

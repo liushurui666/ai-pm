@@ -731,9 +731,12 @@ function createReferenceSpineCohesionFilmMaterial(options: {
         float sourceKey = max(smoothstep(0.045, 0.32, luma), smoothstep(0.025, 0.18, saturation));
         float sideTaper = smoothstep(0.015, 0.14, vUv.x) * (1.0 - smoothstep(0.56, uRightFade, vUv.x));
         float centerBody = 1.0 - smoothstep(0.2, 0.52, abs(vUv.x - uCenterX));
+        float columnOnlyMask = 1.0 - smoothstep(0.26, 0.5, abs(vUv.x - uCenterX));
         float verticalFade = smoothstep(0.02, 0.12, vUv.y) * smoothstep(1.0, 0.88, vUv.y);
         float scan = 0.92 + sin(uTime * 0.44 + vUv.y * 13.0 + uScroll * 1.2) * 0.08;
-        float alpha = sourceKey * sideTaper * (0.5 + centerBody * 0.5) * verticalFade * scan * uOpacity;
+        // 参考视频里有很多横向玻璃屏反光，但用户现在关注的是“柱子是不是一体”。
+        // 因此光膜只允许留在中轴柱体轮廓里，外侧大块蓝紫玻璃面不再参与主体叠加。
+        float alpha = sourceKey * sideTaper * (0.08 + centerBody * 0.92) * columnOnlyMask * verticalFade * scan * uOpacity;
         vec3 color = pow(max(tex.rgb, 0.0), vec3(0.82)) * uTint;
 
         if (alpha < 0.004) {
@@ -1689,31 +1692,34 @@ function drawWorkRefractionPane(
   // Canvas 2D 这层不是页面可见 UI，而是模拟源码 Work/refraction MRT 的运行时缓冲：
   // 卡片亮边、媒体雾面和扫描线会被 SpineShader 按屏幕坐标采样到柱体油膜上。
   // 这样柱体高光会跟真实 WorkItem 队列滚动，而不是继续吃一张固定参考视频贴图。
-  context.fillStyle = "rgba(18,30,34,0.18)";
+  // v159：这里不能再画一整张实心卡片。当前并没有源站完整 MRT/depth composite，
+  // 如果把 WorkItem 矩形直接喂给 spine 折射，用户会在柱体上看到一块“不同步的蓝紫玻璃片”。
+  // 因此折射缓冲只保留很弱的边缘/光斑，主体卡片仍由真实 DOM/WebGL pane 自己展示。
+  context.fillStyle = "rgba(18,30,34,0.035)";
   drawRoundedRect(context, -width * 0.5, -height * 0.5, width, height, radius);
   context.fill();
 
   const mediaGlow = context.createRadialGradient(-width * 0.04, -height * 0.12, 0, -width * 0.04, -height * 0.12, width * 0.62);
-  mediaGlow.addColorStop(0, `rgba(244,252,255,${0.12 + focus * 0.18})`);
-  mediaGlow.addColorStop(0.34, `rgba(110,255,225,${0.06 + focus * 0.08})`);
+  mediaGlow.addColorStop(0, `rgba(244,252,255,${0.032 + focus * 0.052})`);
+  mediaGlow.addColorStop(0.34, `rgba(110,255,225,${0.018 + focus * 0.026})`);
   mediaGlow.addColorStop(1, "rgba(0,0,0,0)");
   context.fillStyle = mediaGlow;
   drawRoundedRect(context, -width * 0.45, -height * 0.39, width * 0.9, height * 0.78, radius * 0.82);
   context.fill();
 
-  context.globalAlpha = 0.22 + focus * 0.32;
+  context.globalAlpha = 0.04 + focus * 0.08;
   context.strokeStyle = accent;
-  context.lineWidth = 2.2 + focus * 2.4;
+  context.lineWidth = 1.1 + focus * 1.2;
   drawRoundedRect(context, -width * 0.5, -height * 0.5, width, height, radius);
   context.stroke();
 
-  context.globalAlpha = 0.08 + focus * 0.16;
+  context.globalAlpha = 0.018 + focus * 0.04;
   context.strokeStyle = "rgba(255,255,255,0.88)";
   context.lineWidth = 1.2;
   drawRoundedRect(context, -width * 0.43, -height * 0.34, width * 0.86, height * 0.68, Math.max(8, radius - 12));
   context.stroke();
 
-  context.globalAlpha = 0.05 + focus * 0.12;
+  context.globalAlpha = 0.012 + focus * 0.028;
   context.strokeStyle = "rgba(216,255,246,0.9)";
   context.lineWidth = 1;
   for (let lineIndex = 0; lineIndex < 5; lineIndex += 1) {
@@ -2637,6 +2643,8 @@ function createStoryWorkItemShaderMaterial(options: {
       uHover: { value: 0 },
       uImpulse: { value: 0 },
       uOpacity: { value: options.opacity },
+      uPillarOcclusionWidth: { value: 0.12 },
+      uPillarScreenX: { value: 0.49 },
       uResolution: { value: new THREE.Vector2(1, 1) },
       uScroll: { value: 0 },
       uTime: { value: 0 },
@@ -2682,6 +2690,8 @@ function createStoryWorkItemShaderMaterial(options: {
       uniform float uHover;
       uniform float uImpulse;
       uniform float uOpacity;
+      uniform float uPillarOcclusionWidth;
+      uniform float uPillarScreenX;
       uniform vec2 uResolution;
       uniform float uScroll;
       uniform float uTime;
@@ -2786,6 +2796,11 @@ function createStoryWorkItemShaderMaterial(options: {
         color = pow(max(color, 0.0), vec3(0.92));
 
         float alpha = uOpacity * mask * edge * scan * (0.08 + paneBody * 0.01 + mediaBody * 0.78 + fresnel * 0.24 + dot(refraction, vec3(0.2126, 0.7152, 0.0722)) * 0.028);
+        // WorkItem 卡片本来就在柱体后方，但柱体是透明油膜材质，卡片会从中轴穿出来。
+        // 这里按屏幕 x 坐标给卡片自己做柱体留白，避免蓝紫玻璃面横切真实 spine.bin，
+        // 同时不重新引入用户之前否定的黑色假柱遮挡层。
+        float pillarColumnCut = smoothstep(uPillarOcclusionWidth * 0.42, uPillarOcclusionWidth, abs(screenUv.x - uPillarScreenX));
+        alpha *= mix(0.08, 1.0, pillarColumnCut);
         gl_FragColor = vec4(color, clamp(alpha, 0.0, 0.985));
       }
     `,
@@ -4940,13 +4955,17 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
             sin(vUv.y * 7.0 + uTime * 0.34 + uScroll * 1.28) * 0.008,
             cos(vUv.x * 5.4 - uTime * 0.22 + uScroll * 0.4) * 0.008
           );
-          float rightPanelCull = 1.0 - smoothstep(0.5, 0.78, vUv.x) * 0.72;
-          float columnSilhouette = 1.0 - smoothstep(0.26, 0.54, abs(vUv.x - 0.39));
+          float rightPanelCull = 1.0 - smoothstep(0.5, 0.72, vUv.x) * 0.86;
+          float columnSilhouette = 1.0 - smoothstep(0.18, 0.38, abs(vUv.x - 0.39));
+          float detachedPanelCull = 1.0 - smoothstep(0.38, 0.56, abs(vUv.x - 0.39));
           float scrollBreath = 1.0 + min(0.2, abs(uScroll) * 0.06);
           float scrollScan = smoothstep(0.72, 1.0, sin((vUv.y + uScroll * 0.42) * 18.0 + uTime * 0.65) * 0.5 + 0.5);
           float scanPulse = 0.94 + sin(uTime * 0.7 + vUv.y * 12.0 + uScroll * 1.2) * 0.06 + scrollScan * 0.035;
           float sourceMatte = max(bodyMatte * 0.9, max(chromaMatte * 0.86, lumaMatte * 0.52));
-          float pillarMask = organicMask * mix(0.62, 1.14, dynamicMask) * (0.58 + columnSilhouette * 0.52);
+          // 这张 mp4 平面里也包含参考画面的横向玻璃卡片。
+          // 旧遮罩在柱体轮廓外仍保留 58% 可见度，用户框选到的蓝紫切片就是这里漏出来的；
+          // 现在只把中轴柱体/油膜高光留下，外侧横向玻璃面交给真实 WorkItem 队列表达。
+          float pillarMask = organicMask * mix(0.62, 1.14, dynamicMask) * (0.08 + columnSilhouette * 1.02) * detachedPanelCull;
           float alpha = sourceMatte * pillarMask * edgeFade * verticalFade * rightPanelCull * scanPulse * scrollBreath * uOpacity;
           vec3 darkBody = video.rgb * vec3(0.68, 0.78, 0.96);
           vec3 oilHighlight = pow(video.rgb, vec3(0.72)) * vec3(1.06, 1.14, 1.26);
@@ -5245,6 +5264,9 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       };
     });
 
+    // 早期为了贴近参考站点，在 stage 里放过一张左侧环境玻璃屏；
+    // 但它不属于 pillarGroup，也不吃柱体的 y-only scroll drop，滚动时会像一块蓝紫色贴片横切柱子。
+    // 用户现在明确指出这层“不像一体、滚动没在一起”，所以保留类型和渲染管线的扩展点，但默认不创建任何环境玻璃屏。
     const referenceGlassPanelConfigs: Array<{
       angle: number;
       height: number;
@@ -5256,22 +5278,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       variant: "front" | "left" | "rear";
       width: number;
       y: number;
-    }> = [
-      // 这些参考玻璃只保留左侧远景层，前景/右后方的大灰屏不再渲染。
-      // 主视觉已经由真实 WorkItem 队列承担，继续保留大面积环境玻璃会被用户看成脏的虚影蒙层。
-      {
-        angle: -1.26,
-        height: 3.42,
-        opacity: 0.0035,
-        radiusX: 2.68,
-        radiusZ: 0.66,
-        renderOrder: 7.85,
-        sourceIndex: -1,
-        variant: "left" as const,
-        width: 3.72,
-        y: 0.5,
-      },
-    ];
+    }> = [];
     const referenceGlassPanels = referenceGlassPanelConfigs.map((config) => {
       const texture = createReferenceGlassPanelTexture(config.variant);
       const geometry = new THREE.PlaneGeometry(config.width, config.height, 12, 8);
@@ -5553,15 +5560,19 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceOilTexture.offset.y = time * 0.046 + sourceSpineUvScroll * 1.18;
       referenceSpineFieldMaterial.uniforms.uTime.value = time;
       referenceSpineFieldMaterial.uniforms.uScroll.value = sourceSpineUvScroll;
-      referenceSpineFieldMaterial.uniforms.uOpacity.value = 0.064 + Math.sin(time * 0.2) * 0.006 + Math.min(0.026, Math.abs(scrollImpulse) * 0.006);
+      // v159：参考视频/贴图片面只能做极弱油膜补光。
+      // 如果继续用它们当主体，横向玻璃卡片会被裁进柱体里，用户会看到“不属于同一根柱子”的蓝紫切片。
+      referenceSpineFieldMaterial.uniforms.uOpacity.value = 0.012 + Math.sin(time * 0.2) * 0.002 + Math.min(0.006, Math.abs(scrollImpulse) * 0.002);
       referenceSpineGhostMaterial.uniforms.uTime.value = time;
       referenceSpineGhostMaterial.uniforms.uScroll.value = sourceSpineUvScroll;
       referenceSpineGhostMaterial.uniforms.uOpacity.value = 0;
       referenceSpineMotionMaterial.uniforms.uTime.value = time;
-      referenceSpineMotionMaterial.uniforms.uOpacity.value = 0.048 + Math.sin(time * 0.31 + 0.4) * 0.006 + Math.min(0.024, Math.abs(scrollImpulse) * 0.006);
+      referenceSpineMotionMaterial.uniforms.uOpacity.value = 0;
       referenceSpineSubjectMaterial.uniforms.uTime.value = time;
       referenceSpineSubjectMaterial.uniforms.uScroll.value = sourceSpineUvScroll;
-      referenceSpineSubjectMaterial.uniforms.uOpacity.value = 0.56 + Math.sin(time * 0.26 + 0.7) * 0.018 + Math.min(0.055, Math.abs(scrollFollow) * 0.014);
+      // subject mp4 已确认会带出参考视频里的横向玻璃切片。
+      // 当前先完全关闭这层，让柱体主体只来自真实 spine.bin、点云和极弱 rim/field 补光，避免“平面贴片”破坏一体感。
+      referenceSpineSubjectMaterial.uniforms.uOpacity.value = 0;
       referenceSpineOcclusionMaterial.uniforms.uTime.value = time;
       referenceSpineOcclusionMaterial.uniforms.uScroll.value = sourceSpineUvScroll;
       // v150：右侧灰色虚影来自这层宽遮挡贴图的烟熏矩形。
@@ -5569,7 +5580,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       referenceSpineOcclusionMaterial.uniforms.uOpacity.value = 0;
       referenceSpineRimMaterial.uniforms.uTime.value = time;
       referenceSpineRimMaterial.uniforms.uScroll.value = sourceSpineUvScroll;
-      referenceSpineRimMaterial.uniforms.uOpacity.value = 0.082 + Math.sin(time * 0.22 + 0.9) * 0.012 + Math.min(0.034, Math.abs(scrollImpulse) * 0.008);
+      referenceSpineRimMaterial.uniforms.uOpacity.value = 0.018 + Math.sin(time * 0.22 + 0.9) * 0.003 + Math.min(0.006, Math.abs(scrollImpulse) * 0.002);
       // v156：所有参考光膜共用同一个本地锚点和近似旋转，只允许极小纵向跟随。
       // 这能保留滚动时的油膜流动，同时避免 field/subject/rim 互相错位，看起来像几张透明图层拼接。
       const referenceLayerY = 0.055 - pillarScrollDrop * 0.075;
@@ -5847,8 +5858,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         // v147 为了补媒体感把牌面推得过满，实际会盖成一整张全屏玻璃。
         // v148 收回到“围绕柱体滚动的中等尺寸屏”；v150 再把非焦点 pane 压低，
         // 否则多张离轴 pane 会在右侧叠成用户截图里的灰色虚影涂层。
-        const backgroundPaneOpacity = cardWindow * (cardFocus > 0.08 ? 0.042 : 0.003);
-        const targetOpacity = Math.min(0.32, backgroundPaneOpacity + cardFocus * 0.25 + scrollBoost * 0.006);
+        const backgroundPaneOpacity = cardWindow * (cardFocus > 0.08 ? 0.02 : 0.002);
+        // v159：WebGL pane 如果太实，会在柱子后面透出一块蓝紫玻璃片，
+        // 用户会把它误认为柱体的一部分但又发现滚动相位不同。这里把 pane 降为背景深度层，
+        // 可读文案继续由 DOM 卡片承担，柱体主体交还给真实 spine 几何和点云。
+        const targetOpacity = Math.min(0.16, backgroundPaneOpacity + cardFocus * 0.11 + scrollBoost * 0.003);
 
         // WorkItem pane 仍有 15 张、仍按源码 50 度队列换面和排序。
         // x/z 的变化只属于卡片自身的环形队列，不再传给 camera 或 pillarGroup。
