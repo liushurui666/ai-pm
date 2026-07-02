@@ -79,6 +79,7 @@ const ACTIVE_THEORY_WORK_LAB_PATH = "/landing/active-theory-work-lab.jpg";
 const ACTIVE_THEORY_WORK_LOCAL_PATH = "/landing/active-theory-work-local.png";
 const ACTIVE_THEORY_WORK_REEL_FRAME_PATH = "/landing/active-theory-work-reel-frame.jpg";
 const ACTIVE_THEORY_WORK_TEST_PATH = "/landing/active-theory-work-test.jpg";
+const LANDING_REFRESH_SCROLL_RESTORE_GUARD_MS = 900;
 const STORY_WORK_TRACK_STEP = THREE.MathUtils.degToRad(50);
 const STORY_WORK_ITEM_REPEAT = 3;
 const STORY_WORK_SOURCE_RADIUS = 3.8;
@@ -3011,6 +3012,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
   const nativeScrollProgressRef = useRef(0);
   const scrollTargetRef = useRef(0);
   const scrollImpulseRef = useRef(0);
+  const refreshScrollGuardUntilRef = useRef(0);
   const touchStartRef = useRef<number | null>(null);
   const [shouldHydrateStoryScene, setShouldHydrateStoryScene] = useState(false);
   const pointerStartRef = useRef<number | null>(null);
@@ -3066,6 +3068,33 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       node.style.transform = visual.transform;
     });
   }, []);
+
+  const resetLandingStoryScrollState = useCallback((options: { scrollToTop?: boolean } = {}) => {
+    const root = experienceRef.current;
+
+    // 刷新卡顿的另一类根因是浏览器会恢复上一次停留的 scrollY。
+    // 这个首页把真实 scrollY 当作 3D WorkItem 进度，一旦恢复到中段就会被误判成用户刚滚了好几下；
+    // 因此刷新/回退恢复时必须同时清浏览器滚动位置、内部 progress、惯性 impulse 和 DOM 卡片状态。
+    nativeScrollProgressRef.current = 0;
+    scrollTargetRef.current = 0;
+    scrollImpulseRef.current = 0;
+    activeIndexRef.current = 0;
+    setActiveIndex(0);
+    applyStoryCardDomProgress(0, 0);
+
+    if (root) {
+      root.dataset.storyProgress = "0.000";
+      root.dataset.pillarDrop = "0.000";
+    }
+
+    if (options.scrollToTop) {
+      window.scrollTo({
+        behavior: "instant",
+        left: 0,
+        top: 0,
+      });
+    }
+  }, [applyStoryCardDomProgress]);
 
   const pushInfiniteScroll = useCallback((delta: number) => {
     scrollTargetRef.current += delta;
@@ -3222,6 +3251,57 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
   }, [activeIndex]);
 
   useEffect(() => {
+    const previousScrollRestoration = "scrollRestoration" in window.history ? window.history.scrollRestoration : null;
+    const resetTimers = new Set<number>();
+    let firstFrameHandle = 0;
+    let secondFrameHandle = 0;
+
+    if (previousScrollRestoration !== null) {
+      window.history.scrollRestoration = "manual";
+    }
+
+    const extendRefreshScrollGuard = () => {
+      refreshScrollGuardUntilRef.current = performance.now() + LANDING_REFRESH_SCROLL_RESTORE_GUARD_MS;
+      resetLandingStoryScrollState({ scrollToTop: true });
+    };
+
+    const scheduleReset = (delayMs: number) => {
+      const timer = window.setTimeout(() => {
+        resetTimers.delete(timer);
+        resetLandingStoryScrollState({ scrollToTop: true });
+      }, delayMs);
+
+      resetTimers.add(timer);
+    };
+
+    // Chrome/Safari 的滚动恢复可能发生在 hydration 前后不同时间点。
+    // 首次同步清一次，再用两帧和少量定时补抓，确保恢复出来的旧 scrollY 不会被 WorkItem rig 当成真实滚轮输入。
+    extendRefreshScrollGuard();
+    firstFrameHandle = window.requestAnimationFrame(() => {
+      resetLandingStoryScrollState({ scrollToTop: true });
+      secondFrameHandle = window.requestAnimationFrame(() => {
+        resetLandingStoryScrollState({ scrollToTop: true });
+      });
+    });
+    scheduleReset(120);
+    scheduleReset(360);
+
+    window.addEventListener("pageshow", extendRefreshScrollGuard);
+
+    return () => {
+      window.removeEventListener("pageshow", extendRefreshScrollGuard);
+      window.cancelAnimationFrame(firstFrameHandle);
+      window.cancelAnimationFrame(secondFrameHandle);
+      resetTimers.forEach((timer) => window.clearTimeout(timer));
+      resetTimers.clear();
+
+      if (previousScrollRestoration !== null) {
+        window.history.scrollRestoration = previousScrollRestoration;
+      }
+    };
+  }, [resetLandingStoryScrollState]);
+
+  useEffect(() => {
     let firstFrameHandle = 0;
     let secondFrameHandle = 0;
     let hydrateTimer: number | null = null;
@@ -3255,6 +3335,11 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
     }
 
     const syncNativeScrollProgress = () => {
+      if (performance.now() < refreshScrollGuardUntilRef.current && Math.abs(window.scrollY) > 0.5) {
+        resetLandingStoryScrollState({ scrollToTop: true });
+        return;
+      }
+
       const scrollSection = scrollSectionRef.current;
 
       if (!scrollSection) {
@@ -3342,7 +3427,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       window.removeEventListener("wheel", handleNativeWheel, { capture: true });
       window.clearInterval(nativeSyncInterval);
     };
-  }, [applyStoryCardDomProgress, syncActiveIndexFromProgress]);
+  }, [applyStoryCardDomProgress, resetLandingStoryScrollState, syncActiveIndexFromProgress]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -5325,6 +5410,10 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
       const scrollSection = scrollSectionRef.current;
 
       if (scrollSection) {
+        if (performance.now() < refreshScrollGuardUntilRef.current && Math.abs(window.scrollY) > 0.5) {
+          resetLandingStoryScrollState({ scrollToTop: true });
+        }
+
         const rect = scrollSection.getBoundingClientRect();
         const scrollUnit = Math.max(320, window.innerHeight * 0.72);
         let nativeProgress = Math.max(0, -rect.top / scrollUnit);
@@ -5974,7 +6063,7 @@ export function LandingHome({ isAuthenticated, primaryHref, versionDashboardHref
         panel.refractionMaterial?.dispose();
       });
     };
-  }, [applyStoryCardDomProgress, shouldHydrateStoryScene, syncActiveIndexFromProgress]);
+  }, [applyStoryCardDomProgress, resetLandingStoryScrollState, shouldHydrateStoryScene, syncActiveIndexFromProgress]);
 
   return (
     <main

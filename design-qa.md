@@ -7,6 +7,7 @@
 - implementation deep-scroll screenshot: `/tmp/ai-pm-landing-v156-cohesive-pillar/refined-progress-5.png`
 - metrics evidence: `/tmp/ai-pm-landing-v156-cohesive-pillar/refined-progress-*.png` plus sampled DOM rects in this QA note.
 - refresh performance evidence: `/tmp/ai-pm-refresh-perf-v157/early-120ms.png` and `/tmp/ai-pm-refresh-perf-v157/late-webgl.png`
+- refresh scroll-restore evidence: `/tmp/ai-pm-scroll-restore-v158/after-reload-top.png`
 - mobile evidence: `/tmp/ai-pm-landing-v156-cohesive-pillar/mobile-progress-5.png`
 - viewport: 1706x918 desktop and 390x844 mobile, in-app browser Playwright verification, `http://localhost:3004/?qa=v156-cohesive-pillar`
 - state: unauthenticated landing page, hydrated WebGL canvas, programmatic native page scroll through top/mid/deep states.
@@ -51,6 +52,10 @@
   Evidence: v157 delays WebGL scene hydration until after the first DOM paint, caps the full-screen renderer pixel ratio at `1.5`, and defers the 7MB flower-spine point cloud by `1200ms`. Built-in browser route `http://localhost:3004/?qa=refresh-perf-v157-clean` showed the landing page present with `storyProgress=0.000`, `pillarDrop=0.000`, `docWidth=1280`, and no horizontal overflow.
   Impact: refreshing the public landing page now shows readable title/CTA content first, while the high-fidelity point-cloud layer loads as progressive enhancement instead of blocking the first visual response.
 
+- [P1] Refresh does not reuse the previous scroll position as new story input.
+  Evidence: v158 reproduces the failure path by scrolling to `scrollY=2200` (`storyProgress=4.296`, active card `上线前最后锁定`) and then reloading. Seven post-reload samples stayed at `scrollY=0`, `storyProgress=0.000`, `pillarDrop=0.000`, active card `AI PM 项目作战舱`.
+  Impact: browser scroll restoration no longer looks like the user rolled several times on refresh, so the landing page avoids the accidental WorkItem/pillar jump that felt like a freeze.
+
 - [P1] Cards no longer cover the full screen.
   Evidence: v153 active card sizes are top `619px` wide, left orbit `765-770px`, center/front pass `458px`, and right return `685px`, instead of v147's `68%-76%` viewport-width full-screen pane.
   Impact: the foreground screen keeps the Active Theory-like media-panel presence without turning into a full-screen poster.
@@ -91,6 +96,7 @@
 - Delayed WebGL scene hydration by two animation frames plus a short timer so refresh can paint the DOM shell before initializing Three.js, video textures, and DRACO/KTX2 resources.
 - Capped the landing renderer pixel ratio at `1.5` to reduce full-screen canvas allocation cost on high-DPI displays.
 - Deferred the 7MB flower-spine point cloud load by `1200ms`, keeping the core pillar and card interaction available before the final particle detail layer arrives.
+- Disabled browser scroll restoration while the landing story is mounted and added a short refresh guard that resets `scrollY`, story progress, impulse, active index, and DOM WorkItem transforms to `0` before restored scroll can enter the 3D rig.
 
 ## Validation
 
@@ -124,6 +130,7 @@
   - `/tmp/ai-pm-landing-v156-cohesive-pillar/mobile-progress-5.png`
   - `/tmp/ai-pm-refresh-perf-v157/early-120ms.png`
   - `/tmp/ai-pm-refresh-perf-v157/late-webgl.png`
+  - `/tmp/ai-pm-scroll-restore-v158/after-reload-top.png`
 - Browser metrics:
   - Desktop horizontal orbit centers: active card centerX `1254 -> 1263 -> 594 -> 403 -> 626 -> 818 -> 1016 -> 1170 -> 488` across sampled progress `0/1/2/3/4/5/6/8/11`.
   - Desktop vertical range: active card centerY stays within `379-500px` across those samples, confirming vertical movement is secondary.
@@ -135,6 +142,7 @@
   - v156 mobile 390px: `docWidth=390`, active card rect `left=76/right=508`, and no horizontal document overflow observed.
   - v156 console/page errors: none observed in the in-app browser run after reload.
   - v157 refresh performance: clean built-in browser route `http://localhost:3004/?qa=refresh-perf-v157-clean` showed `hasLanding=true`, `storyProgress=0.000`, `pillarDrop=0.000`, `docWidth=1280`, and `viewportWidth=1280`; a stale Fast Refresh dependency warning from an earlier hot update remained in cached dev logs but was not reproduced in the clean state sample.
+  - v158 refresh scroll restoration: built-in browser route `http://localhost:3004/?qa=scroll-restore-v158` was scrolled to `scrollY=2200` / `storyProgress=4.296`, then reloaded; samples at roughly `120ms` plus six `260ms` intervals all stayed at `scrollY=0`, `storyProgress=0.000`, `pillarDrop=0.000`.
 
 ## Follow-up Polish
 
