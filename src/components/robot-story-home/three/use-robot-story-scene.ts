@@ -259,7 +259,7 @@ function prepareRobotRuntime(gltfScene: THREE.Group, animations: THREE.Animation
 
       if (object.material instanceof THREE.MeshStandardMaterial) {
         object.material = object.material.clone();
-        object.material.envMapIntensity = 1.18;
+        object.material.envMapIntensity = 1.85;
 
         // Blender 派生模型已经把主体 PBR 材质写进 GLB；Three 这里只接管少量发光嵌片的呼吸强度，
         // 不再重写 baseColor/metalness/roughness，避免运行时材质覆盖造成“糊一层”的视觉。
@@ -516,6 +516,10 @@ export function useRobotStoryScene({
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+    // 白银金属依赖高光层次才能读出科技硬件质感；用 ACES 和轻微曝光提升，
+    // 让模型变亮但不把暗场电影氛围整体冲成白底页面。
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.18;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.setClearColor(0x02040a, 0);
@@ -523,9 +527,9 @@ export function useRobotStoryScene({
 
     scene.fog = new THREE.FogExp2(0x02040a, 0.082);
 
-    const ambientLight = new THREE.HemisphereLight(0xb8f7ff, 0x080412, 0.9);
-    const keyLight = new THREE.SpotLight(0x7ee8ef, 24, 18, Math.PI * 0.18, 0.42, 1.4);
-    const rimLight = new THREE.PointLight(0xe37fa7, 6.5, 10);
+    const ambientLight = new THREE.HemisphereLight(0xe9fdff, 0x0a0812, 1.18);
+    const keyLight = new THREE.SpotLight(0xe9fdff, 36, 18, Math.PI * 0.18, 0.42, 1.4);
+    const rimLight = new THREE.PointLight(0xbde6ff, 9, 10);
     const launchLight = new THREE.PointLight(0xffd36a, 0, 14);
 
     keyLight.castShadow = true;

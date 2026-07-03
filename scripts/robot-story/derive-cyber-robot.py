@@ -117,21 +117,23 @@ def derive_cyber_robot() -> None:
     clear_scene()
     bpy.ops.import_scene.gltf(filepath=str(SOURCE_MODEL))
 
+    # 用户希望机器人更像“白银科技硬件”而不是暗色装甲；这里把主体金属度拉满、
+    # 粗糙度压低，并用冷蓝白弱发光做边缘气质，避免回到前端贴霓虹片的廉价感。
     main_armor = create_pbr_material(
-        "Cyber satin graphite armor",
-        (0.028, 0.038, 0.046, 1.0),
-        metallic=0.78,
-        roughness=0.34,
-        emission_color=(0.0, 0.055, 0.07, 1.0),
-        emission_strength=0.018,
+        "Cyber liquid silver armor",
+        (0.94, 0.97, 0.99, 1.0),
+        metallic=0.96,
+        roughness=0.1,
+        emission_color=(0.08, 0.12, 0.14, 1.0),
+        emission_strength=0.045,
     )
     titanium_trim = create_pbr_material(
-        "Cyber warm titanium chamfer",
-        (0.42, 0.45, 0.43, 1.0),
-        metallic=0.88,
-        roughness=0.24,
-        emission_color=(0.015, 0.035, 0.04, 1.0),
-        emission_strength=0.01,
+        "Cyber polished white titanium trim",
+        (1.0, 1.0, 1.0, 1.0),
+        metallic=1.0,
+        roughness=0.08,
+        emission_color=(0.06, 0.09, 0.12, 1.0),
+        emission_strength=0.032,
     )
     optic_glass = create_pbr_material(
         "Cyber smoked optic glass",
@@ -142,27 +144,27 @@ def derive_cyber_robot() -> None:
         emission_strength=0.72,
     )
     circuit_glow = create_pbr_material(
-        "Cyber hairline ice circuit",
-        (0.035, 0.18, 0.18, 1.0),
-        metallic=0.28,
-        roughness=0.26,
-        emission_color=(0.14, 0.86, 0.82, 1.0),
-        emission_strength=0.46,
+        "Cyber etched ice-blue circuit",
+        (0.12, 0.34, 0.42, 1.0),
+        metallic=0.42,
+        roughness=0.18,
+        emission_color=(0.38, 0.96, 1.0, 1.0),
+        emission_strength=0.62,
     )
     warning_glow = create_pbr_material(
-        "Cyber muted champagne edge",
-        (0.62, 0.54, 0.34, 1.0),
-        metallic=0.72,
-        roughness=0.25,
-        emission_color=(0.78, 0.62, 0.32, 1.0),
-        emission_strength=0.18,
+        "Cyber frosted silver ion edge",
+        (0.68, 0.84, 1.0, 1.0),
+        metallic=0.9,
+        roughness=0.12,
+        emission_color=(0.36, 0.7, 1.0, 1.0),
+        emission_strength=0.3,
     )
 
     replace_material_slots(
         {
             "Main": main_armor,
             "Grey": titanium_trim,
-            "Black": optic_glass,
+            "Black": main_armor,
             "Material": titanium_trim,
         }
     )
