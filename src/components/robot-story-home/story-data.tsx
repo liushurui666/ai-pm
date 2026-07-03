@@ -122,3 +122,4 @@ export const robotStoryChapters: RobotStoryChapter[] = [
 ];
 
 export const ROBOT_MODEL_PATH = "/robot-story/models/Soldier.glb";
+export const HELMET_MODEL_PATH = "/robot-story/models/DamagedHelmet/glTF/DamagedHelmet.gltf";

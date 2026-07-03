@@ -3,7 +3,7 @@
 import { useEffect, type RefObject } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { ROBOT_MODEL_PATH, robotStoryChapters } from "../story-data";
+import { HELMET_MODEL_PATH, ROBOT_MODEL_PATH, robotStoryChapters } from "../story-data";
 import type { RobotStoryChapter } from "../story-data";
 
 type UseRobotStorySceneOptions = {
@@ -28,6 +28,7 @@ type RobotRuntime = {
     rightArm?: THREE.Bone;
   };
   face?: THREE.Mesh;
+  helmet?: THREE.Group;
 };
 
 type CyberRobotRig = {
@@ -326,6 +327,50 @@ function createMonochromeArmorTexture(sourceTexture: THREE.Texture | null) {
   texture.needsUpdate = true;
 
   return texture;
+}
+
+function attachDamagedHelmet(runtime: RobotRuntime, helmetScene: THREE.Group) {
+  const headBone = runtime.bones.head;
+
+  if (!headBone) {
+    disposeObject(helmetScene);
+    return;
+  }
+
+  // Soldier 的身体和动画来自官方 skinning_blending 示例；DamagedHelmet 是另一个官方示例资产。
+  // 这里把头盔挂到 mixamorig:Head 骨骼上，让 Idle/Walk/Run 时头部仍跟随骨骼，而不是固定在世界坐标里。
+  helmetScene.name = "threejs-damaged-helmet-head";
+  helmetScene.position.set(0, 8.2, 0.8);
+  helmetScene.rotation.set(0, Math.PI, 0);
+  helmetScene.scale.setScalar(15.8);
+
+  helmetScene.traverse((object) => {
+    if (object instanceof THREE.Mesh) {
+      object.castShadow = true;
+      object.receiveShadow = true;
+
+      if (object.material instanceof THREE.MeshStandardMaterial) {
+        object.material = object.material.clone();
+        // 头盔保留官方 3DLUT 示例的法线、AO、金属粗糙贴图，只把 albedo 拉到黑白银机甲语言里。
+        object.material.map = createMonochromeArmorTexture(object.material.map) ?? object.material.map;
+        object.material.color.set(0xf7fbff);
+        object.material.envMapIntensity = 1.45;
+        object.material.metalness = Math.max(object.material.metalness, 0.34);
+        object.material.roughness = Math.min(object.material.roughness + 0.08, 0.92);
+        object.material.needsUpdate = true;
+      }
+    }
+  });
+
+  runtime.model.traverse((object) => {
+    if (object instanceof THREE.Mesh && object.name.toLowerCase().includes("visor")) {
+      // 原 Soldier 面罩会和 DamagedHelmet 前脸重叠，隐藏它能让“换头”更干净。
+      object.visible = false;
+    }
+  });
+
+  headBone.add(helmetScene);
+  runtime.helmet = helmetScene;
 }
 
 function prepareRobotRuntime(gltfScene: THREE.Group, animations: THREE.AnimationClip[]) {
@@ -631,6 +676,22 @@ export function useRobotStoryScene({
         const loadedChapter = robotStoryChapters[clamp(activeChapterIndex, 0, robotStoryChapters.length - 1)] ?? robotStoryChapters[0];
         fadeToBaseAction(runtime, loadedChapter.baseAction, reducedMotion ? 0.18 : 0.22);
         setSceneReady(true);
+
+        loader.load(
+          HELMET_MODEL_PATH,
+          (helmetGltf) => {
+            if (disposed || !runtime) {
+              disposeObject(helmetGltf.scene);
+              return;
+            }
+
+            attachDamagedHelmet(runtime, helmetGltf.scene);
+          },
+          undefined,
+          () => {
+            // 头盔是二次强化资产；加载失败时保留 Soldier 主模型，不阻断首页叙事。
+          }
+        );
       },
       undefined,
       () => {
