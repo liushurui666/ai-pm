@@ -246,7 +246,35 @@ function normalizeRobotModel(model: THREE.Group) {
   );
 }
 
-function createCleanTechArmorTexture(sourceTexture: THREE.Texture | null) {
+type CleanTechArmorTextureOptions = {
+  upperBodyAccents?: boolean;
+};
+
+function isUpperBodyTechAccentPixel(u: number, v: number, r: number, g: number, b: number) {
+  const isDeliberateRedStripe = r > 118 && g < 92 && b < 82;
+  const isChestSideInsert =
+    ((u > 0.35 && u < 0.438) || (u > 0.545 && u < 0.632)) &&
+    v > 0.155 &&
+    v < 0.31;
+  const isShoulderStripeZone = u > 0.42 && u < 0.76 && v > 0.02 && v < 0.18 && isDeliberateRedStripe;
+
+  // 上衣区域需要更强的黑白科技分区，但不能把刮痕误判成设计线。
+  // 早期尝试保留大块内衬会在腰胯和腿根误映射出黑斑；这里收窄到胸甲插片和肩部装饰条，避免下半身像战损。
+  return isChestSideInsert || isShoulderStripeZone;
+}
+
+function isLowerWhiteArmorCleanupPixel(u: number, v: number) {
+  const isLeftLegArmor = u > 0.015 && u < 0.31 && v > 0.49 && v < 0.86;
+  const isCenterShinArmor = u > 0.52 && u < 0.69 && v > 0.69 && v < 0.93;
+  const isRightKneeArmor = u > 0.63 && u < 0.75 && v > 0.45 && v < 0.65;
+  const isArmArmor = (u > 0.72 && u < 0.99 && v > 0.03 && v < 0.36) || (u > 0.02 && u < 0.18 && v > 0.08 && v < 0.31);
+
+  // 这些 UV 岛对应用户截图里被框出的白甲、臂甲和腿甲。
+  // 原图在这些区域有成片旧损黑斑，运行时要优先洗成新白，避免被误读成战损工艺。
+  return isLeftLegArmor || isCenterShinArmor || isRightKneeArmor || isArmArmor;
+}
+
+function createCleanTechArmorTexture(sourceTexture: THREE.Texture | null, options: CleanTechArmorTextureOptions = {}) {
   if (!sourceTexture) {
     return null;
   }
@@ -297,12 +325,14 @@ function createCleanTechArmorTexture(sourceTexture: THREE.Texture | null) {
   }
 
   // 用户这次明确不要战损/旧化，只要崭新的纯白黑科技风。
-  // Soldier 和 DamagedHelmet 的原始 diffuse 都包含刮痕、锈色和旧化污渍；这里按局部亮度把外甲“翻新”为干净冷白，
-  // 只保留足够大、足够暗的结构件为蓝黑镜面，细小划痕和暖色战损会被抹回白色，避免全身脏旧。
+  // Soldier 和 DamagedHelmet 的原始 diffuse 都包含刮痕、锈色和旧化污渍；这里按局部亮度把外甲“翻新”为干净冷白。
+  // 为了避免旧刮痕继续以黑线出现，黑色只保留在大面积结构件、头盔镜面和明确的上衣科技分区里。
   for (let index = 0; index < pixels.length; index += 4) {
     const pixelIndex = index / 4;
     const x = pixelIndex % width;
     const y = Math.floor(pixelIndex / width);
+    const u = width > 1 ? x / (width - 1) : 0;
+    const v = height > 1 ? y / (height - 1) : 0;
     const r = pixels[index];
     const g = pixels[index + 1];
     const b = pixels[index + 2];
@@ -314,21 +344,50 @@ function createCleanTechArmorTexture(sourceTexture: THREE.Texture | null) {
         luminanceMap[y * width + Math.max(0, x - 1)] +
         luminanceMap[y * width + Math.min(width - 1, x + 1)]) /
       4;
-    const isSmallScratchOnLightPanel = luminance < 96 && neighborLuminance > 96;
+    const radius = Math.max(4, Math.round(Math.min(width, height) * 0.008));
+    const wideNeighborLuminance =
+      (luminanceMap[Math.max(0, y - radius) * width + x] +
+        luminanceMap[Math.min(height - 1, y + radius) * width + x] +
+        luminanceMap[y * width + Math.max(0, x - radius)] +
+        luminanceMap[y * width + Math.min(width - 1, x + radius)] +
+        luminanceMap[Math.max(0, y - radius) * width + Math.max(0, x - radius)] +
+        luminanceMap[Math.max(0, y - radius) * width + Math.min(width - 1, x + radius)] +
+        luminanceMap[Math.min(height - 1, y + radius) * width + Math.max(0, x - radius)] +
+        luminanceMap[Math.min(height - 1, y + radius) * width + Math.min(width - 1, x + radius)]) /
+      8;
+    const rawUpperBodyAccent = options.upperBodyAccents === true && isUpperBodyTechAccentPixel(u, v, r, g, b);
+    const isBodyArmorTexture = options.upperBodyAccents === true;
+    const isCleanupArmorIsland = options.upperBodyAccents === true && isLowerWhiteArmorCleanupPixel(u, v);
+    const isScratchOnLightPanel =
+      luminance < 126 &&
+      Math.max(neighborLuminance, wideNeighborLuminance) > (isCleanupArmorIsland ? 72 : 92) &&
+      !rawUpperBodyAccent;
+    const isHardBlackStructure = isBodyArmorTexture
+      ? luminance < 12 && wideNeighborLuminance < 24
+      : luminance < 16 && wideNeighborLuminance < 34;
+    const isDeepStructuralBlack = isBodyArmorTexture
+      ? false
+      : !isScratchOnLightPanel &&
+        (!isCleanupArmorIsland || isHardBlackStructure) &&
+        (isHardBlackStructure || (luminance < 48 && wideNeighborLuminance < 64));
+    const isUpperBodyAccent =
+      rawUpperBodyAccent &&
+      !isScratchOnLightPanel;
 
-    if (luminance < 42 && !isSmallScratchOnLightPanel && !isWarmDamage) {
-      const gloss = THREE.MathUtils.clamp(luminance / 42, 0, 1);
+    if ((isDeepStructuralBlack && !isWarmDamage) || isUpperBodyAccent) {
+      const gloss = THREE.MathUtils.clamp(luminance / 84, 0, 1);
+      const accentBoost = isUpperBodyAccent ? 10 : 0;
 
-      pixels[index] = 5 + gloss * 12;
-      pixels[index + 1] = 8 + gloss * 17;
-      pixels[index + 2] = 13 + gloss * 32;
+      pixels[index] = 4 + accentBoost + gloss * 10;
+      pixels[index + 1] = 7 + accentBoost + gloss * 14;
+      pixels[index + 2] = 13 + accentBoost + gloss * 28;
     } else {
-      const panel = THREE.MathUtils.clamp((Math.max(luminance, neighborLuminance) - 58) / 197, 0, 1);
-      const cleanWhite = 188 + panel * 58;
+      const panel = THREE.MathUtils.clamp((Math.max(luminance, neighborLuminance, wideNeighborLuminance) - 48) / 207, 0, 1);
+      const cleanWhite = 214 + panel * 38;
 
       pixels[index] = cleanWhite;
-      pixels[index + 1] = Math.min(255, cleanWhite + 3);
-      pixels[index + 2] = Math.min(255, cleanWhite + 8);
+      pixels[index + 1] = Math.min(255, cleanWhite + 2);
+      pixels[index + 2] = Math.min(255, cleanWhite + 6);
     }
   }
 
@@ -482,8 +541,14 @@ function prepareRobotRuntime(gltfScene: THREE.Group, animations: THREE.Animation
           object.material.metalness = 0.82;
           cyberRig.armorMaterials.push(object.material);
         } else {
-          object.material.map = createCleanTechArmorTexture(object.material.map) ?? object.material.map;
+          object.material.map = createCleanTechArmorTexture(object.material.map, { upperBodyAccents: true }) ?? object.material.map;
           object.material.color.set(0xffffff);
+          // 残留的“战损裂纹”主要来自 Soldier 原始 normal/粗糙度通道，即使 diffuse 被洗白也会在近景里压出黑色凹痕。
+          // 身体装甲这次要呈现全新的黑白科技工艺，所以禁用旧化法线与旧贴图通道，只保留几何自身的硬表面轮廓。
+          object.material.normalMap = null;
+          object.material.aoMap = null;
+          object.material.roughnessMap = null;
+          object.material.metalnessMap = null;
           object.material.envMapIntensity = 0.82;
           object.material.roughness = 0.24;
           object.material.metalness = 0.64;
