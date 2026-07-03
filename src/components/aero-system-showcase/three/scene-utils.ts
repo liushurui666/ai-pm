@@ -74,7 +74,7 @@ export function createStarField() {
 }
 
 export function createCloudBank() {
-  const count = 760;
+  const count = 1180;
   const positions = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
   const blue = new THREE.Color("#6edcff");
@@ -82,13 +82,13 @@ export function createCloudBank() {
   const grey = new THREE.Color("#b8c6cf");
 
   for (let index = 0; index < count; index += 1) {
-    const radius = 1.5 + Math.random() * 5.6;
+    const radius = 1.4 + Math.random() * 6.4;
     const angle = Math.random() * Math.PI * 2;
     const color = (index % 4 === 0 ? green : index % 2 === 0 ? blue : grey).clone();
 
-    positions[index * 3] = Math.cos(angle) * radius + 0.42 + (Math.random() - 0.5) * 1.4;
-    positions[index * 3 + 1] = -1.22 + (Math.random() - 0.5) * 0.42;
-    positions[index * 3 + 2] = Math.sin(angle) * radius + 0.3 + (Math.random() - 0.5) * 1.6;
+    positions[index * 3] = Math.cos(angle) * radius + 0.52 + (Math.random() - 0.5) * 1.8;
+    positions[index * 3 + 1] = -1.08 + (Math.random() - 0.5) * 0.48;
+    positions[index * 3 + 2] = Math.sin(angle) * radius + 0.36 + (Math.random() - 0.5) * 1.9;
     colors[index * 3] = color.r;
     colors[index * 3 + 1] = color.g;
     colors[index * 3 + 2] = color.b;
@@ -103,8 +103,8 @@ export function createCloudBank() {
     new THREE.PointsMaterial({
       blending: THREE.AdditiveBlending,
       depthWrite: false,
-      opacity: 0.08,
-      size: 0.045,
+      opacity: 0.14,
+      size: 0.064,
       transparent: true,
       vertexColors: true,
     })

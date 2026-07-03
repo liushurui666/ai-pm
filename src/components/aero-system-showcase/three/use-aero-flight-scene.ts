@@ -256,11 +256,11 @@ export function useAeroFlightScene({
       if (airshipRoot) {
         // 目标图首屏里飞艇已经进入右侧金色航线，因此初始值不从需求塔台起飞；
         // 滚动时再继续向上线闸口推进，形成“已经在调度航线中巡航”的叙事。
-        const flightProgress = clamp(0.58 + progress * 0.28 + Math.sin(elapsed * 0.7) * 0.004, 0.04, 0.98);
+        const flightProgress = clamp(0.7 + progress * 0.2 + Math.sin(elapsed * 0.7) * 0.004, 0.04, 0.98);
         const point = flightCurve.getPointAt(flightProgress);
         const tangent = flightCurve.getTangentAt(flightProgress);
 
-        airshipRoot.position.lerp(point.clone().add(new THREE.Vector3(0.02, 0.18 + Math.sin(elapsed * 0.9) * 0.026, 0)), 0.14);
+        airshipRoot.position.lerp(point.clone().add(new THREE.Vector3(0.05, 0.08 + Math.sin(elapsed * 0.9) * 0.022, 0.02)), 0.14);
         airshipRoot.rotation.x = 0.04 + Math.sin(elapsed * 0.7) * 0.018;
         airshipRoot.rotation.y = Math.atan2(tangent.x, tangent.z) + Math.PI * 0.5;
         airshipRoot.rotation.z = Math.sin(elapsed * 0.82) * 0.028;

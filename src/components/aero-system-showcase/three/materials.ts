@@ -27,7 +27,7 @@ export function tuneDerivedAeroMaterial(item: THREE.Material, emissiveMaterials:
     materialName.includes("light");
 
   if ("envMapIntensity" in flexibleMaterial) {
-    flexibleMaterial.envMapIntensity = isNaturalSurface ? 0.56 : 1.16;
+    flexibleMaterial.envMapIntensity = isNaturalSurface ? 0.78 : 1.12;
   }
 
   if ("metalness" in flexibleMaterial) {
@@ -40,7 +40,7 @@ export function tuneDerivedAeroMaterial(item: THREE.Material, emissiveMaterials:
 
   if ("color" in flexibleMaterial && flexibleMaterial.color) {
     if (isNaturalSurface) {
-      flexibleMaterial.color.lerp(new THREE.Color("#041016"), 0.22);
+      flexibleMaterial.color.lerp(new THREE.Color("#0a221b"), 0.12);
     } else if (materialName.includes("airship")) {
       flexibleMaterial.color.lerp(new THREE.Color("#c6d2d8"), 0.18);
     } else if (materialName.includes("glass")) {
@@ -52,7 +52,7 @@ export function tuneDerivedAeroMaterial(item: THREE.Material, emissiveMaterials:
     } else if (materialName.includes("magenta")) {
       flexibleMaterial.color.set("#ff6fdb");
     } else {
-      flexibleMaterial.color.lerp(new THREE.Color("#12212a"), 0.42);
+      flexibleMaterial.color.lerp(new THREE.Color("#192d35"), 0.28);
     }
   }
 
