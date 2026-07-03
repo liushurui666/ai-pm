@@ -329,6 +329,76 @@ function createMonochromeArmorTexture(sourceTexture: THREE.Texture | null) {
   return texture;
 }
 
+function getJointInfluence(
+  skinIndex: THREE.BufferAttribute | THREE.InterleavedBufferAttribute,
+  skinWeight: THREE.BufferAttribute | THREE.InterleavedBufferAttribute,
+  vertexIndex: number,
+  jointIndex: number
+) {
+  let influence = 0;
+
+  for (let componentIndex = 0; componentIndex < 4; componentIndex += 1) {
+    if (skinIndex.getComponent(vertexIndex, componentIndex) === jointIndex) {
+      influence += skinWeight.getComponent(vertexIndex, componentIndex);
+    }
+  }
+
+  return influence;
+}
+
+function removeOriginalSoldierHelmet(runtime: RobotRuntime) {
+  const headBone = runtime.bones.head;
+
+  if (!headBone) {
+    return;
+  }
+
+  runtime.model.traverse((object) => {
+    if (object instanceof THREE.SkinnedMesh && object.name === "vanguard_Mesh") {
+      const headJointIndex = object.skeleton.bones.indexOf(headBone);
+      const sourceGeometry = object.geometry;
+      const sourceIndex = sourceGeometry.index;
+      const skinIndex = sourceGeometry.getAttribute("skinIndex");
+      const skinWeight = sourceGeometry.getAttribute("skinWeight");
+
+      if (headJointIndex < 0 || !sourceIndex || !skinIndex || !skinWeight) {
+        return;
+      }
+
+      const filteredIndices: number[] = [];
+
+      // Soldier 的原头盔和身体共用一个 SkinnedMesh，不能整节点隐藏。
+      // 这里按 Head 骨骼权重移除头部三角面：保留身体、肩甲和手臂动画，只把会和新头盔重叠的原头部几何挖掉。
+      for (let indexOffset = 0; indexOffset < sourceIndex.count; indexOffset += 3) {
+        const vertexA = sourceIndex.getX(indexOffset);
+        const vertexB = sourceIndex.getX(indexOffset + 1);
+        const vertexC = sourceIndex.getX(indexOffset + 2);
+        const influenceA = getJointInfluence(skinIndex, skinWeight, vertexA, headJointIndex);
+        const influenceB = getJointInfluence(skinIndex, skinWeight, vertexB, headJointIndex);
+        const influenceC = getJointInfluence(skinIndex, skinWeight, vertexC, headJointIndex);
+        const influencedVertexCount = [influenceA, influenceB, influenceC].filter((influence) => influence > 0.18).length;
+        const averageInfluence = (influenceA + influenceB + influenceC) / 3;
+
+        if (influencedVertexCount >= 2 && averageInfluence > 0.16) {
+          continue;
+        }
+
+        filteredIndices.push(vertexA, vertexB, vertexC);
+      }
+
+      object.geometry = sourceGeometry.clone();
+      object.geometry.setIndex(filteredIndices);
+      sourceGeometry.dispose();
+      object.geometry.computeBoundingSphere();
+    }
+
+    if (object instanceof THREE.Mesh && object.name.toLowerCase().includes("visor")) {
+      // 黑色 visor 是 Soldier 里少数独立头部件，可以直接隐藏；主体头盔则由上面的 Head 权重过滤处理。
+      object.visible = false;
+    }
+  });
+}
+
 function attachDamagedHelmet(runtime: RobotRuntime, helmetScene: THREE.Group) {
   const headBone = runtime.bones.head;
 
@@ -351,24 +421,14 @@ function attachDamagedHelmet(runtime: RobotRuntime, helmetScene: THREE.Group) {
 
       if (object.material instanceof THREE.MeshStandardMaterial) {
         object.material = object.material.clone();
-        // 头盔保留官方 3DLUT 示例的法线、AO、金属粗糙贴图，只把 albedo 拉到黑白银机甲语言里。
-        object.material.map = createMonochromeArmorTexture(object.material.map) ?? object.material.map;
-        object.material.color.set(0xf7fbff);
-        object.material.envMapIntensity = 1.45;
-        object.material.metalness = Math.max(object.material.metalness, 0.34);
-        object.material.roughness = Math.min(object.material.roughness + 0.08, 0.92);
+        // 用户这次要先看官方 DamagedHelmet 原始效果，所以这里只克隆材质避免共享副作用，
+        // 不再改 baseColor、贴图、metalness 或 roughness，颜色完全来自 Three.js 3DLUT 示例资产。
         object.material.needsUpdate = true;
       }
     }
   });
 
-  runtime.model.traverse((object) => {
-    if (object instanceof THREE.Mesh && object.name.toLowerCase().includes("visor")) {
-      // 原 Soldier 面罩会和 DamagedHelmet 前脸重叠，隐藏它能让“换头”更干净。
-      object.visible = false;
-    }
-  });
-
+  removeOriginalSoldierHelmet(runtime);
   headBone.add(helmetScene);
   runtime.helmet = helmetScene;
 }
