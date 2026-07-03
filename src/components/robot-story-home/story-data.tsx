@@ -127,4 +127,4 @@ export const robotStoryChapters: RobotStoryChapter[] = [
   },
 ];
 
-export const ROBOT_MODEL_PATH = "/robot-story/models/RobotExpressive.glb";
+export const ROBOT_MODEL_PATH = "/robot-story/models/RobotExpressiveCyber.glb";

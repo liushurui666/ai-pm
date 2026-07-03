@@ -278,6 +278,7 @@ function createCyberRobotRig() {
   const bodyShell = new THREE.Mesh(new THREE.CapsuleGeometry(0.72, 1.18, 8, 18), shellMaterial);
   bodyShell.position.set(0, 0.95, 0.02);
   bodyShell.scale.set(0.92, 1.05, 0.62);
+  bodyShell.visible = false;
   group.add(bodyShell);
 
   const scanBand = new THREE.Mesh(
@@ -285,10 +286,14 @@ function createCyberRobotRig() {
     createAccentMaterial(0x63f7ff, 0.3)
   );
   scanBand.position.set(0, 1.12, 0.52);
+  scanBand.visible = false;
   group.add(scanBand);
 
   const circuitPlates: CyberRobotRig["circuitPlates"] = [];
-  for (let index = 0; index < 5; index += 1) {
+  // 线路和警示片已经在 Blender 中被写进模型面片材质，这里不再创建运行时贴片，
+  // 避免用户看到“贴上去”的感觉；运行时只保留灯光和核心能量辅助。
+  const runtimeCircuitPlateCount = 0;
+  for (let index = 0; index < runtimeCircuitPlateCount; index += 1) {
     const angle = (index / 5) * Math.PI * 2 + 0.28;
     const plateMaterial = new THREE.MeshBasicMaterial({
       color: index % 2 === 0 ? 0x63f7ff : 0xff5fb7,
@@ -419,6 +424,27 @@ function collectRobotBones(model: THREE.Group) {
   return bones;
 }
 
+function normalizeRobotModel(model: THREE.Group) {
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  const targetHeight = 2.08;
+  const scale = size.y > 0 ? targetHeight / size.y : 0.46;
+
+  // Blender 派生 GLB 可能因为重新导出而改变根节点尺度或中心点。
+  // 这里按包围盒统一归一化，保证后续镜头、胸核灯光和滚动分镜不依赖某个导出器的隐式坐标。
+  model.scale.setScalar(scale);
+  model.updateMatrixWorld(true);
+
+  const normalizedBox = new THREE.Box3().setFromObject(model);
+  const normalizedCenter = normalizedBox.getCenter(new THREE.Vector3());
+
+  model.position.set(
+    -normalizedCenter.x,
+    -normalizedBox.min.y,
+    -normalizedCenter.z
+  );
+}
+
 function prepareRobotRuntime(gltfScene: THREE.Group, animations: THREE.AnimationClip[]) {
   const model = gltfScene;
   const mixer = new THREE.AnimationMixer(model);
@@ -426,24 +452,22 @@ function prepareRobotRuntime(gltfScene: THREE.Group, animations: THREE.Animation
   const cyberRig = createCyberRobotRig();
   let face: THREE.Mesh | undefined;
 
-  model.scale.setScalar(0.46);
-  model.position.y = 0;
-
   model.traverse((object) => {
     if (object instanceof THREE.Mesh) {
       object.castShadow = true;
       object.receiveShadow = true;
 
-      // 机器人原模型偏卡通，这里把主材质压成暗色金属装甲：
-      // 保留原始低模体块的辨识度，但通过高金属度、低粗糙度和弱发光边缘把“玩具感”转成机甲感。
       if (object.material instanceof THREE.MeshStandardMaterial) {
         object.material = object.material.clone();
-        object.material.color.lerp(new THREE.Color(0x071320), 0.42);
-        object.material.emissive = new THREE.Color(0x03101b);
-        object.material.emissiveIntensity = 0.16;
-        object.material.metalness = 0.86;
-        object.material.roughness = 0.24;
-        cyberRig.armorMaterials.push(object.material);
+        object.material.envMapIntensity = 1.18;
+
+        // Blender 派生模型已经把主体 PBR 材质写进 GLB；Three 这里只接管少量发光嵌片的呼吸强度，
+        // 不再重写 baseColor/metalness/roughness，避免运行时材质覆盖造成“糊一层”的视觉。
+        const materialName = object.material.name.toLowerCase();
+
+        if (materialName.includes("optic") || materialName.includes("circuit") || materialName.includes("warning")) {
+          cyberRig.armorMaterials.push(object.material);
+        }
       }
 
       if (object.morphTargetDictionary && object.morphTargetInfluences) {
@@ -451,6 +475,8 @@ function prepareRobotRuntime(gltfScene: THREE.Group, animations: THREE.Animation
       }
     }
   });
+
+  normalizeRobotModel(model);
 
   animations.forEach((clip) => {
     const action = mixer.clipAction(clip);
@@ -606,7 +632,7 @@ function updateCyberRobotRig(
 
   cyberRig.armorMaterials.forEach((material) => {
     material.emissive.lerp(accentColor, 0.025);
-    material.emissiveIntensity = 0.08 + transitionPunch * 0.12;
+    material.emissiveIntensity = 0.42 + pulse * 0.28 + transitionPunch * 0.36;
   });
 
   cyberRig.coreLight.color.lerp(accentColor, 0.08);
