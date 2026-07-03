@@ -182,10 +182,71 @@ def ensure_material(
     return material
 
 
+def create_procedural_texture(
+    name: str,
+    *,
+    width: int,
+    height: int,
+    base: tuple[float, float, float],
+    accent: tuple[float, float, float],
+    contrast: float,
+) -> bpy.types.Image:
+    """生成可随 GLB 导出的低成本纹理，避免浮岛只是一块平涂色。
+
+    这些纹理不是运行时贴图 hack，而是写进 Blender 材质节点并随派生模型导出；
+    后续如果要继续打磨地貌质感，仍然能回到 `.blend` 侧追溯。
+    """
+
+    image = bpy.data.images.get(name)
+    if image:
+        return image
+
+    image = bpy.data.images.new(name, width=width, height=height, alpha=True)
+    pixels: list[float] = []
+    for y in range(height):
+        for x in range(width):
+            u = x / max(1, width - 1)
+            v = y / max(1, height - 1)
+            wave = math.sin(u * 31.0 + math.cos(v * 11.0) * 2.4) * 0.5 + 0.5
+            grain = math.sin((u + v) * 83.0) * math.cos((u - v) * 47.0) * 0.5 + 0.5
+            ridge = 1.0 if (math.sin(u * 18.0) + math.cos(v * 21.0)) > 1.45 else 0.0
+            mix = min(1.0, max(0.0, wave * 0.48 + grain * 0.4 + ridge * 0.28))
+            mix = (mix - 0.5) * contrast + 0.5
+            pixels.extend(
+                [
+                    base[0] * (1 - mix) + accent[0] * mix,
+                    base[1] * (1 - mix) + accent[1] * mix,
+                    base[2] * (1 - mix) + accent[2] * mix,
+                    1.0,
+                ]
+            )
+
+    image.pixels = pixels
+    image.pack()
+    return image
+
+
+def attach_base_color_texture(material: bpy.types.Material, texture_name: str, image: bpy.types.Image) -> None:
+    if not material.use_nodes or not material.node_tree:
+        return
+
+    if material.node_tree.nodes.get(texture_name):
+        return
+
+    principled = material.node_tree.nodes.get("Principled BSDF")
+    if not principled or "Base Color" not in principled.inputs:
+        return
+
+    texture_node = material.node_tree.nodes.new("ShaderNodeTexImage")
+    texture_node.name = texture_name
+    texture_node.image = image
+    material.node_tree.links.new(texture_node.outputs["Color"], principled.inputs["Base Color"])
+
+
 def materials() -> dict[str, bpy.types.Material]:
     """集中维护派生模型使用的材质标签，前端也会按这些名字做二次校色。"""
 
-    return {
+    mats = {
         "rock": ensure_material("AI_PM_dark_floating_rock", (0.008, 0.011, 0.016, 1), metallic=0.05, roughness=0.9),
         "terrain": ensure_material(
             "AI_PM_dark_terrain_surface",
@@ -235,6 +296,14 @@ def materials() -> dict[str, bpy.types.Material]:
             metallic=0.18,
             roughness=0.18,
         ),
+        "warm_window": ensure_material(
+            "AI_PM_orange_city_window",
+            (1.0, 0.68, 0.22, 1),
+            emission=(1.0, 0.48, 0.12, 1),
+            emission_strength=2.8,
+            metallic=0.28,
+            roughness=0.2,
+        ),
         "magenta": ensure_material(
             "AI_PM_neon_magenta",
             (1.0, 0.18, 0.78, 1),
@@ -261,6 +330,31 @@ def materials() -> dict[str, bpy.types.Material]:
             roughness=0.32,
         ),
     }
+    attach_base_color_texture(
+        mats["terrain"],
+        "AI_PM_terrain_surface_texture",
+        create_procedural_texture(
+            "AI_PM_terrain_surface_texture",
+            width=128,
+            height=128,
+            base=(0.018, 0.05, 0.04),
+            accent=(0.1, 0.17, 0.11),
+            contrast=1.18,
+        ),
+    )
+    attach_base_color_texture(
+        mats["rock"],
+        "AI_PM_rock_cliff_texture",
+        create_procedural_texture(
+            "AI_PM_rock_cliff_texture",
+            width=128,
+            height=128,
+            base=(0.008, 0.01, 0.014),
+            accent=(0.09, 0.082, 0.074),
+            contrast=1.35,
+        ),
+    )
+    return mats
 
 
 def get_bounds(objects: list[bpy.types.Object]) -> tuple[Vector, Vector, float]:
@@ -999,6 +1093,83 @@ def add_surface_lane_markings(
         )
 
 
+def add_surface_circuit_grid(
+    name: str,
+    *,
+    radius_x: float,
+    radius_z: float,
+    y: float,
+    accent: bpy.types.Material,
+    branch_count: int = 9,
+) -> None:
+    """把岛面航线做进 GLB，而不是只靠运行时曲线悬在空中。
+
+    目标图里蓝/金光轨是贴着岛面设施走的，首屏截图能看到清楚的路线节点。
+    这组几何以较少但更宽的导出灯条表达岛面交通网络，避免继续堆看不见的
+    微型盒体造成刷新卡顿。
+    """
+
+    mats = materials()
+    add_torus(f"{name}_circuit_outer_glow", accent, location=(0, y + 0.042, 0), major_radius=min(radius_x, radius_z) * 0.86, minor_radius=0.0055)
+    add_torus(f"{name}_circuit_inner_dark_lane", mats["pad"], location=(0, y + 0.036, 0), major_radius=min(radius_x, radius_z) * 0.52, minor_radius=0.006)
+
+    for index in range(branch_count):
+        angle = (index / branch_count) * math.pi * 2 + (index % 2) * 0.11
+        start_radius = 0.18 + (index % 3) * 0.05
+        end_radius = 0.68 + (index % 2) * 0.08
+        x1 = math.cos(angle) * radius_x * start_radius
+        z1 = math.sin(angle) * radius_z * start_radius
+        x2 = math.cos(angle) * radius_x * end_radius
+        z2 = math.sin(angle) * radius_z * end_radius
+        mid = ((x1 + x2) * 0.5, y + 0.048, (z1 + z2) * 0.5)
+        length = math.sqrt((x2 - x1) ** 2 + (z2 - z1) ** 2)
+        lane_material = accent if index % 3 != 1 else mats["pad"]
+
+        add_box(
+            f"{name}_circuit_branch_{index:02d}",
+            lane_material,
+            location=mid,
+            scale=(length * 0.5, 0.0045, 0.012),
+            rotation=(0, -angle, 0),
+        )
+
+        if index % 2 == 0:
+            add_sphere(
+                f"{name}_circuit_node_{index:02d}",
+                accent,
+                location=(x2, y + 0.066, z2),
+                radius=0.016,
+            )
+
+
+def add_island_cliff_lights(
+    name: str,
+    *,
+    radius_x: float,
+    radius_z: float,
+    y: float,
+    accent: bpy.types.Material,
+    count: int = 16,
+) -> None:
+    """在浮岛侧壁补大颗粒灯窗，让岩体厚度在暗场里读得出来。"""
+
+    mats = materials()
+    for index in range(count):
+        if index % 4 == 1:
+            continue
+        angle = (index / count) * math.pi * 2
+        x = math.cos(angle) * radius_x
+        z = math.sin(angle) * radius_z
+        material = accent if index % 3 == 0 else mats["warm_window"]
+        add_box(
+            f"{name}_cliff_window_{index:02d}",
+            material,
+            location=(x, y - 0.04 - (index % 3) * 0.035, z),
+            scale=(0.026, 0.006, 0.006),
+            rotation=(0, -angle + math.pi / 2, 0),
+        )
+
+
 def add_floating_island_edge_lights(
     name: str,
     *,
@@ -1069,6 +1240,40 @@ def add_command_station_skyline(
                 accent,
                 location=(x, y + tower_height + 0.018, z),
                 radius=0.012,
+            )
+
+
+def add_station_hull_bays(
+    name: str,
+    *,
+    radius: float,
+    y: float,
+    material: bpy.types.Material,
+    accent: bpy.types.Material,
+    count: int = 32,
+) -> None:
+    """给主站外缘补更大的舱段体块，首屏远景也能看到建筑密度。"""
+
+    for index in range(count):
+        angle = (index / count) * math.pi * 2
+        bay_width = 0.058 if index % 4 else 0.082
+        bay_height = 0.04 + (index % 3) * 0.008
+        x = math.cos(angle) * radius
+        z = math.sin(angle) * radius
+        add_box(
+            f"{name}_outer_hull_bay_{index:02d}",
+            material,
+            location=(x, y + bay_height * 0.5, z),
+            scale=(bay_width, bay_height, 0.018),
+            rotation=(0, -angle + math.pi / 2, 0),
+        )
+        if index % 2 == 0:
+            add_box(
+                f"{name}_outer_hull_window_{index:02d}",
+                accent,
+                location=(math.cos(angle) * (radius + 0.012), y + bay_height * 0.68, math.sin(angle) * (radius + 0.012)),
+                scale=(bay_width * 0.55, 0.005, 0.004),
+                rotation=(0, -angle + math.pi / 2, 0),
             )
 
 
@@ -1199,8 +1404,8 @@ def build_central_command_station() -> None:
         depth=0.42,
         vertices=11,
     )
-    import_asset("station_main", "AI_PM_core_station", location=(0, -0.01, 0), rotation=(0, -0.16, 0), target_size=1.76, material=mats["pad"])
-    import_asset("station_pink", "AI_PM_core_magenta_ring_asset", location=(0, 0.12, 0), rotation=(0, 0.08, 0), target_size=1.94, material=mats["pad"])
+    import_asset("station_main", "AI_PM_core_station", location=(0, -0.01, 0), rotation=(0, -0.16, 0), target_size=1.76, preserve_source_materials=True)
+    import_asset("station_pink", "AI_PM_core_magenta_ring_asset", location=(0, 0.12, 0), rotation=(0, 0.08, 0), target_size=1.94, preserve_source_materials=True)
     add_station_deck("AI_PM_core_primary", radius=1.02, y=-0.06, accent=mats["magenta"], light_count=56, thickness=0.12)
     add_cylinder("AI_PM_core_lower_habitat_band", mats["pad"], location=(0, -0.08, 0), radius=0.82, depth=0.19, vertices=144)
     add_cylinder("AI_PM_core_mid_habitat_band", mats["pad"], location=(0, 0.12, 0), radius=0.68, depth=0.15, vertices=128)
@@ -1208,6 +1413,8 @@ def build_central_command_station() -> None:
     add_cylinder("AI_PM_core_observation_deck", mats["pad"], location=(0, 0.49, 0), radius=0.38, depth=0.07, vertices=96)
     add_circular_facade_panels("AI_PM_core_lower_city", radius=0.85, base_y=-0.12, material=mats["pad"], window_material=mats["cyan"], rows=2, count=44)
     add_circular_facade_panels("AI_PM_core_mid_city", radius=0.7, base_y=0.11, material=mats["pad"], window_material=mats["orange"], rows=2, count=36)
+    add_station_hull_bays("AI_PM_core_lower", radius=1.03, y=-0.11, material=mats["pad"], accent=mats["warm_window"], count=44)
+    add_station_hull_bays("AI_PM_core_upper", radius=0.72, y=0.18, material=mats["pad"], accent=mats["cyan"], count=34)
     add_window_band("AI_PM_core_lower", radius=0.88, y=-0.2, material=mats["cyan"], count=48)
     add_window_band("AI_PM_core_mid", radius=0.72, y=0.06, material=mats["orange"], count=40)
     add_window_band("AI_PM_core_upper", radius=0.56, y=0.28, material=mats["blue"], count=32)
@@ -1217,6 +1424,7 @@ def build_central_command_station() -> None:
     add_torus("AI_PM_core_inner_cyan_runway", mats["cyan"], location=(0, 0.46, 0), major_radius=0.34, minor_radius=0.007)
     add_torus("AI_PM_core_warm_city_ring", mats["orange"], location=(0, 0.22, 0), major_radius=0.9, minor_radius=0.006)
     add_surface_lane_markings("AI_PM_core_city", radius=0.92, y=0.0, accent=mats["magenta"], count=10)
+    add_surface_circuit_grid("AI_PM_core_city", radius_x=0.88, radius_z=0.52, y=0.02, accent=mats["magenta"], branch_count=12)
     add_surface_micro_facilities("AI_PM_core_city", radius_x=0.86, radius_z=0.52, y=0.04, accent=mats["magenta"], count=34)
     add_orbital_city_blocks("AI_PM_core_lower", radius=0.98, y=0.08, material=mats["pad"], accent=mats["cyan"], count=24)
     add_orbital_city_blocks("AI_PM_core_upper", radius=0.58, y=0.44, material=mats["pad"], accent=mats["orange"], count=16)
@@ -1246,9 +1454,11 @@ def build_requirements_tower_island() -> None:
     add_hex_tile_field("AI_PM_requirements", radius=0.36, y=-0.1, accent=mats["cyan"], count=9)
     add_station_deck("AI_PM_requirements", radius=0.39, y=-0.02, accent=mats["cyan"], light_count=18, thickness=0.055)
     add_surface_lane_markings("AI_PM_requirements", radius=0.34, y=-0.05, accent=mats["cyan"], count=6)
+    add_surface_circuit_grid("AI_PM_requirements", radius_x=0.34, radius_z=0.24, y=-0.04, accent=mats["cyan"], branch_count=7)
     add_surface_micro_facilities("AI_PM_requirements", radius_x=0.34, radius_z=0.24, y=-0.04, accent=mats["cyan"], count=14)
     add_floating_island_edge_lights("AI_PM_requirements", radius_x=0.36, radius_z=0.26, y=-0.12, accent=mats["cyan"], count=10)
-    import_asset("station_mini", "AI_PM_requirements_tower", location=(0, 0.12, 0), rotation=(0, -0.15, 0), target_size=0.38, material=mats["pad"])
+    add_island_cliff_lights("AI_PM_requirements", radius_x=0.38, radius_z=0.27, y=-0.22, accent=mats["cyan"], count=12)
+    import_asset("station_mini", "AI_PM_requirements_tower", location=(0, 0.12, 0), rotation=(0, -0.15, 0), target_size=0.38, preserve_source_materials=True)
     import_asset("lamp", "AI_PM_requirements_signal_lamp", location=(0.18, 0.08, -0.12), rotation=(0, 0.2, 0), target_size=0.22, preserve_source_materials=True)
     add_station_spire_cluster("AI_PM_requirements", radius=0.34, y=0.04, accent=mats["cyan"], count=5)
     add_cylinder("AI_PM_requirements_beam", mats["cyan"], location=(0, 0.2, 0), radius=0.018, depth=0.32, vertices=20)
@@ -1266,13 +1476,15 @@ def build_version_harbor_island() -> None:
     add_floating_island_mass("AI_PM_versions", radius=0.56, y=-0.46, depth=0.5, shard_count=12)
     add_terrain_patch("AI_PM_versions", size=0.7, y=-0.28, rotation=-0.2)
     add_tree_cluster("AI_PM_versions", y=-0.12, radius=0.33, count=7)
-    import_asset("station_ring", "AI_PM_versions_station_ring", location=(0, -0.18, 0), rotation=(0, -0.2, 0), target_size=0.58, material=mats["pad"])
-    import_asset("ground_hexes_b", "AI_PM_versions_hex_field", location=(-0.04, -0.28, 0.08), rotation=(0, 0.22, 0), target_size=0.42, material=mats["pad"])
+    import_asset("station_ring", "AI_PM_versions_station_ring", location=(0, -0.18, 0), rotation=(0, -0.2, 0), target_size=0.58, preserve_source_materials=True)
+    import_asset("ground_hexes_b", "AI_PM_versions_hex_field", location=(-0.04, -0.28, 0.08), rotation=(0, 0.22, 0), target_size=0.42, preserve_source_materials=True)
     add_hex_tile_field("AI_PM_versions", radius=0.48, y=-0.1, accent=mats["blue"], count=12)
     add_station_deck("AI_PM_versions", radius=0.5, y=-0.04, accent=mats["blue"], light_count=20, thickness=0.065)
     add_surface_lane_markings("AI_PM_versions", radius=0.48, y=-0.08, accent=mats["blue"], count=8)
+    add_surface_circuit_grid("AI_PM_versions", radius_x=0.48, radius_z=0.34, y=-0.075, accent=mats["blue"], branch_count=8)
     add_surface_micro_facilities("AI_PM_versions", radius_x=0.48, radius_z=0.34, y=-0.07, accent=mats["blue"], count=22)
     add_floating_island_edge_lights("AI_PM_versions", radius_x=0.48, radius_z=0.34, y=-0.13, accent=mats["blue"], count=12)
+    add_island_cliff_lights("AI_PM_versions", radius_x=0.5, radius_z=0.35, y=-0.24, accent=mats["blue"], count=14)
     add_cylinder("AI_PM_versions_control_tower", mats["pad"], location=(0.18, 0.14, -0.12), radius=0.034, depth=0.32, vertices=24)
     add_station_spire_cluster("AI_PM_versions", radius=0.42, y=0.02, accent=mats["blue"], count=6)
     add_sphere("AI_PM_versions_beacon", mats["blue"], location=(0.18, 0.34, -0.12), radius=0.036)
@@ -1289,13 +1501,15 @@ def build_bug_repair_dock() -> None:
     add_floating_island_mass("AI_PM_bug", radius=0.54, y=-0.45, depth=0.52, shard_count=12)
     add_terrain_patch("AI_PM_bug", size=0.66, y=-0.28, rotation=0.28)
     add_tree_cluster("AI_PM_bug", y=-0.12, radius=0.3, count=6)
-    import_asset("door", "AI_PM_bug_dock_door", location=(-0.03, -0.16, 0), rotation=(0, -0.36, 0), target_size=0.44, material=mats["pad"])
-    import_asset("lamp", "AI_PM_bug_repair_beacon", location=(0.25, -0.1, -0.2), rotation=(0, 0.12, 0), target_size=0.26, material=mats["pad"])
+    import_asset("door", "AI_PM_bug_dock_door", location=(-0.03, -0.16, 0), rotation=(0, -0.36, 0), target_size=0.44, preserve_source_materials=True)
+    import_asset("lamp", "AI_PM_bug_repair_beacon", location=(0.25, -0.1, -0.2), rotation=(0, 0.12, 0), target_size=0.26, preserve_source_materials=True)
     add_hex_tile_field("AI_PM_bug", radius=0.46, y=-0.11, accent=mats["orange"], count=10)
     add_station_deck("AI_PM_bug", radius=0.48, y=-0.08, accent=mats["orange"], light_count=18, thickness=0.065)
     add_surface_lane_markings("AI_PM_bug", radius=0.45, y=-0.1, accent=mats["orange"], count=8)
+    add_surface_circuit_grid("AI_PM_bug", radius_x=0.46, radius_z=0.33, y=-0.09, accent=mats["orange"], branch_count=8)
     add_surface_micro_facilities("AI_PM_bug", radius_x=0.46, radius_z=0.33, y=-0.09, accent=mats["orange"], count=22)
     add_floating_island_edge_lights("AI_PM_bug", radius_x=0.46, radius_z=0.33, y=-0.14, accent=mats["orange"], count=12)
+    add_island_cliff_lights("AI_PM_bug", radius_x=0.48, radius_z=0.34, y=-0.24, accent=mats["orange"], count=14)
     add_box("AI_PM_bug_service_bridge", mats["pad"], location=(-0.32, -0.08, 0.18), scale=(0.34, 0.022, 0.065), rotation=(0, -0.35, 0))
     add_station_spire_cluster("AI_PM_bug", radius=0.42, y=0.02, accent=mats["orange"], count=6)
     add_sphere("AI_PM_bug_hot_beacon", mats["orange"], location=(0.2, 0.24, -0.12), radius=0.038)
@@ -1312,13 +1526,15 @@ def build_launch_gate_island() -> None:
     add_floating_island_mass("AI_PM_launch", radius=0.58, y=-0.44, depth=0.55, shard_count=13)
     add_terrain_patch("AI_PM_launch", size=0.7, y=-0.27, rotation=-0.1)
     add_tree_cluster("AI_PM_launch", y=-0.1, radius=0.31, count=6)
-    import_asset("station_yellow", "AI_PM_launch_station", location=(0, -0.18, 0), rotation=(0, 0.5, 0), target_size=0.56, material=mats["pad"])
-    import_asset("ground_hex", "AI_PM_launch_pad", location=(0.02, -0.28, 0), rotation=(0, 0.15, 0), target_size=0.44, material=mats["pad"])
+    import_asset("station_yellow", "AI_PM_launch_station", location=(0, -0.18, 0), rotation=(0, 0.5, 0), target_size=0.56, preserve_source_materials=True)
+    import_asset("ground_hex", "AI_PM_launch_pad", location=(0.02, -0.28, 0), rotation=(0, 0.15, 0), target_size=0.44, preserve_source_materials=True)
     add_hex_tile_field("AI_PM_launch", radius=0.5, y=-0.1, accent=mats["orange"], count=11)
     add_station_deck("AI_PM_launch", radius=0.52, y=-0.06, accent=mats["orange"], light_count=22, thickness=0.065)
     add_surface_lane_markings("AI_PM_launch", radius=0.5, y=-0.08, accent=mats["orange"], count=8)
+    add_surface_circuit_grid("AI_PM_launch", radius_x=0.5, radius_z=0.36, y=-0.075, accent=mats["orange"], branch_count=8)
     add_surface_micro_facilities("AI_PM_launch", radius_x=0.5, radius_z=0.36, y=-0.07, accent=mats["orange"], count=24)
     add_floating_island_edge_lights("AI_PM_launch", radius_x=0.5, radius_z=0.36, y=-0.12, accent=mats["orange"], count=12)
+    add_island_cliff_lights("AI_PM_launch", radius_x=0.52, radius_z=0.37, y=-0.23, accent=mats["orange"], count=14)
     add_cylinder("AI_PM_launch_gate_column_a", mats["pad"], location=(-0.16, 0.16, 0.02), radius=0.026, depth=0.36, vertices=24)
     add_cylinder("AI_PM_launch_gate_column_b", mats["pad"], location=(0.16, 0.16, 0.02), radius=0.026, depth=0.36, vertices=24)
     add_torus("AI_PM_launch_gate_top_ring", mats["orange"], location=(0, 0.28, 0.02), major_radius=0.18, minor_radius=0.006)

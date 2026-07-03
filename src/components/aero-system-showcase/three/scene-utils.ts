@@ -74,6 +74,7 @@ export function createStarField() {
 }
 
 export function createCloudBank() {
+  const group = new THREE.Group();
   const count = 1280;
   const positions = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
@@ -100,7 +101,7 @@ export function createCloudBank() {
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
   geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
 
-  return new THREE.Points(
+  const cloudPoints = new THREE.Points(
     geometry,
     new THREE.PointsMaterial({
       blending: THREE.AdditiveBlending,
@@ -111,6 +112,53 @@ export function createCloudBank() {
       vertexColors: true,
     })
   );
+  group.add(cloudPoints);
+
+  const texture = createCloudSheetTexture();
+  for (let index = 0; index < 12; index += 1) {
+    const material = new THREE.SpriteMaterial({
+      blending: THREE.NormalBlending,
+      color: index % 3 === 0 ? "#6f9aaa" : "#8ca0aa",
+      depthWrite: false,
+      map: texture,
+      opacity: 0.09 + (index % 3) * 0.018,
+      transparent: true,
+    });
+    const sprite = new THREE.Sprite(material);
+    const angle = (index / 12) * Math.PI * 2;
+    const radius = 1.4 + (index % 5) * 0.55;
+
+    sprite.position.set(Math.cos(angle) * radius + 0.72, -1.1 + (index % 4) * 0.042, Math.sin(angle) * radius + 0.46);
+    sprite.scale.set(2.2 + (index % 4) * 0.58, 0.78 + (index % 3) * 0.22, 1);
+    sprite.userData.phase = index * 0.53;
+    group.add(sprite);
+  }
+
+  group.userData.cloudSheetTexture = texture;
+  return group;
+}
+
+function createCloudSheetTexture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 128;
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    return new THREE.CanvasTexture(canvas);
+  }
+
+  const gradient = context.createRadialGradient(128, 64, 8, 128, 64, 126);
+  gradient.addColorStop(0, "rgba(255, 255, 255, 0.46)");
+  gradient.addColorStop(0.32, "rgba(144, 196, 216, 0.26)");
+  gradient.addColorStop(0.66, "rgba(78, 106, 124, 0.12)");
+  gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, 256, 128);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
 }
 
 export function createRunwayGrid() {
@@ -157,6 +205,14 @@ export function disposeObject(object: THREE.Object3D) {
     }
 
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-    materials.forEach((material) => material.dispose());
+    materials.forEach((material) => {
+      const textureMaterial = material as THREE.Material & { map?: THREE.Texture | null };
+
+      textureMaterial.map?.dispose();
+      material.dispose();
+    });
   });
+
+  const texture = object.userData.cloudSheetTexture as THREE.Texture | undefined;
+  texture?.dispose();
 }

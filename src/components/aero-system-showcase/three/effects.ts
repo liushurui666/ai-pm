@@ -26,13 +26,21 @@ export function createRouteNetwork(routes: AeroRouteDefinition[]) {
       blending: THREE.AdditiveBlending,
       color,
       depthWrite: false,
-      opacity: 0.14,
+      opacity: 0.18,
+      transparent: true,
+    });
+    const ambientHaloMaterial = new THREE.MeshBasicMaterial({
+      blending: THREE.AdditiveBlending,
+      color,
+      depthWrite: false,
+      opacity: 0.045,
       transparent: true,
     });
 
     // 航线光轨保留在运行时生成，因为它需要随滚动和时间流动；Blender 只提供灯塔和锚点。
-    group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 180, 0.011, 8, false), coreMaterial));
-    group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 180, 0.045, 12, false), glowMaterial));
+    group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 220, 0.014, 10, false), coreMaterial));
+    group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 220, 0.058, 14, false), glowMaterial));
+    group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 180, 0.12, 16, false), ambientHaloMaterial));
     runtimeRoutes.push({ color, curve, id: route.id });
   });
 
