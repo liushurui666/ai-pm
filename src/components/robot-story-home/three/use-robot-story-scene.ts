@@ -39,6 +39,14 @@ type CyberRobotRig = {
   eyeLights: THREE.PointLight[];
 };
 
+type RobotArmorSkinTextures = {
+  albedo: THREE.Texture;
+  ao: THREE.Texture;
+  metalness: THREE.Texture;
+  normal: THREE.Texture;
+  roughness: THREE.Texture;
+};
+
 type ScenePanel = {
   mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   basePosition: THREE.Vector3;
@@ -50,6 +58,13 @@ const tmpCameraLookAt = new THREE.Vector3();
 const tmpRobotPosition = new THREE.Vector3();
 const tmpColor = new THREE.Color();
 const tmpLightColor = new THREE.Color();
+const robotArmorSkinTexturePaths = {
+  albedo: "/robot-story/textures/hex-armor/hex-armor-white-black-albedo.png",
+  ao: "/robot-story/textures/hex-armor/hex-armor-ao.png",
+  metalness: "/robot-story/textures/hex-armor/hex-armor-metallic.png",
+  normal: "/robot-story/textures/hex-armor/hex-armor-normal-ogl.png",
+  roughness: "/robot-story/textures/hex-armor/hex-armor-roughness.png",
+};
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -58,6 +73,114 @@ function clamp(value: number, min: number, max: number) {
 function smoothStep(value: number) {
   const t = clamp(value, 0, 1);
   return t * t * (3 - 2 * t);
+}
+
+function configureRobotArmorTexture(texture: THREE.Texture, colorTexture = false) {
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  // Soldier 的 UV 岛大小不完全统一，轻微重复能让蜂窝皮肤覆盖更均匀，
+  // 同时避免格子过大导致身体像贴了几块独立墙板。
+  texture.repeat.set(1.18, 1.18);
+  texture.anisotropy = 6;
+
+  if (colorTexture) {
+    texture.colorSpace = THREE.SRGBColorSpace;
+  }
+
+  return texture;
+}
+
+function createRobotArmorSkinTextures(loader: THREE.TextureLoader) {
+  // 黑白蜂窝皮肤来自 PBR 材质包的结构贴图；albedo 已在资产生成时去掉金色/绿色，
+  // 运行时只负责把同一套 map 复用到白色机甲面，避免再做局部颜色覆盖。
+  return {
+    albedo: configureRobotArmorTexture(loader.load(robotArmorSkinTexturePaths.albedo), true),
+    ao: configureRobotArmorTexture(loader.load(robotArmorSkinTexturePaths.ao)),
+    metalness: configureRobotArmorTexture(loader.load(robotArmorSkinTexturePaths.metalness)),
+    normal: configureRobotArmorTexture(loader.load(robotArmorSkinTexturePaths.normal)),
+    roughness: configureRobotArmorTexture(loader.load(robotArmorSkinTexturePaths.roughness)),
+  } satisfies RobotArmorSkinTextures;
+}
+
+function disposeRobotArmorSkinTextures(textures: RobotArmorSkinTextures) {
+  Object.values(textures).forEach((texture) => texture.dispose());
+}
+
+function smoothRange(start: number, end: number, value: number) {
+  return smoothStep((value - start) / (end - start));
+}
+
+function getUpperBodySkinTone(side: number, vertical: number, depth: number) {
+  const sideExtent = Math.abs(side - 0.5) * 2;
+  const frontBias = 0.72 + smoothRange(0.22, 0.48, depth) * (1 - smoothRange(0.86, 0.98, depth)) * 0.28;
+  const upperBand = smoothRange(0.48, 0.6, vertical) * (1 - smoothRange(0.9, 0.99, vertical));
+  const chestField = upperBand * (1 - smoothRange(0.72, 0.96, sideExtent)) * 0.82;
+  const collarField = smoothRange(0.64, 0.76, vertical) * (1 - smoothRange(0.94, 1, vertical)) * (1 - smoothRange(0.42, 0.68, sideExtent)) * 0.64;
+  const shoulderField = upperBand * smoothRange(0.34, 0.56, sideExtent) * (1 - smoothRange(0.92, 1, sideExtent)) * 0.94;
+  const upperArmField = upperBand * smoothRange(0.6, 0.74, sideExtent) * 0.88;
+  const waistField = smoothRange(0.36, 0.48, vertical) * (1 - smoothRange(0.62, 0.78, vertical)) * (1 - smoothRange(0.76, 0.98, sideExtent)) * 0.64;
+  const shadow = Math.max(chestField, collarField, shoulderField, upperArmField, waistField) * frontBias;
+
+  return 1 - shadow * 0.96;
+}
+
+function applySmoothBlackWhiteSkinTone(geometry: THREE.BufferGeometry) {
+  const position = geometry.getAttribute("position");
+
+  if (!position) {
+    return;
+  }
+
+  geometry.computeBoundingBox();
+
+  const bounds = geometry.boundingBox;
+
+  if (!bounds) {
+    return;
+  }
+
+  const sizeX = Math.max(0.0001, bounds.max.x - bounds.min.x);
+  const sizeY = Math.max(0.0001, bounds.max.y - bounds.min.y);
+  const sizeZ = Math.max(0.0001, bounds.max.z - bounds.min.z);
+  const verticalAxis = sizeY >= sizeZ ? "y" : "z";
+  const colors = new Float32Array(position.count * 3);
+
+  // 这层顶点色只做连续的黑银比例，不新增任何几何或材质块。
+  // 使用每个 mesh 自身包围盒归一化，能适配 Soldier 导出时的坐标轴差异；
+  // 黑色从肩胸、上臂和腰腹自然展开，避免再出现几个孤立色块贴在模型上的观感。
+  for (let index = 0; index < position.count; index += 1) {
+    const x = (position.getX(index) - bounds.min.x) / sizeX;
+    const y = (position.getY(index) - bounds.min.y) / sizeY;
+    const z = (position.getZ(index) - bounds.min.z) / sizeZ;
+    const tone = getUpperBodySkinTone(x, verticalAxis === "y" ? y : z, verticalAxis === "y" ? z : y);
+
+    colors[index * 3] = tone;
+    colors[index * 3 + 1] = tone;
+    colors[index * 3 + 2] = tone;
+  }
+
+  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+}
+
+function applySkinToneToMetalHighlights(material: THREE.MeshStandardMaterial) {
+  material.onBeforeCompile = (shader) => {
+    // MeshStandardMaterial 默认只把 vertex color 乘到漫反射，金属高光仍会把黑区照亮。
+    // 这里在标准光照结算前同步压低黑区的 diffuse/specular，保证上半身黑色是均匀皮肤覆盖，而不是几块纯色材质。
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <lights_fragment_end>",
+      `
+      #include <lights_fragment_end>
+      #ifdef USE_COLOR
+        vec3 robotSkinTone = clamp(vColor.rgb, vec3(0.1), vec3(1.0));
+        reflectedLight.directDiffuse *= robotSkinTone;
+        reflectedLight.indirectDiffuse *= robotSkinTone;
+        reflectedLight.directSpecular *= mix(vec3(0.08), vec3(1.0), robotSkinTone);
+        reflectedLight.indirectSpecular *= mix(vec3(0.06), vec3(1.0), robotSkinTone);
+      #endif
+      `
+    );
+  };
+  material.customProgramCacheKey = () => "robot-story-black-white-skin-tone-v2";
 }
 
 function interpolateChapterVector(
@@ -524,7 +647,10 @@ function attachDamagedHelmet(runtime: RobotRuntime, helmetScene: THREE.Group) {
   runtime.helmet = helmetScene;
 }
 
-function prepareSoldierBodyMaterial(material: THREE.MeshStandardMaterial, cyberRig: CyberRobotRig) {
+function prepareSoldierBodyMaterial(
+  material: THREE.MeshStandardMaterial,
+  armorSkinTextures: RobotArmorSkinTextures
+) {
   const materialName = material.name.toLowerCase();
 
   material.envMapIntensity = 1.85;
@@ -533,54 +659,25 @@ function prepareSoldierBodyMaterial(material: THREE.MeshStandardMaterial, cyberR
     material.color.set(0x07111c);
     material.roughness = 0.22;
     material.metalness = 0.82;
-    cyberRig.armorMaterials.push(material);
-  } else if (materialName.includes("cool black armor panels")) {
-    // Blender 派生模型里新增的黑色面是这次“酷炫黑白占比”的主设计语言。
-    // 这里不再套白色翻新贴图，直接做成深黑镜面装甲，让胸甲、上肋和前臂形成更强的机甲分区。
-    material.map = null;
-    material.normalMap = null;
-    material.aoMap = null;
-    material.roughnessMap = null;
-    material.metalnessMap = null;
-    material.color.set(0x000103);
-    material.emissive.set(0x000000);
-    material.emissiveIntensity = 0;
-    material.envMapIntensity = 0.22;
-    material.roughness = 0.2;
-    material.metalness = 0.82;
-    cyberRig.armorMaterials.push(material);
-  } else if (materialName.includes("cyan signal trims")) {
-    // 青色只作为“系统上线”的信号光点，面积必须很小。
-    // 如果把它做成大色块，机器人会从黑白科技风变成游戏皮肤，所以这里保留发光但降低环境反射。
-    material.map = null;
-    material.normalMap = null;
-    material.aoMap = null;
-    material.roughnessMap = null;
-    material.metalnessMap = null;
-    material.color.set(0x78f7ff);
-    material.emissive.set(0x17d7ff);
-    material.emissiveIntensity = 1.18;
-    material.envMapIntensity = 0.32;
-    material.roughness = 0.2;
-    material.metalness = 0.48;
   } else {
-    material.map = createCleanTechArmorTexture(material.map, { upperBodyAccents: true }) ?? material.map;
+    // 用户要求“只需要黑白色覆盖”，这里改为整身统一皮肤材质：
+    // albedo 决定白银蜂窝和黑色凹槽，PBR 通道负责均匀浮雕，不再沿用 Soldier 原始战损贴图。
+    material.map = armorSkinTextures.albedo;
+    material.normalMap = armorSkinTextures.normal;
+    material.normalScale.set(0.22, 0.22);
+    material.aoMap = armorSkinTextures.ao;
+    material.roughnessMap = armorSkinTextures.roughness;
+    material.metalnessMap = armorSkinTextures.metalness;
     material.color.set(0xffffff);
-    // 残留的“战损裂纹”主要来自 Soldier 原始 normal/粗糙度通道，即使 diffuse 被洗白也会在近景里压出黑色凹痕。
-    // 身体装甲这次要呈现全新的黑白科技工艺，所以禁用旧化法线与旧贴图通道，只保留几何自身的硬表面轮廓。
-    material.normalMap = null;
-    material.aoMap = null;
-    material.roughnessMap = null;
-    material.metalnessMap = null;
-    material.envMapIntensity = 0.82;
-    material.roughness = 0.24;
-    material.metalness = 0.64;
+    material.envMapIntensity = 0.92;
+    material.roughness = 0.2;
+    material.metalness = 0.74;
   }
 
   material.needsUpdate = true;
 }
 
-function prepareRobotRuntime(gltfScene: THREE.Group, animations: THREE.AnimationClip[]) {
+function prepareRobotRuntime(gltfScene: THREE.Group, animations: THREE.AnimationClip[], armorSkinTextures: RobotArmorSkinTextures) {
   const model = gltfScene;
   const mixer = new THREE.AnimationMixer(model);
   const actions = new Map<string, THREE.AnimationAction>();
@@ -591,16 +688,25 @@ function prepareRobotRuntime(gltfScene: THREE.Group, animations: THREE.Animation
     if (object instanceof THREE.Mesh) {
       object.castShadow = true;
       object.receiveShadow = true;
+      applySmoothBlackWhiteSkinTone(object.geometry);
 
-      // SoldierBodyNoHead.glb 现在带有白色主体材质和 Blender 选面的黑色装甲材质。
-      // Three.js 导入多 primitive 时会把 material 变成数组；这里统一 clone 并逐个调 PBR，避免新黑色分区被跳过。
+      // SoldierBodyNoHead.glb 只保留无原头的官方身体几何；黑白风格统一在运行时 PBR 皮肤和顶点涂层里完成。
+      // 仍然兼容 material 数组，是为了后续替换更高精度模型时不需要重写材质入口。
       const sourceMaterials = Array.isArray(object.material) ? object.material : [object.material];
       const clonedMaterials = sourceMaterials.map((material) => material.clone());
       object.material = Array.isArray(object.material) ? clonedMaterials : clonedMaterials[0];
 
       clonedMaterials.forEach((material) => {
         if (material instanceof THREE.MeshStandardMaterial) {
-          prepareSoldierBodyMaterial(material, cyberRig);
+          prepareSoldierBodyMaterial(material, armorSkinTextures);
+
+          // 顶点色由当前几何的包围盒实时生成，用来做上半身黑银填充。
+          // 这层颜色只作为同一套蜂窝皮肤的乘法明暗，不再拆出额外黑色材质块。
+          if (object.geometry.hasAttribute("color")) {
+            material.vertexColors = true;
+            applySkinToneToMetalHighlights(material);
+            material.needsUpdate = true;
+          }
         }
       });
 
@@ -854,6 +960,8 @@ export function useRobotStoryScene({
     signalPanels.forEach((panel) => scene.add(panel.mesh));
 
     const loader = new GLTFLoader();
+    const textureLoader = new THREE.TextureLoader();
+    const armorSkinTextures = createRobotArmorSkinTextures(textureLoader);
     new UltraHDRLoader().load(
       HELMET_ENVIRONMENT_PATH,
       (texture) => {
@@ -882,7 +990,7 @@ export function useRobotStoryScene({
           return;
         }
 
-        runtime = prepareRobotRuntime(gltf.scene, gltf.animations);
+        runtime = prepareRobotRuntime(gltf.scene, gltf.animations, armorSkinTextures);
         robotPivot.add(runtime.model);
         if (runtime.cyberRig) {
           robotPivot.add(runtime.cyberRig.group);
@@ -1040,6 +1148,7 @@ export function useRobotStoryScene({
       renderer.dispose();
       scene.environment = null;
       helmetEnvironmentTexture?.dispose();
+      disposeRobotArmorSkinTextures(armorSkinTextures);
       disposeObject(scene);
     };
   }, [canvasRef, pointerRef, rootRef, setActiveChapterIndex, setSceneReady]);
