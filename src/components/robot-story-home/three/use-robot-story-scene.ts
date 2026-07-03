@@ -91,8 +91,8 @@ function configureRobotArmorTexture(texture: THREE.Texture, colorTexture = false
 }
 
 function createRobotArmorSkinTextures(loader: THREE.TextureLoader) {
-  // 黑白蜂窝皮肤来自 PBR 材质包的结构贴图；albedo 已在资产生成时把部分蜂窝块重绘成纯黑。
-  // 运行时只复用同一套 map，避免用 shader 或额外几何把机甲压成大面积纯黑。
+  // 黑白蜂窝皮肤来自 PBR 材质包的结构贴图；albedo 已在资产生成时按蜂窝单元做规则黑白间隔。
+  // 运行时只复用同一套 map，让每个黑格都填满蜂窝边界，避免用 shader 或额外几何把机甲压成纯黑块。
   return {
     albedo: configureRobotArmorTexture(loader.load(robotArmorSkinTexturePaths.albedo), true),
     ao: configureRobotArmorTexture(loader.load(robotArmorSkinTexturePaths.ao)),
