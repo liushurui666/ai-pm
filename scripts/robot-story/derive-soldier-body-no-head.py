@@ -4,11 +4,13 @@ from pathlib import Path
 
 import bmesh
 import bpy
+from mathutils import Vector
 
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE_MODEL = ROOT / "public/robot-story/models/Soldier.glb"
 OUTPUT_MODEL = ROOT / "public/robot-story/models/SoldierBodyNoHead.glb"
+BLACK_PANEL_MATERIAL_NAME = "Robot story cool black armor panels"
 
 
 def clear_scene() -> None:
@@ -30,6 +32,65 @@ def remove_source_visor() -> None:
 def get_vertex_group_weight(vertex: bmesh.types.BMVert, deform_layer: bmesh.types.BMLayerItem, group_index: int) -> float:
     """读取 bmesh 顶点组权重；缺省权重按 0 处理，避免无权重顶点触发异常。"""
     return vertex[deform_layer].get(group_index, 0.0)
+
+
+def create_cool_black_panel_material() -> bpy.types.Material:
+    """创建黑色装甲分区材质，作为黑白占比优化的真实模型面材质。"""
+    material = bpy.data.materials.new(BLACK_PANEL_MATERIAL_NAME)
+    material.use_nodes = True
+    material.diffuse_color = (0.01, 0.016, 0.028, 1.0)
+
+    node = material.node_tree.nodes.get("Principled BSDF")
+
+    if node:
+        if "Base Color" in node.inputs:
+            node.inputs["Base Color"].default_value = (0.01, 0.016, 0.028, 1.0)
+        if "Metallic" in node.inputs:
+            node.inputs["Metallic"].default_value = 0.88
+        if "Roughness" in node.inputs:
+            node.inputs["Roughness"].default_value = 0.18
+
+    return material
+
+
+def is_cool_black_panel_face(center: Vector) -> bool:
+    """按世界坐标选择更酷的黑色机甲分区，避免靠前端叠可见贴片。
+
+    Soldier 的坐标在导入后存在对象缩放，使用世界坐标能稳定命中胸甲、上肋和前臂。
+    这些区域都是结构化大块面，刻意避开腿部白甲和原始战损纹理，提升黑白占比但不引入旧化感。
+    """
+    x = center.x
+    z = center.z
+    abs_x = abs(x)
+    is_chest_core = abs_x < 0.24 and 1.14 < z < 1.43
+    is_chest_side_wing = 0.2 < abs_x < 0.42 and 1.08 < z < 1.36
+    is_upper_rib_insert = 0.28 < abs_x < 0.48 and 0.98 < z < 1.14
+    is_forearm_cuff = 0.58 < abs_x < 0.9 and 0.72 < z < 1.08
+
+    return is_chest_core or is_chest_side_wing or is_upper_rib_insert or is_forearm_cuff
+
+
+def assign_cool_black_panel_faces() -> None:
+    """把黑色设计语言写入派生 GLB，而不是依赖运行时额外几何贴片。"""
+    body = bpy.data.objects.get("vanguard_Mesh")
+
+    if not body or body.type != "MESH":
+        raise RuntimeError("Soldier body mesh vanguard_Mesh was not found")
+
+    material = create_cool_black_panel_material()
+    body.data.materials.append(material)
+    material_index = len(body.data.materials) - 1
+    selected_count = 0
+
+    for polygon in body.data.polygons:
+        center = sum((body.data.vertices[index].co for index in polygon.vertices), Vector()) / len(polygon.vertices)
+        world_center = body.matrix_world @ center
+
+        if is_cool_black_panel_face(world_center):
+            polygon.material_index = material_index
+            selected_count += 1
+
+    print(f"Assigned {selected_count} Soldier body faces to cool black armor panels")
 
 
 def remove_head_faces_from_body() -> None:
@@ -88,6 +149,7 @@ def derive_soldier_body_no_head() -> None:
     bpy.ops.import_scene.gltf(filepath=str(SOURCE_MODEL))
     remove_source_visor()
     remove_head_faces_from_body()
+    assign_cool_black_panel_faces()
 
     OUTPUT_MODEL.parent.mkdir(parents=True, exist_ok=True)
     bpy.ops.export_scene.gltf(

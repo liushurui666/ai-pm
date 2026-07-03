@@ -375,12 +375,17 @@ function createCleanTechArmorTexture(sourceTexture: THREE.Texture | null, option
       !isScratchOnLightPanel;
 
     if ((isDeepStructuralBlack && !isWarmDamage) || isUpperBodyAccent) {
-      const gloss = THREE.MathUtils.clamp(luminance / 84, 0, 1);
-      const accentBoost = isUpperBodyAccent ? 10 : 0;
+      const gloss = THREE.MathUtils.clamp(luminance / (isUpperBodyAccent ? 255 : 84), 0, 1);
 
-      pixels[index] = 4 + accentBoost + gloss * 10;
-      pixels[index + 1] = 7 + accentBoost + gloss * 14;
-      pixels[index + 2] = 13 + accentBoost + gloss * 28;
+      if (isUpperBodyAccent) {
+        pixels[index] = 1 + gloss * 4;
+        pixels[index + 1] = 2 + gloss * 5;
+        pixels[index + 2] = 5 + gloss * 8;
+      } else {
+        pixels[index] = 4 + gloss * 10;
+        pixels[index + 1] = 7 + gloss * 14;
+        pixels[index + 2] = 13 + gloss * 28;
+      }
     } else {
       const panel = THREE.MathUtils.clamp((Math.max(luminance, neighborLuminance, wideNeighborLuminance) - 48) / 207, 0, 1);
       const cleanWhite = 214 + panel * 38;
@@ -519,6 +524,48 @@ function attachDamagedHelmet(runtime: RobotRuntime, helmetScene: THREE.Group) {
   runtime.helmet = helmetScene;
 }
 
+function prepareSoldierBodyMaterial(material: THREE.MeshStandardMaterial, cyberRig: CyberRobotRig) {
+  const materialName = material.name.toLowerCase();
+
+  material.envMapIntensity = 1.85;
+
+  if (materialName.includes("visor")) {
+    material.color.set(0x07111c);
+    material.roughness = 0.22;
+    material.metalness = 0.82;
+    cyberRig.armorMaterials.push(material);
+  } else if (materialName.includes("cool black armor panels")) {
+    // Blender 派生模型里新增的黑色面是这次“酷炫黑白占比”的主设计语言。
+    // 这里不再套白色翻新贴图，直接做成深黑镜面装甲，让胸甲、上肋和前臂形成更强的机甲分区。
+    material.map = null;
+    material.normalMap = null;
+    material.aoMap = null;
+    material.roughnessMap = null;
+    material.metalnessMap = null;
+    material.color.set(0x000103);
+    material.emissive.set(0x000000);
+    material.emissiveIntensity = 0;
+    material.envMapIntensity = 0.48;
+    material.roughness = 0.28;
+    material.metalness = 0.68;
+    cyberRig.armorMaterials.push(material);
+  } else {
+    material.map = createCleanTechArmorTexture(material.map, { upperBodyAccents: true }) ?? material.map;
+    material.color.set(0xffffff);
+    // 残留的“战损裂纹”主要来自 Soldier 原始 normal/粗糙度通道，即使 diffuse 被洗白也会在近景里压出黑色凹痕。
+    // 身体装甲这次要呈现全新的黑白科技工艺，所以禁用旧化法线与旧贴图通道，只保留几何自身的硬表面轮廓。
+    material.normalMap = null;
+    material.aoMap = null;
+    material.roughnessMap = null;
+    material.metalnessMap = null;
+    material.envMapIntensity = 0.82;
+    material.roughness = 0.24;
+    material.metalness = 0.64;
+  }
+
+  material.needsUpdate = true;
+}
+
 function prepareRobotRuntime(gltfScene: THREE.Group, animations: THREE.AnimationClip[]) {
   const model = gltfScene;
   const mixer = new THREE.AnimationMixer(model);
@@ -531,35 +578,17 @@ function prepareRobotRuntime(gltfScene: THREE.Group, animations: THREE.Animation
       object.castShadow = true;
       object.receiveShadow = true;
 
-      if (object.material instanceof THREE.MeshStandardMaterial) {
-        object.material = object.material.clone();
-        object.material.envMapIntensity = 1.85;
+      // SoldierBodyNoHead.glb 现在带有白色主体材质和 Blender 选面的黑色装甲材质。
+      // Three.js 导入多 primitive 时会把 material 变成数组；这里统一 clone 并逐个调 PBR，避免新黑色分区被跳过。
+      const sourceMaterials = Array.isArray(object.material) ? object.material : [object.material];
+      const clonedMaterials = sourceMaterials.map((material) => material.clone());
+      object.material = Array.isArray(object.material) ? clonedMaterials : clonedMaterials[0];
 
-        // 用户现在要全新的纯白黑科技工艺，不要战损和旧化。
-        // 因此这里把 Soldier 原 diffuse 翻新成冷白外甲和蓝黑镜面结构，同时抹掉暖色锈蚀和大部分细碎刮痕。
-        const materialName = object.material.name.toLowerCase();
-
-        if (materialName.includes("visor")) {
-          object.material.color.set(0x07111c);
-          object.material.roughness = 0.22;
-          object.material.metalness = 0.82;
-          cyberRig.armorMaterials.push(object.material);
-        } else {
-          object.material.map = createCleanTechArmorTexture(object.material.map, { upperBodyAccents: true }) ?? object.material.map;
-          object.material.color.set(0xffffff);
-          // 残留的“战损裂纹”主要来自 Soldier 原始 normal/粗糙度通道，即使 diffuse 被洗白也会在近景里压出黑色凹痕。
-          // 身体装甲这次要呈现全新的黑白科技工艺，所以禁用旧化法线与旧贴图通道，只保留几何自身的硬表面轮廓。
-          object.material.normalMap = null;
-          object.material.aoMap = null;
-          object.material.roughnessMap = null;
-          object.material.metalnessMap = null;
-          object.material.envMapIntensity = 0.82;
-          object.material.roughness = 0.24;
-          object.material.metalness = 0.64;
+      clonedMaterials.forEach((material) => {
+        if (material instanceof THREE.MeshStandardMaterial) {
+          prepareSoldierBodyMaterial(material, cyberRig);
         }
-
-        object.material.needsUpdate = true;
-      }
+      });
 
       if (object.morphTargetDictionary && object.morphTargetInfluences) {
         face = object;
