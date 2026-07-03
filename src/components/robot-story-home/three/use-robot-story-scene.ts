@@ -4,7 +4,7 @@ import { useEffect, type RefObject } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { UltraHDRLoader } from "three/examples/jsm/loaders/UltraHDRLoader.js";
-import { HELMET_ENVIRONMENT_PATH, HELMET_MODEL_PATH, ROBOT_MODEL_PATH, robotStoryChapters } from "../story-data";
+import { HELMET_ENVIRONMENT_PATH, HELMET_MODEL_PATH, ROBOT_MODEL_HAS_SOURCE_HELMET, ROBOT_MODEL_PATH, robotStoryChapters } from "../story-data";
 import type { RobotStoryChapter } from "../story-data";
 
 type UseRobotStorySceneOptions = {
@@ -510,7 +510,11 @@ function attachDamagedHelmet(runtime: RobotRuntime, helmetScene: THREE.Group) {
     }
   });
 
-  removeOriginalSoldierHelmet(runtime);
+  // 默认模型已经由 Blender 派生成无原头身体；运行时删头只保留给回退到原始 Soldier.glb 时使用。
+  // 这样刷新或缓存命中时也不会再出现“旧头盔先露出来再被前端过滤”的闪烁/残留问题。
+  if (ROBOT_MODEL_HAS_SOURCE_HELMET) {
+    removeOriginalSoldierHelmet(runtime);
+  }
   headBone.add(helmetScene);
   runtime.helmet = helmetScene;
 }

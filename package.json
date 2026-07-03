@@ -39,7 +39,8 @@
     "dashboard-side-effect:worker": "tsx scripts/dashboard-side-effect-worker.ts",
     "bug-fix:worker": "tsx scripts/bug-fix-worker.ts",
     "aero:models": "blender --background --python scripts/aero-system/derive-aero-scene.py",
-    "aero:models:validate": "python3 scripts/aero-system/validate-derived-models.py"
+    "aero:models:validate": "python3 scripts/aero-system/validate-derived-models.py",
+    "robot:soldier-body": "blender --background --python scripts/robot-story/derive-soldier-body-no-head.py"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^2.0.48",
