@@ -7,14 +7,16 @@
   "blenderFile": "assets/aero-system/blender/derived/bug-repair-dock/bug-repair-dock.blend",
   "sourceFiles": [
     "Floating_Island_01_Art.glb",
+    "Terrain_Art.glb",
+    "Tree_01_Art.glb",
     "Aero_Door_01.glb",
     "Aero_Lampost_01.glb"
   ],
   "placement": {
     "position": [
       1.34,
-      -0.54,
-      1.22
+      -0.46,
+      1.08
     ],
     "rotation": [
       0,
@@ -22,21 +24,21 @@
       0
     ],
     "scale": [
-      1,
-      1,
-      1
+      0.88,
+      0.88,
+      0.88
     ]
   },
   "anchors": {
     "socket.card": [
       1.38,
       0.14,
-      1.3
+      1.14
     ],
     "socket.cameraFocus": [
       1.34,
-      -0.58,
-      1.22
+      -0.52,
+      1.08
     ]
   }
 }

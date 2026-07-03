@@ -20,9 +20,9 @@
   min-height: 100svh;
   overflow: hidden;
   background:
-    radial-gradient(circle at 70% 42%, rgba(33, 149, 142, 0.2), transparent 30%),
-    radial-gradient(circle at 42% 55%, rgba(48, 151, 214, 0.12), transparent 34%),
-    linear-gradient(180deg, #06111b 0%, #02070d 42%, #010304 100%);
+    radial-gradient(circle at 72% 38%, rgba(34, 150, 142, 0.14), transparent 32%),
+    radial-gradient(circle at 48% 58%, rgba(50, 151, 214, 0.08), transparent 36%),
+    linear-gradient(180deg, #050d16 0%, #02060c 48%, #010304 100%);
 }
 
 .aero-system-showcase__backdrop,
@@ -36,9 +36,9 @@
 .aero-system-showcase__backdrop {
   z-index: 0;
   background:
-    linear-gradient(rgba(118, 232, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(118, 232, 255, 0.032) 1px, transparent 1px),
-    radial-gradient(circle at 58% 42%, rgba(114, 232, 255, 0.12), transparent 34%);
+    linear-gradient(rgba(118, 232, 255, 0.01) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(118, 232, 255, 0.008) 1px, transparent 1px),
+    radial-gradient(circle at 62% 38%, rgba(114, 232, 255, 0.07), transparent 36%);
   background-size: 72px 72px, 72px 72px, 100% 100%;
 }
 
@@ -53,9 +53,12 @@
 
 .aero-system-showcase__cloud-veil {
   z-index: 2;
-  opacity: 0.72;
+  opacity: 0.86;
   background:
-    linear-gradient(180deg, transparent 0%, rgba(58, 158, 182, 0.05) 45%, rgba(2, 7, 10, 0.78) 100%),
+    radial-gradient(ellipse at 72% 69%, rgba(168, 190, 204, 0.16), transparent 30%),
+    radial-gradient(ellipse at 56% 72%, rgba(72, 152, 180, 0.12), transparent 34%),
+    radial-gradient(ellipse at 72% 86%, rgba(210, 220, 225, 0.12), transparent 34%),
+    linear-gradient(180deg, transparent 0%, rgba(58, 158, 182, 0.035) 45%, rgba(2, 7, 10, 0.82) 100%),
     repeating-linear-gradient(106deg, transparent 0 30px, rgba(100, 232, 255, 0.02) 31px 32px);
   mix-blend-mode: screen;
 }
@@ -63,8 +66,8 @@
 .aero-system-showcase__cinema-grade {
   z-index: 3;
   background:
-    linear-gradient(90deg, rgba(0, 0, 0, 0.46), transparent 28%, transparent 72%, rgba(0, 0, 0, 0.28)),
-    radial-gradient(ellipse at 60% 48%, transparent 0%, rgba(0, 0, 0, 0.14) 46%, rgba(0, 0, 0, 0.55) 100%);
+    linear-gradient(90deg, rgba(0, 0, 0, 0.68), transparent 30%, transparent 74%, rgba(0, 0, 0, 0.38)),
+    radial-gradient(ellipse at 63% 48%, transparent 0%, rgba(0, 0, 0, 0.14) 46%, rgba(0, 0, 0, 0.68) 100%);
 }
 
 .aero-system-showcase__canvas {
@@ -351,18 +354,18 @@
 
 .aero-system-showcase__floating-card[data-card="requirements"] {
   top: 21%;
-  left: 29.8%;
+  left: 34%;
   --card-tilt: -9deg;
 }
 
 .aero-system-showcase__floating-card[data-card="versions"] {
   top: 56%;
-  left: 38.5%;
+  left: 42.5%;
   --card-tilt: 7deg;
 }
 
 .aero-system-showcase__floating-card[data-card="bugs"] {
-  right: 15.5%;
+  right: 13%;
   bottom: 23.5%;
   --card-tilt: -7deg;
 }

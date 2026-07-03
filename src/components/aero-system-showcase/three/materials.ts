@@ -14,25 +14,37 @@ export function tuneDerivedAeroMaterial(item: THREE.Material, emissiveMaterials:
     roughness?: number;
   };
 
+  const isNaturalSurface =
+    materialName.includes("rock") ||
+    materialName.includes("terrain") ||
+    materialName.includes("tree") ||
+    materialName.includes("leaf") ||
+    materialName.includes("island");
+  const isSourceGlow =
+    materialName.includes("glow") ||
+    materialName.includes("glass") ||
+    materialName.includes("ring") ||
+    materialName.includes("light");
+
   if ("envMapIntensity" in flexibleMaterial) {
-    flexibleMaterial.envMapIntensity = 1.24;
+    flexibleMaterial.envMapIntensity = isNaturalSurface ? 0.56 : 1.16;
   }
 
   if ("metalness" in flexibleMaterial) {
-    flexibleMaterial.metalness = materialName.includes("rock") ? 0.12 : 0.72;
+    flexibleMaterial.metalness = isNaturalSurface ? 0.16 : 0.66;
   }
 
   if ("roughness" in flexibleMaterial) {
-    flexibleMaterial.roughness = materialName.includes("rock") ? 0.8 : 0.3;
+    flexibleMaterial.roughness = isNaturalSurface ? 0.82 : 0.34;
   }
 
   if ("color" in flexibleMaterial && flexibleMaterial.color) {
-    if (materialName.includes("rock")) {
-      flexibleMaterial.color.set("#071014");
+    if (isNaturalSurface) {
+      flexibleMaterial.color.lerp(new THREE.Color("#041016"), 0.22);
     } else if (materialName.includes("airship")) {
-      flexibleMaterial.color.set("#96a2a8");
+      flexibleMaterial.color.lerp(new THREE.Color("#c6d2d8"), 0.18);
     } else if (materialName.includes("glass")) {
-      flexibleMaterial.color.set("#87f8ff");
+      flexibleMaterial.color.lerp(new THREE.Color("#2d6c74"), 0.68);
     } else if (materialName.includes("orange")) {
       flexibleMaterial.color.set("#ffc15e");
     } else if (materialName.includes("blue") || materialName.includes("cyan")) {
@@ -47,16 +59,19 @@ export function tuneDerivedAeroMaterial(item: THREE.Material, emissiveMaterials:
   if ("emissive" in flexibleMaterial && flexibleMaterial.emissive) {
     if (materialName.includes("orange")) {
       flexibleMaterial.emissive.set("#ff9f2d");
-      flexibleMaterial.emissiveIntensity = 1.28;
+      flexibleMaterial.emissiveIntensity = 0.82;
     } else if (materialName.includes("blue") || materialName.includes("cyan")) {
       flexibleMaterial.emissive.set("#42dfff");
-      flexibleMaterial.emissiveIntensity = 1.18;
+      flexibleMaterial.emissiveIntensity = 0.74;
     } else if (materialName.includes("magenta")) {
       flexibleMaterial.emissive.set("#ff54d6");
-      flexibleMaterial.emissiveIntensity = 1.16;
+      flexibleMaterial.emissiveIntensity = 0.82;
+    } else if (isSourceGlow) {
+      flexibleMaterial.emissive.set("#58e5ff");
+      flexibleMaterial.emissiveIntensity = materialName.includes("glass") ? 0.08 : 0.2;
     } else {
       flexibleMaterial.emissive.set("#123744");
-      flexibleMaterial.emissiveIntensity = 0.08;
+      flexibleMaterial.emissiveIntensity = isNaturalSurface ? 0.02 : 0.08;
     }
   }
 
@@ -68,7 +83,7 @@ export function tuneDerivedAeroMaterial(item: THREE.Material, emissiveMaterials:
   if (materialName.includes("glass")) {
     item.transparent = true;
     item.depthWrite = false;
-    flexibleMaterial.opacity = 0.38;
+    flexibleMaterial.opacity = 0.18;
     item.needsUpdate = true;
   }
 }

@@ -7,14 +7,16 @@
   "blenderFile": "assets/aero-system/blender/derived/version-harbor-island/version-harbor-island.blend",
   "sourceFiles": [
     "Floating_Island_01_Art.glb",
+    "Terrain_Art.glb",
+    "Tree_01_Art.glb",
     "Aero_Station_Ring_Art.glb",
     "Aero_Ground_Hexagons_02_Art.glb"
   ],
   "placement": {
     "position": [
-      -0.42,
-      -0.52,
-      1.04
+      -0.12,
+      -0.48,
+      0.98
     ],
     "rotation": [
       0,
@@ -22,21 +24,21 @@
       0
     ],
     "scale": [
-      1,
-      1,
-      1
+      0.88,
+      0.88,
+      0.88
     ]
   },
   "anchors": {
     "socket.card": [
-      -0.37,
-      0.2,
-      1.12
+      -0.06,
+      0.16,
+      1.06
     ],
     "socket.cameraFocus": [
-      -0.42,
-      -0.54,
-      1.04
+      -0.12,
+      -0.52,
+      0.98
     ]
   }
 }

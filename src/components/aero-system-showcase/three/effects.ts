@@ -19,20 +19,20 @@ export function createRouteNetwork(routes: AeroRouteDefinition[]) {
       blending: THREE.AdditiveBlending,
       color,
       depthWrite: false,
-      opacity: 0.9,
+      opacity: 0.82,
       transparent: true,
     });
     const glowMaterial = new THREE.MeshBasicMaterial({
       blending: THREE.AdditiveBlending,
       color,
       depthWrite: false,
-      opacity: 0.18,
+      opacity: 0.14,
       transparent: true,
     });
 
     // 航线光轨保留在运行时生成，因为它需要随滚动和时间流动；Blender 只提供灯塔和锚点。
-    group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 180, 0.014, 8, false), coreMaterial));
-    group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 180, 0.07, 12, false), glowMaterial));
+    group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 180, 0.011, 8, false), coreMaterial));
+    group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 180, 0.045, 12, false), glowMaterial));
     runtimeRoutes.push({ color, curve, id: route.id });
   });
 
@@ -52,13 +52,13 @@ export function createCardBeaconField(cards: AeroSceneCard[]) {
       transparent: true,
     });
     const ringMaterial = beaconMaterial.clone();
-    ringMaterial.opacity = 0.32;
+    ringMaterial.opacity = 0.18;
 
     const root = new THREE.Group();
     root.position.set(...card.position);
     root.userData.cardId = card.id;
-    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.05, 18, 18), beaconMaterial);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.008, 8, 72), ringMaterial);
+    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.038, 18, 18), beaconMaterial);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.006, 8, 64), ringMaterial);
     ring.rotation.x = Math.PI / 2;
     root.add(beacon);
     root.add(ring);
@@ -84,7 +84,7 @@ export function createRoutePulseFleet(runtimeRoutes: RuntimeRoute[]) {
         opacity: 0.72,
         transparent: true,
       });
-      const pulse = new THREE.Mesh(new THREE.SphereGeometry(0.028 + (index % 2) * 0.008, 14, 14), material);
+      const pulse = new THREE.Mesh(new THREE.SphereGeometry(0.023 + (index % 2) * 0.007, 14, 14), material);
       pulse.userData.routeId = route.id;
       pulse.userData.routeIndex = routeIndex;
       pulse.userData.routeOffset = index / 8;

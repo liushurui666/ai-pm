@@ -74,7 +74,7 @@ export function createStarField() {
 }
 
 export function createCloudBank() {
-  const count = 980;
+  const count = 760;
   const positions = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
   const blue = new THREE.Color("#6edcff");
@@ -82,12 +82,12 @@ export function createCloudBank() {
   const grey = new THREE.Color("#b8c6cf");
 
   for (let index = 0; index < count; index += 1) {
-    const radius = 1.3 + Math.random() * 5.8;
+    const radius = 1.5 + Math.random() * 5.6;
     const angle = Math.random() * Math.PI * 2;
     const color = (index % 4 === 0 ? green : index % 2 === 0 ? blue : grey).clone();
 
     positions[index * 3] = Math.cos(angle) * radius + 0.42 + (Math.random() - 0.5) * 1.4;
-    positions[index * 3 + 1] = -1.05 + (Math.random() - 0.5) * 0.42;
+    positions[index * 3 + 1] = -1.22 + (Math.random() - 0.5) * 0.42;
     positions[index * 3 + 2] = Math.sin(angle) * radius + 0.3 + (Math.random() - 0.5) * 1.6;
     colors[index * 3] = color.r;
     colors[index * 3 + 1] = color.g;
@@ -103,8 +103,8 @@ export function createCloudBank() {
     new THREE.PointsMaterial({
       blending: THREE.AdditiveBlending,
       depthWrite: false,
-      opacity: 0.12,
-      size: 0.12,
+      opacity: 0.08,
+      size: 0.045,
       transparent: true,
       vertexColors: true,
     })
@@ -134,7 +134,7 @@ export function createRunwayGrid() {
     new THREE.LineBasicMaterial({
       blending: THREE.AdditiveBlending,
       depthWrite: false,
-      opacity: 0.12,
+      opacity: 0.018,
       transparent: true,
       vertexColors: true,
     })

@@ -87,7 +87,7 @@ export function useAeroFlightScene({
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.32));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.08;
+    renderer.toneMappingExposure = 0.78;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;
 
@@ -100,38 +100,38 @@ export function useAeroFlightScene({
     scene.environment = environmentMap;
 
     const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 90);
-    camera.position.set(0.2, 1.55, 6.25);
+    camera.position.set(0.16, 1.62, 6.65);
 
     const composer = new EffectComposer(renderer);
     const renderPass = new RenderPass(scene, camera);
-    const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.36, 0.54, 0.6);
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.28, 0.72, 0.66);
     const outputPass = new OutputPass();
     composer.addPass(renderPass);
     composer.addPass(bloomPass);
     composer.addPass(outputPass);
 
     const rig = new THREE.Group();
-    rig.position.set(0.86, -0.02, 0);
-    rig.rotation.x = -0.026;
+    rig.position.set(1.16, 0.04, 0);
+    rig.rotation.x = -0.032;
     scene.add(rig);
 
-    scene.add(new THREE.HemisphereLight(0xccefff, 0x070910, 1.72));
-    const keyLight = new THREE.DirectionalLight(0xeaf8ff, 3.35);
+    scene.add(new THREE.HemisphereLight(0xccefff, 0x070910, 1.05));
+    const keyLight = new THREE.DirectionalLight(0xeaf8ff, 2.1);
     keyLight.position.set(-3.8, 4.6, 3.2);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.set(2048, 2048);
     scene.add(keyLight);
 
-    const magentaLight = new THREE.PointLight(0xff66d8, 5.6, 9);
+    const magentaLight = new THREE.PointLight(0xff66d8, 3.6, 8);
     magentaLight.position.set(0.8, 1.5, -0.3);
     scene.add(magentaLight);
 
-    const cyanLight = new THREE.PointLight(0x66efff, 5.3, 9);
-    cyanLight.position.set(-1.5, 0.7, 0.2);
+    const cyanLight = new THREE.PointLight(0x66efff, 3.6, 8);
+    cyanLight.position.set(-1.0, 0.68, 0.2);
     scene.add(cyanLight);
 
-    const amberLight = new THREE.PointLight(0xffc05e, 5.6, 10);
-    amberLight.position.set(2.0, 0.62, 0.88);
+    const amberLight = new THREE.PointLight(0xffc05e, 3.0, 8.5);
+    amberLight.position.set(2.16, 0.56, 0.82);
     scene.add(amberLight);
 
     const starField = createStarField();
@@ -216,11 +216,11 @@ export function useAeroFlightScene({
       const isNarrow = viewportWidth < 720;
 
       rig.rotation.y += ((pointer.active ? pointer.x * 0.008 : 0) - rig.rotation.y) * 0.045;
-      rig.rotation.x += ((pointer.active ? -pointer.y * 0.006 : -0.026) - rig.rotation.x) * 0.04;
+      rig.rotation.x += ((pointer.active ? -pointer.y * 0.005 : -0.032) - rig.rotation.x) * 0.04;
       starField.rotation.y = elapsed * 0.01;
       cloudBank.rotation.y = -elapsed * 0.008;
-      cloudBank.position.y = -0.02 + Math.sin(elapsed * 0.28) * 0.025;
-      runwayGrid.position.y = -1.36 + Math.sin(elapsed * 0.4) * 0.01;
+      cloudBank.position.y = -0.14 + Math.sin(elapsed * 0.28) * 0.025;
+      runwayGrid.position.y = -1.62 + Math.sin(elapsed * 0.4) * 0.01;
       nebulaPlanes.children.forEach((sprite, index) => {
         sprite.position.y += Math.sin(elapsed * 0.2 + index) * 0.0008;
       });
@@ -254,7 +254,9 @@ export function useAeroFlightScene({
       });
 
       if (airshipRoot) {
-        const flightProgress = clamp(progress * 0.94 + 0.03 + Math.sin(elapsed * 0.7) * 0.006, 0.02, 0.98);
+        // 目标图首屏里飞艇已经进入右侧金色航线，因此初始值不从需求塔台起飞；
+        // 滚动时再继续向上线闸口推进，形成“已经在调度航线中巡航”的叙事。
+        const flightProgress = clamp(0.58 + progress * 0.28 + Math.sin(elapsed * 0.7) * 0.004, 0.04, 0.98);
         const point = flightCurve.getPointAt(flightProgress);
         const tangent = flightCurve.getTangentAt(flightProgress);
 

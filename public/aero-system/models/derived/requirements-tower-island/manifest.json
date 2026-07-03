@@ -7,15 +7,17 @@
   "blenderFile": "assets/aero-system/blender/derived/requirements-tower-island/requirements-tower-island.blend",
   "sourceFiles": [
     "Floating_Island_01_Art.glb",
+    "Terrain_Art.glb",
+    "Tree_01_Art.glb",
     "Aero_Ground_Hexagons_01_Art.glb",
     "Aero_Station_Mini_Platform_Art.glb",
     "Aero_Lampost_01.glb"
   ],
   "placement": {
     "position": [
-      -1.34,
-      -0.22,
-      -0.08
+      -0.72,
+      -0.1,
+      -0.12
     ],
     "rotation": [
       0,
@@ -23,21 +25,21 @@
       0
     ],
     "scale": [
-      1,
-      1,
-      1
+      0.88,
+      0.88,
+      0.88
     ]
   },
   "anchors": {
     "socket.card": [
-      -1.42,
-      0.56,
-      -0.1
+      -0.76,
+      0.58,
+      -0.14
     ],
     "socket.cameraFocus": [
-      -1.34,
-      -0.14,
-      -0.08
+      -0.72,
+      -0.12,
+      -0.12
     ]
   }
 }

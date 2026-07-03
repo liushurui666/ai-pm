@@ -7,14 +7,16 @@
   "blenderFile": "assets/aero-system/blender/derived/launch-gate-island/launch-gate-island.blend",
   "sourceFiles": [
     "Floating_Island_01_Art.glb",
+    "Terrain_Art.glb",
+    "Tree_01_Art.glb",
     "Aero_Station_YellowRing_Art.glb",
     "Aero_Ground_Hexagon_Art.glb"
   ],
   "placement": {
     "position": [
-      2.34,
-      -0.28,
-      0.16
+      2.18,
+      -0.16,
+      0.12
     ],
     "rotation": [
       0,
@@ -22,21 +24,21 @@
       0
     ],
     "scale": [
-      1,
-      1,
-      1
+      0.88,
+      0.88,
+      0.88
     ]
   },
   "anchors": {
     "socket.card": [
-      2.26,
+      2.1,
       0.52,
-      0.26
+      0.22
     ],
     "socket.cameraFocus": [
-      2.34,
-      -0.26,
-      0.16
+      2.18,
+      -0.24,
+      0.12
     ]
   }
 }
