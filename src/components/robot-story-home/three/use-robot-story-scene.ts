@@ -244,6 +244,90 @@ function normalizeRobotModel(model: THREE.Group) {
   );
 }
 
+function createMonochromeArmorTexture(sourceTexture: THREE.Texture | null) {
+  if (!sourceTexture) {
+    return null;
+  }
+
+  const sourceImage = sourceTexture?.image as
+    | (CanvasImageSource & {
+        height?: number;
+        naturalHeight?: number;
+        naturalWidth?: number;
+        videoHeight?: number;
+        videoWidth?: number;
+        width?: number;
+      })
+    | undefined;
+
+  if (!sourceImage) {
+    return null;
+  }
+
+  const width = sourceImage.width ?? sourceImage.naturalWidth ?? sourceImage.videoWidth ?? 0;
+  const height = sourceImage.height ?? sourceImage.naturalHeight ?? sourceImage.videoHeight ?? 0;
+
+  if (!width || !height) {
+    return null;
+  }
+
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+
+  canvas.width = width;
+  canvas.height = height;
+
+  if (!context) {
+    return null;
+  }
+
+  context.drawImage(sourceImage, 0, 0, width, height);
+  const imageData = context.getImageData(0, 0, width, height);
+  const pixels = imageData.data;
+
+  // Soldier 官方贴图把装甲、黑色内衬、划痕和红色装饰都烘在同一张 diffuse 里。
+  // 这里按像素重映射：红色标识保留，暗部继续做黑色机甲结构，米黄色装甲统一提成冷白。
+  for (let index = 0; index < pixels.length; index += 4) {
+    const r = pixels[index];
+    const g = pixels[index + 1];
+    const b = pixels[index + 2];
+    const luminance = r * 0.299 + g * 0.587 + b * 0.114;
+    const isRedMark = r > 110 && r > g * 1.35 && r > b * 1.25;
+
+    if (isRedMark) {
+      pixels[index] = Math.min(230, r * 1.08);
+      pixels[index + 1] = Math.max(24, g * 0.45);
+      pixels[index + 2] = Math.max(22, b * 0.42);
+    } else if (luminance < 82) {
+      const dark = Math.max(12, luminance * 0.62);
+
+      pixels[index] = dark * 0.78;
+      pixels[index + 1] = dark * 0.9;
+      pixels[index + 2] = dark;
+    } else {
+      const detail = THREE.MathUtils.clamp((luminance - 82) / 173, 0, 1);
+      const white = 178 + detail * 74;
+
+      pixels[index] = white;
+      pixels[index + 1] = Math.min(255, white + 3);
+      pixels[index + 2] = Math.min(255, white + 8);
+    }
+  }
+
+  context.putImageData(imageData, 0, 0);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.flipY = sourceTexture.flipY;
+  texture.wrapS = sourceTexture.wrapS;
+  texture.wrapT = sourceTexture.wrapT;
+  texture.repeat.copy(sourceTexture.repeat);
+  texture.offset.copy(sourceTexture.offset);
+  texture.needsUpdate = true;
+
+  return texture;
+}
+
 function prepareRobotRuntime(gltfScene: THREE.Group, animations: THREE.AnimationClip[]) {
   const model = gltfScene;
   const mixer = new THREE.AnimationMixer(model);
@@ -260,13 +344,23 @@ function prepareRobotRuntime(gltfScene: THREE.Group, animations: THREE.Animation
         object.material = object.material.clone();
         object.material.envMapIntensity = 1.85;
 
-        // Soldier.glb 自带贴图和材质，运行时只提高环境响应，不再覆盖 baseColor/roughness。
-        // 这样页面看到的就是 Three.js 示例里的机器人，而不是再被前端调成另一套材质。
+        // 用户希望保留官方 Soldier 模型和动作，但涂装改成黑白机甲。
+        // 因此不删除整张贴图，而是把装甲区域白化，同时保留黑色结构、划痕和少量红色装饰。
         const materialName = object.material.name.toLowerCase();
 
         if (materialName.includes("visor")) {
+          object.material.color.set(0x101d22);
+          object.material.roughness = 0.34;
+          object.material.metalness = 0.28;
           cyberRig.armorMaterials.push(object.material);
+        } else {
+          object.material.map = createMonochromeArmorTexture(object.material.map) ?? object.material.map;
+          object.material.color.set(0xffffff);
+          object.material.roughness = 0.38;
+          object.material.metalness = 0.16;
         }
+
+        object.material.needsUpdate = true;
       }
 
       if (object.morphTargetDictionary && object.morphTargetInfluences) {
