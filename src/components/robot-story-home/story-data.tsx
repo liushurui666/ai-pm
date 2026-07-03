@@ -17,8 +17,7 @@ export type RobotStoryChapter = {
   signal: string;
   metric: string;
   accent: string;
-  baseAction: "Idle" | "Walking" | "Running" | "Dance";
-  gestureAction?: "Wave" | "Yes" | "No" | "ThumbsUp" | "Punch" | "Jump";
+  baseAction: "Idle" | "Walk" | "Run";
   cameraPosition: [number, number, number];
   cameraLookAt: [number, number, number];
   robotRotationY: number;
@@ -53,13 +52,12 @@ export const robotStoryChapters: RobotStoryChapter[] = [
     index: "02",
     eyebrow: "REQUIREMENT SCAN",
     title: "需求被拆成可执行地图",
-    subtitle: "镜头贴近手势，验收点像光束一样展开。",
+    subtitle: "镜头贴近装甲细节，验收点像光束一样展开。",
     body: "PRD、会议纪要和口头描述进入系统后，AI 先拆角色、边界、验收点和风险，研发不用再从群聊里找上下文。",
     signal: "acceptance nodes mapped",
     metric: "12 nodes traced",
     accent: "#9b8cff",
-    baseAction: "Walking",
-    gestureAction: "Yes",
+    baseAction: "Walk",
     cameraPosition: [-2.38, 1.82, 3.62],
     cameraLookAt: [-0.1, 1.42, 0.08],
     robotRotationY: 0.38,
@@ -77,8 +75,7 @@ export const robotStoryChapters: RobotStoryChapter[] = [
     signal: "delivery route locked",
     metric: "24 moves today",
     accent: "#b8c98a",
-    baseAction: "Running",
-    gestureAction: "ThumbsUp",
+    baseAction: "Run",
     cameraPosition: [2.95, 1.68, 3.05],
     cameraLookAt: [0.06, 1.24, -0.1],
     robotRotationY: -0.54,
@@ -91,13 +88,12 @@ export const robotStoryChapters: RobotStoryChapter[] = [
     index: "04",
     eyebrow: "RISK INTERCEPT",
     title: "风险被拦截在上线前",
-    subtitle: "灯光骤窄，机器人做出否决和防御手势。",
+    subtitle: "灯光骤窄，机器人停在风险边界前。",
     body: "Bug、阻塞、缺失验收和测试风险会在关键节点被放大，AI PM 让项目在失控前先露出异常形态。",
     signal: "risk field isolated",
     metric: "5 blockers isolated",
     accent: "#e37fa7",
     baseAction: "Idle",
-    gestureAction: "No",
     cameraPosition: [-1.22, 1.18, 2.42],
     cameraLookAt: [0.02, 1.08, 0],
     robotRotationY: 0.12,
@@ -110,13 +106,12 @@ export const robotStoryChapters: RobotStoryChapter[] = [
     index: "05",
     eyebrow: "LAUNCH LOCK",
     title: "最后一镜，版本准备发射",
-    subtitle: "镜头拉远，机器人确认上线，CTA 出场。",
+    subtitle: "镜头拉远，机器人进入冲刺节奏，CTA 出场。",
     body: "周报、版本大屏、飞书通知和 AI 助手写操作连成闭环，让上线前最后一次确认变成清晰的系统动作。",
     signal: "ready to ship",
     metric: "launch window open",
     accent: "#e2bd75",
-    baseAction: "Dance",
-    gestureAction: "Jump",
+    baseAction: "Run",
     cameraPosition: [0, 2.2, 6.35],
     cameraLookAt: [0, 1.18, 0],
     robotRotationY: 0,
@@ -126,4 +121,4 @@ export const robotStoryChapters: RobotStoryChapter[] = [
   },
 ];
 
-export const ROBOT_MODEL_PATH = "/robot-story/models/RobotExpressiveCyber.glb";
+export const ROBOT_MODEL_PATH = "/robot-story/models/Soldier.glb";

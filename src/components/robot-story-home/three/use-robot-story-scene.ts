@@ -19,7 +19,6 @@ type RobotRuntime = {
   mixer: THREE.AnimationMixer;
   actions: Map<string, THREE.AnimationAction>;
   activeBaseAction: THREE.AnimationAction | null;
-  lastGestureKey: string;
   cyberRig?: CyberRobotRig;
   bones: {
     head?: THREE.Bone;
@@ -114,8 +113,8 @@ function createCyberRobotRig() {
   const group = new THREE.Group();
   const armorMaterials: THREE.MeshStandardMaterial[] = [];
 
-  // 机器人主体材质已在 Blender 中完成。Three 运行时只保留不可见补光，
-  // 用来让嵌入式发光材质在暗场中有体积感，不再添加任何可见几何贴片。
+  // Soldier 官方模型自带完整装甲贴图。Three 运行时只保留不可见补光，
+  // 让暗场里能读到头盔、胸甲和肩甲轮廓，不再向模型外叠任何可见贴片。
   const coreLight = new THREE.PointLight(0xa9f5ff, 0.8, 2.4);
   coreLight.position.set(0, 1.03, 0.42);
   const eyeLights = [-0.22, 0.22].map((x) => {
@@ -230,8 +229,8 @@ function normalizeRobotModel(model: THREE.Group) {
   const targetHeight = 2.08;
   const scale = size.y > 0 ? targetHeight / size.y : 0.46;
 
-  // Blender 派生 GLB 可能因为重新导出而改变根节点尺度或中心点。
-  // 这里按包围盒统一归一化，保证后续镜头、胸核灯光和滚动分镜不依赖某个导出器的隐式坐标。
+  // Three.js 官方 Soldier 模型和旧 RobotExpressive 尺寸完全不同。
+  // 这里按包围盒统一归一化，保证滚动运镜不用依赖某个示例资产的隐式尺度。
   model.scale.setScalar(scale);
   model.updateMatrixWorld(true);
 
@@ -261,11 +260,11 @@ function prepareRobotRuntime(gltfScene: THREE.Group, animations: THREE.Animation
         object.material = object.material.clone();
         object.material.envMapIntensity = 1.85;
 
-        // Blender 派生模型已经把主体 PBR 材质写进 GLB；Three 这里只接管少量发光嵌片的呼吸强度，
-        // 不再重写 baseColor/metalness/roughness，避免运行时材质覆盖造成“糊一层”的视觉。
+        // Soldier.glb 自带贴图和材质，运行时只提高环境响应，不再覆盖 baseColor/roughness。
+        // 这样页面看到的就是 Three.js 示例里的机器人，而不是再被前端调成另一套材质。
         const materialName = object.material.name.toLowerCase();
 
-        if (materialName.includes("optic") || materialName.includes("circuit") || materialName.includes("warning")) {
+        if (materialName.includes("visor")) {
           cyberRig.armorMaterials.push(object.material);
         }
       }
@@ -277,15 +276,16 @@ function prepareRobotRuntime(gltfScene: THREE.Group, animations: THREE.Animation
   });
 
   normalizeRobotModel(model);
+  // Soldier.glb 的默认朝向和旧 RobotExpressive 相反；页面首屏需要看到装甲正面，
+  // 所以只在模型根节点做一次基准旋转，后续滚动分镜仍由 robotPivot 控制。
+  model.rotation.y = Math.PI;
+  model.updateMatrixWorld(true);
 
   animations.forEach((clip) => {
     const action = mixer.clipAction(clip);
     actions.set(clip.name, action);
 
-    if (["Jump", "Yes", "No", "Wave", "Punch", "ThumbsUp"].includes(clip.name)) {
-      action.clampWhenFinished = true;
-      action.loop = THREE.LoopOnce;
-    }
+    action.clampWhenFinished = false;
   });
 
   const idleAction = actions.get("Idle") ?? null;
@@ -303,7 +303,6 @@ function prepareRobotRuntime(gltfScene: THREE.Group, animations: THREE.Animation
     bones: collectRobotBones(model),
     cyberRig,
     face,
-    lastGestureKey: "",
     mixer,
     model,
   } satisfies RobotRuntime;
@@ -322,30 +321,6 @@ function fadeToBaseAction(runtime: RobotRuntime, actionName: string, duration = 
   previousAction?.fadeOut(duration);
 }
 
-function playGesture(runtime: RobotRuntime, actionName: string, chapterKey: string) {
-  const gestureKey = `${chapterKey}:${actionName}`;
-  const action = runtime.actions.get(actionName);
-
-  if (!action || runtime.lastGestureKey === gestureKey) {
-    return;
-  }
-
-  runtime.lastGestureKey = gestureKey;
-  action.reset().setEffectiveTimeScale(actionName === "Jump" ? 0.84 : 1).setEffectiveWeight(1).fadeIn(0.16).play();
-
-  const handleFinished = (event: { action: THREE.AnimationAction }) => {
-    if (event.action !== action) {
-      return;
-    }
-
-    runtime.mixer.removeEventListener("finished", handleFinished);
-    action.fadeOut(0.22);
-    runtime.activeBaseAction?.reset().fadeIn(0.28).play();
-  };
-
-  runtime.mixer.addEventListener("finished", handleFinished);
-}
-
 function updateFace(runtime: RobotRuntime, chapterIndex: number, elapsed: number) {
   const face = runtime.face;
 
@@ -353,8 +328,8 @@ function updateFace(runtime: RobotRuntime, chapterIndex: number, elapsed: number
     return;
   }
 
-  // RobotExpressive 的表情是 morph target；分镜切换时只做轻量表情权重，
-  // 避免和骨骼动作争抢注意力，但能让近景更像真正的电影镜头。
+  // 兼容带 morph target 的角色资产；Soldier 没有表情目标时会直接跳过。
+  // 保留这层兜底，避免后续替换模型时再改渲染主循环。
   Object.entries(face.morphTargetDictionary).forEach(([name, targetIndex]) => {
     const lowerName = name.toLowerCase();
     const isSmile = lowerName.includes("smile") || lowerName.includes("happy");
@@ -561,10 +536,6 @@ export function useRobotStoryScene({
         // 避免机器人停在骨骼绑定姿态，破坏首屏电影感。
         const loadedChapter = robotStoryChapters[clamp(activeChapterIndex, 0, robotStoryChapters.length - 1)] ?? robotStoryChapters[0];
         fadeToBaseAction(runtime, loadedChapter.baseAction, reducedMotion ? 0.18 : 0.22);
-        if (loadedChapter.gestureAction) {
-          playGesture(runtime, loadedChapter.gestureAction, loadedChapter.key);
-        }
-
         setSceneReady(true);
       },
       undefined,
@@ -603,9 +574,6 @@ export function useRobotStoryScene({
 
       if (runtime) {
         fadeToBaseAction(runtime, chapter.baseAction, reducedMotion ? 0.18 : 0.5);
-        if (chapter.gestureAction) {
-          playGesture(runtime, chapter.gestureAction, chapter.key);
-        }
       }
     };
 
