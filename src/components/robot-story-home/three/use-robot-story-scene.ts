@@ -3,7 +3,8 @@
 import { useEffect, type RefObject } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { HELMET_MODEL_PATH, ROBOT_MODEL_PATH, robotStoryChapters } from "../story-data";
+import { UltraHDRLoader } from "three/examples/jsm/loaders/UltraHDRLoader.js";
+import { HELMET_ENVIRONMENT_PATH, HELMET_MODEL_PATH, ROBOT_MODEL_PATH, robotStoryChapters } from "../story-data";
 import type { RobotStoryChapter } from "../story-data";
 
 type UseRobotStorySceneOptions = {
@@ -410,9 +411,9 @@ function attachDamagedHelmet(runtime: RobotRuntime, helmetScene: THREE.Group) {
   // Soldier 的身体和动画来自官方 skinning_blending 示例；DamagedHelmet 是另一个官方示例资产。
   // 这里把头盔挂到 mixamorig:Head 骨骼上，让 Idle/Walk/Run 时头部仍跟随骨骼，而不是固定在世界坐标里。
   helmetScene.name = "threejs-damaged-helmet-head";
-  helmetScene.position.set(0, 8.2, 0.8);
+  helmetScene.position.set(0, 7.1, 2.15);
   helmetScene.rotation.set(0, Math.PI, 0);
-  helmetScene.scale.setScalar(15.8);
+  helmetScene.scale.setScalar(18.2);
 
   helmetScene.traverse((object) => {
     if (object instanceof THREE.Mesh) {
@@ -422,7 +423,8 @@ function attachDamagedHelmet(runtime: RobotRuntime, helmetScene: THREE.Group) {
       if (object.material instanceof THREE.MeshStandardMaterial) {
         object.material = object.material.clone();
         // 用户这次要先看官方 DamagedHelmet 原始效果，所以这里只克隆材质避免共享副作用，
-        // 不再改 baseColor、贴图、metalness 或 roughness，颜色完全来自 Three.js 3DLUT 示例资产。
+        // 不再改 baseColor、贴图、metalness 或 roughness；envMapIntensity 回到默认值，避免故事页冷白灯把官方旧化材质洗白。
+        object.material.envMapIntensity = 1;
         object.material.needsUpdate = true;
       }
     }
@@ -673,6 +675,7 @@ export function useRobotStoryScene({
     let frameId = 0;
     let scrollProgress = 0;
     let activeChapterIndex = -1;
+    let helmetEnvironmentTexture: THREE.Texture | null = null;
     let previousFrameTime = performance.now();
     const startedAt = previousFrameTime;
     const renderer = new THREE.WebGLRenderer({
@@ -717,6 +720,26 @@ export function useRobotStoryScene({
     signalPanels.forEach((panel) => scene.add(panel.mesh));
 
     const loader = new GLTFLoader();
+    new UltraHDRLoader().load(
+      HELMET_ENVIRONMENT_PATH,
+      (texture) => {
+        if (disposed) {
+          texture.dispose();
+          return;
+        }
+
+        // Three.js 3DLUT 官方示例依赖 Royal Esplanade HDRI 做 scene.environment。
+        // 这里仅复用环境反射，不设置 scene.background，避免破坏当前首页暗场和滚动叙事背景。
+        texture.mapping = THREE.EquirectangularReflectionMapping;
+        helmetEnvironmentTexture = texture;
+        scene.environment = texture;
+      },
+      undefined,
+      () => {
+        // HDRI 只影响官方头盔还原度；失败时继续用现有电影灯光，避免阻断主模型。
+      }
+    );
+
     loader.load(
       ROBOT_MODEL_PATH,
       (gltf) => {
@@ -881,6 +904,8 @@ export function useRobotStoryScene({
       window.removeEventListener("resize", resize);
       window.removeEventListener("scroll", updateScrollProgress);
       renderer.dispose();
+      scene.environment = null;
+      helmetEnvironmentTexture?.dispose();
       disposeObject(scene);
     };
   }, [canvasRef, pointerRef, rootRef, setActiveChapterIndex, setSceneReady]);
