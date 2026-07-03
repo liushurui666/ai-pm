@@ -3,115 +3,16 @@
 import "./index.less";
 import {
   ArrowRightOutlined,
-  BranchesOutlined,
-  BugOutlined,
   CodeOutlined,
-  DashboardOutlined,
   LoginOutlined,
   PlayCircleOutlined,
-  RadarChartOutlined,
-  ThunderboltOutlined,
 } from "@ant-design/icons";
 import Link from "next/link";
+import Script from "next/script";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
-
-type CinematicShot = {
-  key: string;
-  index: string;
-  eyebrow: string;
-  title: string;
-  subtitle: string;
-  body: string;
-  metric: string;
-  command: string;
-  accent: string;
-  temperature: string;
-  lens: string;
-  icon: ReactNode;
-  beats: string[];
-};
-
-const sketchfabModelEmbedUrl =
-  "https://sketchfab.com/models/dde1085c464d4f8da259fe6669ae4dd2/embed?autostart=1&preload=1&transparent=1&ui_theme=dark&dnt=1";
-
-const cinematicShots: CinematicShot[] = [
-  {
-    key: "reactor",
-    index: "01",
-    eyebrow: "ARC REACTOR WAKE",
-    title: "Mark 85 进入 AI PM 作战舱",
-    subtitle: "镜头从反应堆冷光推入，项目全局、版本节奏和风险警报在装甲表面同步点亮。",
-    body: "这个首页不是普通卡片堆叠，而是把 AI PM 的交付现场拍成一条电影预告片：滚动就是运镜，模型就是主角，数据 HUD 就是分镜字幕。",
-    metric: "98.7% suit sync",
-    command: "command center",
-    accent: "#45f4d1",
-    temperature: "cold open",
-    lens: "35mm macro",
-    icon: <DashboardOutlined />,
-    beats: ["项目健康扫描", "版本热区锁定", "关键负责人上线"],
-  },
-  {
-    key: "briefing",
-    index: "02",
-    eyebrow: "MISSION BRIEF",
-    title: "需求像任务简报一样展开",
-    subtitle: "PRD、会议纪要和口头输入被拆成验收点，像战术标记一样贴到下一段镜头里。",
-    body: "AI PM 的首页风格继续保留项目管理的真实感：不是卖概念，而是让用户第一眼看到需求、任务、Bug、PR 如何进入同一条交付链路。",
-    metric: "12 acceptance locks",
-    command: "requirement map",
-    accent: "#f5c15b",
-    temperature: "gold tactical",
-    lens: "anamorphic wide",
-    icon: <RadarChartOutlined />,
-    beats: ["验收点拆解", "边界条件标注", "版本目标对齐"],
-  },
-  {
-    key: "assembly",
-    index: "03",
-    eyebrow: "NANO ASSEMBLY",
-    title: "任务推进有装甲拼合的节奏",
-    subtitle: "阶段流转、负责人变化和延期信号被组织成一段高速装配蒙太奇。",
-    body: "滚动中每一屏都像分镜脚本的一格：左侧是导演字幕，右侧是模型和 HUD，底部则用时间码和镜头条把故事连接起来。",
-    metric: "24 stage moves",
-    command: "delivery pulse",
-    accent: "#ff5b42",
-    temperature: "reactor heat",
-    lens: "80mm chase",
-    icon: <BranchesOutlined />,
-    beats: ["阶段拖拽", "负责人负载", "延期风险"],
-  },
-  {
-    key: "targeting",
-    index: "04",
-    eyebrow: "TARGETING LOOP",
-    title: "Bug 被锁定到代码闭环",
-    subtitle: "复现材料、影响范围、仓库分支和 AI 修复状态在瞄准环里连续刷新。",
-    body: "电影感不只靠黑底和光线，还靠叙事冲突。这里把 Bug 从出现、定位、生成修复到 PR 确认做成一组高压目标锁定镜头。",
-    metric: "5 PR awaiting",
-    command: "fix loop",
-    accent: "#38a8ff",
-    temperature: "blue alert",
-    lens: "120mm scope",
-    icon: <BugOutlined />,
-    beats: ["复现证据", "AI 修复分支", "PR 人工确认"],
-  },
-  {
-    key: "launch",
-    index: "05",
-    eyebrow: "FINAL LAUNCH",
-    title: "上线前最后一秒保持冷静",
-    subtitle: "版本大屏、周报、风险回归和团队状态在最后一段长镜头里完成收束。",
-    body: "结尾保留 AI PM 的产品目标：让管理者、产品、研发、测试在同一个高密度界面里看清交付是否真的可以发射。",
-    metric: "ready to ship",
-    command: "launch lock",
-    accent: "#e6ff6f",
-    temperature: "green clearance",
-    lens: "50mm hero",
-    icon: <ThunderboltOutlined />,
-    beats: ["上线检查", "周报导出", "风险回归"],
-  },
-];
+import type { CSSProperties } from "react";
+import { cinematicShots } from "./story-data";
+import { sketchfabModelEmbedUrl, sketchfabViewerApiUrl, useSketchfabIronMan } from "./use-sketchfab-iron-man";
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -121,8 +22,13 @@ function clamp(value: number, min: number, max: number) {
 // Scroll progress 同时写入 CSS 变量，CSS 负责光带、遮幅、HUD 和镜头层的插值。
 export function IronManCinematicHome() {
   const rootRef = useRef<HTMLElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const [activeShotIndex, setActiveShotIndex] = useState(0);
   const activeShot = cinematicShots[activeShotIndex];
+  const { availableAnimationCount, motionMode, setViewerScriptReady, viewerReady } = useSketchfabIronMan({
+    activeShotIndex,
+    iframeRef,
+  });
   const activeProgress = cinematicShots.length <= 1 ? 0 : activeShotIndex / (cinematicShots.length - 1);
   const shotStyle = useMemo(
     () =>
@@ -130,6 +36,7 @@ export function IronManCinematicHome() {
         "--iron-accent": activeShot.accent,
         "--iron-progress": activeProgress.toFixed(4),
         "--iron-shot": activeShotIndex,
+        "--iron-motion": activeShotIndex % 2 === 0 ? 1 : -1,
       }) as CSSProperties,
     [activeProgress, activeShot.accent, activeShotIndex]
   );
@@ -191,6 +98,7 @@ export function IronManCinematicHome() {
 
   return (
     <main className="iron-cinematic-home" ref={rootRef} style={shotStyle}>
+      <Script src={sketchfabViewerApiUrl} strategy="afterInteractive" onLoad={() => setViewerScriptReady(true)} />
       <section className="iron-cinematic-home__stage" aria-label="AI PM 钢铁侠电影分镜首页">
         <div className="iron-cinematic-home__backplate" aria-hidden="true" />
         <div className="iron-cinematic-home__grid" aria-hidden="true" />
@@ -199,10 +107,20 @@ export function IronManCinematicHome() {
           <iframe
             allow="autoplay; fullscreen; xr-spatial-tracking; accelerometer; gyroscope"
             className="iron-cinematic-home__model-frame"
+            ref={iframeRef}
             src={sketchfabModelEmbedUrl}
-            title="Iron-Man Mark 85 Rigged 3D model"
+            title="Iron Man rigged animations 3D model"
           />
           <div className="iron-cinematic-home__model-mask" aria-hidden="true" />
+          <div className="iron-cinematic-home__motion-ring" aria-hidden="true" />
+          <a
+            className="iron-cinematic-home__model-credit"
+            href="https://sketchfab.com/3d-models/iron-man-rigged-animations-627b739b7d5845b0aefe31499a5f5965"
+            rel="noreferrer"
+            target="_blank"
+          >
+            Model: deepak rai / CC BY 4.0
+          </a>
         </div>
 
         <header className="iron-cinematic-home__nav">
@@ -253,7 +171,19 @@ export function IronManCinematicHome() {
               <dt>LOOK</dt>
               <dd>{activeShot.temperature}</dd>
             </div>
+            <div>
+              <dt>MOTION</dt>
+              <dd>{activeShot.motion.label}</dd>
+            </div>
+            <div>
+              <dt>CLIPS</dt>
+              <dd>{viewerReady ? availableAnimationCount : "syncing"}</dd>
+            </div>
           </dl>
+          <div className="iron-cinematic-home__motion-status">
+            <span>{viewerReady ? "SUIT DIRECTED" : "SUIT BOOTING"}</span>
+            <strong>{motionMode}</strong>
+          </div>
           <ul>
             {activeShot.beats.map((beat) => (
               <li key={beat}>
@@ -280,7 +210,7 @@ export function IronManCinematicHome() {
         </div>
 
         <div className="iron-cinematic-home__timeline" aria-hidden="true">
-          <span>00:0{activeShotIndex + 1}:MARK85</span>
+          <span>00:0{activeShotIndex + 1}:IRONMAN</span>
           <i />
           <span>{activeShot.eyebrow}</span>
         </div>
