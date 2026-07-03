@@ -412,7 +412,8 @@ function attachDamagedHelmet(runtime: RobotRuntime, helmetScene: THREE.Group) {
   // 这里把头盔挂到 mixamorig:Head 骨骼上，让 Idle/Walk/Run 时头部仍跟随骨骼，而不是固定在世界坐标里。
   helmetScene.name = "threejs-damaged-helmet-head";
   helmetScene.position.set(0, 7.1, 2.15);
-  helmetScene.rotation.set(0, Math.PI, 0);
+  // DamagedHelmet 默认正面就是官方示例里的圆形“眼睛”和下方口部；之前绕 Y 轴翻转会把这些细节转到背面。
+  helmetScene.rotation.set(0, 0, 0);
   helmetScene.scale.setScalar(18.2);
 
   helmetScene.traverse((object) => {
