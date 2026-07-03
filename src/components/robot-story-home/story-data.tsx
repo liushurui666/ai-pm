@@ -18,7 +18,7 @@ export type RobotStoryChapter = {
   metric: string;
   accent: string;
   baseAction: "Idle" | "Walking" | "Running" | "Dance";
-  gestureAction: "Wave" | "Yes" | "No" | "ThumbsUp" | "Punch" | "Jump";
+  gestureAction?: "Wave" | "Yes" | "No" | "ThumbsUp" | "Punch" | "Jump";
   cameraPosition: [number, number, number];
   cameraLookAt: [number, number, number];
   robotRotationY: number;
@@ -39,9 +39,8 @@ export const robotStoryChapters: RobotStoryChapter[] = [
     body: "需求、任务、Bug、风险和成员负载被拉进同一个实时空间，项目不再靠散落消息拼接真相。",
     signal: "live command core",
     metric: "86% health pulse",
-    accent: "#63f7ff",
+    accent: "#7ee8ef",
     baseAction: "Idle",
-    gestureAction: "Wave",
     cameraPosition: [0.16, 1.36, 5.2],
     cameraLookAt: [0, 1.34, 0],
     robotRotationY: 0,
@@ -58,7 +57,7 @@ export const robotStoryChapters: RobotStoryChapter[] = [
     body: "PRD、会议纪要和口头描述进入系统后，AI 先拆角色、边界、验收点和风险，研发不用再从群聊里找上下文。",
     signal: "acceptance nodes mapped",
     metric: "12 nodes traced",
-    accent: "#8f7dff",
+    accent: "#9b8cff",
     baseAction: "Walking",
     gestureAction: "Yes",
     cameraPosition: [-2.38, 1.82, 3.62],
@@ -77,7 +76,7 @@ export const robotStoryChapters: RobotStoryChapter[] = [
     body: "版本计划、任务看板、负责人负载和延期信号一起进入节奏盘，管理者看到的是正在移动的交付现场。",
     signal: "delivery route locked",
     metric: "24 moves today",
-    accent: "#d8ff6d",
+    accent: "#b8c98a",
     baseAction: "Running",
     gestureAction: "ThumbsUp",
     cameraPosition: [2.95, 1.68, 3.05],
@@ -96,7 +95,7 @@ export const robotStoryChapters: RobotStoryChapter[] = [
     body: "Bug、阻塞、缺失验收和测试风险会在关键节点被放大，AI PM 让项目在失控前先露出异常形态。",
     signal: "risk field isolated",
     metric: "5 blockers isolated",
-    accent: "#ff5fb7",
+    accent: "#e37fa7",
     baseAction: "Idle",
     gestureAction: "No",
     cameraPosition: [-1.22, 1.18, 2.42],
@@ -115,7 +114,7 @@ export const robotStoryChapters: RobotStoryChapter[] = [
     body: "周报、版本大屏、飞书通知和 AI 助手写操作连成闭环，让上线前最后一次确认变成清晰的系统动作。",
     signal: "ready to ship",
     metric: "launch window open",
-    accent: "#ffd36a",
+    accent: "#e2bd75",
     baseAction: "Dance",
     gestureAction: "Jump",
     cameraPosition: [0, 2.2, 6.35],

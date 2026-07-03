@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from pathlib import Path
 
 import bpy
@@ -45,8 +44,8 @@ def create_pbr_material(
     set_principled_input(material, "Roughness", roughness)
 
     if emission_color:
-      set_principled_input(material, "Emission Color", emission_color)
-      set_principled_input(material, "Emission Strength", emission_strength)
+        set_principled_input(material, "Emission Color", emission_color)
+        set_principled_input(material, "Emission Strength", emission_strength)
 
     return material
 
@@ -119,44 +118,44 @@ def derive_cyber_robot() -> None:
     bpy.ops.import_scene.gltf(filepath=str(SOURCE_MODEL))
 
     main_armor = create_pbr_material(
-        "Cyber dark graphite armor",
-        (0.035, 0.09, 0.12, 1.0),
-        metallic=0.9,
-        roughness=0.22,
-        emission_color=(0.0, 0.18, 0.2, 1.0),
-        emission_strength=0.04,
+        "Cyber satin graphite armor",
+        (0.028, 0.038, 0.046, 1.0),
+        metallic=0.78,
+        roughness=0.34,
+        emission_color=(0.0, 0.055, 0.07, 1.0),
+        emission_strength=0.018,
     )
     titanium_trim = create_pbr_material(
-        "Cyber brushed titanium trim",
-        (0.34, 0.47, 0.5, 1.0),
-        metallic=1.0,
-        roughness=0.16,
-        emission_color=(0.0, 0.08, 0.09, 1.0),
-        emission_strength=0.02,
+        "Cyber warm titanium chamfer",
+        (0.42, 0.45, 0.43, 1.0),
+        metallic=0.88,
+        roughness=0.24,
+        emission_color=(0.015, 0.035, 0.04, 1.0),
+        emission_strength=0.01,
     )
     optic_glass = create_pbr_material(
-        "Cyber emissive optic glass",
-        (0.015, 0.035, 0.05, 1.0),
-        metallic=0.55,
-        roughness=0.08,
-        emission_color=(0.18, 1.0, 0.92, 1.0),
-        emission_strength=1.8,
+        "Cyber smoked optic glass",
+        (0.006, 0.015, 0.019, 1.0),
+        metallic=0.42,
+        roughness=0.12,
+        emission_color=(0.18, 0.78, 0.82, 1.0),
+        emission_strength=0.72,
     )
     circuit_glow = create_pbr_material(
-        "Cyber embedded circuit glow",
-        (0.02, 0.35, 0.34, 1.0),
-        metallic=0.35,
-        roughness=0.18,
-        emission_color=(0.1, 1.0, 0.86, 1.0),
-        emission_strength=1.15,
+        "Cyber hairline ice circuit",
+        (0.035, 0.18, 0.18, 1.0),
+        metallic=0.28,
+        roughness=0.26,
+        emission_color=(0.14, 0.86, 0.82, 1.0),
+        emission_strength=0.46,
     )
     warning_glow = create_pbr_material(
-        "Cyber amber warning edge",
-        (0.8, 0.64, 0.15, 1.0),
-        metallic=0.45,
-        roughness=0.2,
-        emission_color=(1.0, 0.78, 0.18, 1.0),
-        emission_strength=0.78,
+        "Cyber muted champagne edge",
+        (0.62, 0.54, 0.34, 1.0),
+        metallic=0.72,
+        roughness=0.25,
+        emission_color=(0.78, 0.62, 0.32, 1.0),
+        emission_strength=0.18,
     )
 
     replace_material_slots(

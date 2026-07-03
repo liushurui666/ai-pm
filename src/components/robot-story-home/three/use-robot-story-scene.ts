@@ -33,14 +33,9 @@ type RobotRuntime = {
 
 type CyberRobotRig = {
   group: THREE.Group;
-  accentMaterials: Array<THREE.MeshBasicMaterial | THREE.SpriteMaterial | THREE.PointsMaterial>;
   armorMaterials: THREE.MeshStandardMaterial[];
   coreLight: THREE.PointLight;
   eyeLights: THREE.PointLight[];
-  scanBand: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
-  coreRings: Array<THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>>;
-  haloRings: Array<THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>>;
-  circuitPlates: Array<THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>>;
 };
 
 type ScenePanel = {
@@ -115,206 +110,16 @@ function createParticles() {
   return new THREE.Points(geometry, material);
 }
 
-function createGlowTexture() {
-  const canvas = document.createElement("canvas");
-  const size = 128;
-  const context = canvas.getContext("2d");
-
-  canvas.width = size;
-  canvas.height = size;
-
-  if (!context) {
-    return new THREE.CanvasTexture(canvas);
-  }
-
-  const gradient = context.createRadialGradient(size / 2, size / 2, 2, size / 2, size / 2, size / 2);
-  gradient.addColorStop(0, "rgba(255,255,255,1)");
-  gradient.addColorStop(0.22, "rgba(118,255,245,0.82)");
-  gradient.addColorStop(0.58, "rgba(70,120,255,0.22)");
-  gradient.addColorStop(1, "rgba(0,0,0,0)");
-  context.fillStyle = gradient;
-  context.fillRect(0, 0, size, size);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-
-  return texture;
-}
-
-function createCircuitTexture() {
-  const canvas = document.createElement("canvas");
-  const size = 256;
-  const context = canvas.getContext("2d");
-
-  canvas.width = size;
-  canvas.height = size;
-
-  if (!context) {
-    return new THREE.CanvasTexture(canvas);
-  }
-
-  context.clearRect(0, 0, size, size);
-  context.strokeStyle = "rgba(125,255,240,0.82)";
-  context.lineWidth = 2;
-
-  // 用 canvas 生成科技线路纹理，避免引入外部贴图，同时让机器人周围 HUD 面板有真实细节。
-  for (let row = 0; row < 7; row += 1) {
-    const y = 28 + row * 32;
-    context.beginPath();
-    context.moveTo(18, y);
-    context.lineTo(62 + row * 7, y);
-    context.lineTo(82 + row * 7, y + 14);
-    context.lineTo(188, y + 14);
-    context.stroke();
-  }
-
-  context.fillStyle = "rgba(255,255,255,0.95)";
-  for (let index = 0; index < 22; index += 1) {
-    const x = 20 + ((index * 43) % 210);
-    const y = 22 + ((index * 31) % 204);
-    context.fillRect(x, y, 4, 4);
-  }
-
-  context.strokeStyle = "rgba(255,95,183,0.58)";
-  context.strokeRect(10, 10, size - 20, size - 20);
-  context.strokeRect(34, 34, size - 68, size - 68);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-
-  return texture;
-}
-
 function createCyberRobotRig() {
   const group = new THREE.Group();
-  const accentMaterials: CyberRobotRig["accentMaterials"] = [];
   const armorMaterials: THREE.MeshStandardMaterial[] = [];
-  const glowTexture = createGlowTexture();
-  const circuitTexture = createCircuitTexture();
-  const additiveDepthFree = {
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    transparent: true,
-  } as const;
 
-  const createAccentMaterial = (color: number, opacity: number) => {
-    const material = new THREE.MeshBasicMaterial({
-      color,
-      opacity,
-      side: THREE.DoubleSide,
-      ...additiveDepthFree,
-    });
-
-    accentMaterials.push(material);
-    return material;
-  };
-
-  const createSprite = (position: THREE.Vector3, scale: number, opacity: number) => {
-    const material = new THREE.SpriteMaterial({
-      color: 0x63f7ff,
-      map: glowTexture,
-      opacity,
-      ...additiveDepthFree,
-    });
-    const sprite = new THREE.Sprite(material);
-
-    sprite.position.copy(position);
-    sprite.scale.setScalar(scale);
-    accentMaterials.push(material);
-    group.add(sprite);
-
-    return sprite;
-  };
-
-  const eyeMaterial = new THREE.MeshBasicMaterial({
-    color: 0x93fff7,
-    opacity: 0.96,
-    ...additiveDepthFree,
-  });
-  accentMaterials.push(eyeMaterial);
-
-  [-0.18, 0.18].forEach((x) => {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.045, 18, 12), eyeMaterial);
-    eye.position.set(x, 1.6, 0.34);
-    group.add(eye);
-    createSprite(new THREE.Vector3(x, 1.6, 0.38), 0.34, 0.64);
-  });
-
-  const coreMaterial = createAccentMaterial(0x63f7ff, 0.9);
-  const core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.105, 2), coreMaterial);
-  core.position.set(0, 0.95, 0.36);
-  group.add(core);
-  createSprite(new THREE.Vector3(0, 0.95, 0.38), 0.62, 0.5);
-
-  const coreRings: CyberRobotRig["coreRings"] = [];
-  for (let index = 0; index < 3; index += 1) {
-    const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(0.17 + index * 0.06, 0.004, 8, 96),
-      createAccentMaterial(index === 1 ? 0xff5fb7 : 0x63f7ff, 0.72 - index * 0.1)
-    );
-
-    ring.position.set(0, 0.95, 0.35);
-    ring.rotation.x = Math.PI / 2 + index * 0.42;
-    ring.rotation.y = index * 0.64;
-    coreRings.push(ring);
-    group.add(ring);
-  }
-
-  const haloRings: CyberRobotRig["haloRings"] = [];
-  [0.66, 0.86, 1.08].forEach((radius, index) => {
-    const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(radius, 0.006, 8, 160),
-      createAccentMaterial(index === 2 ? 0xffd36a : 0x63f7ff, 0.18 + index * 0.06)
-    );
-
-    ring.position.y = 0.55 + index * 0.36;
-    ring.rotation.x = Math.PI / 2;
-    haloRings.push(ring);
-    group.add(ring);
-  });
-
-  const shellMaterial = createAccentMaterial(0x63f7ff, 0.055);
-  shellMaterial.wireframe = true;
-  const bodyShell = new THREE.Mesh(new THREE.CapsuleGeometry(0.72, 1.18, 8, 18), shellMaterial);
-  bodyShell.position.set(0, 0.95, 0.02);
-  bodyShell.scale.set(0.92, 1.05, 0.62);
-  bodyShell.visible = false;
-  group.add(bodyShell);
-
-  const scanBand = new THREE.Mesh(
-    new THREE.PlaneGeometry(1.72, 0.12, 1, 1),
-    createAccentMaterial(0x63f7ff, 0.3)
-  );
-  scanBand.position.set(0, 1.12, 0.52);
-  scanBand.visible = false;
-  group.add(scanBand);
-
-  const circuitPlates: CyberRobotRig["circuitPlates"] = [];
-  // 线路和警示片已经在 Blender 中被写进模型面片材质，这里不再创建运行时贴片，
-  // 避免用户看到“贴上去”的感觉；运行时只保留灯光和核心能量辅助。
-  const runtimeCircuitPlateCount = 0;
-  for (let index = 0; index < runtimeCircuitPlateCount; index += 1) {
-    const angle = (index / 5) * Math.PI * 2 + 0.28;
-    const plateMaterial = new THREE.MeshBasicMaterial({
-      color: index % 2 === 0 ? 0x63f7ff : 0xff5fb7,
-      map: circuitTexture,
-      opacity: 0.2,
-      side: THREE.DoubleSide,
-      ...additiveDepthFree,
-    });
-    const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.28), plateMaterial);
-
-    plate.position.set(Math.cos(angle) * 0.96, 1.05 + Math.sin(index) * 0.2, Math.sin(angle) * 0.42 + 0.08);
-    plate.rotation.set(0.08, -angle + Math.PI / 2, 0.03);
-    circuitPlates.push(plate);
-    accentMaterials.push(plateMaterial);
-    group.add(plate);
-  }
-
-  const coreLight = new THREE.PointLight(0x63f7ff, 6, 3.2);
+  // 机器人主体材质已在 Blender 中完成。Three 运行时只保留不可见补光，
+  // 用来让嵌入式发光材质在暗场中有体积感，不再添加任何可见几何贴片。
+  const coreLight = new THREE.PointLight(0xa9f5ff, 0.8, 2.4);
   coreLight.position.set(0, 1.03, 0.42);
   const eyeLights = [-0.22, 0.22].map((x) => {
-    const light = new THREE.PointLight(0x63f7ff, 1.8, 1.6);
+    const light = new THREE.PointLight(0xbdf7ff, 0.28, 0.95);
     light.position.set(x, 1.6, 0.45);
     group.add(light);
     return light;
@@ -323,21 +128,16 @@ function createCyberRobotRig() {
   group.add(coreLight);
 
   return {
-    accentMaterials,
     armorMaterials,
-    circuitPlates,
     coreLight,
-    coreRings,
     eyeLights,
     group,
-    haloRings,
-    scanBand,
   } satisfies CyberRobotRig;
 }
 
 function createSignalPanels() {
   const panels: ScenePanel[] = [];
-  const materialColors = [0x63f7ff, 0x8f7dff, 0xd8ff6d, 0xff5fb7, 0xffd36a];
+  const materialColors = [0x7ee8ef, 0x9b8cff, 0xb8c98a, 0xe37fa7, 0xe2bd75];
 
   for (let index = 0; index < robotStoryChapters.length; index += 1) {
     const angle = (index / robotStoryChapters.length) * Math.PI * 2;
@@ -622,52 +422,22 @@ function updateCyberRobotRig(
 
   const pulse = 0.5 + Math.sin(elapsed * 4.2 + chapterIndex) * 0.5;
   const accentColor = tmpColor.set(activeChapter.accent);
-  const energy = 0.78 + pulse * 0.22 + transitionPunch * 0.42;
+  const energy = 0.36 + pulse * 0.1 + transitionPunch * 0.1;
 
-  // 全息装甲和灯光统一吃当前分镜强调色，让“故事章节切换”在机器人身体上也有反馈。
+  // 这里只做“摄影棚灯光”和 Blender 发光材质的轻微呼吸。
+  // 不再旋转或渲染额外 HUD 几何，避免机器人像被贴了一层 AI 特效。
   cyberRig.group.rotation.y = THREE.MathUtils.lerp(cyberRig.group.rotation.y, pointer.x * 0.08 * pointer.active, 0.04);
-  cyberRig.accentMaterials.forEach((material) => {
-    material.color.lerp(accentColor, 0.08);
-  });
 
   cyberRig.armorMaterials.forEach((material) => {
-    material.emissive.lerp(accentColor, 0.025);
-    material.emissiveIntensity = 0.42 + pulse * 0.28 + transitionPunch * 0.36;
+    material.emissive.lerp(accentColor, 0.006);
+    material.emissiveIntensity = 0.08 + pulse * 0.035 + transitionPunch * 0.05;
   });
 
-  cyberRig.coreLight.color.lerp(accentColor, 0.08);
-  cyberRig.coreLight.intensity = 4.5 + energy * 4;
+  cyberRig.coreLight.color.lerp(tmpLightColor.copy(accentColor).lerp(new THREE.Color(0xffffff), 0.68), 0.04);
+  cyberRig.coreLight.intensity = 0.22 + energy * 0.55;
   cyberRig.eyeLights.forEach((light) => {
-    light.color.lerp(accentColor, 0.08);
-    light.intensity = 1.7 + energy * 1.4;
-  });
-
-  cyberRig.coreRings.forEach((ring, index) => {
-    ring.rotation.z += 0.018 + index * 0.006;
-    ring.rotation.y += 0.012 + transitionPunch * 0.01;
-    ring.scale.setScalar(1 + pulse * 0.04 + transitionPunch * 0.1);
-    ring.material.opacity = 0.58 + pulse * 0.24;
-  });
-
-  cyberRig.haloRings.forEach((ring, index) => {
-    ring.rotation.z += 0.006 + index * 0.003;
-    ring.position.y = 0.48 + index * 0.34 + Math.sin(elapsed * 1.6 + index) * 0.035;
-    ring.material.opacity = 0.06 + transitionPunch * 0.08 + pulse * 0.05;
-  });
-
-  cyberRig.scanBand.position.y = 0.42 + THREE.MathUtils.euclideanModulo(elapsed * 0.42 + chapterIndex * 0.17, 1.42);
-  cyberRig.scanBand.scale.x = 0.8 + transitionPunch * 0.38;
-  cyberRig.scanBand.material.opacity = 0.18 + pulse * 0.16 + transitionPunch * 0.22;
-
-  cyberRig.circuitPlates.forEach((plate, index) => {
-    const orbit = elapsed * 0.18 + index * 1.26 + chapterIndex * 0.2;
-    const focusBoost = index === chapterIndex ? 0.28 : 0;
-
-    plate.position.x = Math.cos(orbit) * (0.9 + focusBoost);
-    plate.position.z = Math.sin(orbit) * 0.48 + 0.08;
-    plate.position.y = 1.02 + Math.sin(orbit * 1.8) * 0.2;
-    plate.rotation.y = -orbit + Math.PI / 2;
-    plate.material.opacity = 0.12 + focusBoost + transitionPunch * 0.1;
+    light.color.lerp(tmpLightColor, 0.04);
+    light.intensity = 0.12 + energy * 0.2;
   });
 }
 
@@ -753,9 +523,9 @@ export function useRobotStoryScene({
 
     scene.fog = new THREE.FogExp2(0x02040a, 0.082);
 
-    const ambientLight = new THREE.HemisphereLight(0xb8f7ff, 0x080412, 1.1);
-    const keyLight = new THREE.SpotLight(0x63f7ff, 32, 18, Math.PI * 0.18, 0.42, 1.4);
-    const rimLight = new THREE.PointLight(0xff5fb7, 12, 10);
+    const ambientLight = new THREE.HemisphereLight(0xb8f7ff, 0x080412, 0.9);
+    const keyLight = new THREE.SpotLight(0x7ee8ef, 24, 18, Math.PI * 0.18, 0.42, 1.4);
+    const rimLight = new THREE.PointLight(0xe37fa7, 6.5, 10);
     const launchLight = new THREE.PointLight(0xffd36a, 0, 14);
 
     keyLight.castShadow = true;
@@ -782,6 +552,15 @@ export function useRobotStoryScene({
         if (runtime.cyberRig) {
           robotPivot.add(runtime.cyberRig.group);
         }
+
+        // 如果模型加载慢于首帧滚动状态计算，这里补播当前章节动作，
+        // 避免机器人停在骨骼绑定姿态，破坏首屏电影感。
+        const loadedChapter = robotStoryChapters[clamp(activeChapterIndex, 0, robotStoryChapters.length - 1)] ?? robotStoryChapters[0];
+        fadeToBaseAction(runtime, loadedChapter.baseAction, reducedMotion ? 0.18 : 0.22);
+        if (loadedChapter.gestureAction) {
+          playGesture(runtime, loadedChapter.gestureAction, loadedChapter.key);
+        }
+
         setSceneReady(true);
       },
       undefined,
@@ -820,7 +599,9 @@ export function useRobotStoryScene({
 
       if (runtime) {
         fadeToBaseAction(runtime, chapter.baseAction, reducedMotion ? 0.18 : 0.5);
-        playGesture(runtime, chapter.gestureAction, chapter.key);
+        if (chapter.gestureAction) {
+          playGesture(runtime, chapter.gestureAction, chapter.key);
+        }
       }
     };
 
@@ -873,10 +654,10 @@ export function useRobotStoryScene({
       (particles.material as THREE.PointsMaterial).opacity = 0.36 + transitionPunch * 0.22;
 
       tmpColor.set(activeChapter.accent);
-      tmpLightColor.copy(tmpColor).lerp(new THREE.Color(0xb8f7ff), 0.48);
+      tmpLightColor.copy(tmpColor).lerp(new THREE.Color(0xb8f7ff), 0.72);
       keyLight.color.lerp(tmpLightColor, 0.06);
-      rimLight.color.lerp(tmpColor, 0.04);
-      launchLight.intensity = THREE.MathUtils.lerp(launchLight.intensity, chapterIndex === 4 ? 18 : 3 + transitionPunch * 5, 0.05);
+      rimLight.color.lerp(tmpLightColor, 0.035);
+      launchLight.intensity = THREE.MathUtils.lerp(launchLight.intensity, chapterIndex === 4 ? 12 : 2 + transitionPunch * 3.5, 0.05);
 
       signalPanels.forEach((panel, index) => {
         const distance = Math.abs(index - chapterFloat);
