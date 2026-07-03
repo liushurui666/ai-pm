@@ -246,7 +246,7 @@ function normalizeRobotModel(model: THREE.Group) {
   );
 }
 
-function createHelmetInspiredArmorTexture(sourceTexture: THREE.Texture | null) {
+function createCleanTechArmorTexture(sourceTexture: THREE.Texture | null) {
   if (!sourceTexture) {
     return null;
   }
@@ -286,10 +286,19 @@ function createHelmetInspiredArmorTexture(sourceTexture: THREE.Texture | null) {
   context.drawImage(sourceImage, 0, 0, width, height);
   const imageData = context.getImageData(0, 0, width, height);
   const pixels = imageData.data;
+  const luminanceMap = new Float32Array(width * height);
 
-  // DamagedHelmet 的质感不是纯白，而是旧化象牙金属、镜面蓝黑面罩、暖金磨损边共同组成。
-  // Soldier 只有一张 diffuse 贴图，不能直接套头盔 UV；这里保留原贴图的划痕/明暗结构，
-  // 再把颜色映射到头盔同款材质语言，让身体和新头盔看起来来自同一个科幻装备体系。
+  for (let index = 0; index < pixels.length; index += 4) {
+    const r = pixels[index];
+    const g = pixels[index + 1];
+    const b = pixels[index + 2];
+
+    luminanceMap[index / 4] = r * 0.299 + g * 0.587 + b * 0.114;
+  }
+
+  // 用户这次明确不要战损/旧化，只要崭新的纯白黑科技风。
+  // Soldier 和 DamagedHelmet 的原始 diffuse 都包含刮痕、锈色和旧化污渍；这里按局部亮度把外甲“翻新”为干净冷白，
+  // 只保留足够大、足够暗的结构件为蓝黑镜面，细小划痕和暖色战损会被抹回白色，避免全身脏旧。
   for (let index = 0; index < pixels.length; index += 4) {
     const pixelIndex = index / 4;
     const x = pixelIndex % width;
@@ -297,30 +306,29 @@ function createHelmetInspiredArmorTexture(sourceTexture: THREE.Texture | null) {
     const r = pixels[index];
     const g = pixels[index + 1];
     const b = pixels[index + 2];
-    const luminance = r * 0.299 + g * 0.587 + b * 0.114;
-    const surfaceNoise = (Math.sin(x * 0.071 + y * 0.137) + Math.sin(x * 0.017 - y * 0.089)) * 0.5;
-    const isWarmMark = r > 136 && g < 112 && b < 112 && r - g > 42 && r - b > 48;
+    const luminance = luminanceMap[pixelIndex];
+    const isWarmDamage = r > g * 1.18 && r > b * 1.18;
+    const neighborLuminance =
+      (luminanceMap[Math.max(0, y - 1) * width + x] +
+        luminanceMap[Math.min(height - 1, y + 1) * width + x] +
+        luminanceMap[y * width + Math.max(0, x - 1)] +
+        luminanceMap[y * width + Math.min(width - 1, x + 1)]) /
+      4;
+    const isSmallScratchOnLightPanel = luminance < 96 && neighborLuminance > 96;
 
-    if (isWarmMark) {
-      const wear = THREE.MathUtils.clamp((luminance - 72) / 135, 0, 1);
+    if (luminance < 42 && !isSmallScratchOnLightPanel && !isWarmDamage) {
+      const gloss = THREE.MathUtils.clamp(luminance / 42, 0, 1);
 
-      pixels[index] = 118 + wear * 68;
-      pixels[index + 1] = 86 + wear * 48;
-      pixels[index + 2] = 42 + wear * 26;
-    } else if (luminance < 86) {
-      const gloss = THREE.MathUtils.clamp(luminance / 86, 0, 1);
-
-      pixels[index] = 8 + gloss * 18;
-      pixels[index + 1] = 12 + gloss * 26;
-      pixels[index + 2] = 18 + gloss * 44;
+      pixels[index] = 5 + gloss * 12;
+      pixels[index + 1] = 8 + gloss * 17;
+      pixels[index + 2] = 13 + gloss * 32;
     } else {
-      const detail = THREE.MathUtils.clamp((luminance - 86) / 169, 0, 1);
-      const patina = THREE.MathUtils.clamp(surfaceNoise * 9, -9, 9);
-      const ivory = 168 + detail * 78 + patina;
+      const panel = THREE.MathUtils.clamp((Math.max(luminance, neighborLuminance) - 58) / 197, 0, 1);
+      const cleanWhite = 188 + panel * 58;
 
-      pixels[index] = THREE.MathUtils.clamp(ivory + 12, 0, 255);
-      pixels[index + 1] = THREE.MathUtils.clamp(ivory + 8, 0, 255);
-      pixels[index + 2] = THREE.MathUtils.clamp(ivory + 1, 0, 255);
+      pixels[index] = cleanWhite;
+      pixels[index + 1] = Math.min(255, cleanWhite + 3);
+      pixels[index + 2] = Math.min(255, cleanWhite + 8);
     }
   }
 
@@ -431,9 +439,13 @@ function attachDamagedHelmet(runtime: RobotRuntime, helmetScene: THREE.Group) {
 
       if (object.material instanceof THREE.MeshStandardMaterial) {
         object.material = object.material.clone();
-        // 用户这次要先看官方 DamagedHelmet 原始效果，所以这里只克隆材质避免共享副作用，
-        // 不再改 baseColor、贴图、metalness 或 roughness；envMapIntensity 回到默认值，避免故事页冷白灯把官方旧化材质洗白。
-        object.material.envMapIntensity = 1;
+        // 用户要的是全新的纯白黑科技风，而不是 DamagedHelmet 原始的战损旧化。
+        // 因此头盔也走同一套“翻新”贴图：白色外壳、蓝黑镜面结构，弱化锈色和刮痕。
+        object.material.map = createCleanTechArmorTexture(object.material.map) ?? object.material.map;
+        object.material.color.set(0xffffff);
+        object.material.envMapIntensity = 0.38;
+        object.material.roughness = Math.min(object.material.roughness, 0.34);
+        object.material.metalness = Math.max(object.material.metalness, 0.52);
         object.material.needsUpdate = true;
       }
     }
@@ -460,8 +472,8 @@ function prepareRobotRuntime(gltfScene: THREE.Group, animations: THREE.Animation
         object.material = object.material.clone();
         object.material.envMapIntensity = 1.85;
 
-        // 用户希望身体也跟随 DamagedHelmet 的官方材质语言。
-        // 因此不把头盔贴图硬套到 Soldier UV，而是重映射原贴图颜色，并让 PBR 参数接近头盔的金属旧化反射。
+        // 用户现在要全新的纯白黑科技工艺，不要战损和旧化。
+        // 因此这里把 Soldier 原 diffuse 翻新成冷白外甲和蓝黑镜面结构，同时抹掉暖色锈蚀和大部分细碎刮痕。
         const materialName = object.material.name.toLowerCase();
 
         if (materialName.includes("visor")) {
@@ -470,11 +482,11 @@ function prepareRobotRuntime(gltfScene: THREE.Group, animations: THREE.Animation
           object.material.metalness = 0.82;
           cyberRig.armorMaterials.push(object.material);
         } else {
-          object.material.map = createHelmetInspiredArmorTexture(object.material.map) ?? object.material.map;
+          object.material.map = createCleanTechArmorTexture(object.material.map) ?? object.material.map;
           object.material.color.set(0xffffff);
-          object.material.envMapIntensity = 1.18;
-          object.material.roughness = 0.29;
-          object.material.metalness = 0.58;
+          object.material.envMapIntensity = 0.82;
+          object.material.roughness = 0.24;
+          object.material.metalness = 0.64;
         }
 
         object.material.needsUpdate = true;
