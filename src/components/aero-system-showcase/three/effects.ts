@@ -19,28 +19,29 @@ export function createRouteNetwork(routes: AeroRouteDefinition[]) {
       blending: THREE.AdditiveBlending,
       color,
       depthWrite: false,
-      opacity: 0.82,
+      opacity: 0.54,
       transparent: true,
     });
     const glowMaterial = new THREE.MeshBasicMaterial({
       blending: THREE.AdditiveBlending,
       color,
       depthWrite: false,
-      opacity: 0.18,
+      opacity: 0.1,
       transparent: true,
     });
     const ambientHaloMaterial = new THREE.MeshBasicMaterial({
       blending: THREE.AdditiveBlending,
       color,
       depthWrite: false,
-      opacity: 0.045,
+      opacity: 0.024,
       transparent: true,
     });
 
-    // 航线光轨保留在运行时生成，因为它需要随滚动和时间流动；Blender 只提供灯塔和锚点。
-    group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 220, 0.014, 10, false), coreMaterial));
-    group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 220, 0.058, 14, false), glowMaterial));
-    group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 180, 0.12, 16, false), ambientHaloMaterial));
+    // Blender 现在已经输出实体航线桥，运行时只补“流光”和 halo；
+    // 如果继续用大半径强光管，会把模型桥和浮岛细节冲成一整条白带。
+    group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 220, 0.01, 10, false), coreMaterial));
+    group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 220, 0.038, 14, false), glowMaterial));
+    group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 180, 0.08, 16, false), ambientHaloMaterial));
     runtimeRoutes.push({ color, curve, id: route.id });
   });
 
