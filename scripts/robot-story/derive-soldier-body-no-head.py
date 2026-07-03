@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SOURCE_MODEL = ROOT / "public/robot-story/models/Soldier.glb"
 OUTPUT_MODEL = ROOT / "public/robot-story/models/SoldierBodyNoHead.glb"
 BLACK_PANEL_MATERIAL_NAME = "Robot story cool black armor panels"
+CYAN_SIGNAL_MATERIAL_NAME = "Robot story cyan signal trims"
 
 
 def clear_scene() -> None:
@@ -53,6 +54,29 @@ def create_cool_black_panel_material() -> bpy.types.Material:
     return material
 
 
+def create_cyan_signal_material() -> bpy.types.Material:
+    """创建少量冷青色信号材质，用于可落地的小面积科技点缀。"""
+    material = bpy.data.materials.new(CYAN_SIGNAL_MATERIAL_NAME)
+    material.use_nodes = True
+    material.diffuse_color = (0.1, 0.92, 1.0, 1.0)
+
+    node = material.node_tree.nodes.get("Principled BSDF")
+
+    if node:
+        if "Base Color" in node.inputs:
+            node.inputs["Base Color"].default_value = (0.1, 0.92, 1.0, 1.0)
+        if "Emission Color" in node.inputs:
+            node.inputs["Emission Color"].default_value = (0.02, 0.75, 1.0, 1.0)
+        if "Emission Strength" in node.inputs:
+            node.inputs["Emission Strength"].default_value = 0.85
+        if "Metallic" in node.inputs:
+            node.inputs["Metallic"].default_value = 0.35
+        if "Roughness" in node.inputs:
+            node.inputs["Roughness"].default_value = 0.22
+
+    return material
+
+
 def is_cool_black_panel_face(center: Vector) -> bool:
     """按世界坐标选择更酷的黑色机甲分区，避免靠前端叠可见贴片。
 
@@ -62,35 +86,57 @@ def is_cool_black_panel_face(center: Vector) -> bool:
     x = center.x
     z = center.z
     abs_x = abs(x)
-    is_chest_core = abs_x < 0.24 and 1.14 < z < 1.43
-    is_chest_side_wing = 0.2 < abs_x < 0.42 and 1.08 < z < 1.36
-    is_upper_rib_insert = 0.28 < abs_x < 0.48 and 0.98 < z < 1.14
+    is_clavicle_insert = 0.22 < abs_x < 0.46 and 1.34 < z < 1.54
+    is_chest_side_wing = 0.27 < abs_x < 0.47 and 1.08 < z < 1.35
+    is_upper_rib_insert = 0.22 < abs_x < 0.52 and 0.98 < z < 1.13
+    is_abdomen_spine = abs_x < 0.13 and 0.86 < z < 1.08
     is_forearm_cuff = 0.58 < abs_x < 0.9 and 0.72 < z < 1.08
 
-    return is_chest_core or is_chest_side_wing or is_upper_rib_insert or is_forearm_cuff
+    return is_clavicle_insert or is_chest_side_wing or is_upper_rib_insert or is_abdomen_spine or is_forearm_cuff
+
+
+def is_cyan_signal_face(center: Vector) -> bool:
+    """选择极小面积的发光信号面，避免颜色点缀变成廉价大色块。"""
+    x = center.x
+    y = center.y
+    z = center.z
+    abs_x = abs(x)
+    abs_y = abs(y)
+    is_chest_scan_node = 0.105 < abs_x < 0.155 and 0.06 < abs_y < 0.16 and 1.2 < z < 1.28
+    is_wrist_signal = 0.78 < abs_x < 0.88 and abs_y < 0.12 and 0.61 < z < 0.7
+
+    return is_chest_scan_node or is_wrist_signal
 
 
 def assign_cool_black_panel_faces() -> None:
-    """把黑色设计语言写入派生 GLB，而不是依赖运行时额外几何贴片。"""
+    """把黑白科技分区写入派生 GLB，而不是依赖运行时额外几何贴片。"""
     body = bpy.data.objects.get("vanguard_Mesh")
 
     if not body or body.type != "MESH":
         raise RuntimeError("Soldier body mesh vanguard_Mesh was not found")
 
-    material = create_cool_black_panel_material()
-    body.data.materials.append(material)
-    material_index = len(body.data.materials) - 1
-    selected_count = 0
+    black_material = create_cool_black_panel_material()
+    cyan_material = create_cyan_signal_material()
+    body.data.materials.append(black_material)
+    black_material_index = len(body.data.materials) - 1
+    body.data.materials.append(cyan_material)
+    cyan_material_index = len(body.data.materials) - 1
+    black_selected_count = 0
+    cyan_selected_count = 0
 
     for polygon in body.data.polygons:
         center = sum((body.data.vertices[index].co for index in polygon.vertices), Vector()) / len(polygon.vertices)
         world_center = body.matrix_world @ center
 
-        if is_cool_black_panel_face(world_center):
-            polygon.material_index = material_index
-            selected_count += 1
+        if is_cyan_signal_face(world_center):
+            polygon.material_index = cyan_material_index
+            cyan_selected_count += 1
+        elif is_cool_black_panel_face(world_center):
+            polygon.material_index = black_material_index
+            black_selected_count += 1
 
-    print(f"Assigned {selected_count} Soldier body faces to cool black armor panels")
+    print(f"Assigned {black_selected_count} Soldier body faces to cool black armor panels")
+    print(f"Assigned {cyan_selected_count} Soldier body faces to cyan signal trims")
 
 
 def remove_head_faces_from_body() -> None:

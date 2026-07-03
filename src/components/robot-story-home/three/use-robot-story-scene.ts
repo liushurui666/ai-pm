@@ -545,10 +545,24 @@ function prepareSoldierBodyMaterial(material: THREE.MeshStandardMaterial, cyberR
     material.color.set(0x000103);
     material.emissive.set(0x000000);
     material.emissiveIntensity = 0;
-    material.envMapIntensity = 0.48;
-    material.roughness = 0.28;
-    material.metalness = 0.68;
+    material.envMapIntensity = 0.22;
+    material.roughness = 0.2;
+    material.metalness = 0.82;
     cyberRig.armorMaterials.push(material);
+  } else if (materialName.includes("cyan signal trims")) {
+    // 青色只作为“系统上线”的信号光点，面积必须很小。
+    // 如果把它做成大色块，机器人会从黑白科技风变成游戏皮肤，所以这里保留发光但降低环境反射。
+    material.map = null;
+    material.normalMap = null;
+    material.aoMap = null;
+    material.roughnessMap = null;
+    material.metalnessMap = null;
+    material.color.set(0x78f7ff);
+    material.emissive.set(0x17d7ff);
+    material.emissiveIntensity = 1.18;
+    material.envMapIntensity = 0.32;
+    material.roughness = 0.2;
+    material.metalness = 0.48;
   } else {
     material.map = createCleanTechArmorTexture(material.map, { upperBodyAccents: true }) ?? material.map;
     material.color.set(0xffffff);
