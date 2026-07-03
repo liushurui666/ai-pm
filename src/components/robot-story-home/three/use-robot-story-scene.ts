@@ -246,7 +246,7 @@ function normalizeRobotModel(model: THREE.Group) {
   );
 }
 
-function createMonochromeArmorTexture(sourceTexture: THREE.Texture | null) {
+function createHelmetInspiredArmorTexture(sourceTexture: THREE.Texture | null) {
   if (!sourceTexture) {
     return null;
   }
@@ -287,32 +287,40 @@ function createMonochromeArmorTexture(sourceTexture: THREE.Texture | null) {
   const imageData = context.getImageData(0, 0, width, height);
   const pixels = imageData.data;
 
-  // Soldier 官方贴图把装甲、黑色内衬、划痕和红色装饰都烘在同一张 diffuse 里。
-  // 这里按像素重映射：红色标识保留，暗部继续做黑色机甲结构，米黄色装甲统一提成冷白。
+  // DamagedHelmet 的质感不是纯白，而是旧化象牙金属、镜面蓝黑面罩、暖金磨损边共同组成。
+  // Soldier 只有一张 diffuse 贴图，不能直接套头盔 UV；这里保留原贴图的划痕/明暗结构，
+  // 再把颜色映射到头盔同款材质语言，让身体和新头盔看起来来自同一个科幻装备体系。
   for (let index = 0; index < pixels.length; index += 4) {
+    const pixelIndex = index / 4;
+    const x = pixelIndex % width;
+    const y = Math.floor(pixelIndex / width);
     const r = pixels[index];
     const g = pixels[index + 1];
     const b = pixels[index + 2];
     const luminance = r * 0.299 + g * 0.587 + b * 0.114;
-    const isRedMark = r > 110 && r > g * 1.35 && r > b * 1.25;
+    const surfaceNoise = (Math.sin(x * 0.071 + y * 0.137) + Math.sin(x * 0.017 - y * 0.089)) * 0.5;
+    const isWarmMark = r > 136 && g < 112 && b < 112 && r - g > 42 && r - b > 48;
 
-    if (isRedMark) {
-      pixels[index] = Math.min(230, r * 1.08);
-      pixels[index + 1] = Math.max(24, g * 0.45);
-      pixels[index + 2] = Math.max(22, b * 0.42);
-    } else if (luminance < 82) {
-      const dark = Math.max(12, luminance * 0.62);
+    if (isWarmMark) {
+      const wear = THREE.MathUtils.clamp((luminance - 72) / 135, 0, 1);
 
-      pixels[index] = dark * 0.78;
-      pixels[index + 1] = dark * 0.9;
-      pixels[index + 2] = dark;
+      pixels[index] = 118 + wear * 68;
+      pixels[index + 1] = 86 + wear * 48;
+      pixels[index + 2] = 42 + wear * 26;
+    } else if (luminance < 86) {
+      const gloss = THREE.MathUtils.clamp(luminance / 86, 0, 1);
+
+      pixels[index] = 8 + gloss * 18;
+      pixels[index + 1] = 12 + gloss * 26;
+      pixels[index + 2] = 18 + gloss * 44;
     } else {
-      const detail = THREE.MathUtils.clamp((luminance - 82) / 173, 0, 1);
-      const white = 178 + detail * 74;
+      const detail = THREE.MathUtils.clamp((luminance - 86) / 169, 0, 1);
+      const patina = THREE.MathUtils.clamp(surfaceNoise * 9, -9, 9);
+      const ivory = 168 + detail * 78 + patina;
 
-      pixels[index] = white;
-      pixels[index + 1] = Math.min(255, white + 3);
-      pixels[index + 2] = Math.min(255, white + 8);
+      pixels[index] = THREE.MathUtils.clamp(ivory + 12, 0, 255);
+      pixels[index + 1] = THREE.MathUtils.clamp(ivory + 8, 0, 255);
+      pixels[index + 2] = THREE.MathUtils.clamp(ivory + 1, 0, 255);
     }
   }
 
@@ -452,20 +460,21 @@ function prepareRobotRuntime(gltfScene: THREE.Group, animations: THREE.Animation
         object.material = object.material.clone();
         object.material.envMapIntensity = 1.85;
 
-        // 用户希望保留官方 Soldier 模型和动作，但涂装改成黑白机甲。
-        // 因此不删除整张贴图，而是把装甲区域白化，同时保留黑色结构、划痕和少量红色装饰。
+        // 用户希望身体也跟随 DamagedHelmet 的官方材质语言。
+        // 因此不把头盔贴图硬套到 Soldier UV，而是重映射原贴图颜色，并让 PBR 参数接近头盔的金属旧化反射。
         const materialName = object.material.name.toLowerCase();
 
         if (materialName.includes("visor")) {
-          object.material.color.set(0x101d22);
-          object.material.roughness = 0.34;
-          object.material.metalness = 0.28;
+          object.material.color.set(0x07111c);
+          object.material.roughness = 0.22;
+          object.material.metalness = 0.82;
           cyberRig.armorMaterials.push(object.material);
         } else {
-          object.material.map = createMonochromeArmorTexture(object.material.map) ?? object.material.map;
+          object.material.map = createHelmetInspiredArmorTexture(object.material.map) ?? object.material.map;
           object.material.color.set(0xffffff);
-          object.material.roughness = 0.38;
-          object.material.metalness = 0.16;
+          object.material.envMapIntensity = 1.18;
+          object.material.roughness = 0.29;
+          object.material.metalness = 0.58;
         }
 
         object.material.needsUpdate = true;
