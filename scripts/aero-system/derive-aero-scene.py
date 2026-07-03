@@ -186,12 +186,12 @@ def materials() -> dict[str, bpy.types.Material]:
     """集中维护派生模型使用的材质标签，前端也会按这些名字做二次校色。"""
 
     return {
-        "rock": ensure_material("AI_PM_dark_floating_rock", (0.008, 0.014, 0.018, 1), metallic=0.02, roughness=0.9),
+        "rock": ensure_material("AI_PM_dark_floating_rock", (0.014, 0.018, 0.023, 1), metallic=0.03, roughness=0.88),
         "terrain": ensure_material(
             "AI_PM_dark_terrain_surface",
-            (0.025, 0.065, 0.045, 1),
-            emission=(0.0, 0.035, 0.025, 1),
-            emission_strength=0.03,
+            (0.038, 0.105, 0.072, 1),
+            emission=(0.0, 0.046, 0.032, 1),
+            emission_strength=0.04,
             metallic=0.05,
             roughness=0.88,
         ),
@@ -282,6 +282,170 @@ def get_bounds(objects: list[bpy.types.Object]) -> tuple[Vector, Vector, float]:
     return (min_corner + max_corner) * 0.5, size, max(size.x, size.y, size.z, 0.001)
 
 
+def to_blender_location(location: tuple[float, float, float] | list[float]) -> tuple[float, float, float]:
+    """把运行时 Three.js 坐标转换成 Blender 原生坐标。
+
+    这个脚本的业务坐标统一按 Three.js 语义书写：`x` 是横向，`y` 是高度，
+    `z` 是镜头深度。Blender 导出 GLB 时会把自身 Z-up 转为 glTF/Three 的 Y-up，
+    因此如果不在入口处转换，原本想做“上下层级”的圆盘和岛体会被错放到深度轴，
+    浏览器里就会读成几张贴片叠在一起。转换规则来自最小 GLB 导出验证：
+    Blender `(0, 1, 0)` -> Three `[0, 0, -1]`，Blender `(0, 0, 1)` -> Three `[0, 1, 0]`。
+    """
+
+    x, y, z = location
+    return (x, -z, y)
+
+
+def to_blender_rotation(rotation: tuple[float, float, float]) -> tuple[float, float, float]:
+    """把运行时欧拉角语义转换成 Blender 欧拉角。
+
+    首页派生模型绝大多数只需要绕 Three.js 的 Y 轴做朝向旋转。统一映射后，
+    `rotation=(0, yaw, 0)` 会真正变成 Blender Z 轴旋转，避免窗口带、泊位和桥体
+    沿错误轴展开。
+    """
+
+    rx, ry, rz = rotation
+    return (rx, -rz, ry)
+
+
+def to_blender_scale(scale: tuple[float, float, float]) -> tuple[float, float, float]:
+    """把 Three.js 语义的非等比缩放映射到 Blender 轴向。"""
+
+    sx, sy, sz = scale
+    return (sx, sz, sy)
+
+
+def polish_mesh_object(obj: bpy.types.Object, *, smooth: bool = True, bevel: float = 0.0) -> bpy.types.Object:
+    """给程序化几何做基础圆润处理，降低低模拼贴感。
+
+    目标图的空间站和浮岛虽然是科幻风，但边缘不是硬邦邦的纯低多边形；这里在 Blender
+    侧给导出资产加平滑和微倒角，避免把质感问题推给 Three.js 后期。
+    """
+
+    if obj.type != "MESH":
+        return obj
+
+    if smooth:
+        for polygon in obj.data.polygons:
+            polygon.use_smooth = True
+
+    if bevel > 0:
+        modifier = obj.modifiers.new(f"{obj.name}_soft_bevel", "BEVEL")
+        modifier.width = bevel
+        modifier.segments = 2
+        modifier.affect = "EDGES"
+        weighted = obj.modifiers.new(f"{obj.name}_weighted_normals", "WEIGHTED_NORMAL")
+        weighted.keep_sharp = True
+
+    return obj
+
+
+def add_organic_island_shell(
+    name: str,
+    material: bpy.types.Material,
+    *,
+    radius_x: float,
+    radius_z: float,
+    y: float,
+    thickness: float,
+    segments: int = 32,
+) -> bpy.types.Object:
+    """生成一体化悬浮岛岩壳，替代“圆盘 + 多个碎锥”的拼贴观感。
+
+    目标图中的每个业务节点都是一块完整浮空地貌，上方承载站台，下方有连续岩壁。
+    这里直接在 Blender 里生成闭合网格：上缘、下缘和底点都属于同一个 Mesh，
+    浏览器滚动时才会像一个整体，而不是几层贴片互相穿插。
+    """
+
+    vertices: list[tuple[float, float, float]] = []
+    top_indices: list[int] = []
+    waist_indices: list[int] = []
+    bottom_indices: list[int] = []
+
+    for index in range(segments):
+        angle = (index / segments) * math.pi * 2
+        ridge_noise = 1 + math.sin(index * 1.7) * 0.055 + math.cos(index * 0.9) * 0.035
+        x = math.cos(angle) * radius_x * ridge_noise
+        z = math.sin(angle) * radius_z * (1 + math.cos(index * 1.3) * 0.05)
+        vertices.append(to_blender_location((x, y + math.sin(index * 0.7) * 0.018, z)))
+        top_indices.append(index)
+
+    for index in range(segments):
+        angle = (index / segments) * math.pi * 2
+        waist_noise = 0.68 + (index % 5) * 0.018
+        x = math.cos(angle) * radius_x * waist_noise
+        z = math.sin(angle) * radius_z * (0.64 + (index % 4) * 0.016)
+        vertices.append(to_blender_location((x, y - thickness * 0.48 + math.sin(index * 0.9) * 0.026, z)))
+        waist_indices.append(segments + index)
+
+    for index in range(segments):
+        angle = (index / segments) * math.pi * 2
+        bottom_noise = 0.26 + (index % 6) * 0.015
+        x = math.cos(angle) * radius_x * bottom_noise
+        z = math.sin(angle) * radius_z * (0.24 + (index % 5) * 0.012)
+        vertices.append(to_blender_location((x, y - thickness * (0.92 + math.sin(index) * 0.05), z)))
+        bottom_indices.append(segments * 2 + index)
+
+    top_center_index = len(vertices)
+    vertices.append(to_blender_location((0, y + 0.018, 0)))
+    bottom_tip_index = len(vertices)
+    vertices.append(to_blender_location((0, y - thickness * 1.08, 0)))
+
+    faces: list[tuple[int, ...]] = []
+    for index in range(segments):
+        next_index = (index + 1) % segments
+        faces.append((top_center_index, top_indices[index], top_indices[next_index]))
+        faces.append((top_indices[index], waist_indices[index], waist_indices[next_index], top_indices[next_index]))
+        faces.append((waist_indices[index], bottom_indices[index], bottom_indices[next_index], waist_indices[next_index]))
+        faces.append((bottom_tip_index, bottom_indices[next_index], bottom_indices[index]))
+
+    mesh = bpy.data.meshes.new(f"{name}_mesh")
+    mesh.from_pydata(vertices, [], faces)
+    mesh.update()
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.collection.objects.link(obj)
+    obj.data.materials.append(material)
+    return polish_mesh_object(obj, smooth=True, bevel=0.006)
+
+
+def add_organic_island_top(
+    name: str,
+    material: bpy.types.Material,
+    *,
+    radius_x: float,
+    radius_z: float,
+    y: float,
+    segments: int = 40,
+) -> bpy.types.Object:
+    """生成可见的岛面地貌盖板。
+
+    只做暗色岩壳会让浮岛在首页截图里变成灰色块。目标图里每块浮岛顶部都有
+    地貌、跑道和设施叠加，因此这里在岩壳上方补一层不规则地面 Mesh，作为
+    后续站台、灯塔和航线锚点的承载面。
+    """
+
+    vertices = [to_blender_location((0, y, 0))]
+    faces: list[tuple[int, int, int]] = []
+
+    for index in range(segments):
+        angle = (index / segments) * math.pi * 2
+        terrain_noise = 0.92 + math.sin(index * 1.4) * 0.04 + math.cos(index * 0.6) * 0.035
+        x = math.cos(angle) * radius_x * terrain_noise
+        z = math.sin(angle) * radius_z * (0.9 + math.cos(index * 1.1) * 0.045)
+        vertices.append(to_blender_location((x, y + math.sin(index * 0.8) * 0.012, z)))
+
+    for index in range(1, segments + 1):
+        faces.append((0, index, 1 if index == segments else index + 1))
+
+    mesh = bpy.data.meshes.new(f"{name}_mesh")
+    mesh.from_pydata(vertices, [], faces)
+    mesh.update()
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.collection.objects.link(obj)
+    obj.data.materials.append(material)
+    return polish_mesh_object(obj, smooth=True, bevel=0.003)
+
+
 def import_asset(
     asset_key: str,
     name: str,
@@ -311,8 +475,8 @@ def import_asset(
     bpy.context.collection.objects.link(root)
     root.empty_display_type = "CUBE"
     root.empty_display_size = target_size * 0.2
-    root.location = location
-    root.rotation_euler = rotation
+    root.location = to_blender_location(location)
+    root.rotation_euler = to_blender_rotation(rotation)
     root.scale = (target_size / max_dimension, target_size / max_dimension, target_size / max_dimension)
 
     imported_set = set(imported)
@@ -347,13 +511,13 @@ def add_torus(
         minor_radius=minor_radius,
         major_segments=144,
         minor_segments=10,
-        location=location,
-        rotation=rotation,
+        location=to_blender_location(location),
+        rotation=to_blender_rotation(rotation),
     )
     torus = bpy.context.object
     torus.name = name
     torus.data.materials.append(material)
-    return torus
+    return polish_mesh_object(torus, smooth=True)
 
 
 def add_cylinder(
@@ -367,11 +531,11 @@ def add_cylinder(
 ) -> bpy.types.Object:
     """添加塔体、灯塔和航线插口，补足原始低模缺少的视觉锚点。"""
 
-    bpy.ops.mesh.primitive_cylinder_add(vertices=vertices, radius=radius, depth=depth, location=location)
+    bpy.ops.mesh.primitive_cylinder_add(vertices=vertices, radius=radius, depth=depth, location=to_blender_location(location))
     cylinder = bpy.context.object
     cylinder.name = name
     cylinder.data.materials.append(material)
-    return cylinder
+    return polish_mesh_object(cylinder, smooth=vertices > 12, bevel=min(radius * 0.12, 0.006))
 
 
 def add_box(
@@ -384,12 +548,15 @@ def add_box(
 ) -> bpy.types.Object:
     """用低成本盒体补出远景连接桥和机械层，避免画面只有圆盘。"""
 
-    bpy.ops.mesh.primitive_cube_add(size=1, location=location, rotation=rotation)
+    bpy.ops.mesh.primitive_cube_add(size=1, location=to_blender_location(location), rotation=to_blender_rotation(rotation))
     box = bpy.context.object
     box.name = name
-    box.scale = scale
+    box.scale = to_blender_scale(scale)
     box.data.materials.append(material)
-    return box
+    # 小窗口/灯条数量很多，如果每个都加倒角会让 GLB 节点和导出几何急剧膨胀，
+    # 浏览器刷新会变慢；只有较大的实体模块才保留倒角质感。
+    bevel = min(max(scale) * 0.02, 0.01) if max(scale) >= 0.055 else 0.0
+    return polish_mesh_object(box, smooth=False, bevel=bevel)
 
 
 def add_cone(
@@ -414,13 +581,13 @@ def add_cone(
         radius1=radius1,
         radius2=radius2,
         depth=depth,
-        location=location,
-        rotation=rotation,
+        location=to_blender_location(location),
+        rotation=to_blender_rotation(rotation),
     )
     cone = bpy.context.object
     cone.name = name
     cone.data.materials.append(material)
-    return cone
+    return polish_mesh_object(cone, smooth=vertices > 8)
 
 
 def add_sphere(
@@ -432,11 +599,11 @@ def add_sphere(
 ) -> bpy.types.Object:
     """添加发光节点，前端 Bloom 会把这些节点扩成目标图里的灯点。"""
 
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=16, radius=radius, location=location)
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=16, radius=radius, location=to_blender_location(location))
     sphere = bpy.context.object
     sphere.name = name
     sphere.data.materials.append(material)
-    return sphere
+    return polish_mesh_object(sphere, smooth=True)
 
 
 def add_ellipsoid(
@@ -449,12 +616,18 @@ def add_ellipsoid(
 ) -> bpy.types.Object:
     """添加可读的椭球体外壳，用来补足源 GLB 在首页镜头中不够清晰的问题。"""
 
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=48, ring_count=20, radius=1, location=location, rotation=rotation)
+    bpy.ops.mesh.primitive_uv_sphere_add(
+        segments=48,
+        ring_count=20,
+        radius=1,
+        location=to_blender_location(location),
+        rotation=to_blender_rotation(rotation),
+    )
     ellipsoid = bpy.context.object
     ellipsoid.name = name
-    ellipsoid.scale = scale
+    ellipsoid.scale = to_blender_scale(scale)
     ellipsoid.data.materials.append(material)
-    return ellipsoid
+    return polish_mesh_object(ellipsoid, smooth=True)
 
 
 def add_window_band(name: str, *, radius: float, y: float, material: bpy.types.Material, count: int = 36) -> None:
@@ -469,9 +642,82 @@ def add_window_band(name: str, *, radius: float, y: float, material: bpy.types.M
             f"{name}_window_{index:02d}",
             material,
             location=(math.cos(angle) * radius, y, math.sin(angle) * radius),
-            scale=(0.026, 0.008, 0.006),
-            rotation=(0, -angle, 0),
+            scale=(0.036, 0.012, 0.008),
+            rotation=(0, -angle + math.pi / 2, 0),
         )
+
+
+def add_circular_facade_panels(
+    name: str,
+    *,
+    radius: float,
+    base_y: float,
+    material: bpy.types.Material,
+    window_material: bpy.types.Material,
+    rows: int = 3,
+    count: int = 56,
+) -> None:
+    """给中央枢纽补连续舱室外墙和窗口矩阵。
+
+    目标图的主站核心是“圆形城市枢纽”，侧面有很多窗口、舱段和暖色灯点；
+    只放一个源 GLB 圆盘会显得像玩具模型。这里用分段盒体做出可追溯的导出几何，
+    之后 Three.js 只负责 Bloom 和色彩，不负责虚构建筑密度。
+    """
+
+    for row in range(rows):
+        row_y = base_y + row * 0.075
+        for index in range(count):
+            angle = (index / count) * math.pi * 2
+            # 每一圈留出少量暗段，模拟真实舱段分隔，避免窗口变成一整条霓虹线。
+            is_dark_panel = (index + row) % 5 in (0, 1)
+            panel_material = material if is_dark_panel else window_material
+            width = 0.043 if is_dark_panel else 0.028
+            add_box(
+                f"{name}_facade_r{row}_{index:02d}",
+                panel_material,
+                location=(math.cos(angle) * radius, row_y, math.sin(angle) * radius),
+                scale=(width, 0.025 if is_dark_panel else 0.012, 0.009),
+                rotation=(0, -angle + math.pi / 2, 0),
+            )
+
+
+def add_orbital_city_blocks(
+    name: str,
+    *,
+    radius: float,
+    y: float,
+    material: bpy.types.Material,
+    accent: bpy.types.Material,
+    count: int = 28,
+) -> None:
+    """围绕主站上层补小型建筑群，让圆形枢纽更像目标图里的空间城市。
+
+    这些块体不是前端装饰，而是导出到 GLB 的派生几何；后续如果效果不对，
+    可以直接回 Blender 文件调整，而不会散落在 Three.js 场景代码里。
+    """
+
+    for index in range(count):
+        angle = (index / count) * math.pi * 2 + 0.08
+        block_height = 0.05 + (index % 4) * 0.018
+        block_width = 0.035 + (index % 3) * 0.012
+        block_depth = 0.05 + (index % 2) * 0.01
+        x = math.cos(angle) * radius
+        z = math.sin(angle) * radius
+        add_box(
+            f"{name}_city_block_{index:02d}",
+            material,
+            location=(x, y + block_height * 0.5, z),
+            scale=(block_width, block_height, block_depth),
+            rotation=(0, -angle + math.pi / 2, 0),
+        )
+        if index % 3 != 0:
+            add_box(
+                f"{name}_city_window_{index:02d}",
+                accent,
+                location=(math.cos(angle) * (radius + 0.012), y + block_height * 0.58, math.sin(angle) * (radius + 0.012)),
+                scale=(block_width * 0.54, 0.006, 0.004),
+                rotation=(0, -angle + math.pi / 2, 0),
+            )
 
 
 def add_floating_island_mass(
@@ -489,15 +735,31 @@ def add_floating_island_mass(
     """
 
     mats = materials()
-    add_cylinder(f"{name}_shadowed_upper_rock_shelf", mats["rock"], location=(0, y, 0), radius=radius, depth=0.07, vertices=13)
+    add_organic_island_shell(
+        f"{name}_organic_rock_shell",
+        mats["rock"],
+        radius_x=radius * 1.16,
+        radius_z=radius * 0.84,
+        y=y,
+        thickness=depth,
+        segments=34,
+    )
+    add_organic_island_top(
+        f"{name}_terrain_cap",
+        mats["terrain"],
+        radius_x=radius * 0.96,
+        radius_z=radius * 0.68,
+        y=y + 0.038,
+        segments=36,
+    )
     for index in range(shard_count):
         angle = (index / shard_count) * math.pi * 2
-        stagger = 0.82 + (index % 3) * 0.12
-        shard_radius = radius * (0.34 + (index % 4) * 0.045)
+        stagger = 0.58 + (index % 3) * 0.08
+        shard_radius = radius * (0.18 + (index % 4) * 0.03)
         add_cone(
             f"{name}_underside_shard_{index:02d}",
             mats["rock"],
-            location=(math.cos(angle) * radius * 0.42, y - depth * (0.36 + (index % 2) * 0.08), math.sin(angle) * radius * 0.36),
+            location=(math.cos(angle) * radius * 0.34, y - depth * (0.5 + (index % 2) * 0.08), math.sin(angle) * radius * 0.26),
             radius1=0.02 + (index % 2) * 0.016,
             radius2=shard_radius,
             depth=depth * stagger,
@@ -577,7 +839,7 @@ def add_cinematic_bridge(
 def add_anchor(name: str, location: list[float] | tuple[float, float, float]) -> None:
     """添加可导出的命名 Empty，前端用它校验模型和交互锚点是否对齐。"""
 
-    bpy.ops.object.empty_add(type="PLAIN_AXES", location=location)
+    bpy.ops.object.empty_add(type="PLAIN_AXES", location=to_blender_location(location))
     anchor = bpy.context.object
     anchor.name = name
     anchor.empty_display_size = 0.12
@@ -694,39 +956,60 @@ def add_tree_cluster(name: str, *, y: float, radius: float, count: int = 5) -> N
 
 def build_central_command_station() -> None:
     mats = materials()
-    import_asset("island", "AI_PM_core_island", location=(0, -1.02, 0.03), rotation=(0, 0.18, 0), target_size=0.58, material=mats["rock"])
-    # 主站不能再叠大块岩体，否则首屏会变成黑色墙面；这里只保留薄型底座和局部尖底。
+    import_asset("island", "AI_PM_core_island", location=(0, -0.64, 0.03), rotation=(0, 0.18, 0), target_size=0.72, material=mats["rock"])
+    add_organic_island_shell(
+        "AI_PM_core_city_rock_shell",
+        mats["rock"],
+        radius_x=1.18,
+        radius_z=0.72,
+        y=-0.38,
+        thickness=0.72,
+        segments=42,
+    )
+    add_organic_island_top(
+        "AI_PM_core_city_terrain_cap",
+        mats["terrain"],
+        radius_x=1.02,
+        radius_z=0.58,
+        y=-0.3,
+        segments=48,
+    )
+    # 主站保留岩底体量，但避免重新生成一整面黑墙；核心视觉应来自圆形站体和灯环。
     add_cone(
         "AI_PM_core_compact_underbody",
         mats["rock"],
-        location=(0, -0.74, 0.02),
-        radius1=0.08,
-        radius2=0.46,
-        depth=0.36,
+        location=(0, -0.78, 0.02),
+        radius1=0.1,
+        radius2=0.36,
+        depth=0.42,
         vertices=11,
     )
-    import_asset("station_main", "AI_PM_core_station", location=(0, -0.08, 0), rotation=(0, -0.16, 0), target_size=1.72, preserve_source_materials=True)
-    import_asset("station_pink", "AI_PM_core_magenta_ring_asset", location=(0, 0.05, 0), rotation=(0, 0.08, 0), target_size=1.92, preserve_source_materials=True)
-    add_station_deck("AI_PM_core_primary", radius=0.96, y=-0.1, accent=mats["magenta"], light_count=44, thickness=0.1)
-    add_cylinder("AI_PM_core_lower_habitat_band", mats["pad"], location=(0, -0.22, 0), radius=0.76, depth=0.17, vertices=128)
-    add_cylinder("AI_PM_core_mid_habitat_band", mats["pad"], location=(0, -0.02, 0), radius=0.65, depth=0.13, vertices=112)
-    add_cylinder("AI_PM_core_upper_habitat_band", mats["pad"], location=(0, 0.16, 0), radius=0.5, depth=0.1, vertices=96)
-    add_cylinder("AI_PM_core_observation_deck", mats["pad"], location=(0, 0.31, 0), radius=0.34, depth=0.055, vertices=88)
-    add_window_band("AI_PM_core_lower", radius=0.78, y=-0.13, material=mats["cyan"], count=48)
-    add_window_band("AI_PM_core_mid", radius=0.67, y=0.05, material=mats["orange"], count=40)
-    add_window_band("AI_PM_core_upper", radius=0.52, y=0.22, material=mats["blue"], count=32)
-    add_torus("AI_PM_core_outer_magenta_runway", mats["magenta"], location=(0, 0.2, 0), major_radius=0.94, minor_radius=0.015)
-    add_torus("AI_PM_core_outer_dark_guardrail", mats["pad"], location=(0, 0.245, 0), major_radius=1.0, minor_radius=0.0055)
-    add_torus("AI_PM_core_mid_blue_runway", mats["blue"], location=(0, 0.31, 0), major_radius=0.62, minor_radius=0.009)
-    add_torus("AI_PM_core_inner_cyan_runway", mats["cyan"], location=(0, 0.39, 0), major_radius=0.31, minor_radius=0.0065)
-    add_radial_docks("AI_PM_core", mats["pad"], radius=1.0, y=-0.08, count=14)
-    add_station_spire_cluster("AI_PM_core_outer", radius=0.92, y=0.04, accent=mats["magenta"], count=9)
-    add_perimeter_signal_towers("AI_PM_core", radius=0.82, y=0.12, accent=mats["magenta"], count=12)
-    add_cylinder("AI_PM_core_command_tower", mats["pad"], location=(0, 0.84, 0), radius=0.078, depth=0.9, vertices=56)
-    add_cylinder("AI_PM_core_tower_light_column", mats["cyan"], location=(0, 1.0, 0), radius=0.02, depth=0.64, vertices=28)
-    add_torus("AI_PM_core_tower_signal_ring", mats["magenta"], location=(0, 1.22, 0), major_radius=0.18, minor_radius=0.007)
-    add_torus("AI_PM_core_tower_blue_ring", mats["blue"], location=(0, 1.02, 0), major_radius=0.12, minor_radius=0.0055)
-    add_sphere("AI_PM_core_top_beacon", mats["cyan"], location=(0, 1.38, 0), radius=0.038)
+    import_asset("station_main", "AI_PM_core_station", location=(0, -0.01, 0), rotation=(0, -0.16, 0), target_size=1.88, preserve_source_materials=True)
+    import_asset("station_pink", "AI_PM_core_magenta_ring_asset", location=(0, 0.12, 0), rotation=(0, 0.08, 0), target_size=2.04, preserve_source_materials=True)
+    add_station_deck("AI_PM_core_primary", radius=1.02, y=-0.06, accent=mats["magenta"], light_count=56, thickness=0.12)
+    add_cylinder("AI_PM_core_lower_habitat_band", mats["pad"], location=(0, -0.08, 0), radius=0.82, depth=0.19, vertices=144)
+    add_cylinder("AI_PM_core_mid_habitat_band", mats["pad"], location=(0, 0.12, 0), radius=0.68, depth=0.15, vertices=128)
+    add_cylinder("AI_PM_core_upper_habitat_band", mats["pad"], location=(0, 0.32, 0), radius=0.54, depth=0.11, vertices=112)
+    add_cylinder("AI_PM_core_observation_deck", mats["pad"], location=(0, 0.49, 0), radius=0.38, depth=0.07, vertices=96)
+    add_circular_facade_panels("AI_PM_core_lower_city", radius=0.85, base_y=-0.12, material=mats["pad"], window_material=mats["cyan"], rows=2, count=44)
+    add_circular_facade_panels("AI_PM_core_mid_city", radius=0.7, base_y=0.11, material=mats["pad"], window_material=mats["orange"], rows=2, count=36)
+    add_window_band("AI_PM_core_lower", radius=0.88, y=-0.2, material=mats["cyan"], count=48)
+    add_window_band("AI_PM_core_mid", radius=0.72, y=0.06, material=mats["orange"], count=40)
+    add_window_band("AI_PM_core_upper", radius=0.56, y=0.28, material=mats["blue"], count=32)
+    add_torus("AI_PM_core_outer_magenta_runway", mats["magenta"], location=(0, 0.1, 0), major_radius=1.02, minor_radius=0.018)
+    add_torus("AI_PM_core_outer_dark_guardrail", mats["pad"], location=(0, 0.16, 0), major_radius=1.08, minor_radius=0.006)
+    add_torus("AI_PM_core_mid_blue_runway", mats["blue"], location=(0, 0.34, 0), major_radius=0.66, minor_radius=0.01)
+    add_torus("AI_PM_core_inner_cyan_runway", mats["cyan"], location=(0, 0.46, 0), major_radius=0.34, minor_radius=0.007)
+    add_orbital_city_blocks("AI_PM_core_lower", radius=0.98, y=0.08, material=mats["pad"], accent=mats["cyan"], count=24)
+    add_orbital_city_blocks("AI_PM_core_upper", radius=0.58, y=0.44, material=mats["pad"], accent=mats["orange"], count=16)
+    add_radial_docks("AI_PM_core", mats["pad"], radius=1.08, y=-0.04, count=18)
+    add_station_spire_cluster("AI_PM_core_outer", radius=0.96, y=0.12, accent=mats["magenta"], count=12)
+    add_perimeter_signal_towers("AI_PM_core", radius=0.9, y=0.18, accent=mats["magenta"], count=16)
+    add_cylinder("AI_PM_core_command_tower", mats["pad"], location=(0, 0.9, 0), radius=0.084, depth=0.78, vertices=64)
+    add_cylinder("AI_PM_core_tower_light_column", mats["cyan"], location=(0, 1.0, 0), radius=0.022, depth=0.72, vertices=32)
+    add_torus("AI_PM_core_tower_signal_ring", mats["magenta"], location=(0, 1.3, 0), major_radius=0.2, minor_radius=0.008)
+    add_torus("AI_PM_core_tower_blue_ring", mats["blue"], location=(0, 1.08, 0), major_radius=0.14, minor_radius=0.006)
+    add_sphere("AI_PM_core_top_beacon", mats["cyan"], location=(0, 1.42, 0), radius=0.042)
     add_anchor("socket.route.in", [-0.52, 0.18, 0.42])
     add_anchor("socket.route.out", [0.52, 0.2, 0.42])
     add_anchor("socket.cameraFocus", [0, 0.3, 0])
