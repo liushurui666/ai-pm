@@ -848,6 +848,66 @@ def add_island_strata_segments(
             )
 
 
+def add_island_cliff_boulder_field(
+    name: str,
+    *,
+    radius_x: float,
+    radius_z: float,
+    y: float,
+    depth: float,
+    accent: bpy.types.Material,
+    count: int = 18,
+) -> None:
+    """给浮岛生成连续可见的岩壁块、底部阴影和局部灯点。
+
+    参考图里的浮岛边缘不是一圈平滑圆盘，而是由岩壁、暗部和局部设施组成的厚重地貌。
+    这组几何直接导出到派生 GLB，滚动和相机运动时会跟岛体一起运动，避免再次出现
+    “前端贴片叠上去”的分离感。
+    """
+
+    mats = materials()
+    for index in range(count):
+        angle = (index / count) * math.pi * 2 + (index % 3) * 0.045
+        edge_noise = 0.9 + math.sin(index * 1.37) * 0.055
+        x = math.cos(angle) * radius_x * edge_noise
+        z = math.sin(angle) * radius_z * (0.88 + math.cos(index * 1.11) * 0.05)
+        layer_y = y - 0.08 - (index % 4) * depth * 0.09
+        boulder_scale = (
+            0.075 + (index % 4) * 0.014,
+            0.034 + (index % 3) * 0.012,
+            0.052 + (index % 5) * 0.01,
+        )
+
+        add_ellipsoid(
+            f"{name}_cliff_boulder_{index:02d}",
+            mats["rock"],
+            location=(x, layer_y, z),
+            scale=boulder_scale,
+            rotation=(0, -angle + (index % 2) * 0.2, 0),
+        )
+
+        if index % 3 != 1:
+            add_cone(
+                f"{name}_cliff_tooth_{index:02d}",
+                mats["rock"],
+                location=(x * 0.78, y - depth * (0.46 + (index % 3) * 0.08), z * 0.78),
+                radius1=0.018 + (index % 2) * 0.008,
+                radius2=0.055 + (index % 4) * 0.012,
+                depth=depth * (0.38 + (index % 3) * 0.055),
+                vertices=8 + (index % 3),
+                rotation=(0, angle * 0.12, 0),
+            )
+
+        if index % 5 == 0:
+            add_box(
+                f"{name}_embedded_cliff_window_{index:02d}",
+                accent,
+                location=(x * 1.01, layer_y + 0.01, z * 1.01),
+                scale=(0.034, 0.006, 0.006),
+                rotation=(0, -angle + math.pi / 2, 0),
+            )
+
+
 def add_surface_micro_facilities(
     name: str,
     *,
@@ -895,6 +955,7 @@ def add_floating_island_mass(
     radius: float,
     y: float,
     depth: float,
+    accent: bpy.types.Material | None = None,
     shard_count: int = 11,
 ) -> None:
     """把浮岛从薄片补成有岩体厚度的可导出几何。
@@ -904,6 +965,7 @@ def add_floating_island_mass(
     """
 
     mats = materials()
+    cliff_accent = accent or mats["cyan"]
     add_organic_island_shell(
         f"{name}_organic_rock_shell",
         mats["rock"],
@@ -942,6 +1004,15 @@ def add_floating_island_mass(
         y=y - 0.08,
         levels=3,
         count=30,
+    )
+    add_island_cliff_boulder_field(
+        name,
+        radius_x=radius * 1.04,
+        radius_z=radius * 0.74,
+        y=y - 0.02,
+        depth=depth,
+        accent=cliff_accent,
+        count=16,
     )
 
 
@@ -1130,6 +1201,68 @@ def add_reference_station_spokes(
             )
 
 
+def add_station_underbelly_truss(
+    name: str,
+    *,
+    radius: float,
+    y: float,
+    accent: bpy.types.Material,
+    secondary: bpy.types.Material,
+    count: int = 18,
+) -> None:
+    """给中央主站补连续下腹桁架、舱段和底部灯点。
+
+    目标图的中央枢纽不是一个悬在空中的薄圆盘，底部能看到结构、阴影和向外延展的泊位。
+    这部分必须在 Blender 里做成派生模型自身的一部分，Three.js 只负责把发光材质提亮。
+    """
+
+    mats = materials()
+    add_cylinder(f"{name}_underbelly_core_shadow", mats["rock"], location=(0, y - 0.04, 0), radius=radius * 0.34, depth=0.18, vertices=72)
+    add_torus(f"{name}_underbelly_service_ring", mats["pad"], location=(0, y + 0.02, 0), major_radius=radius * 0.62, minor_radius=0.01)
+
+    for index in range(count):
+        angle = (index / count) * math.pi * 2
+        inner_radius = radius * (0.38 + (index % 2) * 0.04)
+        outer_radius = radius * (0.78 + (index % 3) * 0.035)
+        mid_radius = (inner_radius + outer_radius) * 0.5
+        length = outer_radius - inner_radius
+        x = math.cos(angle) * mid_radius
+        z = math.sin(angle) * mid_radius
+        add_box(
+            f"{name}_underbelly_truss_{index:02d}",
+            mats["pad"],
+            location=(x, y + (index % 2) * 0.018, z),
+            scale=(length * 0.52, 0.012, 0.018),
+            rotation=(0, -angle, 0),
+        )
+        if index % 2 == 0:
+            add_box(
+                f"{name}_underbelly_light_strip_{index:02d}",
+                accent if index % 4 else secondary,
+                location=(x, y + 0.024, z),
+                scale=(length * 0.42, 0.004, 0.005),
+                rotation=(0, -angle, 0),
+            )
+        if index % 3 != 1:
+            pod_x = math.cos(angle) * outer_radius
+            pod_z = math.sin(angle) * outer_radius
+            pod_drop = 0.11 + (index % 3) * 0.035
+            add_cylinder(
+                f"{name}_underbelly_hanging_pod_{index:02d}",
+                mats["pad"],
+                location=(pod_x, y - pod_drop * 0.5, pod_z),
+                radius=0.02 + (index % 2) * 0.004,
+                depth=pod_drop,
+                vertices=14,
+            )
+            add_sphere(
+                f"{name}_underbelly_pod_light_{index:02d}",
+                accent if index % 2 else secondary,
+                location=(pod_x, y - pod_drop - 0.014, pod_z),
+                radius=0.012,
+            )
+
+
 def add_terrain_micro_relief(
     name: str,
     *,
@@ -1235,6 +1368,51 @@ def add_route_bridge_segments(
             location=(end[0], end[1] + 0.02, end[2]),
             radius=0.026 if index < len(points) - 2 else 0.038,
         )
+
+
+def add_route_terrain_socket(
+    name: str,
+    *,
+    location: list[float],
+    accent: bpy.types.Material,
+    heading: float,
+) -> None:
+    """给航线节点补地面插座，让蓝/金光轨看起来嵌在岛面设施里。
+
+    参考图的路线不是悬浮在模型前方的线，而是从站台节点里发出并落到地面设施上。
+    插座和短导轨随 route-beacon-kit 导出，运行时动态流光再沿同一锚点叠加。
+    """
+
+    mats = materials()
+    x, y, z = location
+    add_cylinder(
+        f"{name}_socket_pad",
+        mats["pad"],
+        location=(x, y - 0.035, z),
+        radius=0.082,
+        depth=0.018,
+        vertices=32,
+    )
+    add_torus(
+        f"{name}_socket_glow_ring",
+        accent,
+        location=(x, y - 0.018, z),
+        major_radius=0.074,
+        minor_radius=0.0045,
+    )
+    add_box(
+        f"{name}_socket_direction_lane",
+        accent,
+        location=(x, y - 0.006, z),
+        scale=(0.115, 0.0038, 0.008),
+        rotation=(0, -heading, 0),
+    )
+    add_sphere(
+        f"{name}_socket_core_beacon",
+        accent,
+        location=(x, y + 0.022, z),
+        radius=0.024,
+    )
 
 
 def add_anchor(name: str, location: list[float] | tuple[float, float, float]) -> None:
@@ -1628,6 +1806,15 @@ def build_central_command_station() -> None:
         depth=0.42,
         vertices=11,
     )
+    add_island_cliff_boulder_field(
+        "AI_PM_core_city",
+        radius_x=0.84,
+        radius_z=0.5,
+        y=-0.36,
+        depth=0.62,
+        accent=mats["magenta"],
+        count=22,
+    )
     import_asset("station_main", "AI_PM_core_station", location=(0, -0.01, 0), rotation=(0, -0.16, 0), target_size=1.76, preserve_source_materials=True)
     import_asset("station_pink", "AI_PM_core_magenta_ring_asset", location=(0, 0.12, 0), rotation=(0, 0.08, 0), target_size=1.94, preserve_source_materials=True)
     add_station_deck("AI_PM_core_primary", radius=1.02, y=-0.06, accent=mats["magenta"], light_count=56, thickness=0.12)
@@ -1657,6 +1844,7 @@ def build_central_command_station() -> None:
     add_command_station_skyline("AI_PM_core_inner", radius=0.42, y=0.58, accent=mats["cyan"], count=12)
     add_radial_docks("AI_PM_core", mats["pad"], radius=1.08, y=-0.04, count=18)
     add_reference_station_spokes("AI_PM_core", radius=1.04, y=0.0, accent=mats["magenta"], count=14)
+    add_station_underbelly_truss("AI_PM_core", radius=1.02, y=-0.16, accent=mats["magenta"], secondary=mats["cyan"], count=22)
     add_station_spire_cluster("AI_PM_core_outer", radius=0.96, y=0.12, accent=mats["magenta"], count=12)
     add_perimeter_signal_towers("AI_PM_core", radius=0.9, y=0.18, accent=mats["magenta"], count=16)
     add_reference_station_tower("AI_PM_core_reference", base_y=0.48, accent=mats["magenta"], secondary=mats["cyan"])
@@ -1674,7 +1862,7 @@ def build_central_command_station() -> None:
 def build_requirements_tower_island() -> None:
     mats = materials()
     import_asset("island", "AI_PM_requirements_island", location=(0, -0.62, 0), rotation=(0, -0.45, 0), target_size=0.7, material=mats["rock"])
-    add_floating_island_mass("AI_PM_requirements", radius=0.42, y=-0.45, depth=0.42, shard_count=10)
+    add_floating_island_mass("AI_PM_requirements", radius=0.42, y=-0.45, depth=0.42, accent=mats["cyan"], shard_count=10)
     add_terrain_patch("AI_PM_requirements", size=0.58, y=-0.25, rotation=0.18)
     add_tree_cluster("AI_PM_requirements", y=-0.1, radius=0.22, count=4)
     import_asset("ground_hexes_a", "AI_PM_requirements_hex_pad", location=(0, -0.2, 0), rotation=(0, 0.2, 0), target_size=0.48, preserve_source_materials=True)
@@ -1701,7 +1889,7 @@ def build_requirements_tower_island() -> None:
 def build_version_harbor_island() -> None:
     mats = materials()
     import_asset("island", "AI_PM_versions_island", location=(0, -0.6, 0), rotation=(0, 0.38, 0), target_size=0.88, material=mats["rock"])
-    add_floating_island_mass("AI_PM_versions", radius=0.56, y=-0.46, depth=0.5, shard_count=12)
+    add_floating_island_mass("AI_PM_versions", radius=0.56, y=-0.46, depth=0.5, accent=mats["blue"], shard_count=12)
     add_terrain_patch("AI_PM_versions", size=0.7, y=-0.28, rotation=-0.2)
     add_tree_cluster("AI_PM_versions", y=-0.12, radius=0.33, count=7)
     import_asset("station_ring", "AI_PM_versions_station_ring", location=(0, -0.18, 0), rotation=(0, -0.2, 0), target_size=0.58, preserve_source_materials=True)
@@ -1727,7 +1915,7 @@ def build_version_harbor_island() -> None:
 def build_bug_repair_dock() -> None:
     mats = materials()
     import_asset("island", "AI_PM_bug_island", location=(0, -0.58, 0), rotation=(0, -0.22, 0), target_size=0.86, material=mats["rock"])
-    add_floating_island_mass("AI_PM_bug", radius=0.54, y=-0.45, depth=0.52, shard_count=12)
+    add_floating_island_mass("AI_PM_bug", radius=0.54, y=-0.45, depth=0.52, accent=mats["orange"], shard_count=12)
     add_terrain_patch("AI_PM_bug", size=0.66, y=-0.28, rotation=0.28)
     add_tree_cluster("AI_PM_bug", y=-0.12, radius=0.3, count=6)
     import_asset("door", "AI_PM_bug_dock_door", location=(-0.03, -0.16, 0), rotation=(0, -0.36, 0), target_size=0.44, preserve_source_materials=True)
@@ -1753,7 +1941,7 @@ def build_bug_repair_dock() -> None:
 def build_launch_gate_island() -> None:
     mats = materials()
     import_asset("island", "AI_PM_launch_island", location=(0, -0.58, 0), rotation=(0, -0.12, 0), target_size=0.9, material=mats["rock"])
-    add_floating_island_mass("AI_PM_launch", radius=0.58, y=-0.44, depth=0.55, shard_count=13)
+    add_floating_island_mass("AI_PM_launch", radius=0.58, y=-0.44, depth=0.55, accent=mats["orange"], shard_count=13)
     add_terrain_patch("AI_PM_launch", size=0.7, y=-0.27, rotation=-0.1)
     add_tree_cluster("AI_PM_launch", y=-0.1, radius=0.31, count=6)
     import_asset("station_yellow", "AI_PM_launch_station", location=(0, -0.18, 0), rotation=(0, 0.5, 0), target_size=0.56, preserve_source_materials=True)
@@ -1781,11 +1969,11 @@ def build_launch_gate_island() -> None:
 def build_background_support_stations() -> None:
     mats = materials()
     import_asset("island", "AI_PM_background_left_island", location=(-0.9, -0.42, 0), rotation=(0, 0.64, 0), target_size=0.76, material=mats["rock"])
-    add_floating_island_mass("AI_PM_background_left", radius=0.42, y=-0.34, depth=0.42, shard_count=8)
+    add_floating_island_mass("AI_PM_background_left", radius=0.42, y=-0.34, depth=0.42, accent=mats["blue"], shard_count=8)
     import_asset("station_ring", "AI_PM_background_left_station", location=(-0.9, -0.1, 0), rotation=(0, 0.72, 0), target_size=0.5, preserve_source_materials=True)
     add_station_deck("AI_PM_background_left", radius=0.34, y=-0.04, accent=mats["blue"], light_count=12, thickness=0.04)
     import_asset("island", "AI_PM_background_right_island", location=(0.85, -0.38, 0.12), rotation=(0, -0.42, 0), target_size=0.88, material=mats["rock"])
-    add_floating_island_mass("AI_PM_background_right", radius=0.48, y=-0.31, depth=0.46, shard_count=9)
+    add_floating_island_mass("AI_PM_background_right", radius=0.48, y=-0.31, depth=0.46, accent=mats["magenta"], shard_count=9)
     import_asset("station_mini", "AI_PM_background_right_station", location=(0.85, -0.04, 0.12), rotation=(0, -0.35, 0), target_size=0.46, preserve_source_materials=True)
     add_station_deck("AI_PM_background_right", radius=0.36, y=-0.02, accent=mats["magenta"], light_count=12, thickness=0.04)
     add_cinematic_bridge(
@@ -1825,7 +2013,16 @@ def build_route_beacon_kit() -> None:
     for route_id, route in ROUTES.items():
         material = mats["blue"] if route_id == "blue" else mats["orange"]
         add_route_bridge_segments("AI_PM_route_bridge", route_id=route_id, points=route["points"], accent=material)
-        for point in route["points"]:
+        points = route["points"]
+        for point_index, point in enumerate(points):
+            neighbor = points[min(point_index + 1, len(points) - 1)] if point_index < len(points) - 1 else points[max(0, point_index - 1)]
+            heading = math.atan2(neighbor[2] - point[2], neighbor[0] - point[0])
+            add_route_terrain_socket(
+                f"AI_PM_route_{route_id}_socket_{route_index:02d}",
+                location=point,
+                accent=material,
+                heading=heading,
+            )
             add_cylinder(
                 f"AI_PM_route_{route_id}_pylon_{route_index:02d}",
                 mats["pad"],

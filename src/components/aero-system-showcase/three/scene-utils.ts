@@ -75,7 +75,7 @@ export function createStarField() {
 
 export function createCloudBank() {
   const group = new THREE.Group();
-  const count = 1280;
+  const count = 1760;
   const positions = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
   const blue = new THREE.Color("#6edcff");
@@ -89,9 +89,9 @@ export function createCloudBank() {
 
     // 云海压在浮岛底部，提供目标图那种“平台悬在云层上”的深度感；
     // 保持点云而不是大纹理，避免继续增加 GLB 体积和首屏网络负担。
-    positions[index * 3] = Math.cos(angle) * radius + 0.68 + (Math.random() - 0.5) * 2.2;
-    positions[index * 3 + 1] = -1.08 + (Math.random() - 0.5) * 0.26;
-    positions[index * 3 + 2] = Math.sin(angle) * radius + 0.3 + (Math.random() - 0.5) * 2.35;
+    positions[index * 3] = Math.cos(angle) * radius + 0.68 + (Math.random() - 0.5) * 2.65;
+    positions[index * 3 + 1] = -1.02 + (Math.random() - 0.5) * 0.34;
+    positions[index * 3 + 2] = Math.sin(angle) * radius + 0.3 + (Math.random() - 0.5) * 2.75;
     colors[index * 3] = color.r;
     colors[index * 3 + 1] = color.g;
     colors[index * 3 + 2] = color.b;
@@ -106,8 +106,8 @@ export function createCloudBank() {
     new THREE.PointsMaterial({
       blending: THREE.AdditiveBlending,
       depthWrite: false,
-      opacity: 0.13,
-      size: 0.056,
+      opacity: 0.1,
+      size: 0.052,
       transparent: true,
       vertexColors: true,
     })
@@ -115,21 +115,21 @@ export function createCloudBank() {
   group.add(cloudPoints);
 
   const texture = createCloudSheetTexture();
-  for (let index = 0; index < 12; index += 1) {
+  for (let index = 0; index < 18; index += 1) {
     const material = new THREE.SpriteMaterial({
       blending: THREE.NormalBlending,
       color: index % 3 === 0 ? "#6f9aaa" : "#8ca0aa",
       depthWrite: false,
       map: texture,
-      opacity: 0.09 + (index % 3) * 0.018,
+      opacity: 0.12 + (index % 3) * 0.022,
       transparent: true,
     });
     const sprite = new THREE.Sprite(material);
-    const angle = (index / 12) * Math.PI * 2;
-    const radius = 1.4 + (index % 5) * 0.55;
+    const angle = (index / 18) * Math.PI * 2;
+    const radius = 1.35 + (index % 6) * 0.58;
 
-    sprite.position.set(Math.cos(angle) * radius + 0.72, -1.1 + (index % 4) * 0.042, Math.sin(angle) * radius + 0.46);
-    sprite.scale.set(2.2 + (index % 4) * 0.58, 0.78 + (index % 3) * 0.22, 1);
+    sprite.position.set(Math.cos(angle) * radius + 0.72, -1.08 + (index % 5) * 0.044, Math.sin(angle) * radius + 0.46);
+    sprite.scale.set(2.7 + (index % 5) * 0.62, 0.92 + (index % 3) * 0.26, 1);
     sprite.userData.phase = index * 0.53;
     group.add(sprite);
   }
@@ -184,7 +184,7 @@ export function createRunwayGrid() {
     new THREE.LineBasicMaterial({
       blending: THREE.AdditiveBlending,
       depthWrite: false,
-      opacity: 0.018,
+      opacity: 0.012,
       transparent: true,
       vertexColors: true,
     })
