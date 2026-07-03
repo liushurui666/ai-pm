@@ -1,0 +1,564 @@
+.robot-story-home {
+  --robot-active-accent: #63f7ff;
+  min-height: 620vh;
+  background:
+    linear-gradient(90deg, rgba(99, 247, 255, 0.08), transparent 24%, rgba(255, 95, 183, 0.08) 78%, transparent),
+    linear-gradient(180deg, #030510 0%, #050611 44%, #090814 100%);
+  color: #f7fbff;
+  font-family: var(--font-geist-sans), "Inter", "PingFang SC", sans-serif;
+  letter-spacing: 0;
+  position: relative;
+}
+
+.robot-story-home__stage {
+  height: 100vh;
+  min-height: 680px;
+  overflow: hidden;
+  position: sticky;
+  top: 0;
+}
+
+.robot-story-home__canvas {
+  display: block;
+  height: 100%;
+  inset: 0;
+  position: absolute;
+  width: 100%;
+  z-index: 1;
+}
+
+.robot-story-home__cinema-mask {
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.72), transparent 17%, transparent 78%, rgba(0, 0, 0, 0.76)),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.84), transparent 28%, transparent 68%, rgba(0, 0, 0, 0.58));
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 2;
+}
+
+.robot-story-home__scanlines {
+  background:
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.032) 0, rgba(255, 255, 255, 0.032) 1px, transparent 1px, transparent 5px),
+    linear-gradient(110deg, transparent 0%, rgba(99, 247, 255, 0.18) 46%, transparent 54%);
+  inset: 0;
+  mix-blend-mode: screen;
+  opacity: 0.35;
+  pointer-events: none;
+  position: absolute;
+  transform: translateX(-18%);
+  z-index: 3;
+  animation: robotStoryScan 5.8s linear infinite;
+}
+
+.robot-story-home__grid {
+  background-image:
+    linear-gradient(rgba(99, 247, 255, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(99, 247, 255, 0.08) 1px, transparent 1px);
+  background-size: 72px 72px;
+  inset: auto 0 0;
+  height: 45%;
+  opacity: 0.26;
+  pointer-events: none;
+  position: absolute;
+  transform: perspective(560px) rotateX(62deg) translateY(22%);
+  transform-origin: bottom;
+  z-index: 2;
+}
+
+.robot-story-home__nav {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  left: clamp(20px, 4vw, 64px);
+  position: absolute;
+  right: clamp(20px, 4vw, 64px);
+  top: 28px;
+  z-index: 8;
+}
+
+.robot-story-home__brand {
+  align-items: center;
+  color: #f7fbff;
+  display: inline-flex;
+  gap: 12px;
+  text-decoration: none;
+}
+
+.robot-story-home__brand-mark {
+  align-items: center;
+  border: 1px solid rgba(99, 247, 255, 0.42);
+  box-shadow: 0 0 28px rgba(99, 247, 255, 0.18);
+  color: var(--robot-active-accent);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 800;
+  height: 38px;
+  justify-content: center;
+  width: 38px;
+}
+
+.robot-story-home__brand strong,
+.robot-story-home__brand small {
+  display: block;
+  line-height: 1.1;
+}
+
+.robot-story-home__brand small {
+  color: rgba(220, 236, 255, 0.62);
+  font-size: 11px;
+  margin-top: 4px;
+  text-transform: uppercase;
+}
+
+.robot-story-home__nav-links {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.robot-story-home__nav-links a {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(238, 248, 255, 0.72);
+  font-size: 12px;
+  padding: 9px 12px;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.robot-story-home__copy {
+  left: clamp(22px, 5vw, 86px);
+  max-width: min(560px, 45vw);
+  position: absolute;
+  top: 19vh;
+  z-index: 7;
+}
+
+.robot-story-home__chapter-index {
+  align-items: center;
+  color: var(--robot-active-accent);
+  display: flex;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 12px;
+  margin-bottom: 18px;
+  text-transform: uppercase;
+}
+
+.robot-story-home__chapter-index span {
+  font-size: 28px;
+}
+
+.robot-story-home__chapter-index i {
+  background: currentColor;
+  display: inline-block;
+  height: 1px;
+  opacity: 0.72;
+  width: 68px;
+}
+
+.robot-story-home__chapter-index em {
+  font-style: normal;
+  letter-spacing: 0.16em;
+}
+
+.robot-story-home__copy h1 {
+  font-size: clamp(42px, 6vw, 92px);
+  font-weight: 850;
+  line-height: 0.96;
+  margin: 0;
+  max-width: 720px;
+  text-wrap: balance;
+}
+
+.robot-story-home__subtitle {
+  color: #ffffff;
+  font-size: clamp(18px, 2vw, 28px);
+  font-weight: 650;
+  line-height: 1.26;
+  margin: 22px 0 0;
+}
+
+.robot-story-home__body {
+  color: rgba(223, 236, 255, 0.74);
+  font-size: 15px;
+  line-height: 1.86;
+  margin: 18px 0 0;
+  max-width: 520px;
+}
+
+.robot-story-home__actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.robot-story-home__primary,
+.robot-story-home__secondary {
+  align-items: center;
+  display: inline-flex;
+  font-size: 14px;
+  font-weight: 750;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  text-decoration: none;
+}
+
+.robot-story-home__primary {
+  background: var(--robot-active-accent);
+  box-shadow: 0 18px 46px rgba(99, 247, 255, 0.25);
+  color: #02050d;
+}
+
+.robot-story-home__secondary {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #eff8ff;
+}
+
+.robot-story-home__mission {
+  border-left: 1px solid rgba(255, 255, 255, 0.16);
+  bottom: 16vh;
+  max-width: 300px;
+  padding-left: 22px;
+  position: absolute;
+  right: clamp(24px, 5vw, 88px);
+  z-index: 7;
+}
+
+.robot-story-home__mission-top {
+  align-items: center;
+  color: rgba(237, 248, 255, 0.72);
+  display: flex;
+  font-size: 12px;
+  gap: 10px;
+  text-transform: uppercase;
+}
+
+.robot-story-home__mission-icon {
+  color: var(--robot-active-accent);
+  font-size: 18px;
+}
+
+.robot-story-home__mission strong {
+  color: #fff;
+  display: block;
+  font-size: 28px;
+  line-height: 1.05;
+  margin-top: 12px;
+}
+
+.robot-story-home__mission ul {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+}
+
+.robot-story-home__mission li {
+  align-items: center;
+  color: rgba(229, 240, 255, 0.72);
+  display: flex;
+  font-size: 13px;
+  gap: 8px;
+}
+
+.robot-story-home__mission li svg {
+  color: var(--robot-active-accent);
+}
+
+.robot-story-home__rail {
+  display: grid;
+  gap: 12px;
+  position: absolute;
+  right: 28px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 8;
+}
+
+.robot-story-home__rail button {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: rgba(238, 248, 255, 0.62);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 11px;
+  height: 36px;
+  justify-content: center;
+  padding: 0;
+  transition: border-color 160ms ease, color 160ms ease, transform 160ms ease;
+  width: 36px;
+}
+
+.robot-story-home__rail button[aria-current="step"] {
+  border-color: var(--robot-active-accent);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--robot-active-accent) 32%, transparent);
+  color: #fff;
+  transform: translateX(-5px);
+}
+
+.robot-story-home__loader {
+  align-items: center;
+  bottom: 34px;
+  color: rgba(240, 248, 255, 0.66);
+  display: flex;
+  font-size: 11px;
+  gap: 10px;
+  left: clamp(22px, 5vw, 86px);
+  letter-spacing: 0.16em;
+  position: absolute;
+  text-transform: uppercase;
+  z-index: 8;
+}
+
+.robot-story-home__loader span {
+  background: rgba(255, 255, 255, 0.26);
+  display: inline-block;
+  height: 2px;
+  overflow: hidden;
+  position: relative;
+  width: 82px;
+}
+
+.robot-story-home__loader span::after {
+  background: var(--robot-active-accent);
+  content: "";
+  inset: 0;
+  position: absolute;
+  transform: translateX(-72%);
+  animation: robotStoryLoader 1.2s ease-in-out infinite;
+}
+
+.robot-story-home__loader[data-ready="true"] span::after {
+  transform: translateX(0);
+  animation: none;
+}
+
+.robot-story-home__scroll-hint {
+  align-items: center;
+  bottom: 34px;
+  color: rgba(240, 248, 255, 0.62);
+  display: flex;
+  font-size: 11px;
+  gap: 10px;
+  letter-spacing: 0.16em;
+  position: absolute;
+  right: clamp(24px, 5vw, 88px);
+  text-transform: uppercase;
+  z-index: 8;
+}
+
+.robot-story-home__scroll-hint svg {
+  color: var(--robot-active-accent);
+  transform: rotate(90deg);
+}
+
+.robot-story-home__chapters {
+  display: grid;
+  gap: 0;
+  margin-top: -100vh;
+  padding-top: 100vh;
+  position: relative;
+  z-index: 6;
+}
+
+.robot-story-home__chapter-card {
+  align-items: end;
+  display: grid;
+  height: 104vh;
+  justify-items: end;
+  padding: 0 clamp(26px, 7vw, 112px) 18vh;
+  pointer-events: none;
+}
+
+.robot-story-home__chapter-card > * {
+  max-width: 360px;
+  opacity: 0;
+  text-align: right;
+}
+
+.robot-story-home__chapter-card span {
+  color: var(--robot-card-accent);
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+}
+
+.robot-story-home__chapter-card h2 {
+  color: rgba(255, 255, 255, 0.28);
+  font-size: clamp(24px, 3vw, 42px);
+  line-height: 1.08;
+  margin: 10px 0 0;
+  transition: color 200ms ease;
+}
+
+.robot-story-home__chapter-card p {
+  color: rgba(225, 238, 255, 0.42);
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 12px 0 0;
+}
+
+.robot-story-home__chapter-card[data-active="true"] h2 {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+@keyframes robotStoryScan {
+  0% {
+    transform: translateX(-32%);
+  }
+
+  100% {
+    transform: translateX(32%);
+  }
+}
+
+@keyframes robotStoryLoader {
+  0% {
+    transform: translateX(-92%);
+  }
+
+  55% {
+    transform: translateX(8%);
+  }
+
+  100% {
+    transform: translateX(102%);
+  }
+}
+
+@media (max-width: 980px) {
+  .robot-story-home__stage {
+    min-height: 720px;
+  }
+
+  .robot-story-home__nav-links {
+    display: none;
+  }
+
+  .robot-story-home__copy {
+    max-width: calc(100vw - 44px);
+    top: 15vh;
+  }
+
+  .robot-story-home__body {
+    max-width: 88vw;
+  }
+
+  .robot-story-home__mission {
+    bottom: 94px;
+    left: 22px;
+    max-width: calc(100vw - 76px);
+    right: 54px;
+  }
+
+  .robot-story-home__mission strong {
+    font-size: 22px;
+  }
+
+  .robot-story-home__rail {
+    right: 16px;
+  }
+
+  .robot-story-home__scroll-hint {
+    display: none;
+  }
+
+  .robot-story-home__chapter-card {
+    justify-items: start;
+    padding: 0 24px 14vh;
+  }
+
+  .robot-story-home__chapter-card > * {
+    text-align: left;
+  }
+}
+
+@media (max-width: 640px) {
+  .robot-story-home__stage {
+    min-height: 760px;
+  }
+
+  .robot-story-home__nav {
+    left: 18px;
+    right: 18px;
+    top: 18px;
+  }
+
+  .robot-story-home__brand-mark {
+    height: 34px;
+    width: 34px;
+  }
+
+  .robot-story-home__copy {
+    left: 18px;
+    top: 12vh;
+  }
+
+  .robot-story-home__copy h1 {
+    font-size: clamp(38px, 14vw, 58px);
+    max-width: calc(100vw - 48px);
+  }
+
+  .robot-story-home__subtitle {
+    font-size: 17px;
+    max-width: calc(100vw - 42px);
+  }
+
+  .robot-story-home__body {
+    font-size: 13px;
+    line-height: 1.68;
+    max-width: calc(100vw - 42px);
+  }
+
+  .robot-story-home__actions {
+    align-items: stretch;
+    flex-direction: column;
+    max-width: 230px;
+  }
+
+  .robot-story-home__primary,
+  .robot-story-home__secondary {
+    justify-content: center;
+  }
+
+  .robot-story-home__mission {
+    bottom: 76px;
+    left: 18px;
+    padding-left: 14px;
+    right: 50px;
+  }
+
+  .robot-story-home__mission ul {
+    gap: 7px;
+    margin-top: 12px;
+  }
+
+  .robot-story-home__rail {
+    gap: 8px;
+    right: 10px;
+  }
+
+  .robot-story-home__rail button {
+    height: 30px;
+    width: 30px;
+  }
+
+  .robot-story-home__loader {
+    bottom: 22px;
+    left: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .robot-story-home__scanlines,
+  .robot-story-home__loader span::after {
+    animation: none;
+  }
+}
