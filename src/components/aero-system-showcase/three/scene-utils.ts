@@ -34,7 +34,7 @@ export function sampleTupleKeyframes(
 
 // 星空和云雾继续由运行时生成，避免把大面积透明粒子烘进 GLB，导致 Blender 回归成本过高。
 export function createStarField() {
-  const count = 860;
+  const count = 680;
   const positions = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
   const cyan = new THREE.Color("#75e9ff");
@@ -65,8 +65,8 @@ export function createStarField() {
     new THREE.PointsMaterial({
       blending: THREE.AdditiveBlending,
       depthWrite: false,
-      opacity: 0.58,
-      size: 0.024,
+      opacity: 0.34,
+      size: 0.018,
       transparent: true,
       vertexColors: true,
     })
@@ -74,7 +74,7 @@ export function createStarField() {
 }
 
 export function createCloudBank() {
-  const count = 1560;
+  const count = 1280;
   const positions = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
   const blue = new THREE.Color("#6edcff");
@@ -89,7 +89,7 @@ export function createCloudBank() {
     // 云海压在浮岛底部，提供目标图那种“平台悬在云层上”的深度感；
     // 保持点云而不是大纹理，避免继续增加 GLB 体积和首屏网络负担。
     positions[index * 3] = Math.cos(angle) * radius + 0.68 + (Math.random() - 0.5) * 2.2;
-    positions[index * 3 + 1] = -1.0 + (Math.random() - 0.5) * 0.34;
+    positions[index * 3 + 1] = -1.08 + (Math.random() - 0.5) * 0.26;
     positions[index * 3 + 2] = Math.sin(angle) * radius + 0.3 + (Math.random() - 0.5) * 2.35;
     colors[index * 3] = color.r;
     colors[index * 3 + 1] = color.g;
@@ -105,8 +105,8 @@ export function createCloudBank() {
     new THREE.PointsMaterial({
       blending: THREE.AdditiveBlending,
       depthWrite: false,
-      opacity: 0.2,
-      size: 0.082,
+      opacity: 0.13,
+      size: 0.056,
       transparent: true,
       vertexColors: true,
     })

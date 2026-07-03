@@ -87,12 +87,12 @@ export function useAeroFlightScene({
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.32));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.68;
+    renderer.toneMappingExposure = 0.62;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;
 
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2("#03070d", 0.058);
+    scene.fog = new THREE.FogExp2("#03070d", 0.032);
 
     const pmremGenerator = new THREE.PMREMGenerator(renderer);
     const roomEnvironment = new RoomEnvironment();
@@ -104,7 +104,7 @@ export function useAeroFlightScene({
 
     const composer = new EffectComposer(renderer);
     const renderPass = new RenderPass(scene, camera);
-    const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.34, 0.62, 0.72);
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.28, 0.48, 0.82);
     const outputPass = new OutputPass();
     composer.addPass(renderPass);
     composer.addPass(bloomPass);
@@ -116,22 +116,22 @@ export function useAeroFlightScene({
     scene.add(rig);
 
     // 参考图是高反差夜景：环境光不能太满，否则 Blender 派生模型会被冲成一片灰。
-    scene.add(new THREE.HemisphereLight(0xccefff, 0x070910, 0.82));
-    const keyLight = new THREE.DirectionalLight(0xeaf8ff, 1.72);
+    scene.add(new THREE.HemisphereLight(0xccefff, 0x070910, 0.58));
+    const keyLight = new THREE.DirectionalLight(0xeaf8ff, 1.28);
     keyLight.position.set(-3.8, 4.6, 3.2);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.set(2048, 2048);
     scene.add(keyLight);
 
-    const magentaLight = new THREE.PointLight(0xff66d8, 2.7, 8);
+    const magentaLight = new THREE.PointLight(0xff66d8, 2.3, 8);
     magentaLight.position.set(0.8, 1.5, -0.3);
     scene.add(magentaLight);
 
-    const cyanLight = new THREE.PointLight(0x66efff, 2.8, 8);
+    const cyanLight = new THREE.PointLight(0x66efff, 2.15, 8);
     cyanLight.position.set(-1.0, 0.68, 0.2);
     scene.add(cyanLight);
 
-    const amberLight = new THREE.PointLight(0xffc05e, 2.45, 8.5);
+    const amberLight = new THREE.PointLight(0xffc05e, 2.08, 8.5);
     amberLight.position.set(2.16, 0.56, 0.82);
     scene.add(amberLight);
 

@@ -27,7 +27,7 @@ export function tuneDerivedAeroMaterial(item: THREE.Material, emissiveMaterials:
     materialName.includes("light");
 
   if ("envMapIntensity" in flexibleMaterial) {
-    flexibleMaterial.envMapIntensity = isNaturalSurface ? 0.58 : 1.02;
+    flexibleMaterial.envMapIntensity = isNaturalSurface ? 0.62 : 0.92;
   }
 
   if ("metalness" in flexibleMaterial) {
@@ -41,7 +41,7 @@ export function tuneDerivedAeroMaterial(item: THREE.Material, emissiveMaterials:
   if ("color" in flexibleMaterial && flexibleMaterial.color) {
     if (isNaturalSurface) {
       // Blender 派生模型已经负责形体，前端只压出夜景反差；否则地表会被灯光冲成灰绿平面。
-      flexibleMaterial.color.lerp(new THREE.Color("#061915"), 0.28);
+      flexibleMaterial.color.lerp(new THREE.Color("#08211b"), 0.18);
     } else if (materialName.includes("airship")) {
       flexibleMaterial.color.lerp(new THREE.Color("#c6d2d8"), 0.18);
     } else if (materialName.includes("glass")) {
@@ -53,7 +53,7 @@ export function tuneDerivedAeroMaterial(item: THREE.Material, emissiveMaterials:
     } else if (materialName.includes("magenta")) {
       flexibleMaterial.color.set("#ff6fdb");
     } else {
-      flexibleMaterial.color.lerp(new THREE.Color("#14252f"), 0.34);
+      flexibleMaterial.color.lerp(new THREE.Color("#0b1822"), 0.42);
     }
   }
 
@@ -72,7 +72,7 @@ export function tuneDerivedAeroMaterial(item: THREE.Material, emissiveMaterials:
       flexibleMaterial.emissiveIntensity = materialName.includes("glass") ? 0.08 : 0.2;
     } else {
       flexibleMaterial.emissive.set("#123744");
-      flexibleMaterial.emissiveIntensity = isNaturalSurface ? 0.012 : 0.06;
+      flexibleMaterial.emissiveIntensity = isNaturalSurface ? 0.02 : 0.06;
     }
   }
 

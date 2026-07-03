@@ -50,7 +50,7 @@ CARDS = [
         "id": "requirements",
         "index": "01",
         "metric": "进行中 12/20",
-        "position": [-0.82, 0.62, -0.18],
+        "position": [-0.92, 0.62, -0.34],
         "status": "进行中",
         "summary": "收集需求，拆解任务",
         "title": "需求塔台",
@@ -60,7 +60,7 @@ CARDS = [
         "id": "versions",
         "index": "02",
         "metric": "进行中 v1.2.3",
-        "position": [-0.18, 0.12, 1.08],
+        "position": [-0.32, 0.08, 1.16],
         "status": "进行中",
         "summary": "规划版本，分配资源",
         "title": "版本航站",
@@ -70,7 +70,7 @@ CARDS = [
         "id": "bugs",
         "index": "03",
         "metric": "进行中 5 个待处理",
-        "position": [1.44, 0.12, 1.08],
+        "position": [1.42, 0.08, 1.16],
         "status": "进行中",
         "summary": "发现问题，修复验证",
         "title": "Bug 维修坞",
@@ -80,7 +80,7 @@ CARDS = [
         "id": "launch",
         "index": "04",
         "metric": "准备就绪 v1.2.3",
-        "position": [2.24, 0.6, 0.14],
+        "position": [2.28, 0.62, 0.06],
         "status": "准备就绪",
         "summary": "验收合规，发布上线",
         "title": "上线闸口",
@@ -93,31 +93,31 @@ ROUTES = {
         "color": "#4bd8ff",
         "points": [
             [-0.72, 0.12, -0.1],
-            [-0.56, 0.04, 0.42],
-            [-0.18, -0.08, 1.0],
-            [0.54, 0.04, 0.72],
-            [0.92, 0.2, -0.04],
+            [-0.62, 0.02, 0.34],
+            [-0.32, -0.08, 1.08],
+            [0.46, 0.02, 0.76],
+            [0.86, 0.16, 0.0],
         ],
     },
     "orange": {
         "color": "#ffc35c",
         "points": [
-            [0.92, 0.2, -0.04],
-            [1.16, 0.02, 0.66],
-            [1.42, -0.06, 1.08],
-            [1.78, 0.1, 0.74],
-            [2.24, 0.28, 0.14],
+            [0.86, 0.16, 0.0],
+            [1.12, 0.02, 0.62],
+            [1.42, -0.05, 1.08],
+            [1.78, 0.08, 0.72],
+            [2.28, 0.28, 0.08],
         ],
     },
 }
 
 
 FLIGHT_PATH = [
-    [-0.34, 0.28, 0.58],
-    [0.54, 0.38, 0.36],
-    [1.14, 0.42, 0.72],
+    [-0.28, 0.3, 0.62],
+    [0.48, 0.4, 0.42],
+    [1.14, 0.44, 0.72],
     [1.72, 0.46, 0.62],
-    [2.14, 0.45, 0.18],
+    [2.14, 0.45, 0.12],
 ]
 
 
@@ -186,12 +186,12 @@ def materials() -> dict[str, bpy.types.Material]:
     """集中维护派生模型使用的材质标签，前端也会按这些名字做二次校色。"""
 
     return {
-        "rock": ensure_material("AI_PM_dark_floating_rock", (0.014, 0.018, 0.023, 1), metallic=0.03, roughness=0.88),
+        "rock": ensure_material("AI_PM_dark_floating_rock", (0.008, 0.011, 0.016, 1), metallic=0.05, roughness=0.9),
         "terrain": ensure_material(
             "AI_PM_dark_terrain_surface",
-            (0.038, 0.105, 0.072, 1),
-            emission=(0.0, 0.046, 0.032, 1),
-            emission_strength=0.04,
+            (0.022, 0.062, 0.052, 1),
+            emission=(0.0, 0.028, 0.024, 1),
+            emission_strength=0.025,
             metallic=0.05,
             roughness=0.88,
         ),
@@ -205,11 +205,11 @@ def materials() -> dict[str, bpy.types.Material]:
         ),
         "pad": ensure_material(
             "AI_PM_station_dark_metal",
-            (0.044, 0.058, 0.068, 1),
-            emission=(0.01, 0.045, 0.06, 1),
-            emission_strength=0.08,
-            metallic=0.76,
-            roughness=0.3,
+            (0.026, 0.036, 0.046, 1),
+            emission=(0.008, 0.026, 0.034, 1),
+            emission_strength=0.045,
+            metallic=0.82,
+            roughness=0.34,
         ),
         "cyan": ensure_material(
             "AI_PM_neon_cyan",
@@ -720,6 +720,81 @@ def add_orbital_city_blocks(
             )
 
 
+def add_island_strata_segments(
+    name: str,
+    *,
+    radius_x: float,
+    radius_z: float,
+    y: float,
+    levels: int = 3,
+    count: int = 28,
+) -> None:
+    """给浮岛岩壁补分段岩层线，减少“几片平板叠起来”的感觉。
+
+    参考图的岛体能看到岩壁、边缘和底部体积。当前源 GLB 较低模，因此在 Blender
+    派生阶段沿椭圆边缘补暗色短段，让每块岛在截图里读成一个完整地貌。
+    """
+
+    mats = materials()
+    for level in range(levels):
+        layer_y = y - level * 0.075
+        layer_scale = 1 - level * 0.09
+        for index in range(count):
+            if (index + level) % 3 == 0:
+                continue
+            angle = (index / count) * math.pi * 2
+            x = math.cos(angle) * radius_x * layer_scale
+            z = math.sin(angle) * radius_z * layer_scale
+            add_box(
+                f"{name}_rock_strata_l{level}_{index:02d}",
+                mats["rock"],
+                location=(x, layer_y, z),
+                scale=(0.038 + (index % 2) * 0.012, 0.01, 0.014),
+                rotation=(0, -angle + math.pi / 2, 0),
+            )
+
+
+def add_surface_micro_facilities(
+    name: str,
+    *,
+    radius_x: float,
+    radius_z: float,
+    y: float,
+    accent: bpy.types.Material,
+    count: int = 22,
+) -> None:
+    """在岛面散布小型设施、灯点和检修块，补足目标图里的复杂尺度。
+
+    这些微型设施使用确定性角度生成，保证每次导出结果稳定；它们只负责近景可读性，
+    不承担业务语义，业务节点仍由卡片和 manifest 锚点控制。
+    """
+
+    mats = materials()
+    for index in range(count):
+        angle = (index / count) * math.pi * 2 + (index % 4) * 0.09
+        ring = 0.18 + (index % 5) * 0.12
+        x = math.cos(angle) * radius_x * min(ring, 0.78)
+        z = math.sin(angle) * radius_z * min(ring, 0.78)
+        if index % 4 == 0:
+            add_cylinder(
+                f"{name}_micro_tower_{index:02d}",
+                mats["pad"],
+                location=(x, y + 0.045, z),
+                radius=0.012,
+                depth=0.09 + (index % 3) * 0.025,
+                vertices=10,
+            )
+            add_sphere(f"{name}_micro_light_{index:02d}", accent, location=(x, y + 0.1 + (index % 3) * 0.025, z), radius=0.01)
+        else:
+            add_box(
+                f"{name}_micro_service_block_{index:02d}",
+                mats["pad"] if index % 3 else accent,
+                location=(x, y + 0.022, z),
+                scale=(0.032 + (index % 3) * 0.01, 0.015, 0.024 + (index % 2) * 0.008),
+                rotation=(0, -angle, 0),
+            )
+
+
 def add_floating_island_mass(
     name: str,
     *,
@@ -766,6 +841,14 @@ def add_floating_island_mass(
             vertices=7 + (index % 3),
             rotation=(0, angle * 0.18, 0),
         )
+    add_island_strata_segments(
+        name,
+        radius_x=radius * 1.02,
+        radius_z=radius * 0.72,
+        y=y - 0.08,
+        levels=3,
+        count=30,
+    )
 
 
 def add_hex_tile_field(name: str, *, radius: float, y: float, accent: bpy.types.Material, count: int = 10) -> None:
@@ -858,6 +941,137 @@ def add_ring_lights(radius: float, y: float, material: bpy.types.Material, *, co
         )
 
 
+def add_rim_window_segments(
+    name: str,
+    *,
+    radius: float,
+    y: float,
+    material: bpy.types.Material,
+    count: int = 48,
+    every: int = 2,
+) -> None:
+    """在站台边缘补分段式窗带，替代当前截图里过于粗糙的大块发光条。
+
+    目标图的空间站外圈有大量短窗、舱段和暖色灯点。用短盒体做成导出几何后，
+    浏览器端的 Bloom 只负责把它们提亮，不再靠一整条霓虹线硬撑精度。
+    """
+
+    for index in range(count):
+        if index % every != 0:
+            continue
+        angle = (index / count) * math.pi * 2
+        add_box(
+            f"{name}_rim_window_{index:02d}",
+            material,
+            location=(math.cos(angle) * radius, y, math.sin(angle) * radius),
+            scale=(0.022, 0.006, 0.005),
+            rotation=(0, -angle + math.pi / 2, 0),
+        )
+
+
+def add_surface_lane_markings(
+    name: str,
+    *,
+    radius: float,
+    y: float,
+    accent: bpy.types.Material,
+    count: int = 6,
+) -> None:
+    """给浮岛站台补可导出的跑道线和停靠线。
+
+    参考图里每个岛面都有清晰的蓝/金发光路径和小型设施；当前模型只靠运行时曲线，
+    岛面本身缺少细节会显得像一片平板。这里把局部跑道和停机坪写入 GLB。
+    """
+
+    mats = materials()
+    add_torus(f"{name}_surface_inner_lane", accent, location=(0, y + 0.028, 0), major_radius=radius * 0.56, minor_radius=0.004)
+    add_torus(f"{name}_surface_outer_lane", mats["pad"], location=(0, y + 0.018, 0), major_radius=radius * 0.82, minor_radius=0.005)
+
+    for index in range(count):
+        angle = (index / count) * math.pi * 2
+        lane_length = radius * (0.42 + (index % 2) * 0.1)
+        add_box(
+            f"{name}_radial_lane_{index:02d}",
+            accent if index % 3 == 0 else mats["pad"],
+            location=(math.cos(angle) * radius * 0.34, y + 0.034, math.sin(angle) * radius * 0.34),
+            scale=(lane_length, 0.004, 0.009),
+            rotation=(0, -angle, 0),
+        )
+
+
+def add_floating_island_edge_lights(
+    name: str,
+    *,
+    radius_x: float,
+    radius_z: float,
+    y: float,
+    accent: bpy.types.Material,
+    count: int = 14,
+) -> None:
+    """沿浮岛边缘补小型灯塔，让分离的岛在暗场里不会糊成一块。
+
+    这些灯不是运行时特效，而是模型上的锚点灯。它们能帮助用户看清“多个浮岛
+    被航线连接”的目标图叙事。
+    """
+
+    for index in range(count):
+        angle = (index / count) * math.pi * 2
+        x = math.cos(angle) * radius_x
+        z = math.sin(angle) * radius_z
+        add_cylinder(
+            f"{name}_edge_lamp_mast_{index:02d}",
+            materials()["pad"],
+            location=(x, y + 0.06, z),
+            radius=0.008,
+            depth=0.12,
+            vertices=10,
+        )
+        add_sphere(
+            f"{name}_edge_lamp_{index:02d}",
+            accent,
+            location=(x, y + 0.13, z),
+            radius=0.012,
+        )
+
+
+def add_command_station_skyline(
+    name: str,
+    *,
+    radius: float,
+    y: float,
+    accent: bpy.types.Material,
+    count: int = 18,
+) -> None:
+    """给中央主站增加目标图那种环绕式小塔和城市天际线。
+
+    原始 GLB 的主站轮廓偏简单，直接放大会像低模玩具。这里通过 Blender
+    程序化派生生成一圈不同高度的暗色塔楼，强化“中心调度枢纽”的真实尺度。
+    """
+
+    mats = materials()
+    for index in range(count):
+        angle = (index / count) * math.pi * 2 + 0.06
+        tower_height = 0.12 + (index % 5) * 0.045
+        tower_radius = 0.014 + (index % 3) * 0.004
+        x = math.cos(angle) * radius
+        z = math.sin(angle) * radius
+        add_cylinder(
+            f"{name}_skyline_tower_{index:02d}",
+            mats["pad"],
+            location=(x, y + tower_height * 0.5, z),
+            radius=tower_radius,
+            depth=tower_height,
+            vertices=12,
+        )
+        if index % 2 == 0:
+            add_sphere(
+                f"{name}_skyline_light_{index:02d}",
+                accent,
+                location=(x, y + tower_height + 0.018, z),
+                radius=0.012,
+            )
+
+
 def add_station_deck(
     name: str,
     *,
@@ -873,6 +1087,7 @@ def add_station_deck(
     add_cylinder(f"{name}_round_deck", mats["pad"], location=(0, y, 0), radius=radius, depth=thickness, vertices=96)
     add_torus(f"{name}_outer_light_ring", accent, location=(0, y + 0.04, 0), major_radius=radius * 0.88, minor_radius=0.0075)
     add_torus(f"{name}_inner_service_ring", mats["cyan"], location=(0, y + 0.075, 0), major_radius=radius * 0.5, minor_radius=0.005)
+    add_rim_window_segments(f"{name}_deck", radius=radius * 0.92, y=y + 0.052, material=accent, count=light_count * 2, every=2)
     add_ring_lights(radius * 0.78, y + 0.082, accent, count=light_count)
 
 
@@ -956,21 +1171,21 @@ def add_tree_cluster(name: str, *, y: float, radius: float, count: int = 5) -> N
 
 def build_central_command_station() -> None:
     mats = materials()
-    import_asset("island", "AI_PM_core_island", location=(0, -0.64, 0.03), rotation=(0, 0.18, 0), target_size=0.72, material=mats["rock"])
+    import_asset("island", "AI_PM_core_island", location=(0, -0.64, 0.03), rotation=(0, 0.18, 0), target_size=0.62, material=mats["rock"])
     add_organic_island_shell(
         "AI_PM_core_city_rock_shell",
         mats["rock"],
-        radius_x=1.18,
-        radius_z=0.72,
+        radius_x=1.04,
+        radius_z=0.62,
         y=-0.38,
-        thickness=0.72,
+        thickness=0.64,
         segments=42,
     )
     add_organic_island_top(
         "AI_PM_core_city_terrain_cap",
         mats["terrain"],
-        radius_x=1.02,
-        radius_z=0.58,
+        radius_x=0.92,
+        radius_z=0.5,
         y=-0.3,
         segments=48,
     )
@@ -984,8 +1199,8 @@ def build_central_command_station() -> None:
         depth=0.42,
         vertices=11,
     )
-    import_asset("station_main", "AI_PM_core_station", location=(0, -0.01, 0), rotation=(0, -0.16, 0), target_size=1.88, preserve_source_materials=True)
-    import_asset("station_pink", "AI_PM_core_magenta_ring_asset", location=(0, 0.12, 0), rotation=(0, 0.08, 0), target_size=2.04, preserve_source_materials=True)
+    import_asset("station_main", "AI_PM_core_station", location=(0, -0.01, 0), rotation=(0, -0.16, 0), target_size=1.76, material=mats["pad"])
+    import_asset("station_pink", "AI_PM_core_magenta_ring_asset", location=(0, 0.12, 0), rotation=(0, 0.08, 0), target_size=1.94, material=mats["pad"])
     add_station_deck("AI_PM_core_primary", radius=1.02, y=-0.06, accent=mats["magenta"], light_count=56, thickness=0.12)
     add_cylinder("AI_PM_core_lower_habitat_band", mats["pad"], location=(0, -0.08, 0), radius=0.82, depth=0.19, vertices=144)
     add_cylinder("AI_PM_core_mid_habitat_band", mats["pad"], location=(0, 0.12, 0), radius=0.68, depth=0.15, vertices=128)
@@ -1000,8 +1215,13 @@ def build_central_command_station() -> None:
     add_torus("AI_PM_core_outer_dark_guardrail", mats["pad"], location=(0, 0.16, 0), major_radius=1.08, minor_radius=0.006)
     add_torus("AI_PM_core_mid_blue_runway", mats["blue"], location=(0, 0.34, 0), major_radius=0.66, minor_radius=0.01)
     add_torus("AI_PM_core_inner_cyan_runway", mats["cyan"], location=(0, 0.46, 0), major_radius=0.34, minor_radius=0.007)
+    add_torus("AI_PM_core_warm_city_ring", mats["orange"], location=(0, 0.22, 0), major_radius=0.9, minor_radius=0.006)
+    add_surface_lane_markings("AI_PM_core_city", radius=0.92, y=0.0, accent=mats["magenta"], count=10)
+    add_surface_micro_facilities("AI_PM_core_city", radius_x=0.86, radius_z=0.52, y=0.04, accent=mats["magenta"], count=34)
     add_orbital_city_blocks("AI_PM_core_lower", radius=0.98, y=0.08, material=mats["pad"], accent=mats["cyan"], count=24)
     add_orbital_city_blocks("AI_PM_core_upper", radius=0.58, y=0.44, material=mats["pad"], accent=mats["orange"], count=16)
+    add_command_station_skyline("AI_PM_core", radius=0.74, y=0.42, accent=mats["magenta"], count=20)
+    add_command_station_skyline("AI_PM_core_inner", radius=0.42, y=0.58, accent=mats["cyan"], count=12)
     add_radial_docks("AI_PM_core", mats["pad"], radius=1.08, y=-0.04, count=18)
     add_station_spire_cluster("AI_PM_core_outer", radius=0.96, y=0.12, accent=mats["magenta"], count=12)
     add_perimeter_signal_towers("AI_PM_core", radius=0.9, y=0.18, accent=mats["magenta"], count=16)
@@ -1025,7 +1245,10 @@ def build_requirements_tower_island() -> None:
     import_asset("ground_hexes_a", "AI_PM_requirements_hex_pad", location=(0, -0.2, 0), rotation=(0, 0.2, 0), target_size=0.48, preserve_source_materials=True)
     add_hex_tile_field("AI_PM_requirements", radius=0.36, y=-0.1, accent=mats["cyan"], count=9)
     add_station_deck("AI_PM_requirements", radius=0.39, y=-0.02, accent=mats["cyan"], light_count=18, thickness=0.055)
-    import_asset("station_mini", "AI_PM_requirements_tower", location=(0, 0.12, 0), rotation=(0, -0.15, 0), target_size=0.38, preserve_source_materials=True)
+    add_surface_lane_markings("AI_PM_requirements", radius=0.34, y=-0.05, accent=mats["cyan"], count=6)
+    add_surface_micro_facilities("AI_PM_requirements", radius_x=0.34, radius_z=0.24, y=-0.04, accent=mats["cyan"], count=14)
+    add_floating_island_edge_lights("AI_PM_requirements", radius_x=0.36, radius_z=0.26, y=-0.12, accent=mats["cyan"], count=10)
+    import_asset("station_mini", "AI_PM_requirements_tower", location=(0, 0.12, 0), rotation=(0, -0.15, 0), target_size=0.38, material=mats["pad"])
     import_asset("lamp", "AI_PM_requirements_signal_lamp", location=(0.18, 0.08, -0.12), rotation=(0, 0.2, 0), target_size=0.22, preserve_source_materials=True)
     add_station_spire_cluster("AI_PM_requirements", radius=0.34, y=0.04, accent=mats["cyan"], count=5)
     add_cylinder("AI_PM_requirements_beam", mats["cyan"], location=(0, 0.2, 0), radius=0.018, depth=0.32, vertices=20)
@@ -1043,10 +1266,13 @@ def build_version_harbor_island() -> None:
     add_floating_island_mass("AI_PM_versions", radius=0.56, y=-0.46, depth=0.5, shard_count=12)
     add_terrain_patch("AI_PM_versions", size=0.7, y=-0.28, rotation=-0.2)
     add_tree_cluster("AI_PM_versions", y=-0.12, radius=0.33, count=7)
-    import_asset("station_ring", "AI_PM_versions_station_ring", location=(0, -0.18, 0), rotation=(0, -0.2, 0), target_size=0.64, preserve_source_materials=True)
-    import_asset("ground_hexes_b", "AI_PM_versions_hex_field", location=(-0.04, -0.28, 0.08), rotation=(0, 0.22, 0), target_size=0.42, preserve_source_materials=True)
+    import_asset("station_ring", "AI_PM_versions_station_ring", location=(0, -0.18, 0), rotation=(0, -0.2, 0), target_size=0.58, material=mats["pad"])
+    import_asset("ground_hexes_b", "AI_PM_versions_hex_field", location=(-0.04, -0.28, 0.08), rotation=(0, 0.22, 0), target_size=0.42, material=mats["pad"])
     add_hex_tile_field("AI_PM_versions", radius=0.48, y=-0.1, accent=mats["blue"], count=12)
     add_station_deck("AI_PM_versions", radius=0.5, y=-0.04, accent=mats["blue"], light_count=20, thickness=0.065)
+    add_surface_lane_markings("AI_PM_versions", radius=0.48, y=-0.08, accent=mats["blue"], count=8)
+    add_surface_micro_facilities("AI_PM_versions", radius_x=0.48, radius_z=0.34, y=-0.07, accent=mats["blue"], count=22)
+    add_floating_island_edge_lights("AI_PM_versions", radius_x=0.48, radius_z=0.34, y=-0.13, accent=mats["blue"], count=12)
     add_cylinder("AI_PM_versions_control_tower", mats["pad"], location=(0.18, 0.14, -0.12), radius=0.034, depth=0.32, vertices=24)
     add_station_spire_cluster("AI_PM_versions", radius=0.42, y=0.02, accent=mats["blue"], count=6)
     add_sphere("AI_PM_versions_beacon", mats["blue"], location=(0.18, 0.34, -0.12), radius=0.036)
@@ -1063,10 +1289,13 @@ def build_bug_repair_dock() -> None:
     add_floating_island_mass("AI_PM_bug", radius=0.54, y=-0.45, depth=0.52, shard_count=12)
     add_terrain_patch("AI_PM_bug", size=0.66, y=-0.28, rotation=0.28)
     add_tree_cluster("AI_PM_bug", y=-0.12, radius=0.3, count=6)
-    import_asset("door", "AI_PM_bug_dock_door", location=(-0.03, -0.16, 0), rotation=(0, -0.36, 0), target_size=0.44, preserve_source_materials=True)
-    import_asset("lamp", "AI_PM_bug_repair_beacon", location=(0.25, -0.1, -0.2), rotation=(0, 0.12, 0), target_size=0.26, preserve_source_materials=True)
+    import_asset("door", "AI_PM_bug_dock_door", location=(-0.03, -0.16, 0), rotation=(0, -0.36, 0), target_size=0.44, material=mats["pad"])
+    import_asset("lamp", "AI_PM_bug_repair_beacon", location=(0.25, -0.1, -0.2), rotation=(0, 0.12, 0), target_size=0.26, material=mats["pad"])
     add_hex_tile_field("AI_PM_bug", radius=0.46, y=-0.11, accent=mats["orange"], count=10)
     add_station_deck("AI_PM_bug", radius=0.48, y=-0.08, accent=mats["orange"], light_count=18, thickness=0.065)
+    add_surface_lane_markings("AI_PM_bug", radius=0.45, y=-0.1, accent=mats["orange"], count=8)
+    add_surface_micro_facilities("AI_PM_bug", radius_x=0.46, radius_z=0.33, y=-0.09, accent=mats["orange"], count=22)
+    add_floating_island_edge_lights("AI_PM_bug", radius_x=0.46, radius_z=0.33, y=-0.14, accent=mats["orange"], count=12)
     add_box("AI_PM_bug_service_bridge", mats["pad"], location=(-0.32, -0.08, 0.18), scale=(0.34, 0.022, 0.065), rotation=(0, -0.35, 0))
     add_station_spire_cluster("AI_PM_bug", radius=0.42, y=0.02, accent=mats["orange"], count=6)
     add_sphere("AI_PM_bug_hot_beacon", mats["orange"], location=(0.2, 0.24, -0.12), radius=0.038)
@@ -1083,10 +1312,13 @@ def build_launch_gate_island() -> None:
     add_floating_island_mass("AI_PM_launch", radius=0.58, y=-0.44, depth=0.55, shard_count=13)
     add_terrain_patch("AI_PM_launch", size=0.7, y=-0.27, rotation=-0.1)
     add_tree_cluster("AI_PM_launch", y=-0.1, radius=0.31, count=6)
-    import_asset("station_yellow", "AI_PM_launch_station", location=(0, -0.18, 0), rotation=(0, 0.5, 0), target_size=0.56, preserve_source_materials=True)
-    import_asset("ground_hex", "AI_PM_launch_pad", location=(0.02, -0.28, 0), rotation=(0, 0.15, 0), target_size=0.44, preserve_source_materials=True)
+    import_asset("station_yellow", "AI_PM_launch_station", location=(0, -0.18, 0), rotation=(0, 0.5, 0), target_size=0.56, material=mats["pad"])
+    import_asset("ground_hex", "AI_PM_launch_pad", location=(0.02, -0.28, 0), rotation=(0, 0.15, 0), target_size=0.44, material=mats["pad"])
     add_hex_tile_field("AI_PM_launch", radius=0.5, y=-0.1, accent=mats["orange"], count=11)
     add_station_deck("AI_PM_launch", radius=0.52, y=-0.06, accent=mats["orange"], light_count=22, thickness=0.065)
+    add_surface_lane_markings("AI_PM_launch", radius=0.5, y=-0.08, accent=mats["orange"], count=8)
+    add_surface_micro_facilities("AI_PM_launch", radius_x=0.5, radius_z=0.36, y=-0.07, accent=mats["orange"], count=24)
+    add_floating_island_edge_lights("AI_PM_launch", radius_x=0.5, radius_z=0.36, y=-0.12, accent=mats["orange"], count=12)
     add_cylinder("AI_PM_launch_gate_column_a", mats["pad"], location=(-0.16, 0.16, 0.02), radius=0.026, depth=0.36, vertices=24)
     add_cylinder("AI_PM_launch_gate_column_b", mats["pad"], location=(0.16, 0.16, 0.02), radius=0.026, depth=0.36, vertices=24)
     add_torus("AI_PM_launch_gate_top_ring", mats["orange"], location=(0, 0.28, 0.02), major_radius=0.18, minor_radius=0.006)
@@ -1178,55 +1410,55 @@ def derived_specs() -> list[DerivedModelSpec]:
             "id": "background-support-stations",
             "title": "远景支撑空间站",
             "role": "background-depth",
-            "placement": {"position": [1.12, -0.28, -1.42], "rotation": [0, 0, 0], "scale": [0.98, 0.98, 0.98]},
+            "placement": {"position": [1.12, -0.36, -1.55], "rotation": [0, 0, 0], "scale": [0.88, 0.88, 0.88]},
             "sourceKeys": ["island", "station_ring", "station_mini"],
             "builder": build_background_support_stations,
-            "anchors": {"socket.cameraFocus": [1.12, -0.24, -1.26], "socket.lightKey": [1.12, 0.08, -1.26]},
+            "anchors": {"socket.cameraFocus": [1.12, -0.3, -1.38], "socket.lightKey": [1.12, 0.02, -1.38]},
         },
         {
             "id": "central-command-station",
             "title": "中央主空间站",
             "role": "hero-station",
-            "placement": {"position": [0.98, 0.02, -0.16], "rotation": [0, 0, 0], "scale": [1.12, 0.84, 1.12]},
+            "placement": {"position": [0.98, -0.04, -0.24], "rotation": [0, 0, 0], "scale": [1.05, 0.86, 1.05]},
             "sourceKeys": ["island", "station_main", "station_pink"],
             "builder": build_central_command_station,
-            "anchors": {"socket.cameraFocus": [0.98, 0.28, -0.16], "socket.lightKey": [0.98, 1.14, -0.16]},
+            "anchors": {"socket.cameraFocus": [0.98, 0.24, -0.24], "socket.lightKey": [0.98, 1.08, -0.24]},
         },
         {
             "id": "requirements-tower-island",
             "title": "需求塔台岛",
             "role": "chapter-node",
-            "placement": {"position": [-0.82, -0.08, -0.2], "rotation": [0, 0, 0], "scale": [1.04, 1.04, 1.04]},
+            "placement": {"position": [-0.92, -0.08, -0.34], "rotation": [0, 0, 0], "scale": [0.96, 0.96, 0.96]},
             "sourceKeys": ["island", "terrain", "tree", "ground_hexes_a", "station_mini", "lamp"],
             "builder": build_requirements_tower_island,
-            "anchors": {"socket.card": [-0.82, 0.62, -0.18], "socket.cameraFocus": [-0.82, -0.1, -0.18]},
+            "anchors": {"socket.card": [-0.92, 0.62, -0.34], "socket.cameraFocus": [-0.92, -0.1, -0.34]},
         },
         {
             "id": "version-harbor-island",
             "title": "版本航站岛",
             "role": "chapter-node",
-            "placement": {"position": [-0.18, -0.5, 1.04], "rotation": [0, 0, 0], "scale": [1.08, 1.08, 1.08]},
+            "placement": {"position": [-0.32, -0.58, 1.16], "rotation": [0, 0, 0], "scale": [0.96, 0.96, 0.96]},
             "sourceKeys": ["island", "terrain", "tree", "station_ring", "ground_hexes_b"],
             "builder": build_version_harbor_island,
-            "anchors": {"socket.card": [-0.18, 0.12, 1.08], "socket.cameraFocus": [-0.18, -0.52, 1.04]},
+            "anchors": {"socket.card": [-0.32, 0.08, 1.16], "socket.cameraFocus": [-0.32, -0.58, 1.16]},
         },
         {
             "id": "bug-repair-dock",
             "title": "Bug 维修坞",
             "role": "chapter-node",
-            "placement": {"position": [1.44, -0.46, 1.08], "rotation": [0, 0, 0], "scale": [1.08, 1.08, 1.08]},
+            "placement": {"position": [1.42, -0.58, 1.16], "rotation": [0, 0, 0], "scale": [0.96, 0.96, 0.96]},
             "sourceKeys": ["island", "terrain", "tree", "door", "lamp"],
             "builder": build_bug_repair_dock,
-            "anchors": {"socket.card": [1.44, 0.12, 1.08], "socket.cameraFocus": [1.44, -0.52, 1.08]},
+            "anchors": {"socket.card": [1.42, 0.08, 1.16], "socket.cameraFocus": [1.42, -0.58, 1.16]},
         },
         {
             "id": "launch-gate-island",
             "title": "上线闸口岛",
             "role": "chapter-node",
-            "placement": {"position": [2.26, -0.1, 0.08], "rotation": [0, 0, 0], "scale": [1.08, 1.08, 1.08]},
+            "placement": {"position": [2.28, -0.16, 0.06], "rotation": [0, 0, 0], "scale": [0.98, 0.98, 0.98]},
             "sourceKeys": ["island", "terrain", "tree", "station_yellow", "ground_hex"],
             "builder": build_launch_gate_island,
-            "anchors": {"socket.card": [2.24, 0.6, 0.14], "socket.cameraFocus": [2.26, -0.18, 0.08]},
+            "anchors": {"socket.card": [2.28, 0.62, 0.06], "socket.cameraFocus": [2.28, -0.2, 0.06]},
         },
         {
             "id": "route-beacon-kit",
