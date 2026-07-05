@@ -1,47 +1,13 @@
-import { LandingHome } from "@/components/landing-home";
-import { headers } from "next/headers";
-import { redirect } from "next/navigation";
-import { unifiedAuthConfig } from "@/lib/auth/config";
-import { getSession } from "@/lib/auth/session";
-import { getRequestOriginFromHeaders, resolveTrustedRequestOrigin } from "@/lib/auth/request-origin";
-import { getAiPmAuthLoginHref, isAuthServiceConfigured } from "@/lib/auth/unified-auth";
+import type { Metadata } from "next";
+import { RobotStoryHome } from "@/components/robot-story-home";
 
-export const dynamic = "force-dynamic";
+export const metadata: Metadata = {
+  title: "AI PM | Robot Story",
+  description: "AI PM 机器人电影化滚动叙事首页",
+};
 
-const defaultAuthOrigin = unifiedAuthConfig.auth?.origin ?? unifiedAuthConfig.app?.origin ?? "http://localhost:3004";
-
-export default async function Home() {
-  const authEnabled = isAuthServiceConfigured();
-  const session = authEnabled ? await getSession() : null;
-  const requestOrigin = resolveTrustedRequestOrigin(
-    getRequestOriginFromHeaders(await headers()),
-    defaultAuthOrigin
-  );
-  const workbenchHref = "/workbench";
-  const versionDashboardPath = "/workbench?view=versionDashboard";
-
-  // 首页只服务未登录访客的产品介绍；一旦已有统一认证会话，根路由必须直接进入工作台。
-  // 这样 OAuth 回跳到 `/`、用户手动输入首页地址或登录态刷新时，都不会再看到宣传页。
-  if (!authEnabled || session) {
-    redirect(workbenchHref);
-  }
-
-  // 能走到这里说明当前请求没有登录态，首页 CTA 只负责发起登录并带回真实业务入口。
-  const primaryHref = getAiPmAuthLoginHref(workbenchHref, {
-    appBaseURL: requestOrigin,
-    authBaseURL: requestOrigin
-  });
-  const versionDashboardHref = getAiPmAuthLoginHref(versionDashboardPath, {
-    appBaseURL: requestOrigin,
-    authBaseURL: requestOrigin
-  });
-
-  return (
-    <LandingHome
-      isAuthenticated={false}
-      primaryHref={primaryHref}
-      versionDashboardHref={versionDashboardHref}
-      workbenchHref={workbenchHref}
-    />
-  );
+export default function Home() {
+  // 根路径现在承接机器人电影首页，不再按登录态自动跳转工作台。
+  // 用户明确要求把当前机器人页面换成首页，工作台入口继续由页面内 CTA 保留。
+  return <RobotStoryHome />;
 }
