@@ -245,6 +245,98 @@ function createGroundSystem() {
   return group;
 }
 
+function createStageEnvironment() {
+  const group = new THREE.Group();
+  const cyanMaterial = new THREE.MeshBasicMaterial({
+    color: 0x8af8ff,
+    depthWrite: false,
+    opacity: 0.18,
+    transparent: true,
+  });
+  const magentaMaterial = new THREE.MeshBasicMaterial({
+    color: 0xff6fb8,
+    depthWrite: false,
+    opacity: 0.12,
+    transparent: true,
+  });
+  const blueMaterial = new THREE.MeshBasicMaterial({
+    color: 0x88a7ff,
+    depthWrite: false,
+    opacity: 0.07,
+    transparent: true,
+  });
+
+  // 这组环境件只做“空间舱体”和电影纵深，不跟着地面旋转；
+  // 否则机器人周围会像一层贴图在转，反而削弱机甲站在真实场景里的稳定感。
+  const backWall = new THREE.Mesh(new THREE.PlaneGeometry(5.2, 2.62, 12, 6), blueMaterial.clone());
+  backWall.position.set(0.92, 1.38, -2.48);
+  backWall.rotation.set(0.02, 0, 0);
+  group.add(backWall);
+
+  const sideConfigs = [
+    { x: -3.15, z: -0.95, rotationY: Math.PI * 0.34, material: cyanMaterial },
+    { x: 3.12, z: -1.02, rotationY: -Math.PI * 0.34, material: magentaMaterial },
+  ];
+
+  sideConfigs.forEach((config, sideIndex) => {
+    for (let index = 0; index < 7; index += 1) {
+      const strip = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.035, 2.4 - index * 0.12),
+        config.material.clone()
+      );
+
+      strip.position.set(config.x, 0.92 + index * 0.08, config.z - index * 0.42);
+      strip.rotation.set(0, config.rotationY, sideIndex === 0 ? 0.08 : -0.08);
+      group.add(strip);
+    }
+  });
+
+  for (let index = 0; index < 4; index += 1) {
+    const rail = new THREE.Mesh(
+      new THREE.BoxGeometry(0.018, 0.018, 4.2 + index * 0.5),
+      new THREE.MeshBasicMaterial({
+        color: index % 2 === 0 ? 0x63f7ff : 0xff6fb8,
+        depthWrite: false,
+        opacity: 0.16,
+        transparent: true,
+      })
+    );
+
+    rail.position.set(index % 2 === 0 ? -1.9 - index * 0.18 : 1.9 + index * 0.18, 0.04, -0.55 - index * 0.16);
+    rail.rotation.y = index % 2 === 0 ? -0.12 : 0.12;
+    group.add(rail);
+  }
+
+  for (let index = 0; index < 3; index += 1) {
+    const gate = new THREE.Mesh(
+      new THREE.TorusGeometry(1.62 + index * 0.36, 0.004, 6, 96, Math.PI * 1.32),
+      new THREE.MeshBasicMaterial({
+        color: index === 1 ? 0xff6fb8 : 0x8af8ff,
+        depthWrite: false,
+        opacity: 0.12 - index * 0.018,
+        transparent: true,
+      })
+    );
+
+    gate.position.set(0.18, 1.12 + index * 0.05, -1.9 - index * 0.28);
+    gate.rotation.set(Math.PI * 0.5, 0, Math.PI * (0.08 + index * 0.06));
+    group.add(gate);
+  }
+
+  let materialIndex = 0;
+  group.traverse((object) => {
+    if (!(object instanceof THREE.Mesh) || !(object.material instanceof THREE.MeshBasicMaterial)) {
+      return;
+    }
+
+    object.material.userData.baseOpacity = object.material.opacity;
+    object.userData.environmentPhase = materialIndex * 0.71;
+    materialIndex += 1;
+  });
+
+  return group;
+}
+
 function collectRobotBones(model: THREE.Group) {
   const bones: RobotRuntime["bones"] = {};
 
@@ -844,6 +936,7 @@ export function useRobotStoryScene({
     const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 80);
     const robotPivot = new THREE.Group();
     const groundSystem = createGroundSystem();
+    const stageEnvironment = createStageEnvironment();
     const particles = createParticles();
     const signalPanels = createSignalPanels();
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -872,7 +965,7 @@ export function useRobotStoryScene({
     rimLight.position.set(3.2, 2.4, -3.8);
     launchLight.position.set(0, 3.2, 3.8);
 
-    scene.add(ambientLight, keyLight, keyLight.target, rimLight, launchLight, robotPivot, groundSystem, particles);
+    scene.add(ambientLight, keyLight, keyLight.target, rimLight, launchLight, robotPivot, stageEnvironment, groundSystem, particles);
     signalPanels.forEach((panel) => scene.add(panel.mesh));
 
     const loader = new GLTFLoader();
@@ -1020,6 +1113,17 @@ export function useRobotStoryScene({
       groundSystem.rotation.y += reducedMotion ? 0.0008 : 0.0028;
       particles.rotation.y -= reducedMotion ? 0.0004 : 0.0016;
       (particles.material as THREE.PointsMaterial).opacity = 0.36 + transitionPunch * 0.22;
+
+      stageEnvironment.children.forEach((child) => {
+        if (!(child instanceof THREE.Mesh) || !(child.material instanceof THREE.MeshBasicMaterial)) {
+          return;
+        }
+
+        const baseOpacity = Number(child.material.userData.baseOpacity ?? child.material.opacity);
+        const pulse = 0.84 + Math.sin(elapsed * 1.6 + Number(child.userData.environmentPhase ?? 0)) * 0.16;
+
+        child.material.opacity = Math.min(0.34, baseOpacity * pulse + transitionPunch * 0.025);
+      });
 
       tmpColor.set(activeChapter.accent);
       tmpLightColor.copy(tmpColor).lerp(new THREE.Color(0xb8f7ff), 0.72);
