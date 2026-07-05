@@ -147,78 +147,22 @@ function createCyberRobotRig() {
 function createGroundSystem() {
   const group = new THREE.Group();
 
-  // 真实检测仓已经由高质量背景图承担，Three 地面只做“机器人站在这个空间里”的接触阴影。
-  // 不再画网格或圆环，避免把画面拉回符号化 HUD；这里的填充面只模拟摄影棚地台反射。
-  const contactShadow = new THREE.Mesh(
-    new THREE.CircleGeometry(1, 96),
-    new THREE.MeshBasicMaterial({
-      color: 0x02060d,
-      depthWrite: false,
-      opacity: 0.38,
+  // 真实检测仓背景已经包含地台、舱壁和机械结构。
+  // Three 这层只放一张不可见的阴影承接面，让机器人投影落到背景地面上；
+  // 不能再画可见圆、线、面，否则用户框出的区域会像前端贴了一层透明特效。
+  const shadowReceiver = new THREE.Mesh(
+    new THREE.PlaneGeometry(4.2, 2.4),
+    new THREE.ShadowMaterial({
+      color: 0x000000,
+      opacity: 0.28,
       transparent: true,
     })
   );
 
-  contactShadow.rotation.x = -Math.PI / 2;
-  contactShadow.scale.set(1.26, 0.46, 1);
-  contactShadow.position.set(0, 0.012, -0.04);
-  group.add(contactShadow);
-
-  const floorReflection = new THREE.Mesh(
-    new THREE.CircleGeometry(1, 96),
-    new THREE.MeshBasicMaterial({
-      color: 0x9defff,
-      depthWrite: false,
-      opacity: 0.055,
-      transparent: true,
-    })
-  );
-
-  floorReflection.rotation.x = -Math.PI / 2;
-  floorReflection.scale.set(1.78, 0.62, 1);
-  floorReflection.position.set(0.08, 0.016, -0.1);
-  group.add(floorReflection);
-
-  return group;
-}
-
-function createStageEnvironment() {
-  const group = new THREE.Group();
-  const washConfigs = [
-    { color: 0xbdf8ff, opacity: 0.055, position: [-1.9, 1.2, -1.55], rotationY: 0.18 },
-    { color: 0xffffff, opacity: 0.045, position: [1.72, 1.18, -1.44], rotationY: -0.2 },
-    { color: 0x0b111c, opacity: 0.18, position: [0.42, 1.38, -2.2], rotationY: 0 },
-  ] as const;
-
-  // 这里不再用几何“造背景”，只用几块非常弱的光洗把 WebGL 机器人和真实背景的亮暗关系接上。
-  // 这些面没有可识别形状，只承担合成光和景深压暗，避免出现用户反感的点线面科技装饰。
-  washConfigs.forEach((config, index) => {
-    const wash = new THREE.Mesh(
-      new THREE.PlaneGeometry(index === 2 ? 4.8 : 1.8, index === 2 ? 2.8 : 2.2),
-      new THREE.MeshBasicMaterial({
-        color: config.color,
-        depthWrite: false,
-        opacity: config.opacity,
-        side: THREE.DoubleSide,
-        transparent: true,
-      })
-    );
-
-    wash.position.set(config.position[0], config.position[1], config.position[2]);
-    wash.rotation.set(0, config.rotationY, 0);
-    group.add(wash);
-  });
-
-  let materialIndex = 0;
-  group.traverse((object) => {
-    if (!(object instanceof THREE.Mesh) || !(object.material instanceof THREE.MeshBasicMaterial)) {
-      return;
-    }
-
-    object.material.userData.baseOpacity = object.material.opacity;
-    object.userData.environmentPhase = materialIndex * 0.71;
-    materialIndex += 1;
-  });
+  shadowReceiver.rotation.x = -Math.PI / 2;
+  shadowReceiver.position.set(0, 0.006, -0.08);
+  shadowReceiver.receiveShadow = true;
+  group.add(shadowReceiver);
 
   return group;
 }
@@ -822,7 +766,6 @@ export function useRobotStoryScene({
     const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 80);
     const robotPivot = new THREE.Group();
     const groundSystem = createGroundSystem();
-    const stageEnvironment = createStageEnvironment();
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -849,7 +792,7 @@ export function useRobotStoryScene({
     rimLight.position.set(3.2, 2.4, -3.8);
     launchLight.position.set(0, 3.2, 3.8);
 
-    scene.add(ambientLight, keyLight, keyLight.target, rimLight, launchLight, robotPivot, stageEnvironment, groundSystem);
+    scene.add(ambientLight, keyLight, keyLight.target, rimLight, launchLight, robotPivot, groundSystem);
 
     const loader = new GLTFLoader();
     const textureLoader = new THREE.TextureLoader();
@@ -995,17 +938,6 @@ export function useRobotStoryScene({
 
       // 地台阴影只做轻微呼吸，不再旋转网格/粒子；真实检测仓背景需要稳定空间感。
       groundSystem.scale.setScalar(1 + transitionPunch * (reducedMotion ? 0.015 : 0.035));
-
-      stageEnvironment.children.forEach((child) => {
-        if (!(child instanceof THREE.Mesh) || !(child.material instanceof THREE.MeshBasicMaterial)) {
-          return;
-        }
-
-        const baseOpacity = Number(child.material.userData.baseOpacity ?? child.material.opacity);
-        const pulse = 0.84 + Math.sin(elapsed * 1.6 + Number(child.userData.environmentPhase ?? 0)) * 0.16;
-
-        child.material.opacity = Math.min(0.34, baseOpacity * pulse + transitionPunch * 0.025);
-      });
 
       tmpColor.set(activeChapter.accent);
       tmpLightColor.copy(tmpColor).lerp(new THREE.Color(0xb8f7ff), 0.72);
