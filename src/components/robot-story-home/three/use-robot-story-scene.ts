@@ -537,7 +537,9 @@ function attachDamagedHelmet(runtime: RobotRuntime, helmetScene: THREE.Group) {
   // Soldier 的身体和动画来自官方 skinning_blending 示例；DamagedHelmet 是另一个官方示例资产。
   // 这里把头盔挂到 mixamorig:Head 骨骼上，让 Idle/Walk/Run 时头部仍跟随骨骼，而不是固定在世界坐标里。
   helmetScene.name = "threejs-damaged-helmet-head";
-  helmetScene.position.set(0, 7.1, 2.15);
+  // 头盔需要略高于 Soldier 原始头部切口，否则首屏近景会像陷进胸颈装甲里；
+  // 这里只调整骨骼局部挂点，不改模型比例，避免动画时头盔和身体产生更大的错位。
+  helmetScene.position.set(0, 7.75, 2.2);
   // DamagedHelmet 默认正面就是官方示例里的圆形“眼睛”和下方口部；之前绕 Y 轴翻转会把这些细节转到背面。
   helmetScene.rotation.set(0, 0, 0);
   helmetScene.scale.setScalar(18.2);
