@@ -85,8 +85,6 @@ export function RobotStoryHome() {
       >
         <canvas className="robot-story-home__canvas" ref={canvasRef} />
         <div className="robot-story-home__cinema-mask" aria-hidden="true" />
-        <div className="robot-story-home__scanlines" aria-hidden="true" />
-        <div className="robot-story-home__grid" aria-hidden="true" />
 
         <header className="robot-story-home__nav">
           <Link className="robot-story-home__brand" href="/">

@@ -47,12 +47,6 @@ type RobotArmorSkinTextures = {
   roughness: THREE.Texture;
 };
 
-type ScenePanel = {
-  mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
-  basePosition: THREE.Vector3;
-  baseRotation: THREE.Euler;
-};
-
 const tmpCameraPosition = new THREE.Vector3();
 const tmpCameraLookAt = new THREE.Vector3();
 const tmpRobotPosition = new THREE.Vector3();
@@ -125,38 +119,6 @@ function interpolateChapterVector(
   return target;
 }
 
-function createParticles() {
-  const particleCount = 1200;
-  const positions = new Float32Array(particleCount * 3);
-  const seeds = new Float32Array(particleCount);
-
-  for (let index = 0; index < particleCount; index += 1) {
-    const radius = 2.4 + Math.random() * 7.8;
-    const angle = Math.random() * Math.PI * 2;
-    const height = -0.8 + Math.random() * 4.8;
-
-    positions[index * 3] = Math.cos(angle) * radius;
-    positions[index * 3 + 1] = height;
-    positions[index * 3 + 2] = Math.sin(angle) * radius - 1.2;
-    seeds[index] = Math.random();
-  }
-
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute("aSeed", new THREE.BufferAttribute(seeds, 1));
-
-  const material = new THREE.PointsMaterial({
-    color: 0x8ff7ff,
-    depthWrite: false,
-    opacity: 0.56,
-    size: 0.018,
-    sizeAttenuation: true,
-    transparent: true,
-  });
-
-  return new THREE.Points(geometry, material);
-}
-
 function createCyberRobotRig() {
   const group = new THREE.Group();
   const armorMaterials: THREE.MeshStandardMaterial[] = [];
@@ -182,278 +144,70 @@ function createCyberRobotRig() {
   } satisfies CyberRobotRig;
 }
 
-function createSignalPanels() {
-  const panels: ScenePanel[] = [];
-  const materialColors = [0x7ee8ef, 0x9b8cff, 0xb8c98a, 0xe37fa7, 0xe2bd75];
-
-  for (let index = 0; index < robotStoryChapters.length; index += 1) {
-    const angle = (index / robotStoryChapters.length) * Math.PI * 2;
-    const material = new THREE.MeshBasicMaterial({
-      color: materialColors[index],
-      depthWrite: false,
-      opacity: 0.12,
-      side: THREE.DoubleSide,
-      transparent: true,
-      wireframe: false,
-    });
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.25, 0.72, 8, 4), material);
-    const basePosition = new THREE.Vector3(Math.cos(angle) * 2.25, 1.22 + index * 0.08, Math.sin(angle) * 1.15 - 0.5);
-    const baseRotation = new THREE.Euler(0.08, -angle + Math.PI / 2, 0);
-
-    mesh.position.copy(basePosition);
-    mesh.rotation.copy(baseRotation);
-    panels.push({ mesh, basePosition, baseRotation });
-  }
-
-  return panels;
-}
-
 function createGroundSystem() {
   const group = new THREE.Group();
-  const grid = new THREE.GridHelper(12, 36, 0x2eefff, 0x1a2a4c);
 
-  // 地面网格只提供“作战舱坐标系”的空间线索，透明度很低，避免抢掉机器人主体。
-  if (Array.isArray(grid.material)) {
-    grid.material.forEach((material) => {
-      material.transparent = true;
-      material.opacity = 0.24;
-    });
-  } else {
-    grid.material.transparent = true;
-    grid.material.opacity = 0.24;
-  }
+  // 真实检测仓已经由高质量背景图承担，Three 地面只做“机器人站在这个空间里”的接触阴影。
+  // 不再画网格或圆环，避免把画面拉回符号化 HUD；这里的填充面只模拟摄影棚地台反射。
+  const contactShadow = new THREE.Mesh(
+    new THREE.CircleGeometry(1, 96),
+    new THREE.MeshBasicMaterial({
+      color: 0x02060d,
+      depthWrite: false,
+      opacity: 0.38,
+      transparent: true,
+    })
+  );
 
-  grid.position.y = -0.02;
-  group.add(grid);
+  contactShadow.rotation.x = -Math.PI / 2;
+  contactShadow.scale.set(1.26, 0.46, 1);
+  contactShadow.position.set(0, 0.012, -0.04);
+  group.add(contactShadow);
 
-  for (let index = 0; index < 5; index += 1) {
-    const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(1.05 + index * 0.58, 0.006, 8, 128),
-      new THREE.MeshBasicMaterial({
-        color: index % 2 === 0 ? 0x63f7ff : 0xff5fb7,
-        depthWrite: false,
-        opacity: 0.18 - index * 0.018,
-        transparent: true,
-      })
-    );
+  const floorReflection = new THREE.Mesh(
+    new THREE.CircleGeometry(1, 96),
+    new THREE.MeshBasicMaterial({
+      color: 0x9defff,
+      depthWrite: false,
+      opacity: 0.055,
+      transparent: true,
+    })
+  );
 
-    ring.rotation.x = Math.PI / 2;
-    ring.position.y = 0.018 + index * 0.003;
-    group.add(ring);
-  }
+  floorReflection.rotation.x = -Math.PI / 2;
+  floorReflection.scale.set(1.78, 0.62, 1);
+  floorReflection.position.set(0.08, 0.016, -0.1);
+  group.add(floorReflection);
 
   return group;
 }
 
 function createStageEnvironment() {
   const group = new THREE.Group();
-  const cyanMaterial = new THREE.MeshBasicMaterial({
-    color: 0x8af8ff,
-    depthWrite: false,
-    opacity: 0.18,
-    transparent: true,
-  });
-  const magentaMaterial = new THREE.MeshBasicMaterial({
-    color: 0xff6fb8,
-    depthWrite: false,
-    opacity: 0.12,
-    transparent: true,
-  });
-  const blueMaterial = new THREE.MeshBasicMaterial({
-    color: 0x88a7ff,
-    depthWrite: false,
-    opacity: 0.07,
-    transparent: true,
-  });
-  const glassMaterial = new THREE.MeshBasicMaterial({
-    color: 0x07101c,
-    depthWrite: false,
-    opacity: 0.32,
-    side: THREE.DoubleSide,
-    transparent: true,
-  });
-  const whiteArmorMaterial = new THREE.MeshBasicMaterial({
-    color: 0xf2fbff,
-    depthWrite: false,
-    opacity: 0.18,
-    side: THREE.DoubleSide,
-    transparent: true,
-  });
-  const blackArmorMaterial = new THREE.MeshBasicMaterial({
-    color: 0x020913,
-    depthWrite: false,
-    opacity: 0.56,
-    side: THREE.DoubleSide,
-    transparent: true,
-  });
+  const washConfigs = [
+    { color: 0xbdf8ff, opacity: 0.055, position: [-1.9, 1.2, -1.55], rotationY: 0.18 },
+    { color: 0xffffff, opacity: 0.045, position: [1.72, 1.18, -1.44], rotationY: -0.2 },
+    { color: 0x0b111c, opacity: 0.18, position: [0.42, 1.38, -2.2], rotationY: 0 },
+  ] as const;
 
-  // 这组环境件只做“空间舱体”和电影纵深，不跟着地面旋转；
-  // 否则机器人周围会像一层贴图在转，反而削弱机甲站在真实场景里的稳定感。
-  const backWall = new THREE.Mesh(new THREE.PlaneGeometry(5.4, 2.72), blueMaterial.clone());
-  backWall.position.set(0.92, 1.38, -2.48);
-  backWall.rotation.set(0.02, 0, 0);
-  group.add(backWall);
-
-  // 背后的大面积扫描幕只给出“机器人检测舱”的空间基底。
-  // 用半透明整块面承接机甲反光，避免继续出现普通网页式线框网格。
-  const scannerCurtain = new THREE.Mesh(
-    new THREE.PlaneGeometry(2.72, 3.05),
-    new THREE.MeshBasicMaterial({
-      color: 0x9af9ff,
-      depthWrite: false,
-      opacity: 0.055,
-      side: THREE.DoubleSide,
-      transparent: true,
-    })
-  );
-  scannerCurtain.position.set(0.34, 1.34, -1.96);
-  scannerCurtain.rotation.set(0.04, 0, 0);
-  group.add(scannerCurtain);
-
-  const createHexCell = (radius: number, material: THREE.MeshBasicMaterial) => {
-    const cell = new THREE.Mesh(new THREE.CircleGeometry(radius, 6), material.clone());
-
-    cell.rotation.z = Math.PI / 6;
-    return cell;
-  };
-
-  const addArmorCluster = (
-    parent: THREE.Group,
-    cells: Array<{ x: number; y: number; radius: number; black?: boolean; accent?: boolean }>
-  ) => {
-    cells.forEach((cellConfig, index) => {
-      const material = cellConfig.accent ? cyanMaterial : cellConfig.black ? blackArmorMaterial : whiteArmorMaterial;
-      const cell = createHexCell(cellConfig.radius, material);
-
-      cell.position.set(cellConfig.x, cellConfig.y, -0.015 - index * 0.001);
-      parent.add(cell);
-    });
-  };
-
-  const backArmor = new THREE.Group();
-  backArmor.position.set(0.86, 1.28, -2.42);
-  backArmor.rotation.set(0.02, 0, 0);
-  addArmorCluster(backArmor, [
-    { x: -1.55, y: 0.56, radius: 0.18, black: true },
-    { x: -1.2, y: 0.36, radius: 0.2 },
-    { x: -0.86, y: 0.58, radius: 0.16, accent: true },
-    { x: -0.48, y: 0.2, radius: 0.18, black: true },
-    { x: 0.42, y: 0.34, radius: 0.19 },
-    { x: 1.04, y: 0.48, radius: 0.2, black: true },
-    { x: 1.38, y: 0.22, radius: 0.17 },
-    { x: 1.62, y: -0.22, radius: 0.2, black: true },
-    { x: -1.42, y: -0.38, radius: 0.16 },
-    { x: -1.05, y: -0.62, radius: 0.2, black: true },
-    { x: -0.54, y: -0.34, radius: 0.17 },
-    { x: 0.34, y: -0.36, radius: 0.18, black: true },
-    { x: 0.94, y: -0.62, radius: 0.16, accent: true },
-  ]);
-  group.add(backArmor);
-
-  const sideConfigs = [
-    { x: -3.15, z: -0.95, rotationY: Math.PI * 0.34, material: cyanMaterial },
-    { x: 3.12, z: -1.02, rotationY: -Math.PI * 0.34, material: magentaMaterial },
-  ];
-
-  sideConfigs.forEach((config, sideIndex) => {
-    const side = sideIndex === 0 ? -1 : 1;
-    const bay = new THREE.Group();
-
-    bay.position.set(config.x, 1.03, config.z);
-    bay.rotation.set(0, config.rotationY, sideIndex === 0 ? 0.05 : -0.05);
-
-    // 侧面从“几根线”改成机甲舱壁：深色玻璃主板承载白/黑蜂窝装甲片，
-    // 让四周场景和机器人身上的黑白蜂窝皮肤属于同一套视觉系统。
-    const mainPlate = new THREE.Mesh(new THREE.PlaneGeometry(1.36, 2.36), glassMaterial.clone());
-    mainPlate.position.set(0, 0, -0.04);
-    bay.add(mainPlate);
-
-    const upperPlate = new THREE.Mesh(new THREE.PlaneGeometry(0.72, 0.2), config.material.clone());
-    upperPlate.position.set(-0.12 * side, 0.95, -0.055);
-    bay.add(upperPlate);
-
-    const lowerPlate = new THREE.Mesh(new THREE.PlaneGeometry(0.92, 0.26), config.material.clone());
-    lowerPlate.position.set(0.1 * side, -0.86, -0.055);
-    bay.add(lowerPlate);
-
-    addArmorCluster(bay, [
-      { x: -0.44 * side, y: 0.62, radius: 0.17, black: true },
-      { x: -0.16 * side, y: 0.42, radius: 0.15 },
-      { x: 0.16 * side, y: 0.58, radius: 0.13, accent: true },
-      { x: 0.42 * side, y: 0.18, radius: 0.17, black: true },
-      { x: -0.04 * side, y: 0.02, radius: 0.16 },
-      { x: -0.34 * side, y: -0.18, radius: 0.15 },
-      { x: 0.02 * side, y: -0.38, radius: 0.18, black: true },
-      { x: -0.42 * side, y: -0.58, radius: 0.13, accent: true },
-      { x: 0.44 * side, y: -0.62, radius: 0.14 },
-    ]);
-
-    for (let index = 0; index < 4; index += 1) {
-      const shutter = new THREE.Mesh(
-        new THREE.BoxGeometry(0.07, 0.62 - index * 0.04, 0.025),
-        new THREE.MeshBasicMaterial({
-          color: index % 2 === 0 ? 0xcffbff : 0x07111d,
-          depthWrite: false,
-          opacity: index % 2 === 0 ? 0.18 : 0.42,
-          transparent: true,
-        })
-      );
-
-      shutter.position.set(-0.58 * side + index * 0.18 * side, 0.62 - index * 0.42, -0.025);
-      shutter.rotation.z = side * 0.18;
-      bay.add(shutter);
-    }
-
-    group.add(bay);
-  });
-
-  for (let index = 0; index < 4; index += 1) {
-    const rail = new THREE.Mesh(
-      new THREE.BoxGeometry(0.018, 0.018, 4.2 + index * 0.5),
+  // 这里不再用几何“造背景”，只用几块非常弱的光洗把 WebGL 机器人和真实背景的亮暗关系接上。
+  // 这些面没有可识别形状，只承担合成光和景深压暗，避免出现用户反感的点线面科技装饰。
+  washConfigs.forEach((config, index) => {
+    const wash = new THREE.Mesh(
+      new THREE.PlaneGeometry(index === 2 ? 4.8 : 1.8, index === 2 ? 2.8 : 2.2),
       new THREE.MeshBasicMaterial({
-        color: index % 2 === 0 ? 0x63f7ff : 0xff6fb8,
+        color: config.color,
         depthWrite: false,
-        opacity: 0.16,
+        opacity: config.opacity,
+        side: THREE.DoubleSide,
         transparent: true,
       })
     );
 
-    rail.position.set(index % 2 === 0 ? -1.9 - index * 0.18 : 1.9 + index * 0.18, 0.04, -0.55 - index * 0.16);
-    rail.rotation.y = index % 2 === 0 ? -0.12 : 0.12;
-    group.add(rail);
-  }
-
-  for (let index = 0; index < 3; index += 1) {
-    const gate = new THREE.Mesh(
-      new THREE.TorusGeometry(1.62 + index * 0.36, 0.004, 6, 96, Math.PI * 1.32),
-      new THREE.MeshBasicMaterial({
-        color: index === 1 ? 0xff6fb8 : 0x8af8ff,
-        depthWrite: false,
-        opacity: 0.12 - index * 0.018,
-        transparent: true,
-      })
-    );
-
-    gate.position.set(0.18, 1.12 + index * 0.05, -1.9 - index * 0.28);
-    gate.rotation.set(Math.PI * 0.5, 0, Math.PI * (0.08 + index * 0.06));
-    group.add(gate);
-
-    const bracketMaterial = new THREE.MeshBasicMaterial({
-      color: index === 1 ? 0xff6fb8 : 0x8af8ff,
-      depthWrite: false,
-      opacity: 0.16 - index * 0.018,
-      transparent: true,
-    });
-    const leftBracket = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.034, 0.34), bracketMaterial);
-    const rightBracket = leftBracket.clone();
-
-    // 弧形闸门两侧加实体机械卡扣，让它像机器人校准舱，而不是漂浮 HUD 圆线。
-    leftBracket.position.set(-1.18 - index * 0.18, 1.1 + index * 0.04, -1.9 - index * 0.28);
-    rightBracket.position.set(1.48 + index * 0.18, 1.1 + index * 0.04, -1.9 - index * 0.28);
-    leftBracket.rotation.y = -0.16;
-    rightBracket.rotation.y = 0.16;
-    group.add(leftBracket, rightBracket);
-  }
+    wash.position.set(config.position[0], config.position[1], config.position[2]);
+    wash.rotation.set(0, config.rotationY, 0);
+    group.add(wash);
+  });
 
   let materialIndex = 0;
   group.traverse((object) => {
@@ -1069,8 +823,6 @@ export function useRobotStoryScene({
     const robotPivot = new THREE.Group();
     const groundSystem = createGroundSystem();
     const stageEnvironment = createStageEnvironment();
-    const particles = createParticles();
-    const signalPanels = createSignalPanels();
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -1097,8 +849,7 @@ export function useRobotStoryScene({
     rimLight.position.set(3.2, 2.4, -3.8);
     launchLight.position.set(0, 3.2, 3.8);
 
-    scene.add(ambientLight, keyLight, keyLight.target, rimLight, launchLight, robotPivot, stageEnvironment, groundSystem, particles);
-    signalPanels.forEach((panel) => scene.add(panel.mesh));
+    scene.add(ambientLight, keyLight, keyLight.target, rimLight, launchLight, robotPivot, stageEnvironment, groundSystem);
 
     const loader = new GLTFLoader();
     const textureLoader = new THREE.TextureLoader();
@@ -1242,9 +993,8 @@ export function useRobotStoryScene({
         0.06
       );
 
-      groundSystem.rotation.y += reducedMotion ? 0.0008 : 0.0028;
-      particles.rotation.y -= reducedMotion ? 0.0004 : 0.0016;
-      (particles.material as THREE.PointsMaterial).opacity = 0.36 + transitionPunch * 0.22;
+      // 地台阴影只做轻微呼吸，不再旋转网格/粒子；真实检测仓背景需要稳定空间感。
+      groundSystem.scale.setScalar(1 + transitionPunch * (reducedMotion ? 0.015 : 0.035));
 
       stageEnvironment.children.forEach((child) => {
         if (!(child instanceof THREE.Mesh) || !(child.material instanceof THREE.MeshBasicMaterial)) {
@@ -1262,18 +1012,6 @@ export function useRobotStoryScene({
       keyLight.color.lerp(tmpLightColor, 0.06);
       rimLight.color.lerp(tmpLightColor, 0.035);
       launchLight.intensity = THREE.MathUtils.lerp(launchLight.intensity, chapterIndex === 4 ? 12 : 2 + transitionPunch * 3.5, 0.05);
-
-      signalPanels.forEach((panel, index) => {
-        const distance = Math.abs(index - chapterFloat);
-        const focus = clamp(1 - distance, 0, 1);
-
-        panel.mesh.position.copy(panel.basePosition);
-        panel.mesh.position.y += Math.sin(elapsed * 1.4 + index) * 0.035 + focus * 0.18;
-        panel.mesh.rotation.copy(panel.baseRotation);
-        panel.mesh.rotation.z = Math.sin(elapsed * 0.8 + index) * 0.035;
-        panel.mesh.scale.setScalar(1 + focus * 0.28 + transitionPunch * 0.05);
-        panel.mesh.material.opacity = 0.08 + focus * 0.28;
-      });
 
       if (runtime) {
         runtime.mixer.update(delta * (reducedMotion ? 0.7 : 1));
