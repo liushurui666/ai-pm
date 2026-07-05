@@ -191,10 +191,10 @@ function createSignalPanels() {
     const material = new THREE.MeshBasicMaterial({
       color: materialColors[index],
       depthWrite: false,
-      opacity: 0.18,
+      opacity: 0.12,
       side: THREE.DoubleSide,
       transparent: true,
-      wireframe: true,
+      wireframe: false,
     });
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.25, 0.72, 8, 4), material);
     const basePosition = new THREE.Vector3(Math.cos(angle) * 2.25, 1.22 + index * 0.08, Math.sin(angle) * 1.15 - 0.5);
@@ -265,13 +265,90 @@ function createStageEnvironment() {
     opacity: 0.07,
     transparent: true,
   });
+  const glassMaterial = new THREE.MeshBasicMaterial({
+    color: 0x07101c,
+    depthWrite: false,
+    opacity: 0.32,
+    side: THREE.DoubleSide,
+    transparent: true,
+  });
+  const whiteArmorMaterial = new THREE.MeshBasicMaterial({
+    color: 0xf2fbff,
+    depthWrite: false,
+    opacity: 0.18,
+    side: THREE.DoubleSide,
+    transparent: true,
+  });
+  const blackArmorMaterial = new THREE.MeshBasicMaterial({
+    color: 0x020913,
+    depthWrite: false,
+    opacity: 0.56,
+    side: THREE.DoubleSide,
+    transparent: true,
+  });
 
   // 这组环境件只做“空间舱体”和电影纵深，不跟着地面旋转；
   // 否则机器人周围会像一层贴图在转，反而削弱机甲站在真实场景里的稳定感。
-  const backWall = new THREE.Mesh(new THREE.PlaneGeometry(5.2, 2.62, 12, 6), blueMaterial.clone());
+  const backWall = new THREE.Mesh(new THREE.PlaneGeometry(5.4, 2.72), blueMaterial.clone());
   backWall.position.set(0.92, 1.38, -2.48);
   backWall.rotation.set(0.02, 0, 0);
   group.add(backWall);
+
+  // 背后的大面积扫描幕只给出“机器人检测舱”的空间基底。
+  // 用半透明整块面承接机甲反光，避免继续出现普通网页式线框网格。
+  const scannerCurtain = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.72, 3.05),
+    new THREE.MeshBasicMaterial({
+      color: 0x9af9ff,
+      depthWrite: false,
+      opacity: 0.055,
+      side: THREE.DoubleSide,
+      transparent: true,
+    })
+  );
+  scannerCurtain.position.set(0.34, 1.34, -1.96);
+  scannerCurtain.rotation.set(0.04, 0, 0);
+  group.add(scannerCurtain);
+
+  const createHexCell = (radius: number, material: THREE.MeshBasicMaterial) => {
+    const cell = new THREE.Mesh(new THREE.CircleGeometry(radius, 6), material.clone());
+
+    cell.rotation.z = Math.PI / 6;
+    return cell;
+  };
+
+  const addArmorCluster = (
+    parent: THREE.Group,
+    cells: Array<{ x: number; y: number; radius: number; black?: boolean; accent?: boolean }>
+  ) => {
+    cells.forEach((cellConfig, index) => {
+      const material = cellConfig.accent ? cyanMaterial : cellConfig.black ? blackArmorMaterial : whiteArmorMaterial;
+      const cell = createHexCell(cellConfig.radius, material);
+
+      cell.position.set(cellConfig.x, cellConfig.y, -0.015 - index * 0.001);
+      parent.add(cell);
+    });
+  };
+
+  const backArmor = new THREE.Group();
+  backArmor.position.set(0.86, 1.28, -2.42);
+  backArmor.rotation.set(0.02, 0, 0);
+  addArmorCluster(backArmor, [
+    { x: -1.55, y: 0.56, radius: 0.18, black: true },
+    { x: -1.2, y: 0.36, radius: 0.2 },
+    { x: -0.86, y: 0.58, radius: 0.16, accent: true },
+    { x: -0.48, y: 0.2, radius: 0.18, black: true },
+    { x: 0.42, y: 0.34, radius: 0.19 },
+    { x: 1.04, y: 0.48, radius: 0.2, black: true },
+    { x: 1.38, y: 0.22, radius: 0.17 },
+    { x: 1.62, y: -0.22, radius: 0.2, black: true },
+    { x: -1.42, y: -0.38, radius: 0.16 },
+    { x: -1.05, y: -0.62, radius: 0.2, black: true },
+    { x: -0.54, y: -0.34, radius: 0.17 },
+    { x: 0.34, y: -0.36, radius: 0.18, black: true },
+    { x: 0.94, y: -0.62, radius: 0.16, accent: true },
+  ]);
+  group.add(backArmor);
 
   const sideConfigs = [
     { x: -3.15, z: -0.95, rotationY: Math.PI * 0.34, material: cyanMaterial },
@@ -279,16 +356,55 @@ function createStageEnvironment() {
   ];
 
   sideConfigs.forEach((config, sideIndex) => {
-    for (let index = 0; index < 7; index += 1) {
-      const strip = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.035, 2.4 - index * 0.12),
-        config.material.clone()
+    const side = sideIndex === 0 ? -1 : 1;
+    const bay = new THREE.Group();
+
+    bay.position.set(config.x, 1.03, config.z);
+    bay.rotation.set(0, config.rotationY, sideIndex === 0 ? 0.05 : -0.05);
+
+    // 侧面从“几根线”改成机甲舱壁：深色玻璃主板承载白/黑蜂窝装甲片，
+    // 让四周场景和机器人身上的黑白蜂窝皮肤属于同一套视觉系统。
+    const mainPlate = new THREE.Mesh(new THREE.PlaneGeometry(1.36, 2.36), glassMaterial.clone());
+    mainPlate.position.set(0, 0, -0.04);
+    bay.add(mainPlate);
+
+    const upperPlate = new THREE.Mesh(new THREE.PlaneGeometry(0.72, 0.2), config.material.clone());
+    upperPlate.position.set(-0.12 * side, 0.95, -0.055);
+    bay.add(upperPlate);
+
+    const lowerPlate = new THREE.Mesh(new THREE.PlaneGeometry(0.92, 0.26), config.material.clone());
+    lowerPlate.position.set(0.1 * side, -0.86, -0.055);
+    bay.add(lowerPlate);
+
+    addArmorCluster(bay, [
+      { x: -0.44 * side, y: 0.62, radius: 0.17, black: true },
+      { x: -0.16 * side, y: 0.42, radius: 0.15 },
+      { x: 0.16 * side, y: 0.58, radius: 0.13, accent: true },
+      { x: 0.42 * side, y: 0.18, radius: 0.17, black: true },
+      { x: -0.04 * side, y: 0.02, radius: 0.16 },
+      { x: -0.34 * side, y: -0.18, radius: 0.15 },
+      { x: 0.02 * side, y: -0.38, radius: 0.18, black: true },
+      { x: -0.42 * side, y: -0.58, radius: 0.13, accent: true },
+      { x: 0.44 * side, y: -0.62, radius: 0.14 },
+    ]);
+
+    for (let index = 0; index < 4; index += 1) {
+      const shutter = new THREE.Mesh(
+        new THREE.BoxGeometry(0.07, 0.62 - index * 0.04, 0.025),
+        new THREE.MeshBasicMaterial({
+          color: index % 2 === 0 ? 0xcffbff : 0x07111d,
+          depthWrite: false,
+          opacity: index % 2 === 0 ? 0.18 : 0.42,
+          transparent: true,
+        })
       );
 
-      strip.position.set(config.x, 0.92 + index * 0.08, config.z - index * 0.42);
-      strip.rotation.set(0, config.rotationY, sideIndex === 0 ? 0.08 : -0.08);
-      group.add(strip);
+      shutter.position.set(-0.58 * side + index * 0.18 * side, 0.62 - index * 0.42, -0.025);
+      shutter.rotation.z = side * 0.18;
+      bay.add(shutter);
     }
+
+    group.add(bay);
   });
 
   for (let index = 0; index < 4; index += 1) {
@@ -321,6 +437,22 @@ function createStageEnvironment() {
     gate.position.set(0.18, 1.12 + index * 0.05, -1.9 - index * 0.28);
     gate.rotation.set(Math.PI * 0.5, 0, Math.PI * (0.08 + index * 0.06));
     group.add(gate);
+
+    const bracketMaterial = new THREE.MeshBasicMaterial({
+      color: index === 1 ? 0xff6fb8 : 0x8af8ff,
+      depthWrite: false,
+      opacity: 0.16 - index * 0.018,
+      transparent: true,
+    });
+    const leftBracket = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.034, 0.34), bracketMaterial);
+    const rightBracket = leftBracket.clone();
+
+    // 弧形闸门两侧加实体机械卡扣，让它像机器人校准舱，而不是漂浮 HUD 圆线。
+    leftBracket.position.set(-1.18 - index * 0.18, 1.1 + index * 0.04, -1.9 - index * 0.28);
+    rightBracket.position.set(1.48 + index * 0.18, 1.1 + index * 0.04, -1.9 - index * 0.28);
+    leftBracket.rotation.y = -0.16;
+    rightBracket.rotation.y = 0.16;
+    group.add(leftBracket, rightBracket);
   }
 
   let materialIndex = 0;

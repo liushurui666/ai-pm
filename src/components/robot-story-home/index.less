@@ -66,10 +66,12 @@
 }
 
 .robot-story-home__scanlines {
+  /* 首页背景已经由 Three 承担机甲舱体结构，这一层只保留宽幅扫描光幕。
+     取消密集横竖线，避免用户看到普通网页网格，而不是机器人战术场景。 */
   background:
-    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.036) 0, rgba(255, 255, 255, 0.036) 1px, transparent 1px, transparent 5px),
-    repeating-linear-gradient(90deg, rgba(99, 247, 255, 0.035) 0, rgba(99, 247, 255, 0.035) 1px, transparent 1px, transparent 38px),
-    linear-gradient(110deg, transparent 0%, color-mix(in srgb, var(--robot-active-accent) 34%, transparent) 46%, transparent 54%);
+    linear-gradient(104deg, transparent 0%, transparent 28%, color-mix(in srgb, var(--robot-active-accent) 22%, transparent) 42%, transparent 56%, transparent 100%),
+    linear-gradient(76deg, transparent 0%, rgba(255, 255, 255, 0.06) 47%, transparent 54%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.026), transparent 18%, transparent 82%, rgba(99, 247, 255, 0.035));
   inset: 0;
   mix-blend-mode: screen;
   opacity: 0.35;
@@ -81,13 +83,16 @@
 }
 
 .robot-story-home__grid {
-  background-image:
-    linear-gradient(rgba(99, 247, 255, 0.1) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(99, 247, 255, 0.08) 1px, transparent 1px);
-  background-size: 72px 72px;
+  /* 地台从普通透视网格改为机库跑道光带，和 Three 里的舱壁块面统一成“机器人停泊位”。 */
+  background:
+    linear-gradient(90deg, transparent 0%, rgba(99, 247, 255, 0.14) 18%, transparent 23%, transparent 77%, rgba(255, 95, 183, 0.12) 83%, transparent 100%),
+    linear-gradient(104deg, transparent 0%, transparent 36%, rgba(255, 255, 255, 0.08) 42%, transparent 49%),
+    linear-gradient(76deg, transparent 0%, transparent 42%, rgba(99, 247, 255, 0.1) 47%, transparent 53%),
+    linear-gradient(180deg, transparent 0%, rgba(99, 247, 255, 0.08) 55%, transparent 100%);
+  clip-path: polygon(18% 0, 82% 0, 100% 100%, 0 100%);
   inset: auto 0 0;
   height: 45%;
-  opacity: 0.26;
+  opacity: 0.34;
   pointer-events: none;
   position: absolute;
   transform: perspective(560px) rotateX(62deg) translateY(22%);
