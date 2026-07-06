@@ -330,39 +330,156 @@
 
 .robot-story-home__loader {
   align-items: center;
-  bottom: 34px;
-  color: rgba(240, 248, 255, 0.66);
+  background:
+    radial-gradient(circle at 50% 45%, rgba(126, 232, 239, 0.1), transparent 26%),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.8), rgba(1, 8, 14, 0.42) 42%, rgba(0, 0, 0, 0.72));
+  color: rgba(240, 248, 255, 0.78);
   display: flex;
-  font-size: 11px;
-  gap: 10px;
-  left: clamp(22px, 5vw, 86px);
-  letter-spacing: 0.16em;
+  inset: 0;
+  justify-content: center;
+  opacity: 1;
+  pointer-events: auto;
   position: absolute;
-  text-transform: uppercase;
-  z-index: 8;
+  transition: opacity 520ms ease, visibility 520ms ease;
+  visibility: visible;
+  z-index: 9;
 }
 
-.robot-story-home__loader span {
-  background: rgba(255, 255, 255, 0.26);
-  display: inline-block;
-  height: 2px;
+.robot-story-home__loader::before {
+  background:
+    linear-gradient(90deg, transparent, rgba(126, 232, 239, 0.22), transparent),
+    linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+  content: "";
+  height: 28%;
+  left: 0;
+  mix-blend-mode: screen;
+  opacity: 0.72;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 30%;
+  transform: translateY(-18%);
+  animation: robotStoryLoaderSweep 1.9s ease-in-out infinite;
+}
+
+.robot-story-home__loader::after {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-left-color: color-mix(in srgb, var(--robot-active-accent) 72%, transparent);
+  border-right-color: color-mix(in srgb, var(--robot-active-accent) 36%, transparent);
+  border-radius: 50%;
+  content: "";
+  height: 218px;
+  left: 50%;
+  opacity: 0.42;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 218px;
+  animation: robotStoryLoaderPulse 1.8s ease-in-out infinite;
+}
+
+.robot-story-home__loader-core {
+  align-items: center;
+  background:
+    linear-gradient(180deg, rgba(8, 14, 22, 0.72), rgba(3, 7, 12, 0.84)),
+    color-mix(in srgb, var(--robot-active-accent) 7%, transparent);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 28px 80px rgba(0, 0, 0, 0.42),
+    inset 0 0 48px rgba(255, 255, 255, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 212px;
+  padding: 28px 34px 26px;
+  position: relative;
+  text-align: center;
+  width: min(360px, calc(100vw - 44px));
+  z-index: 1;
+}
+
+.robot-story-home__loader-mark {
+  border: 1px solid color-mix(in srgb, var(--robot-active-accent) 54%, rgba(255, 255, 255, 0.18));
+  color: var(--robot-active-accent);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.18em;
+  padding: 7px 10px;
+}
+
+.robot-story-home__loader strong {
+  color: #fff;
+  font-size: 22px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  margin-top: 4px;
+  text-transform: uppercase;
+}
+
+.robot-story-home__loader small {
+  color: rgba(226, 240, 255, 0.66);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.robot-story-home__loader-track {
+  background: rgba(255, 255, 255, 0.12);
+  height: 3px;
+  margin-top: 10px;
   overflow: hidden;
   position: relative;
-  width: 82px;
+  width: 100%;
 }
 
-.robot-story-home__loader span::after {
-  background: var(--robot-active-accent);
-  content: "";
-  inset: 0;
-  position: absolute;
-  transform: translateX(-72%);
-  animation: robotStoryLoader 1.2s ease-in-out infinite;
+.robot-story-home__loader-track i {
+  background:
+    linear-gradient(90deg, transparent, var(--robot-active-accent), #ffffff, var(--robot-active-accent), transparent);
+  display: block;
+  height: 100%;
+  transform: translateX(-82%);
+  width: 72%;
+  animation: robotStoryLoaderTrack 1.2s ease-in-out infinite;
 }
 
-.robot-story-home__loader[data-ready="true"] span::after {
-  transform: translateX(0);
+.robot-story-home__loader ul {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  width: 100%;
+}
+
+.robot-story-home__loader li {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(226, 240, 255, 0.66);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  min-height: 30px;
+  padding: 8px 6px;
+  text-transform: uppercase;
+  animation: robotStoryLoaderStep 1.6s ease-in-out infinite;
+}
+
+.robot-story-home__loader li:nth-child(2) {
+  animation-delay: 180ms;
+}
+
+.robot-story-home__loader li:nth-child(3) {
+  animation-delay: 360ms;
+}
+
+.robot-story-home__loader[data-ready="true"] {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.robot-story-home__loader[data-ready="true"] .robot-story-home__loader-track i {
   animation: none;
+  transform: translateX(40%);
 }
 
 .robot-story-home__scroll-hint {
@@ -435,17 +552,57 @@
   color: rgba(255, 255, 255, 0.9);
 }
 
-@keyframes robotStoryLoader {
+@keyframes robotStoryLoaderSweep {
   0% {
-    transform: translateX(-92%);
+    transform: translateY(-18%) translateX(-36%);
   }
 
-  55% {
-    transform: translateX(8%);
+  50% {
+    transform: translateY(-18%) translateX(0);
   }
 
   100% {
-    transform: translateX(102%);
+    transform: translateY(-18%) translateX(36%);
+  }
+}
+
+@keyframes robotStoryLoaderPulse {
+  0%,
+  100% {
+    opacity: 0.28;
+    transform: translate(-50%, -50%) scale(0.96);
+  }
+
+  50% {
+    opacity: 0.52;
+    transform: translate(-50%, -50%) scale(1.04);
+  }
+}
+
+@keyframes robotStoryLoaderTrack {
+  0% {
+    transform: translateX(-82%);
+  }
+
+  62% {
+    transform: translateX(36%);
+  }
+
+  100% {
+    transform: translateX(118%);
+  }
+}
+
+@keyframes robotStoryLoaderStep {
+  0%,
+  100% {
+    border-color: rgba(255, 255, 255, 0.1);
+    color: rgba(226, 240, 255, 0.58);
+  }
+
+  50% {
+    border-color: color-mix(in srgb, var(--robot-active-accent) 52%, rgba(255, 255, 255, 0.16));
+    color: rgba(255, 255, 255, 0.9);
   }
 }
 
@@ -579,13 +736,25 @@
   }
 
   .robot-story-home__loader {
-    bottom: 22px;
-    left: 18px;
+    padding: 0 18px;
+  }
+
+  .robot-story-home__loader-core {
+    min-height: 198px;
+    padding: 24px 20px 22px;
+  }
+
+  .robot-story-home__loader ul {
+    grid-template-columns: 1fr;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .robot-story-home__loader span::after {
+  .robot-story-home__loader::before,
+  .robot-story-home__loader::after,
+  .robot-story-home__loader-track i,
+  .robot-story-home__loader li,
+  .robot-story-home__loader[data-ready="true"] .robot-story-home__loader-track i {
     animation: none;
   }
 }

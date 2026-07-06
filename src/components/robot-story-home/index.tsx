@@ -22,6 +22,7 @@ export function RobotStoryHome() {
   const pointerRef = useRef({ active: 0, x: 0, y: 0 });
   const [activeChapterIndex, setActiveChapterIndex] = useState(0);
   const [sceneReady, setSceneReady] = useState(false);
+  const [loaderReady, setLoaderReady] = useState(false);
   const activeChapter = robotStoryChapters[activeChapterIndex];
 
   useRobotStoryScene({
@@ -35,6 +36,20 @@ export function RobotStoryHome() {
   useEffect(() => {
     stageRef.current?.style.setProperty("--robot-active-accent", activeChapter.accent);
   }, [activeChapter.accent]);
+
+  useEffect(() => {
+    if (!sceneReady) {
+      return undefined;
+    }
+
+    // 本地缓存命中时模型会非常快 ready，直接隐藏加载层会像页面闪了一下。
+    // 保留一个短暂的检测仓启动动画，让首屏从“系统上电”过渡到机器人上线，而不是突然出现。
+    const timer = window.setTimeout(() => {
+      setLoaderReady(true);
+    }, 850);
+
+    return () => window.clearTimeout(timer);
+  }, [sceneReady]);
 
   const handlePointerMove = useCallback((event: PointerEvent<HTMLElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -151,9 +166,25 @@ export function RobotStoryHome() {
           ))}
         </div>
 
-        <div className="robot-story-home__loader" data-ready={sceneReady}>
-          <span />
-          <em>{sceneReady ? "ROBOT ONLINE" : "LOADING ROBOT"}</em>
+        <div
+          aria-hidden={loaderReady}
+          aria-live="polite"
+          className="robot-story-home__loader"
+          data-ready={loaderReady}
+        >
+          <div className="robot-story-home__loader-core">
+            <span className="robot-story-home__loader-mark">AI PM</span>
+            <strong>{loaderReady ? "ROBOT ONLINE" : "ROBOT BOOTING"}</strong>
+            <small>{loaderReady ? "Inspection bay synchronized" : "Loading armored unit and reflective bay"}</small>
+            <div className="robot-story-home__loader-track">
+              <i />
+            </div>
+            <ul>
+              <li>Hull material</li>
+              <li>Helmet optics</li>
+              <li>Motion rig</li>
+            </ul>
+          </div>
         </div>
 
         <div className="robot-story-home__scroll-hint">
