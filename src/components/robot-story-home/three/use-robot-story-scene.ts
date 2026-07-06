@@ -924,7 +924,9 @@ export function useRobotStoryScene({
         tmpCameraPosition.add(new THREE.Vector3(pointer.x * 0.12 * pointerBoost, -pointer.y * 0.07 * pointerBoost, -transitionPunch * 0.18)),
         0.08
       );
-      camera.fov = THREE.MathUtils.lerp(camera.fov, 38 - transitionPunch * 3.8 + chapterIndex * 0.45, 0.06);
+      // 过渡时只保留轻微电影推镜，不再做明显冲近。
+      // 用户反馈基础分镜过大后，这里把 FOV 收窄幅度压低，避免滚动停在 03/04 之间时机器人被裁成胸腹特写。
+      camera.fov = THREE.MathUtils.lerp(camera.fov, 39 - transitionPunch * 1.4 + chapterIndex * 0.32, 0.06);
       camera.updateProjectionMatrix();
       camera.lookAt(tmpCameraLookAt);
       camera.rotation.z += THREE.MathUtils.degToRad(pointer.x * 0.36 * pointerBoost);
