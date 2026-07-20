@@ -50,6 +50,7 @@ type RobotArmorSkinTextures = {
 const tmpCameraPosition = new THREE.Vector3();
 const tmpCameraLookAt = new THREE.Vector3();
 const tmpRobotPosition = new THREE.Vector3();
+const tmpCameraOffset = new THREE.Vector3();
 const tmpColor = new THREE.Color();
 const tmpLightColor = new THREE.Color();
 const robotArmorSkinTexturePaths = {
@@ -154,7 +155,7 @@ function createGroundSystem() {
     new THREE.PlaneGeometry(4.2, 2.4),
     new THREE.ShadowMaterial({
       color: 0x000000,
-      opacity: 0.28,
+      opacity: 0.38,
       transparent: true,
     })
   );
@@ -477,9 +478,13 @@ function attachDamagedHelmet(runtime: RobotRuntime, helmetScene: THREE.Group) {
         // 因此头盔也走同一套“翻新”贴图：白色外壳、蓝黑镜面结构，弱化锈色和刮痕。
         object.material.map = createCleanTechArmorTexture(object.material.map) ?? object.material.map;
         object.material.color.set(0xffffff);
-        object.material.envMapIntensity = 0.38;
-        object.material.roughness = Math.min(object.material.roughness, 0.34);
-        object.material.metalness = Math.max(object.material.metalness, 0.52);
+        object.material.envMapIntensity = 0.32;
+        object.material.roughness = THREE.MathUtils.clamp(object.material.roughness, 0.28, 0.36);
+        object.material.metalness = 0.42;
+        // 官方 HDRI 带有偏暖的广场反射。首页要保持崭新的冷白装甲，因此压掉原资产的暖色自发光，
+        // 只让眼部细节和金属轮廓接受当前摄影棚灯光，不让头盔重新显出金铜旧化感。
+        object.material.emissive.set(0x07131a);
+        object.material.emissiveIntensity = 0.08;
         object.material.needsUpdate = true;
       }
     }
@@ -754,6 +759,8 @@ export function useRobotStoryScene({
     let scrollProgress = 0;
     let activeChapterIndex = -1;
     let helmetEnvironmentTexture: THREE.Texture | null = null;
+    let robotRevealStartedAt = Number.POSITIVE_INFINITY;
+    let viewportWidth = window.innerWidth;
     let previousFrameTime = performance.now();
     const startedAt = previousFrameTime;
     const renderer = new THREE.WebGLRenderer({
@@ -772,27 +779,57 @@ export function useRobotStoryScene({
     // 白银金属依赖高光层次才能读出科技硬件质感；用 ACES 和轻微曝光提升，
     // 让模型变亮但不把暗场电影氛围整体冲成白底页面。
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.18;
+    renderer.toneMappingExposure = 1.06;
     renderer.shadowMap.enabled = true;
+    // Three r185 已把 PCFSoftShadowMap 归并到 PCFShadowMap；直接使用新枚举，避免首页控制台产生弃用告警。
     renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.setClearColor(0x02040a, 0);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
 
     scene.fog = new THREE.FogExp2(0x02040a, 0.082);
 
-    const ambientLight = new THREE.HemisphereLight(0xe9fdff, 0x0a0812, 1.18);
-    const keyLight = new THREE.SpotLight(0xe9fdff, 36, 18, Math.PI * 0.18, 0.42, 1.4);
-    const rimLight = new THREE.PointLight(0xbde6ff, 9, 10);
+    const ambientLight = new THREE.HemisphereLight(0xe9fdff, 0x08070d, 0.86);
+    const keyLight = new THREE.SpotLight(0xf3fdff, 42, 18, Math.PI * 0.2, 0.5, 1.25);
+    const rimLight = new THREE.PointLight(0xbde6ff, 10, 10);
     const launchLight = new THREE.PointLight(0xffd36a, 0, 14);
+    const leftSoftbox = new THREE.RectAreaLight(0x9ae9ff, 6.8, 2.6, 4.2);
+    const rightSoftbox = new THREE.RectAreaLight(0xdde8ff, 5.2, 2.2, 3.6);
+    const floorBounce = new THREE.PointLight(0x78cbd8, 2.8, 5.2, 1.7);
+    const sweepLight = new THREE.SpotLight(0xf6ffff, 0, 12, Math.PI * 0.12, 0.76, 1.4);
 
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.set(1024, 1024);
+    keyLight.shadow.bias = -0.00018;
+    keyLight.shadow.normalBias = 0.025;
+    keyLight.shadow.radius = 3;
     keyLight.position.set(-2.8, 5.6, 3.4);
     keyLight.target.position.set(0, 1.1, 0);
     rimLight.position.set(3.2, 2.4, -3.8);
     launchLight.position.set(0, 3.2, 3.8);
+    leftSoftbox.position.set(-3.5, 2.5, 2.6);
+    leftSoftbox.lookAt(0, 1.15, 0);
+    rightSoftbox.position.set(3.2, 2.15, 1.2);
+    rightSoftbox.lookAt(0, 1.2, 0);
+    floorBounce.position.set(0.2, 0.2, 1.4);
+    sweepLight.position.set(-3.6, 3.4, 3.2);
+    sweepLight.target.position.set(0, 1.12, 0);
 
-    scene.add(ambientLight, keyLight, keyLight.target, rimLight, launchLight, robotPivot, groundSystem);
+    // 机器人增强只使用真实 PBR 灯光：左右软箱负责白银装甲的大面积明暗，移动窄灯负责滚动切章时的高光掠过。
+    // 场景里不添加可见面板、圆环或粒子，继续保留真实检测仓作为唯一环境主体。
+    scene.add(
+      ambientLight,
+      keyLight,
+      keyLight.target,
+      rimLight,
+      launchLight,
+      leftSoftbox,
+      rightSoftbox,
+      floorBounce,
+      sweepLight,
+      sweepLight.target,
+      robotPivot,
+      groundSystem
+    );
 
     const loader = new GLTFLoader();
     const textureLoader = new THREE.TextureLoader();
@@ -810,6 +847,7 @@ export function useRobotStoryScene({
         texture.mapping = THREE.EquirectangularReflectionMapping;
         helmetEnvironmentTexture = texture;
         scene.environment = texture;
+        scene.environmentIntensity = 0.62;
       },
       undefined,
       () => {
@@ -835,8 +873,6 @@ export function useRobotStoryScene({
         // 避免机器人停在骨骼绑定姿态，破坏首屏电影感。
         const loadedChapter = robotStoryChapters[clamp(activeChapterIndex, 0, robotStoryChapters.length - 1)] ?? robotStoryChapters[0];
         fadeToBaseAction(runtime, loadedChapter.baseAction, reducedMotion ? 0.18 : 0.22);
-        setSceneReady(true);
-
         loader.load(
           HELMET_MODEL_PATH,
           (helmetGltf) => {
@@ -846,10 +882,15 @@ export function useRobotStoryScene({
             }
 
             attachDamagedHelmet(runtime, helmetGltf.scene);
+            robotRevealStartedAt = performance.now();
+            setSceneReady(true);
           },
           undefined,
           () => {
-            // 头盔是二次强化资产；加载失败时保留 Soldier 主模型，不阻断首页叙事。
+            // 头盔加载失败时仍要退出启动层，让用户可以进入页面；正常路径必须等头盔挂载完成，
+            // 避免加载层先消失、无头身体短暂暴露的违和闪帧。
+            robotRevealStartedAt = performance.now();
+            setSceneReady(true);
           }
         );
       },
@@ -866,6 +907,7 @@ export function useRobotStoryScene({
       const width = Math.max(1, rect.width);
       const height = Math.max(1, rect.height);
 
+      viewportWidth = width;
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
       renderer.setSize(width, height, false);
@@ -912,6 +954,8 @@ export function useRobotStoryScene({
       const activeChapter = robotStoryChapters[chapterIndex];
       const transitionPunch = Math.sin(localRatio * Math.PI);
       const pointer = pointerRef.current;
+      const narrowViewportBlend = clamp((760 - viewportWidth) / 390, 0, 1);
+      const revealProgress = smoothStep(clamp((now - robotRevealStartedAt) / 1200, 0, 1));
 
       applyChapterState(chapterIndex);
 
@@ -920,8 +964,16 @@ export function useRobotStoryScene({
       interpolateChapterVector(currentChapter, nextChapter, "robotPosition", localRatio, tmpRobotPosition);
 
       const pointerBoost = reducedMotion ? 0 : pointer.active;
+      // 窄屏不再照搬桌面运镜：镜头略后撤、机器人稍向右下让位，保证标题、CTA 和机甲轮廓都能完整读到。
+      // 桌面端只保留极弱的摄影机呼吸，避免静止画面像模型查看器，同时不破坏用户控制的滚动分镜。
+      tmpCameraPosition.z += narrowViewportBlend * 0.78;
+      tmpCameraPosition.x += reducedMotion ? 0 : Math.sin(elapsed * 0.22) * 0.022;
+      tmpCameraPosition.y += reducedMotion ? 0 : Math.sin(elapsed * 0.3 + 0.8) * 0.012;
+      tmpRobotPosition.x += narrowViewportBlend * 0.3;
+      tmpRobotPosition.y -= narrowViewportBlend * 0.045;
+      tmpCameraOffset.set(pointer.x * 0.12 * pointerBoost, -pointer.y * 0.07 * pointerBoost, -transitionPunch * 0.18);
       camera.position.lerp(
-        tmpCameraPosition.add(new THREE.Vector3(pointer.x * 0.12 * pointerBoost, -pointer.y * 0.07 * pointerBoost, -transitionPunch * 0.18)),
+        tmpCameraPosition.add(tmpCameraOffset),
         0.08
       );
       // 过渡时只保留轻微电影推镜，不再做明显冲近。
@@ -932,6 +984,7 @@ export function useRobotStoryScene({
       camera.rotation.z += THREE.MathUtils.degToRad(pointer.x * 0.36 * pointerBoost);
 
       robotPivot.position.lerp(tmpRobotPosition, 0.08);
+      robotPivot.scale.setScalar(0.965 + revealProgress * 0.035);
       robotPivot.rotation.y = THREE.MathUtils.lerp(
         robotPivot.rotation.y,
         THREE.MathUtils.lerp(currentChapter.robotRotationY, nextChapter.robotRotationY, localRatio),
@@ -940,12 +993,24 @@ export function useRobotStoryScene({
 
       // 地台阴影只做轻微呼吸，不再旋转网格/粒子；真实检测仓背景需要稳定空间感。
       groundSystem.scale.setScalar(1 + transitionPunch * (reducedMotion ? 0.015 : 0.035));
+      groundSystem.position.set(robotPivot.position.x, 0, robotPivot.position.z);
 
       tmpColor.set(activeChapter.accent);
       tmpLightColor.copy(tmpColor).lerp(new THREE.Color(0xb8f7ff), 0.72);
       keyLight.color.lerp(tmpLightColor, 0.06);
       rimLight.color.lerp(tmpLightColor, 0.035);
-      launchLight.intensity = THREE.MathUtils.lerp(launchLight.intensity, chapterIndex === 4 ? 12 : 2 + transitionPunch * 3.5, 0.05);
+      leftSoftbox.color.lerp(tmpLightColor, 0.025);
+      rightSoftbox.color.lerp(tmpLightColor.copy(tmpColor).lerp(new THREE.Color(0xffffff), 0.84), 0.02);
+      floorBounce.color.lerp(tmpLightColor.copy(tmpColor).lerp(new THREE.Color(0x87d8e4), 0.72), 0.025);
+      launchLight.intensity = THREE.MathUtils.lerp(launchLight.intensity, chapterIndex === 4 ? 8.5 : 0.25 + transitionPunch * 0.8, 0.05);
+
+      // 软箱高光以很慢的节奏横向掠过，切章时略增强，让金属体积来自真实反射变化而不是外贴发光描边。
+      const sweepPhase = reducedMotion ? 0.52 : (Math.sin(elapsed * 0.52 + chapterFloat * 0.7) + 1) * 0.5;
+      sweepLight.position.x = THREE.MathUtils.lerp(-3.6, 3.6, sweepPhase);
+      sweepLight.position.y = 3.2 + Math.sin(elapsed * 0.38) * (reducedMotion ? 0 : 0.22);
+      sweepLight.color.lerp(tmpLightColor.copy(tmpColor).lerp(new THREE.Color(0xffffff), 0.9), 0.04);
+      sweepLight.intensity = THREE.MathUtils.lerp(sweepLight.intensity, 3.2 + transitionPunch * 5.8, 0.045);
+      leftSoftbox.intensity = 6.4 + Math.sin(elapsed * 0.42) * (reducedMotion ? 0 : 0.4);
 
       if (runtime) {
         runtime.mixer.update(delta * (reducedMotion ? 0.7 : 1));

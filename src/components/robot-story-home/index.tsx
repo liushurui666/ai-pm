@@ -10,12 +10,16 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent } from "react";
+import { useThemePreference } from "@/components/theme-mode";
 import { robotStoryChapters } from "./story-data";
 import { useRobotStoryScene } from "./three/use-robot-story-scene";
 
 // 独立机器人首页负责把“产品能力”翻译成滚动电影分镜：
 // React 层承载可访问文案、导航和 CTA，Three 层承载机器人动作、运镜和光场，两者只共享 activeChapterIndex。
 export function RobotStoryHome() {
+  // 根首页没有工作台里的主题按钮，但仍要消费主题 hook 完成首屏主题启动收口。
+  // 否则首次跟随深色系统访问时，html 上的 bootstrapping 标记不会被清除，整页会一直保持不可见。
+  useThemePreference();
   const rootRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageRef = useRef<HTMLElement>(null);
@@ -94,6 +98,8 @@ export function RobotStoryHome() {
     >
       <section
         className="robot-story-home__stage"
+        data-chapter={activeChapter.key}
+        data-ready={loaderReady}
         onPointerLeave={handlePointerLeave}
         onPointerMove={handlePointerMove}
         ref={stageRef}
@@ -116,27 +122,29 @@ export function RobotStoryHome() {
         </header>
 
         <div className="robot-story-home__copy">
-          <div className="robot-story-home__chapter-index">
-            <span>{activeChapter.index}</span>
-            <i />
-            <em>{activeChapter.eyebrow}</em>
-          </div>
-          <h1>{activeChapter.title}</h1>
-          <p className="robot-story-home__subtitle">{activeChapter.subtitle}</p>
-          <p className="robot-story-home__body">{activeChapter.body}</p>
-          <div className="robot-story-home__actions">
-            <Link className="robot-story-home__primary" href="/workbench">
-              <LoginOutlined />
-              进入工作台
-            </Link>
-            <Link className="robot-story-home__secondary" href="/workbench?view=versionDashboard">
-              <PlayCircleOutlined />
-              查看版本大屏
-            </Link>
+          <div className="robot-story-home__copy-content" key={activeChapter.key}>
+            <div className="robot-story-home__chapter-index">
+              <span>{activeChapter.index}</span>
+              <i />
+              <em>{activeChapter.eyebrow}</em>
+            </div>
+            <h1>{activeChapter.title}</h1>
+            <p className="robot-story-home__subtitle">{activeChapter.subtitle}</p>
+            <p className="robot-story-home__body">{activeChapter.body}</p>
+            <div className="robot-story-home__actions">
+              <Link className="robot-story-home__primary" href="/workbench">
+                <LoginOutlined />
+                进入工作台
+              </Link>
+              <Link className="robot-story-home__secondary" href="/workbench?view=versionDashboard">
+                <PlayCircleOutlined />
+                查看版本大屏
+              </Link>
+            </div>
           </div>
         </div>
 
-        <aside className="robot-story-home__mission" aria-label="当前分镜状态">
+        <aside className="robot-story-home__mission" aria-label="当前分镜状态" key={activeChapter.key}>
           <div className="robot-story-home__mission-top">
             <span className="robot-story-home__mission-icon">{activeChapter.icon}</span>
             <span>{activeChapter.signal}</span>
