@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDashboardData } from "@/data/local-dashboard";
 import { createAiWeeklyReportReply, isAiAssistantConfigured } from "@/lib/ai/client";
-import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
+import { isAuthServiceConfigured } from "@/lib/auth/client";
 import { getSession } from "@/lib/auth/session";
 import { createWeeklyReportMarkdown } from "@/lib/reports/weekly-report";
 

@@ -265,7 +265,7 @@ function verifyDeniedStates() {
   }));
   const missingMemberPermissions = getDashboardPermissions(undefined);
 
-  // 正式 Unified Auth 运行态下，禁用成员和未加入成员必须全部拒绝；这个分支保护登录成功但未被加入工作区的用户。
+  // 正式 Better Auth 运行态下，禁用成员和未加入成员必须全部拒绝；这个分支保护登录成功但未被加入工作区的用户。
   assertSmoke(!disabledPermissions.canManageMembers, "禁用管理员不应继续管理成员");
   assertSmoke(!disabledPermissions.canEditBugs, "禁用成员不应继续编辑 Bug");
   assertSmoke(disabledPermissions.deniedReason === "成员已被禁用，请联系管理员。", "禁用成员拒绝原因不正确");

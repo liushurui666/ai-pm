@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listFeishuPeopleWithDiagnostics } from "@/lib/feishu/users";
-import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
+import { isAuthServiceConfigured } from "@/lib/auth/client";
 import { getSession } from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {

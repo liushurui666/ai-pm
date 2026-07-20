@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDashboardData } from "@/data/local-dashboard";
-import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
+import { isAuthServiceConfigured } from "@/lib/auth/client";
 import { getSession } from "@/lib/auth/session";
 
 export async function GET(request: Request) {

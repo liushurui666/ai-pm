@@ -3,13 +3,13 @@ import { headers } from "next/headers";
 import { ProjectManagementPlatform } from "@/components/project-management-platform";
 import type { AppView } from "@/components/project-management-platform";
 import { getDashboardData } from "@/data/local-dashboard";
-import { unifiedAuthConfig } from "@/lib/auth/config";
+import { authConfig } from "@/lib/auth/config";
 import { getSession } from "@/lib/auth/session";
 import { getRequestOriginFromHeaders, resolveTrustedRequestOrigin } from "@/lib/auth/request-origin";
-import { getAiPmAuthLoginHref, isAuthServiceConfigured } from "@/lib/auth/unified-auth";
+import { getAiPmAuthLoginHref, isAuthServiceConfigured } from "@/lib/auth/client";
 
 export const dynamic = "force-dynamic";
-const defaultAuthOrigin = unifiedAuthConfig.auth?.origin ?? unifiedAuthConfig.app?.origin ?? "http://localhost:3004";
+const defaultAuthOrigin = authConfig.auth.origin;
 
 const validAppViews = new Set<AppView>([
   "overview",

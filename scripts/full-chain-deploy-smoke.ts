@@ -143,8 +143,8 @@ function verifyDockerEntrypoint() {
   assertIncludes(entrypoint, "postgresql://*|postgres://*", "docker-entrypoint 必须强制 AUTH_DATABASE_URL 使用 PostgreSQL");
   assertIncludes(entrypoint, "ALLOW_LOCAL_APP_URL", "docker-entrypoint 必须允许本地容器测试显式豁免 localhost APP_URL");
   assertIncludes(entrypoint, "pnpm db:migrate", "RUN_MIGRATIONS=1 时必须执行业务数据库迁移");
-  assertIncludes(entrypoint, "pnpm exec unified-auth db migrate", "RUN_AUTH_MIGRATIONS=1 时必须执行认证库迁移");
-  assertIncludes(entrypoint, "pnpm exec unified-auth doctor", "认证库迁移后必须执行 Unified Auth doctor");
+  assertIncludes(entrypoint, "pnpm auth-db:migrate", "RUN_AUTH_MIGRATIONS=1 时必须执行认证库迁移");
+  assertIncludes(entrypoint, "pnpm auth-db:doctor", "认证库迁移后必须执行 Better Auth doctor");
 
   recordCheck("docker-entrypoint", "已校验生产必填 env、数据库类型、迁移开关和 OAuth 回调提示");
 }
@@ -166,7 +166,8 @@ function verifyDeployScripts() {
 
   for (const script of [opsDeploy, remoteDeploy]) {
     assertIncludes(script, "pnpm db:migrate", "非 Docker 部署脚本必须支持业务迁移");
-    assertIncludes(script, "pnpm exec unified-auth db migrate", "非 Docker 部署脚本必须支持显式认证迁移");
+    assertIncludes(script, "pnpm auth-db:migrate", "非 Docker 部署脚本必须支持显式认证迁移");
+    assertIncludes(script, "pnpm auth-db:doctor", "非 Docker 部署脚本必须在迁移后校验认证表");
     assertIncludes(script, "RUN_AUTH_MIGRATE", "非 Docker 部署脚本必须默认关闭认证迁移开关");
     assertIncludes(script, "pnpm build", "非 Docker 部署脚本必须支持生产构建");
     assertIncludes(script, "systemctl restart", "非 Docker 部署脚本必须支持 systemd 重启");

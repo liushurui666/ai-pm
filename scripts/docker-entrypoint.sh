@@ -73,12 +73,12 @@ else
 fi
 
 if [ "${RUN_AUTH_MIGRATIONS}" = "1" ]; then
-  # 只有认证平台 schema 也需要跟随本次发布升级时才打开这个开关；默认关闭，避免 AI PM 部署流程误操作外部认证库。
-  echo "[docker-entrypoint] 执行 Unified Auth 认证数据库迁移"
-  pnpm exec unified-auth db migrate
-  pnpm exec unified-auth doctor
+  # 认证库默认仍由外部基础设施管理；显式开启时使用 AI PM 内置的幂等 Better Auth schema 脚本。
+  echo "[docker-entrypoint] 执行 Better Auth 认证数据库迁移"
+  pnpm auth-db:migrate
+  pnpm auth-db:doctor
 else
-  echo "[docker-entrypoint] 跳过 Unified Auth 认证数据库迁移：RUN_AUTH_MIGRATIONS=${RUN_AUTH_MIGRATIONS}"
+  echo "[docker-entrypoint] 跳过 Better Auth 认证数据库迁移：RUN_AUTH_MIGRATIONS=${RUN_AUTH_MIGRATIONS}"
 fi
 
 echo "[docker-entrypoint] 启动应用：$*"

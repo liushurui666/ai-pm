@@ -86,7 +86,7 @@ const smokeCases: SmokeCase[] = [
     timeoutMs: 300_000
   },
   {
-    description: "权限矩阵、禁用成员、未加入成员和 Unified Auth 身份匹配。",
+    description: "权限矩阵、禁用成员、未加入成员和 Better Auth 身份匹配。",
     groups: ["all", "core", "static"],
     id: "permission",
     script: "scripts/full-chain-permission-smoke.ts",

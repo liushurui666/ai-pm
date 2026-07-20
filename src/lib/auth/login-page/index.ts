@@ -1,7 +1,4 @@
-import type {
-  HostedAuthLoginPageComponent,
-  HostedAuthLoginProviderView,
-} from "@rc-tool/unified-auth-hosted-service";
+import type { LoginPageComponent, LoginProviderView } from "@/lib/auth/types";
 import { aiPmLoginPageStyles } from "@/lib/auth/login-page/styles";
 
 function escapeHtml(value: unknown) {
@@ -15,11 +12,10 @@ function escapeHtml(value: unknown) {
     .replaceAll("'", "&#39;");
 }
 
-function renderLoginProviderButton(provider: HostedAuthLoginProviderView, variant: "primary" | "secondary") {
+function renderLoginProviderButton(provider: LoginProviderView, variant: "primary" | "secondary") {
   const providerLabel = escapeHtml(provider.label);
 
-  // provider.href 由 Unified Auth SDK 根据当前 redirect_uri 和 OAuth 配置生成；
-  // 视觉层只渲染真实可点击按钮，不再用截图热区覆盖，避免“看起来能点但不是手动实现”的问题。
+  // provider.href 由 AI PM 服务端根据当前 redirect_uri 和 OAuth 白名单生成；视觉层不接管 state 或回调校验。
   return `
     <a class="login-provider login-provider-${variant}" href="${escapeHtml(provider.href)}" aria-label="使用${providerLabel}登录">
       <span class="login-provider-icon ${escapeHtml(provider.iconClassName)}" aria-hidden="true">${provider.icon}</span>
@@ -27,9 +23,9 @@ function renderLoginProviderButton(provider: HostedAuthLoginProviderView, varian
     </a>`;
 }
 
-function renderLoginProviders(providers: HostedAuthLoginProviderView[], primaryProviderId = "feishu") {
+function renderLoginProviders(providers: LoginProviderView[], primaryProviderId = "feishu") {
   // 飞书是 AI PM 的主认证入口，Google/GitHub 作为备用身份；
-  // 所有按钮都是 SDK provider 链接，确保手写视觉不接管 OAuth state 或回跳安全校验。
+  // 所有按钮都是服务端 provider start 链接，确保手写视觉不接管 OAuth state 或回跳安全校验。
   const enabledProviders = providers.filter((provider) => provider.enabled);
   const primaryProvider = enabledProviders.find((provider) => provider.id === primaryProviderId) ?? enabledProviders[0];
 
@@ -360,8 +356,8 @@ const featureIcons = {
   bug: "<svg viewBox='0 0 24 24'><path d='M8 8h8v8a4 4 0 0 1-8 0V8Z'/><path d='M9 4l2 4M15 4l-2 4M4 13h4M16 13h4M5 18l3-2M16 16l3 2'/></svg>",
 };
 
-export const aiPmLoginPageComponent: HostedAuthLoginPageComponent = ({ model }) => {
-  // 登录页是认证系统公开入口：视觉完全手写实现，OAuth state、provider 链接和 redirect_uri 仍交由 Unified Auth SDK 管理。
+export const aiPmLoginPageComponent: LoginPageComponent = ({ model }) => {
+  // 登录页是认证系统公开入口：视觉完全手写，OAuth state、provider 回调和数据库会话仍交由 Better Auth 处理。
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -385,7 +381,7 @@ export const aiPmLoginPageComponent: HostedAuthLoginPageComponent = ({ model }) 
           <span>智能项目管理平台</span>
         </div>
       </div>
-      <div class="login-status"><i></i>AI PM Unified Auth</div>
+      <div class="login-status"><i></i>AI PM 安全认证</div>
     </header>
 
     <section class="login-main">
@@ -428,10 +424,10 @@ export const aiPmLoginPageComponent: HostedAuthLoginPageComponent = ({ model }) 
       <section class="login-panel" aria-labelledby="login-title">
         <div class="login-panel-kicker">AI PM 统一登录</div>
         <h2 id="login-title">统一登录</h2>
-        <p>请选择企业认证方式进入 AI PM，认证、回调和会话由 Unified Auth SDK 黑盒处理。</p>
+        <p>请选择企业认证方式进入 AI PM，账号与会话安全存储在独立认证数据库。</p>
         ${renderLoginError(model.error)}
         ${renderLoginProviders(model.providers)}
-        <div class="login-footer">client_id: ${escapeHtml(model.clientId)}</div>
+        <div class="login-footer">由 AI PM 认证服务保护账号安全</div>
       </section>
     </section>
 

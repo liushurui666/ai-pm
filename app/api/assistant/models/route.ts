@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getValidatedAiAvailableModels } from "@/lib/ai/model-availability";
 import { isAiAssistantConfigured } from "@/lib/ai/settings";
-import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
+import { isAuthServiceConfigured } from "@/lib/auth/client";
 import { getSession } from "@/lib/auth/session";
 
 export const runtime = "nodejs";

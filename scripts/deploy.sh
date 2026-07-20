@@ -186,7 +186,7 @@ run_hook "${before_script}"
 
 cd "${release_dir}"
 set -a
-# Unified Auth CLI 直接执行 unified-auth.config.ts，不会自动加载 .env；远端迁移和构建前必须先导出运行时变量。
+# 远端认证库检查和 Next 构建前必须先导出同一份运行时变量。
 # shellcheck disable=SC1090
 source "${runtime_env_file}"
 set +a
@@ -205,9 +205,9 @@ fi
 
 if [[ "${run_auth_migrate}" == "1" ]]; then
   # 认证 PostgreSQL 由外部认证平台/基础设施提前部署；这里默认不触碰，只有认证 schema 需要升级时才执行。
-  remote_log "执行 Unified Auth 认证数据库迁移"
-  pnpm exec unified-auth db migrate
-  pnpm exec unified-auth doctor
+  remote_log "执行 Better Auth 认证数据库迁移"
+  pnpm auth-db:migrate
+  pnpm auth-db:doctor
 fi
 
 if [[ "${run_build}" == "1" ]]; then

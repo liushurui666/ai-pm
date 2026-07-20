@@ -1,18 +1,19 @@
 import { cookies, headers } from "next/headers";
-import type { AuthContext } from "@rc-tool/unified-auth-sdk/service-client";
 import type { AppSession } from "@/types/auth";
+import { auth } from "@/lib/auth/server";
 import { authPgPool } from "@/lib/auth/database";
-import { unifiedAuthConfig } from "@/lib/auth/config";
+import { authConfig } from "@/lib/auth/config";
+import type { AuthContext, AuthUser } from "@/lib/auth/types";
 import { getRequestOriginFromHeaders, resolveTrustedRequestOrigin } from "@/lib/auth/request-origin";
-import { createAiPmAuthServiceClient, mapAuthUserToFeishuUser } from "@/lib/auth/unified-auth";
+import { mapAuthUserToFeishuUser } from "@/lib/auth/client";
+import { getAuthSchemaName } from "@/lib/auth/schema";
 
 const supportedAuthProviders = new Set(["feishu", "google", "github", "email"]);
-const defaultAuthOrigin = unifiedAuthConfig.auth?.origin ?? unifiedAuthConfig.app?.origin ?? "http://localhost:3004";
 const authContextRetryDelaysMs = [120, 360];
 
 export class AuthServiceUnavailableError extends Error {
   constructor(cause?: unknown) {
-    super("统一认证服务暂时不可用，请稍后重试。");
+    super("认证服务暂时不可用，请稍后重试。");
     this.name = "AuthServiceUnavailableError";
     this.cause = cause;
   }
@@ -22,9 +23,7 @@ function serializeCookieHeader(cookieStore: Awaited<ReturnType<typeof cookies>>)
   return cookieStore
     .getAll()
     .map((item) => {
-      // Next 的 cookies() 会把百分号编码的 Cookie value 解码成 JS 字符串；如果浏览器里存在中文 Cookie，
-      // 再把它原样塞进 fetch 的 cookie header，Node/undici 会因为 header 必须是 ByteString 而抛错。
-      // 这里重新按 RFC 6265 可传输格式编码 value，Auth Service 的 cookie parser 会 decodeURIComponent 还原。
+      // Next 可能已对 Cookie value 解码，重新编码可避免中文值在构造 Better Auth Request 时违反 ByteString 约束。
       return `${item.name}=${encodeURIComponent(item.value)}`;
     })
     .join("; ");
@@ -34,46 +33,96 @@ function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function normalizeDate(value: unknown) {
+  if (!value) {
+    return null;
+  }
+
+  return value instanceof Date ? value.toISOString() : String(value);
+}
+
+function toAuthContext(payload: unknown): AuthContext {
+  const data = payload as {
+    session?: { expiresAt?: unknown; id?: string | null; token?: string | null; userId?: string | null };
+    user?: Record<string, unknown> & { email?: string | null; id?: string; image?: string | null; name?: string | null };
+  } | null;
+  const rawUser = data?.user;
+  const rawSession = data?.session;
+  let user: AuthUser | null = null;
+
+  if (rawUser?.id) {
+    const metadata = Object.fromEntries(
+      Object.entries(rawUser).filter(([key]) => ![
+        "createdAt",
+        "email",
+        "emailVerified",
+        "id",
+        "image",
+        "name",
+        "updatedAt",
+      ].includes(key)),
+    );
+
+    user = {
+      avatarUrl: rawUser.image ?? null,
+      email: rawUser.email ?? null,
+      id: rawUser.id,
+      metadata: Object.keys(metadata).length ? metadata : undefined,
+      name: rawUser.name ?? null,
+    };
+  }
+
+  return {
+    session: rawSession?.userId
+      ? {
+          expiresAt: normalizeDate(rawSession.expiresAt),
+          id: String(rawSession.id ?? rawSession.token ?? ""),
+          userId: rawSession.userId,
+        }
+      : null,
+    user,
+  };
+}
+
 /**
- * 从黑盒 Auth Service 获取认证上下文。
+ * 直接在当前 Next 进程内读取 Better Auth 会话。
  *
- * AI PM 只转发浏览器带来的统一认证 Cookie，不解析、不签发、不刷新用户会话。
- * 如果 Auth Service 查询失败，必须把它视为临时服务故障而不是“未登录”；否则任意一次认证库抖动
- * 都会让业务 API 返回 401，前端再把用户踢回登录页，造成“输着输着自己掉线”的体验。
+ * 旧链路会先通过 SDK client 发起同源 HTTP，再由 SDK hosted route 转发给 Better Auth；现在只保留最后一层。
+ * 认证库短暂失败仍会极短重试，并在失败时抛出 503 语义，不把服务故障伪装成未登录 401。
  */
 export async function getAuthContext(): Promise<AuthContext> {
-  const cookieHeader = serializeCookieHeader(await cookies());
-  const requestOrigin = resolveTrustedRequestOrigin(
-    getRequestOriginFromHeaders(await headers()),
-    defaultAuthOrigin
+  const [cookieStore, requestHeaders] = await Promise.all([cookies(), headers()]);
+  const origin = resolveTrustedRequestOrigin(
+    getRequestOriginFromHeaders(requestHeaders),
+    authConfig.auth.origin,
   );
-  const authClient = createAiPmAuthServiceClient({
-    authBaseURL: requestOrigin,
-    defaultRedirectURI: `${requestOrigin}/`,
-    fetcher(input, init) {
-      return fetch(input, {
-        ...init,
-        cache: "no-store",
-        headers: {
-          ...init?.headers,
-          ...(cookieHeader ? { cookie: cookieHeader } : {})
-        }
-      });
-    }
-  });
+  const cookieHeader = serializeCookieHeader(cookieStore);
 
   for (let attempt = 0; attempt <= authContextRetryDelaysMs.length; attempt += 1) {
     try {
-      return await authClient.getAuthContext();
+      const authHeaders = new Headers(requestHeaders);
+
+      if (cookieHeader) {
+        authHeaders.set("cookie", cookieHeader);
+      }
+
+      const response = await auth.handler(new Request(new URL("/api/auth/get-session", origin), {
+        headers: authHeaders,
+        method: "GET",
+      }));
+
+      if (!response.ok) {
+        throw new Error(`Better Auth get-session 返回 ${response.status}`);
+      }
+
+      return toAuthContext(await response.json().catch(() => null));
     } catch (error) {
       const retryDelay = authContextRetryDelaysMs[attempt];
 
-      // OAuth 刚回跳、Auth Service 或认证库短暂抖动时，第一次 context 查询可能失败。
-      // 这里只对“请求失败”做极短重试，不把失败伪装成未登录，避免第一次登录失败或工作台误跳登录页。
       if (retryDelay !== undefined) {
         console.warn("[auth] retry auth context after transient failure", {
           attempt: attempt + 1,
-          retryDelay
+          retryDelay,
         });
         await wait(retryDelay);
         continue;
@@ -88,10 +137,7 @@ export async function getAuthContext(): Promise<AuthContext> {
 }
 
 /**
- * 获取 AI PM 当前请求的业务会话。
- *
- * 真正的会话签发、续期和 Cookie 校验都在 Unified Auth SDK 内部完成；这里仅把 SDK 上下文整理成
- * 页面和 API 已经使用的 AppSession 结构，方便权限、负责人筛选和工作区成员同步继续走同一入口。
+ * 把 Better Auth 会话整理为 AI PM 业务层已有的 AppSession，不在此处签发或自行解析会话 Cookie。
  */
 export async function getSession(): Promise<AppSession | null> {
   const context = await getAuthContext();
@@ -100,12 +146,9 @@ export async function getSession(): Promise<AppSession | null> {
     authProvider && context.user
       ? {
           ...context.user,
-          metadata: {
-            ...context.user.metadata,
-            provider: authProvider
-          }
+          metadata: { ...context.user.metadata, provider: authProvider },
         }
-      : context.user
+      : context.user,
   );
 
   if (!context.session || !user) {
@@ -114,14 +157,8 @@ export async function getSession(): Promise<AppSession | null> {
 
   return {
     loginAt: context.session.id.split(":").slice(2).join(":") || new Date().toISOString(),
-    user
+    user,
   };
-}
-
-function getAuthSchemaName() {
-  const realm = unifiedAuthConfig.realm ?? unifiedAuthConfig.app?.id ?? "default";
-
-  return `auth_${realm.replace(/[^a-zA-Z0-9_]/g, "_")}`;
 }
 
 function quotePgIdentifier(identifier: string) {
@@ -129,9 +166,8 @@ function quotePgIdentifier(identifier: string) {
 }
 
 /**
- * SDK 当前的 AuthUser 只稳定返回 user/session，某些 Better Auth 路径不会把 account.providerId
- * 带进 metadata；AI PM 的成员注册渠道必须展示真实 OAuth 来源，所以服务端会按当前 authUserId
- * 回查认证库账号表。查询失败时退回 SDK metadata，避免认证库短暂抖动影响用户进入业务页面。
+ * Better Auth session 不保证携带 OAuth provider，成员注册渠道因此直接从原 `auth_ai_pm.account` 回查。
+ * 这里只读取 providerId，查询失败会退回会话 metadata，不影响用户进入工作台。
  */
 async function resolveAccountProvider(context: AuthContext) {
   const metadataProvider = typeof context.user?.metadata?.provider === "string" ? context.user.metadata.provider : undefined;
@@ -139,16 +175,15 @@ async function resolveAccountProvider(context: AuthContext) {
   if (metadataProvider && supportedAuthProviders.has(metadataProvider)) {
     return metadataProvider;
   }
-
   if (!context.session || !context.user?.id) {
     return undefined;
   }
 
   try {
-    const schemaName = quotePgIdentifier(getAuthSchemaName());
+    const schemaName = quotePgIdentifier(getAuthSchemaName(authConfig.realm));
     const result = await authPgPool.query<{ providerId: string }>(
       `select "providerId" from ${schemaName}."account" where "userId" = $1 order by "updatedAt" desc nulls last limit 1`,
-      [context.user.id]
+      [context.user.id],
     );
     const providerId = result.rows[0]?.providerId;
 

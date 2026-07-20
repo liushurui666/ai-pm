@@ -115,7 +115,7 @@ import { ProjectsView } from "@/components/project-management-platform/views/pro
 import { RequirementsView } from "@/components/project-management-platform/views/requirements-view";
 import { TasksView } from "@/components/project-management-platform/views/tasks-view";
 import { VersionDashboardView } from "@/components/project-management-platform/views/version-dashboard-view";
-import { getAiPmAuthLogoutHref } from "@/lib/auth/unified-auth";
+import { getAiPmAuthLogoutHref } from "@/lib/auth/client";
 import { createWeeklyReportFileName } from "@/lib/reports/weekly-report";
 
 export type { AppView } from "@/components/project-management-platform/types";

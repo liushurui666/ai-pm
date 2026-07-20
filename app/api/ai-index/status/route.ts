@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getWorkspaceAccessContext } from "@/data/local-dashboard";
 import { canPerformAction, getPermissionDeniedReason } from "@/lib/access/permissions";
 import { getSession } from "@/lib/auth/session";
-import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
+import { isAuthServiceConfigured } from "@/lib/auth/client";
 import { getPrismaClient } from "@/lib/database/prisma";
 
 export const runtime = "nodejs";

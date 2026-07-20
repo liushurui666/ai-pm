@@ -61,7 +61,7 @@ async function runCheck(name: string, check: () => Promise<Record<string, unknow
 
 async function checkLoginPageOrigin(origin: string) {
   const redirectUri = `${origin}/workbench?view=members&workspaceId=${WORKSPACE_ID}`;
-  const response = await fetch(`${origin}/login?client_id=ai-pm&redirect_uri=${encodeURIComponent(redirectUri)}`);
+  const response = await fetch(`${origin}/login?redirect_uri=${encodeURIComponent(redirectUri)}`);
   const html = await response.text();
   const detail = {
     hasFeishu: html.includes("飞书"),

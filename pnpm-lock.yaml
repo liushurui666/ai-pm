@@ -50,12 +50,6 @@ importers:
       '@qdrant/js-client-rest':
         specifier: 1.18.0
         version: 1.18.0(typescript@5.9.3)
-      '@rc-tool/unified-auth-hosted-service':
-        specifier: ^0.3.1
-        version: 0.3.1(better-auth@1.6.14(b498535e162af2ed23aef113da6e4402))(drizzle-orm@0.45.2(@electric-sql/pglite@0.4.1)(@opentelemetry/api@1.9.1)(@prisma/client@7.8.0(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@5.9.3))(typescript@5.9.3))(@types/pg@8.20.0)(kysely@0.28.8)(mysql2@3.15.3)(pg@8.21.0)(postgres@3.4.7)(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@5.9.3)))(react@19.2.6)
-      '@rc-tool/unified-auth-sdk':
-        specifier: ^0.3.2
-        version: 0.3.2(better-auth@1.6.14(b498535e162af2ed23aef113da6e4402))(drizzle-orm@0.45.2(@electric-sql/pglite@0.4.1)(@opentelemetry/api@1.9.1)(@prisma/client@7.8.0(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@5.9.3))(typescript@5.9.3))(@types/pg@8.20.0)(kysely@0.28.8)(mysql2@3.15.3)(pg@8.21.0)(postgres@3.4.7)(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@5.9.3)))(react@19.2.6)
       ai:
         specifier: ^6.0.199
         version: 6.0.199(zod@4.4.3)
@@ -1467,24 +1461,6 @@ packages:
     peerDependencies:
       react: '>=16.9.0'
       react-dom: '>=16.9.0'
-
-  '@rc-tool/unified-auth-hosted-service@0.3.1':
-    resolution: {integrity: sha512-fp/PhbUGzoF9u96yUjz66aXaaHef7uVh5cmAxjY0Hj1Jn9sXJz0ENG/KB2kJjBUSIellhQXd8uhj4dM8yQrNKw==}
-    hasBin: true
-
-  '@rc-tool/unified-auth-sdk@0.3.2':
-    resolution: {integrity: sha512-K0peVUYCsht43+CUq0cm7SpU6O3XN7QcL9BkyciStl4AkSxMKiSrOdmWWAPf8+FgXZYG5+J4wqs0rOojn35Bsw==}
-    peerDependencies:
-      better-auth: ^1.6.14
-      drizzle-orm: ^0.45.2 || ^1.0.0-rc.1
-      react: '>=18'
-    peerDependenciesMeta:
-      better-auth:
-        optional: true
-      drizzle-orm:
-        optional: true
-      react:
-        optional: true
 
   '@rtsao/scc@1.1.0':
     resolution: {integrity: sha512-zt6OdqaDoOnJ1ZYsCYGt9YmWzDXl4vQdKTyJev62gFhRGKdx7mcT54V9KIjg+d2wi9EXsPvAPKe7i7WjfVWB8g==}
@@ -6407,23 +6383,6 @@ snapshots:
       clsx: 2.1.1
       react: 19.2.6
       react-dom: 19.2.6(react@19.2.6)
-
-  '@rc-tool/unified-auth-hosted-service@0.3.1(better-auth@1.6.14(b498535e162af2ed23aef113da6e4402))(drizzle-orm@0.45.2(@electric-sql/pglite@0.4.1)(@opentelemetry/api@1.9.1)(@prisma/client@7.8.0(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@5.9.3))(typescript@5.9.3))(@types/pg@8.20.0)(kysely@0.28.8)(mysql2@3.15.3)(pg@8.21.0)(postgres@3.4.7)(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@5.9.3)))(react@19.2.6)':
-    dependencies:
-      '@rc-tool/unified-auth-sdk': 0.3.2(better-auth@1.6.14(b498535e162af2ed23aef113da6e4402))(drizzle-orm@0.45.2(@electric-sql/pglite@0.4.1)(@opentelemetry/api@1.9.1)(@prisma/client@7.8.0(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@5.9.3))(typescript@5.9.3))(@types/pg@8.20.0)(kysely@0.28.8)(mysql2@3.15.3)(pg@8.21.0)(postgres@3.4.7)(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@5.9.3)))(react@19.2.6)
-      pg: 8.21.0
-      typescript: 5.9.3
-    transitivePeerDependencies:
-      - better-auth
-      - drizzle-orm
-      - pg-native
-      - react
-
-  '@rc-tool/unified-auth-sdk@0.3.2(better-auth@1.6.14(b498535e162af2ed23aef113da6e4402))(drizzle-orm@0.45.2(@electric-sql/pglite@0.4.1)(@opentelemetry/api@1.9.1)(@prisma/client@7.8.0(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@5.9.3))(typescript@5.9.3))(@types/pg@8.20.0)(kysely@0.28.8)(mysql2@3.15.3)(pg@8.21.0)(postgres@3.4.7)(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@5.9.3)))(react@19.2.6)':
-    optionalDependencies:
-      better-auth: 1.6.14(b498535e162af2ed23aef113da6e4402)
-      drizzle-orm: 0.45.2(@electric-sql/pglite@0.4.1)(@opentelemetry/api@1.9.1)(@prisma/client@7.8.0(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@5.9.3))(typescript@5.9.3))(@types/pg@8.20.0)(kysely@0.28.8)(mysql2@3.15.3)(pg@8.21.0)(postgres@3.4.7)(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@5.9.3))
-      react: 19.2.6
 
   '@rtsao/scc@1.1.0': {}
 

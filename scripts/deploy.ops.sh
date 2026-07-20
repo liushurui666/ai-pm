@@ -136,7 +136,7 @@ main() {
   run_hook "${BEFORE_DEPLOY_HOOK}" "${release_dir}" "${current_dir}" "${shared_dir}"
 
   cd "${release_dir}"
-  # Unified Auth CLI 不主动读取 .env 文件；这里显式导出运行时变量，确保 db migrate/doctor 和 Next build 读取同一份配置。
+  # 显式导出运行时变量，确保 Better Auth 认证库检查和 Next build 读取同一份配置。
   set -a
   # shellcheck disable=SC1090
   source "${RUNTIME_ENV_FILE}"
@@ -156,9 +156,9 @@ main() {
 
   if [[ "${RUN_AUTH_MIGRATE}" == "1" ]]; then
     # 认证 PostgreSQL 属于外部已部署依赖，默认不随 AI PM 发布操作；只有认证平台 schema 需要升级时才打开。
-    log "执行 Unified Auth 认证数据库迁移"
-    pnpm exec unified-auth db migrate
-    pnpm exec unified-auth doctor
+    log "执行 Better Auth 认证数据库迁移"
+    pnpm auth-db:migrate
+    pnpm auth-db:doctor
   fi
 
   if [[ "${RUN_BUILD}" == "1" ]]; then

@@ -5,7 +5,7 @@ import { createAssistantStreamResult } from "@/lib/ai/assistant-stream";
 import { sanitizeAssistantErrorMessage } from "@/lib/ai/assistant-error-message";
 import { isAiAssistantConfigured } from "@/lib/ai/settings";
 import { getRequestOriginFromRequest } from "@/lib/auth/request-origin";
-import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
+import { isAuthServiceConfigured } from "@/lib/auth/client";
 import { AuthServiceUnavailableError, getSession } from "@/lib/auth/session";
 
 export const runtime = "nodejs";

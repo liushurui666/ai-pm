@@ -8,7 +8,7 @@ import {
   updateDashboardRecord,
   updateDashboardTaskRecord
 } from "@/data/local-dashboard";
-import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
+import { isAuthServiceConfigured } from "@/lib/auth/client";
 import { canPerformAction, getPermissionDeniedReason } from "@/lib/access/permissions";
 import { safelyEnqueueRecordCleanupJob, safelyEnqueueRecordIndexJob } from "@/lib/ai/knowledge/record-indexing";
 import { getSession } from "@/lib/auth/session";

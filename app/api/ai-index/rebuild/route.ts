@@ -3,7 +3,7 @@ import { getWorkspaceAccessContext } from "@/data/local-dashboard";
 import { canPerformAction, getPermissionDeniedReason } from "@/lib/access/permissions";
 import { createIndexQueue, createMastraKnowledgeWorkflow } from "@/lib/ai/knowledge";
 import { getSession } from "@/lib/auth/session";
-import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
+import { isAuthServiceConfigured } from "@/lib/auth/client";
 
 export const runtime = "nodejs";
 

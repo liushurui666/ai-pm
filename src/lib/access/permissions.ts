@@ -137,7 +137,7 @@ function getMemberAuthUserIds(member: DashboardMember) {
 }
 
 function getUserIdentities(user?: FeishuUser | null) {
-  // AI PM 登录已经完全切到 Unified Auth，运行时只认 SDK 返回的 authUserId。
+  // AI PM 运行时只认 Better Auth 数据库返回的 authUserId，不使用邮箱/openId 猜测成员身份，避免跨账号误授权。
   // 历史成员行如果还只有 openId/email，应通过正式数据修正写入 auth_... 身份；这里不再做邮箱或 provider id 猜测。
   return [user?.authUserId]
     .map(normalizeIdentity)

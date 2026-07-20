@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createDashboardRecord, getDashboardData } from "@/data/local-dashboard";
 import { createAiDocumentTaskBreakdown, isAiAssistantConfigured } from "@/lib/ai/client";
 import { createFallbackDocumentTaskBreakdown } from "@/lib/documents/breakdown";
-import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
+import { isAuthServiceConfigured } from "@/lib/auth/client";
 import { getSession } from "@/lib/auth/session";
 import type { DashboardMember, RequirementVersion } from "@/types/dashboard";
 import type { DocumentAnalyzeResult, DocumentTaskBreakdown, DocumentTaskDraft } from "@/types/records";

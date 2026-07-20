@@ -11,7 +11,7 @@ pnpm db:migrate
 pnpm dev
 ```
 
-默认访问 `http://localhost:3004`。当前 `pnpm dev` 固定使用 3004，统一认证登录页和 `/api/auth/*` 也挂在同一个 origin 下。
+默认访问 `http://localhost:3004`。当前 `pnpm dev` 固定使用 3004，Better Auth 登录页和 `/api/auth/*` 也挂在同一个 origin 下。
 
 本地开发使用本机 MySQL 保存 AI PM 业务数据。当前默认连接串为：
 
@@ -33,7 +33,8 @@ pnpm db:migrate
 DATABASE_URL=mysql://用户名:密码@腾讯云MySQL地址:3306/数据库名
 ```
 
-统一认证使用独立 PostgreSQL 保存 Better Auth 用户、账号、session 和验证码表。当前本地默认连接串为：
+身份认证使用独立 PostgreSQL 保存 Better Auth 用户、账号、session 和验证码表。原 SDK 创建的
+`auth_ai_pm` schema 会原样继续使用，当前本地默认连接串为：
 
 ```txt
 AUTH_DATABASE_URL=postgresql://ai_pm_auth:ai_pm_auth_local@localhost:5432/ai_pm_auth
@@ -46,20 +47,23 @@ createdb ai_pm_auth
 createuser ai_pm_auth
 psql -d ai_pm_auth -c "ALTER USER ai_pm_auth WITH PASSWORD 'ai_pm_auth_local';"
 psql -d ai_pm_auth -c "GRANT ALL PRIVILEGES ON DATABASE ai_pm_auth TO ai_pm_auth;"
-pnpm dlx @rc-tool/unified-auth-hosted-service db migrate
+pnpm auth-db:migrate
+pnpm auth-db:doctor
 ```
 
-## 统一认证与协同集成
+## 身份认证与协同集成
 
-AI PM 使用 Unified Auth 黑盒认证。业务代码通过 `@rc-tool/unified-auth-sdk` 读取当前用户和会话，登录页、OAuth start/callback、session/context 接口由 `@rc-tool/unified-auth-hosted-service` 内嵌到 AI PM 自己的 Next.js 路由：
+AI PM 不再依赖 `@rc-tool/unified-auth-*` SDK。登录页、OAuth start 和会话读取由项目内认证模块管理，
+OAuth 回调、会话签发与 Cookie 校验直接使用 Better Auth：
 
 - `/login`
 - `/logout`
 - `/api/auth/*`
 
-本地不需要额外启动认证服务；AI PM 自己只保留业务成员、权限、项目和任务数据，认证用户、OAuth 账号绑定、session 和 cookie 全部由 Better Auth 管理。
+本地不需要额外启动认证服务；AI PM 仍只在 MySQL 保留业务成员、权限、项目和任务数据，
+认证用户、OAuth 账号绑定、session 和 Cookie 继续保存在独立 PostgreSQL 的 `auth_ai_pm` schema。
 
-复制 `.env.example` 为 `.env.local`，先准备统一认证基础配置：
+复制 `.env.example` 为 `.env.local`，先准备认证基础配置：
 
 ```bash
 cp .env.example .env.local
@@ -75,20 +79,20 @@ AUTH_DATABASE_URL=postgresql://ai_pm_auth:ai_pm_auth_local@localhost:5432/ai_pm_
 BETTER_AUTH_SECRET=本地随机密钥
 ```
 
-AI PM 已提交 `unified-auth.config.ts`，CLI 会直接读取这份配置，不再通过一串命令参数生成 env：
+AI PM 内置幂等认证库迁移与健康检查，不需要安装原 SDK CLI：
 
 ```bash
-pnpm dlx @rc-tool/unified-auth-hosted-service db migrate
-pnpm dlx @rc-tool/unified-auth-hosted-service doctor
+pnpm auth-db:migrate
+pnpm auth-db:doctor
 ```
 
-真实 OAuth provider 按需配置，内嵌 Unified Auth 登录和飞书通讯录/机器人能力会复用这组飞书企业内部应用：
+真实 OAuth provider 按需配置，Better Auth 飞书登录和通讯录/机器人能力会复用这组飞书企业内部应用：
 
 - `FEISHU_APP_ID`
 - `FEISHU_APP_SECRET`
 - `APP_URL`，生产环境填写公网访问地址，例如 `https://ai-pm.chainthink.cn`
 
-需求模块权限由站内“成员管理”维护，并按工作区生效。配置 Unified Auth 后，首个进入某个工作区的用户会自动成为该工作区 `owner`，后续首次进入的用户会作为 `viewer` 只读成员登记，再由 `owner / admin` 调整角色；`owner / admin / productAdmin` 可以删除需求和版本，`productMember` 可以创建和编辑但不能删除，`viewer` 只读。
+需求模块权限由站内“成员管理”维护，并按工作区生效。启用 Better Auth 后，首个进入某个工作区的用户会自动成为该工作区 `owner`，后续首次进入的用户会作为 `viewer` 只读成员登记，再由 `owner / admin` 调整角色；`owner / admin / productAdmin` 可以删除需求和版本，`productMember` 可以创建和编辑但不能删除，`viewer` 只读。
 
 飞书开放平台里需要把 Better Auth 标准回调 URL 配到应用的重定向 URL，例如：
 
@@ -112,13 +116,13 @@ https://ai-pm.chainthink.cn/api/auth/callback/github
 
 如果站点前面有 Nginx、负载均衡或网关，也要透传 `Host`、`X-Forwarded-Host` 和 `X-Forwarded-Proto`，否则服务端只能看到容器内地址，登录成功后就可能跳回 `localhost:3003`。
 
-Docker 生产容器启动时会对公网地址变量打印警告，但不会因为飞书配置错误直接退出；登录错误由 Unified Auth 登录页统一展示。
+Docker 生产容器启动时会对公网地址变量打印警告，但不会因为飞书配置错误直接退出；登录错误由 AI PM 登录页统一展示。
 
 项目管理主数据不写入飞书云文档。AI PM 平台会把项目、任务、风险、需求、文档、洞察、Bug 和 AI 修复任务保存到 MySQL；首次启动时如果数据库为空，系统会从内置种子数据初始化。后续通过“新建项目 / 新建任务 / 登记风险 / 新建需求 / 新建文档 / 登记 Bug”创建的记录会由站内 API 持久化到数据库，刷新页面后仍然保留。
 
 飞书只承担三件事：
 
-- Unified Auth 登录，确保用户来自已配置的企业 OAuth provider。
+- Better Auth 登录，确保用户来自已配置的企业 OAuth provider。
 - 通讯录负责人选择，保存负责人 `open_id / user_id / union_id / email` 到站内记录。
 - 根据成员管理里的通知开关，通过飞书机器人给负责人发送通知。
 
@@ -182,7 +186,8 @@ FEISHU_APP_ID=cli_xxxxxxxxxxxxxxxx
 FEISHU_APP_SECRET=xxxxxxxxxxxxxxxx
 ```
 
-这里的 `AUTH_DATABASE_URL` 不是让 AI PM 部署 PostgreSQL；认证 PostgreSQL/Unified Auth 基础设施应由外部提前部署好，AI PM 只拿连接串读取登录会话。默认部署只迁移 AI PM 自己的业务 MySQL。
+这里的 `AUTH_DATABASE_URL` 不是让 AI PM 容器内部署 PostgreSQL；认证 PostgreSQL 应由外部提前部署好，
+AI PM 直接使用其 `auth_ai_pm` schema 读写登录会话。默认部署只迁移 AI PM 自己的业务 MySQL。
 
 首次部署或更新都执行同一个脚本：
 
@@ -213,7 +218,7 @@ curl -fsSL https://raw.githubusercontent.com/liushurui666/ai-pm/main/scripts/dep
 AI_PM_ENV_FILE=/etc/ai-pm/test.env AI_PM_HOST_PORT=3004 AI_PM_CONTAINER_NAME=ai-pm-test AI_PM_IMAGE=ai-pm:test bash scripts/deploy.docker.sh
 ```
 
-容器启动时会检查 `APP_URL`、`DATABASE_URL`、`AUTH_DATABASE_URL` 和 `BETTER_AUTH_SECRET`，并默认只执行 `pnpm db:migrate` 迁移 AI PM 业务 MySQL。如果业务数据库迁移由外部发布系统统一控制，可设置 `RUN_MIGRATIONS=0`；只有认证平台 schema 也要随本次发布升级时，才设置 `RUN_AUTH_MIGRATIONS=1` 执行 `unified-auth db migrate/doctor`。
+容器启动时会检查 `APP_URL`、`DATABASE_URL`、`AUTH_DATABASE_URL` 和 `BETTER_AUTH_SECRET`，并默认只执行 `pnpm db:migrate` 迁移 AI PM 业务 MySQL。如果业务数据库迁移由外部发布系统统一控制，可设置 `RUN_MIGRATIONS=0`；只有认证 schema 也要随本次发布校验时，才设置 `RUN_AUTH_MIGRATIONS=1` 执行 `pnpm auth-db:migrate && pnpm auth-db:doctor`。
 
 Docker 构建阶段不会注入真实 `AUTH_DATABASE_URL`，镜像里只使用占位连接串让 Next 完成认证路由静态收集；真实认证库连接只在容器运行时通过 `AI_PM_ENV_FILE` 注入。
 
@@ -310,7 +315,7 @@ pnpm deploy:remote
 
 - 用 `git archive` 打包当前提交，避免把 `.env.local`、`.next`、`node_modules` 等本地文件带到服务器。
 - 上传到 `${DEPLOY_TARGET_DIR}/releases/{时间戳-commit}`，并把运行时 env 放到 `${DEPLOY_TARGET_DIR}/shared`。
-- 在服务器执行 `pnpm install --frozen-lockfile`、`pnpm db:migrate`、`pnpm exec unified-auth db migrate`、`pnpm build`。
+- 在服务器执行 `pnpm install --frozen-lockfile`、`pnpm db:migrate`、按开关执行 `pnpm auth-db:migrate`、`pnpm build`。
 - 切换 `${DEPLOY_TARGET_DIR}/current` 软链，再按 `DEPLOY_RESTART_STRATEGY` 选择 `systemd`、`pm2`、`custom` 或 `none` 重启。
 - 可通过 `DEPLOY_BEFORE_REMOTE_SCRIPT` 和 `DEPLOY_AFTER_REMOTE_SCRIPT` 插入内部运维脚本，适合接入 Nginx reload、健康检查、通知等流程。
 

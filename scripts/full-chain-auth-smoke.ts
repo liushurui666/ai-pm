@@ -51,7 +51,7 @@ async function checkProtectedRoute(name: string, path: string) {
   return assertSmoke(
     [302, 303, 307, 308].includes(response.status) &&
       location.includes("/login") &&
-      location.includes("client_id=ai-pm") &&
+      !location.includes("client_id=") &&
       location.includes("redirect_uri="),
     `${name} 未按预期重定向到登录页`,
     detail
@@ -59,7 +59,7 @@ async function checkProtectedRoute(name: string, path: string) {
 }
 
 async function checkLoginPage() {
-  const response = await fetch(createUrl("/login?client_id=ai-pm&redirect_uri=http%3A%2F%2Flocalhost%3A3004%2Fworkbench"));
+  const response = await fetch(createUrl("/login?redirect_uri=http%3A%2F%2Flocalhost%3A3004%2Fworkbench"));
   const html = await response.text();
   const detail = {
     hasFeishu: html.includes("飞书"),

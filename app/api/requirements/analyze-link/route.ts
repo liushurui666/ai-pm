@@ -4,7 +4,7 @@ import {
   createFallbackRequirementAnalysis,
   isAiAssistantConfigured
 } from "@/lib/ai/client";
-import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
+import { isAuthServiceConfigured } from "@/lib/auth/client";
 import { readFeishuDocumentFromLink } from "@/lib/requirements/feishu-document";
 import { getSession } from "@/lib/auth/session";
 

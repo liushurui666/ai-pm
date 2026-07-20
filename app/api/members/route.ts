@@ -4,7 +4,7 @@ import {
   getWorkspaceAccessContext,
   updateDashboardMember
 } from "@/data/local-dashboard";
-import { isAuthServiceConfigured } from "@/lib/auth/unified-auth";
+import { isAuthServiceConfigured } from "@/lib/auth/client";
 import { getPermissionDeniedReason } from "@/lib/access/permissions";
 import { getSession } from "@/lib/auth/session";
 import { readDashboardMembersDatabase } from "@/data/database-dashboard";

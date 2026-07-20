@@ -2,13 +2,13 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { ProjectManagementPlatform } from "@/components/project-management-platform";
 import { getDashboardData } from "@/data/local-dashboard";
-import { unifiedAuthConfig } from "@/lib/auth/config";
+import { authConfig } from "@/lib/auth/config";
 import { getRequestOriginFromHeaders, resolveTrustedRequestOrigin } from "@/lib/auth/request-origin";
-import { getAiPmAuthLoginHref, isAuthServiceConfigured } from "@/lib/auth/unified-auth";
+import { getAiPmAuthLoginHref, isAuthServiceConfigured } from "@/lib/auth/client";
 import { getSession } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
-const defaultAuthOrigin = unifiedAuthConfig.auth?.origin ?? unifiedAuthConfig.app?.origin ?? "http://localhost:3004";
+const defaultAuthOrigin = authConfig.auth.origin;
 
 export default async function BugEditPage({
   params,
