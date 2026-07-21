@@ -2,6 +2,7 @@
 
 import { useEffect, type RefObject } from "react";
 import * as THREE from "three";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { UltraHDRLoader } from "three/examples/jsm/loaders/UltraHDRLoader.js";
 import { HELMET_ENVIRONMENT_PATH, HELMET_MODEL_PATH, ROBOT_MODEL_HAS_SOURCE_HELMET, ROBOT_MODEL_PATH, robotStoryChapters } from "../story-data";
@@ -216,6 +217,7 @@ function normalizeRobotModel(model: THREE.Group) {
 }
 
 type CleanTechArmorTextureOptions = {
+  helmetStructure?: boolean;
   upperBodyAccents?: boolean;
 };
 
@@ -327,18 +329,24 @@ function createCleanTechArmorTexture(sourceTexture: THREE.Texture | null, option
     const rawUpperBodyAccent = options.upperBodyAccents === true && isUpperBodyTechAccentPixel(u, v, r, g, b);
     const isBodyArmorTexture = options.upperBodyAccents === true;
     const isCleanupArmorIsland = options.upperBodyAccents === true && isLowerWhiteArmorCleanupPixel(u, v);
+    const isHelmetTexture = options.helmetStructure === true;
+    const localLightDifference = Math.max(neighborLuminance, wideNeighborLuminance) - luminance;
     const isScratchOnLightPanel =
       luminance < 126 &&
       Math.max(neighborLuminance, wideNeighborLuminance) > (isCleanupArmorIsland ? 72 : 92) &&
+      (!isHelmetTexture || localLightDifference > 22) &&
       !rawUpperBodyAccent;
     const isHardBlackStructure = isBodyArmorTexture
       ? luminance < 12 && wideNeighborLuminance < 24
-      : luminance < 16 && wideNeighborLuminance < 34;
+      : isHelmetTexture
+        ? luminance < 96 && wideNeighborLuminance < 112
+        : luminance < 16 && wideNeighborLuminance < 34;
     const isDeepStructuralBlack = isBodyArmorTexture
       ? false
       : !isScratchOnLightPanel &&
         (!isCleanupArmorIsland || isHardBlackStructure) &&
-        (isHardBlackStructure || (luminance < 48 && wideNeighborLuminance < 64));
+        (isHardBlackStructure ||
+          (luminance < (isHelmetTexture ? 118 : 48) && wideNeighborLuminance < (isHelmetTexture ? 128 : 64)));
     const isUpperBodyAccent =
       rawUpperBodyAccent &&
       !isScratchOnLightPanel;
@@ -449,7 +457,7 @@ function removeOriginalSoldierHelmet(runtime: RobotRuntime) {
   });
 }
 
-function attachDamagedHelmet(runtime: RobotRuntime, helmetScene: THREE.Group) {
+function attachDamagedHelmet(runtime: RobotRuntime, helmetScene: THREE.Group, neutralEnvironment: THREE.Texture) {
   const headBone = runtime.bones.head;
 
   if (!headBone) {
@@ -476,15 +484,19 @@ function attachDamagedHelmet(runtime: RobotRuntime, helmetScene: THREE.Group) {
         object.material = object.material.clone();
         // 用户要的是全新的纯白黑科技风，而不是 DamagedHelmet 原始的战损旧化。
         // 因此头盔也走同一套“翻新”贴图：白色外壳、蓝黑镜面结构，弱化锈色和刮痕。
-        object.material.map = createCleanTechArmorTexture(object.material.map) ?? object.material.map;
+        object.material.map = createCleanTechArmorTexture(object.material.map, { helmetStructure: true }) ?? object.material.map;
         object.material.color.set(0xffffff);
-        object.material.envMapIntensity = 0.32;
-        object.material.roughness = THREE.MathUtils.clamp(object.material.roughness, 0.28, 0.36);
-        object.material.metalness = 0.42;
-        // 官方 HDRI 带有偏暖的广场反射。首页要保持崭新的冷白装甲，因此压掉原资产的暖色自发光，
-        // 只让眼部细节和金属轮廓接受当前摄影棚灯光，不让头盔重新显出金铜旧化感。
-        object.material.emissive.set(0x07131a);
-        object.material.emissiveIntensity = 0.08;
+        // 官方 HDRI 带有大面积金色建筑反射，金属度较高的头盔会因此变成金铜色。
+        // 头盔单独改用中性影棚环境，既保住银色高光和黑色结构，也不会改动机身的全局灯光。
+        object.material.envMap = neutralEnvironment;
+        object.material.envMapIntensity = 0.36;
+        object.material.roughness = Math.min(object.material.roughness, 0.34);
+        object.material.metalness = Math.max(object.material.metalness, 0.52);
+        // 原自发光贴图的眼部和界面纹理需要保留，但黄色标记会破坏冷色设定；
+        // 先将发光纹理翻新成黑白明度遮罩，再统一染成低亮度冰蓝色。
+        object.material.emissiveMap = createCleanTechArmorTexture(object.material.emissiveMap) ?? object.material.emissiveMap;
+        object.material.emissive.set(0x86efff);
+        object.material.emissiveIntensity = 0.68;
         object.material.needsUpdate = true;
       }
     }
@@ -786,6 +798,15 @@ export function useRobotStoryScene({
     renderer.setClearColor(0x02040a, 0);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
 
+    // 头盔使用独立的中性影棚反射，避免 Royal Esplanade HDRI 的暖色建筑被金属表面染成金铜色。
+    // PMREM 在启动时仅生成一次，后续所有头盔网格共享同一张 GPU 环境贴图。
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    const neutralHelmetEnvironmentScene = new RoomEnvironment();
+    const neutralHelmetEnvironmentTarget = pmremGenerator.fromScene(neutralHelmetEnvironmentScene, 0.04);
+
+    neutralHelmetEnvironmentScene.dispose();
+    pmremGenerator.dispose();
+
     scene.fog = new THREE.FogExp2(0x02040a, 0.082);
 
     const ambientLight = new THREE.HemisphereLight(0xe9fdff, 0x08070d, 0.86);
@@ -881,7 +902,7 @@ export function useRobotStoryScene({
               return;
             }
 
-            attachDamagedHelmet(runtime, helmetGltf.scene);
+            attachDamagedHelmet(runtime, helmetGltf.scene, neutralHelmetEnvironmentTarget.texture);
             robotRevealStartedAt = performance.now();
             setSceneReady(true);
           },
@@ -1037,6 +1058,7 @@ export function useRobotStoryScene({
       renderer.dispose();
       scene.environment = null;
       helmetEnvironmentTexture?.dispose();
+      neutralHelmetEnvironmentTarget.dispose();
       disposeRobotArmorSkinTextures(armorSkinTextures);
       disposeObject(scene);
     };
