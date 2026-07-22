@@ -132,6 +132,14 @@ export async function PATCH(request: NextRequest) {
   }
 
   try {
+    const targetMember = (await readDashboardMembersDatabase(context.currentWorkspace.id))
+      .find((member) => member.id === body.id);
+
+    // 权限来自请求工作区时，目标成员也必须属于同一工作区；不能拿 A 工作区管理员身份更新 B 的全局成员 ID。
+    if (!targetMember) {
+      return NextResponse.json({ error: "成员不存在或不属于当前工作区" }, { status: 404 });
+    }
+
     return NextResponse.json(await updateDashboardMember(body.id, body.values));
   } catch (error) {
     return NextResponse.json(

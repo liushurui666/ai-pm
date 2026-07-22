@@ -6,6 +6,8 @@ import { createAiDocumentTaskBreakdown, isAiAssistantConfigured } from "@/lib/ai
 import { createFallbackDocumentTaskBreakdown } from "@/lib/documents/breakdown";
 import { isAuthServiceConfigured } from "@/lib/auth/client";
 import { getSession } from "@/lib/auth/session";
+import { authorizeProjectMutation } from "@/lib/project-management/access";
+import { recordProjectActivityForMutation } from "@/lib/project-management/activity";
 import type { DashboardMember, RequirementVersion } from "@/types/dashboard";
 import type { DocumentAnalyzeResult, DocumentTaskBreakdown, DocumentTaskDraft } from "@/types/records";
 
@@ -97,6 +99,31 @@ function hasFallbackOwner(fallbackOwner: ReturnType<typeof getFallbackOwner>) {
   return Boolean(fallbackOwner.ownerMemberId || fallbackOwner.ownerOpenId || fallbackOwner.owner);
 }
 
+function normalizeFallbackOwnerForWorkspace(
+  fallbackOwner: ReturnType<typeof getFallbackOwner>,
+  members: DashboardMember[]
+) {
+  if (!fallbackOwner.ownerMemberId) {
+    return fallbackOwner;
+  }
+
+  const member = members.find((item) => item.id === fallbackOwner.ownerMemberId);
+
+  if (!member) {
+    throw new DocumentAnalyzeInputError("默认负责人不存在或不属于当前工作区，请重新选择。");
+  }
+
+  return {
+    owner: member.name,
+    ownerMemberId: member.id,
+    ownerOpenId: member.notification.feishuOpenId ?? "",
+    ownerUnionId: member.notification.feishuUnionId ?? "",
+    ownerUserId: member.notification.feishuUserId ?? "",
+    ownerEmail: member.email ?? "",
+    ownerAvatarUrl: member.avatarUrl ?? ""
+  };
+}
+
 function resolveTaskOwner(task: DocumentTaskDraft, members: DashboardMember[], fallbackOwner: ReturnType<typeof getFallbackOwner>) {
   if (hasFallbackOwner(fallbackOwner)) {
     return fallbackOwner;
@@ -146,6 +173,8 @@ function resolveBreakdownVersion({
 
   // 入库时以服务端解析出来的版本为准，避免子版本入口的隐藏字段同步慢一步导致任务落到父版本或未规划版本。
   return {
+    ownerMemberId: targetVersion.ownerMemberId,
+    projectId: targetVersion.projectId,
     projectName: targetVersion.project || formProjectName || "跨项目",
     versionId: targetVersion.id,
     versionName: targetVersion.name
@@ -203,19 +232,19 @@ function ensureUsefulBreakdown(breakdown: DocumentTaskBreakdown) {
     tasks: [
       {
         title: "【前端】确认文档涉及的页面范围与交互验收",
-        priority: "中" as const,
+        priority: "普通" as const,
         dueDate: dayjs().add(3, "day").format("YYYY-MM-DD"),
         aiHint: "文档中没有识别到明确前端待办，请确认页面、组件、表单、权限可见性和异常状态。"
       },
       {
         title: "【后端】确认文档涉及的接口数据与权限规则",
-        priority: "中" as const,
+        priority: "普通" as const,
         dueDate: dayjs().add(4, "day").format("YYYY-MM-DD"),
         aiHint: "文档中没有识别到明确后端待办，请确认接口、数据模型、鉴权、持久化和消息通知边界。"
       },
       {
         title: "【测试】确认文档涉及的测试用例与回归范围",
-        priority: "中" as const,
+        priority: "普通" as const,
         dueDate: dayjs().add(5, "day").format("YYYY-MM-DD"),
         aiHint: "文档中没有识别到明确测试待办，请补齐主流程、异常、权限边界和端到端验收用例。"
       }
@@ -282,13 +311,39 @@ export async function POST(request: NextRequest) {
 
     const dashboardData = await getDashboardData(session?.user, workspaceId || undefined);
     const members = dashboardData.members.filter((member) => member.status === "active");
-    const fallbackOwner = getFallbackOwner(formData);
+    const fallbackOwner = normalizeFallbackOwnerForWorkspace(getFallbackOwner(formData), members);
     const targetVersion = resolveBreakdownVersion({
       formProjectName,
       versionId,
       versions: dashboardData.requirementVersions,
       workspaceId: dashboardData.meta?.currentWorkspace?.id ?? (workspaceId || "ws-default")
     });
+    const resolvedWorkspaceId = dashboardData.meta?.currentWorkspace?.id ?? (workspaceId || "ws-default");
+    const breakdownAuthorization = await authorizeProjectMutation({
+      user: session?.user,
+      workspaceId: resolvedWorkspaceId,
+      projectId: targetVersion.projectId,
+      projectName: targetVersion.projectName,
+      entityType: "requirementVersion",
+      action: "update",
+      record: {
+        id: targetVersion.versionId,
+        ownerMemberId: targetVersion.ownerMemberId,
+        projectId: targetVersion.projectId,
+        project: targetVersion.projectName,
+        workspaceId: resolvedWorkspaceId
+      }
+    });
+
+    // 文档拆解是版本级动作：复用 canUpdateVersion 口径，让版本 owner/delivery_manager 可拆解，
+    // 但不能用缺少 requirementId 的普通 task:create 误拒；后续任务仍锁定该服务端版本作用域。
+    if (!breakdownAuthorization.allowed) {
+      return NextResponse.json(
+        { error: breakdownAuthorization.reason || "当前成员无权在目标项目中拆解任务。" },
+        { status: 403 }
+      );
+    }
+
     const { source, breakdown: rawBreakdown, warning } = await createBreakdown({
       documentText,
       fileName: file.name,
@@ -305,7 +360,7 @@ export async function POST(request: NextRequest) {
         updatedAt: dayjs().format("YYYY-MM-DD HH:mm"),
         aiSummary: breakdown.summary
       },
-      workspaceId
+      resolvedWorkspaceId
     );
     const tasks = [];
 
@@ -324,6 +379,7 @@ export async function POST(request: NextRequest) {
           ownerEmail: owner.ownerEmail,
           ownerAvatarUrl: owner.ownerAvatarUrl,
           project: targetVersion.projectName,
+          projectId: targetVersion.projectId,
           versionId: targetVersion.versionId,
           versionName: targetVersion.versionName,
           priority: task.priority,
@@ -331,10 +387,20 @@ export async function POST(request: NextRequest) {
           dueDate: normalizeDueDate(task.dueDate),
           aiHint: task.aiHint
         },
-        workspaceId
+        resolvedWorkspaceId
       );
 
       tasks.push(taskResult.record);
+      await recordProjectActivityForMutation({
+        user: session?.user,
+        workspaceId: resolvedWorkspaceId,
+        projectId: targetVersion.projectId,
+        projectName: targetVersion.projectName,
+        entityType: "task",
+        action: "create",
+        record: taskResult.record as unknown as Record<string, unknown>,
+        detail: `通过文档「${breakdown.documentTitle}」拆解创建任务。`
+      });
     }
 
     return NextResponse.json({

@@ -10,8 +10,8 @@ type WeekRange = {
 const dayMs = 24 * 60 * 60 * 1000;
 const maxTableRows = 12;
 
-const taskPriorityWeight: Record<Task["priority"], number> = { 高: 3, 中: 2, 低: 1 };
-const taskStageWeight: Record<Task["stage"], number> = { 待处理: 4, 进行中: 3, 评审中: 2, 已完成: 1 };
+const taskPriorityWeight: Record<Task["priority"], number> = { 紧急: 4, 高: 3, 普通: 2, 低: 1 };
+const taskStageWeight: Record<Task["stage"], number> = { 待处理: 5, 进行中: 4, 评审中: 3, 验收中: 2, 已完成: 1 };
 const bugSeverityWeight: Record<BugReport["severity"], number> = { 阻塞: 4, 严重: 3, 一般: 2, 轻微: 1 };
 const bugStatusWeight: Record<BugReport["status"], number> = { 新建: 4, 定位中: 3, 修复中: 2, 待验证: 1, 已关闭: 0 };
 const riskLevelWeight: Record<Risk["level"], number> = { 高: 3, 中: 2, 低: 1 };

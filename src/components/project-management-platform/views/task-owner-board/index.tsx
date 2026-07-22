@@ -180,6 +180,7 @@ function TaskOwnerCard({
   dragAttributes,
   dragListeners,
   dragging,
+  editable,
   onEdit,
   setDragHandleRef,
   task
@@ -187,29 +188,34 @@ function TaskOwnerCard({
   dragAttributes?: DraggableAttributes;
   dragListeners?: DraggableSyntheticListeners;
   dragging?: boolean;
+  editable: boolean;
   onEdit: (task: Task) => void;
   setDragHandleRef?: (element: HTMLElement | null) => void;
   task: Task;
 }) {
   return (
-    <div className={`task-owner-card${dragging ? " task-owner-card-dragging" : ""}`}>
+    <div className={`task-owner-card${dragging ? " task-owner-card-dragging" : ""}${editable ? "" : " task-owner-card-readonly"}`}>
       <Flex justify="space-between" align="start" gap={12}>
         <Space size={8} align="start" className="task-owner-card-title">
-          <span
-            ref={setDragHandleRef}
-            className="task-owner-card-handle"
-            {...dragAttributes}
-            {...dragListeners}
-          >
-            <HolderOutlined />
-          </span>
+          {editable ? (
+            <span
+              ref={setDragHandleRef}
+              className="task-owner-card-handle"
+              {...dragAttributes}
+              {...dragListeners}
+            >
+              <HolderOutlined />
+            </span>
+          ) : <Tag>只读</Tag>}
           <Text strong>{task.title}</Text>
         </Space>
         <Space size={4}>
           <Tag color={priorityColor[task.priority]}>{task.priority}</Tag>
-          <Tooltip title="编辑任务">
-            <Button size="small" type="text" icon={<EditOutlined />} onClick={() => onEdit(task)} />
-          </Tooltip>
+          {editable ? (
+            <Tooltip title="编辑任务">
+              <Button size="small" type="text" icon={<EditOutlined />} onClick={() => onEdit(task)} />
+            </Tooltip>
+          ) : null}
         </Space>
       </Flex>
       <Space wrap size={[6, 6]} className="task-meta-tags">
@@ -231,9 +237,11 @@ function TaskOwnerCard({
 
 // 负责人看板只提供“转交给某个人”的拖拽，不做列内排序，避免拖动时对卡片列表做额外测量。
 const DraggableOwnerTaskCard = memo(function DraggableOwnerTaskCard({
+  editable,
   onEdit,
   task
 }: {
+  editable: boolean;
   onEdit: (task: Task) => void;
   task: Task;
 }) {
@@ -247,7 +255,8 @@ const DraggableOwnerTaskCard = memo(function DraggableOwnerTaskCard({
     data: {
       type: "task-owner"
     },
-    id: task.id
+    id: task.id,
+    disabled: !editable
   });
 
   return (
@@ -259,6 +268,7 @@ const DraggableOwnerTaskCard = memo(function DraggableOwnerTaskCard({
         dragAttributes={attributes}
         dragListeners={listeners}
         dragging={isDragging}
+        editable={editable}
         setDragHandleRef={setActivatorNodeRef}
         task={task}
         onEdit={onEdit}
@@ -268,12 +278,14 @@ const DraggableOwnerTaskCard = memo(function DraggableOwnerTaskCard({
 });
 
 export function TaskOwnerBoard({
+  canEditTask,
   emptyText,
   onEdit,
   onOwnerChange,
   ownerOptions,
   tasks
 }: {
+  canEditTask: (task: Task) => boolean;
   emptyText: string;
   onEdit: (task: Task) => void;
   onOwnerChange: (task: Task, owner: OwnerSelectableMember | null) => Promise<boolean>;
@@ -296,7 +308,7 @@ export function TaskOwnerBoard({
     const task = tasks.find((item) => item.id === event.active.id) ?? null;
 
     lastOverOwnerKeyRef.current = "";
-    setActiveTask(task);
+    setActiveTask(task && canEditTask(task) ? task : null);
   }
 
   function handleDragOver(event: DragOverEvent) {
@@ -316,7 +328,7 @@ export function TaskOwnerBoard({
     setActiveTask(null);
     lastOverOwnerKeyRef.current = "";
 
-    if (!task || !targetGroup || isSameOwner(task, targetGroup)) {
+    if (!task || !canEditTask(task) || !targetGroup || isSameOwner(task, targetGroup)) {
       return;
     }
 
@@ -349,7 +361,7 @@ export function TaskOwnerBoard({
         {ownerGroups.map((group) => (
           <TaskOwnerColumn key={group.key} group={group} dragging={Boolean(activeTask)}>
             {group.tasks.map((task) => (
-              <DraggableOwnerTaskCard key={task.id} task={task} onEdit={onEdit} />
+              <DraggableOwnerTaskCard editable={canEditTask(task)} key={task.id} task={task} onEdit={onEdit} />
             ))}
           </TaskOwnerColumn>
         ))}
@@ -357,7 +369,7 @@ export function TaskOwnerBoard({
       <DragOverlay dropAnimation={null}>
         {activeTask ? (
           <div className="task-owner-drag-overlay">
-            <TaskOwnerCard task={activeTask} onEdit={onEdit} dragging />
+            <TaskOwnerCard editable task={activeTask} onEdit={onEdit} dragging />
           </div>
         ) : null}
       </DragOverlay>

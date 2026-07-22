@@ -1,0 +1,69 @@
+.project-schedule {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.project-schedule-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(420px, 0.8fr);
+  gap: 12px;
+}
+
+.project-schedule-summary > span {
+  display: grid;
+  align-content: center;
+  gap: 7px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.project-schedule-summary > span > .ant-tag {
+  width: fit-content;
+}
+
+.project-schedule-summary h5.ant-typography {
+  margin: 0;
+}
+
+.project-schedule-summary > span > .ant-typography-secondary {
+  font-size: 12px;
+}
+
+.project-schedule-summary > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.project-schedule-summary .ant-statistic {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.project-schedule-summary .ant-statistic-title {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.project-schedule-summary .ant-statistic-content {
+  color: var(--foreground);
+  font-size: 20px;
+}
+
+@media (max-width: 900px) {
+  .project-schedule-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .project-schedule-summary > div {
+    grid-template-columns: 1fr 1fr;
+  }
+}

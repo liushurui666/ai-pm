@@ -20,6 +20,7 @@ export type ProjectCalendarItem = {
   status: string;
   progress: number;
   riskTone: "success" | "processing" | "warning" | "danger";
+  editable?: boolean;
 };
 
 export type ProjectCalendarScheduleChange = {
@@ -103,6 +104,7 @@ function getTaskProgress(stage: Task["stage"]) {
     待处理: 12,
     进行中: 55,
     评审中: 82,
+    验收中: 92,
     已完成: 100
   };
 
@@ -167,10 +169,12 @@ export function getProjectCalendarFallbackMonth(items: ProjectCalendarItem[], pr
 
 // 项目交付日历只展示任务，避免 Bug、版本和里程碑混入后干扰排期判断。
 export function createProjectCalendarItems({
+  canEditTask,
   selectedVersionId,
   tasks,
   versions
 }: {
+  canEditTask?: (task: Task) => boolean;
   selectedVersionId?: string | null;
   tasks: Task[];
   versions: RequirementVersion[];
@@ -194,7 +198,9 @@ export function createProjectCalendarItems({
         versionName: task.versionName,
         status: task.stage,
         progress,
-        riskTone: getRiskTone(progress, task.stage !== "已完成" && isPast(task.dueDate))
+        riskTone: getRiskTone(progress, task.stage !== "已完成" && isPast(task.dueDate)),
+        // 排期组件只消费统一条目，必须把原任务的细粒度权限一并固化，避免拖拽层丢失需求作用域。
+        editable: canEditTask?.(task) ?? false
       };
     });
 

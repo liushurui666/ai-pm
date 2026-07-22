@@ -103,7 +103,7 @@ async function main() {
       project: "Codex E2E",
       versionId: "rv-backlog",
       versionName: "未规划需求池",
-      priority: "中",
+      priority: "普通",
       startDate: "2026-06-24",
       dueDate: "2026-06-30",
       aiHint: "全链路测试任务，可删除。"

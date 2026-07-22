@@ -3,10 +3,12 @@
 import "./index.less";
 import { Drawer, Form } from "antd";
 import type { DashboardEntityType } from "@/types/records";
+import type { Project } from "@/types/dashboard";
 import type { OwnerSelectableMember, RequirementVersionOption } from "@/components/project-management-platform/types";
 import { entityLabels } from "@/components/project-management-platform/constants";
 import { BugFields, DocumentFields, ProjectFields, RequirementFields, RequirementVersionFields, RiskFields, TaskFields } from "@/components/project-management-platform/forms/form-fields";
 import { DrawerFooterActions } from "@/components/project-management-platform/forms/drawer-footer-actions";
+import type { TaskRequirementOption } from "@/components/project-management-platform/forms/task-fields";
 
 // 新建记录抽屉根据实体类型切换字段组件，主容器只传入提交回调。
 export function CreateRecordDrawer({
@@ -15,7 +17,9 @@ export function CreateRecordDrawer({
   type,
   submitting,
   projectOptions,
+  projects,
   requirementVersionOptions,
+  requirementOptions,
   people,
   peopleLoading,
   peopleError,
@@ -27,7 +31,9 @@ export function CreateRecordDrawer({
   type: DashboardEntityType | null;
   submitting: boolean;
   projectOptions: string[];
+  projects: Project[];
   requirementVersionOptions: RequirementVersionOption[];
+  requirementOptions: TaskRequirementOption[];
   people: OwnerSelectableMember[];
   peopleLoading: boolean;
   peopleError: string;
@@ -63,6 +69,7 @@ export function CreateRecordDrawer({
               people={people}
               peopleLoading={peopleLoading}
               peopleError={peopleError}
+              requirementOptions={requirementOptions}
               versionOptions={requirementVersionOptions}
             />
           ) : null}
@@ -90,6 +97,7 @@ export function CreateRecordDrawer({
               people={people}
               peopleLoading={peopleLoading}
               peopleError={peopleError}
+              projects={projects}
               versionOptions={requirementVersionOptions}
             />
           ) : null}

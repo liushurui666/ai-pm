@@ -186,7 +186,7 @@ async function main() {
       aiHint: "版本范围冒烟任务。",
       dueDate: "2026-07-05",
       owner: "Codex QA",
-      priority: "中",
+      priority: "普通",
       project: wrongProject,
       stage: "待处理",
       startDate: "2026-06-26",

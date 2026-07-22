@@ -7,6 +7,21 @@ const globalForPrisma = globalThis as typeof globalThis & {
 
 const LOCAL_DATABASE_URL = "mysql://ai_pm:ai_pm_local@localhost:3306/ai_pm";
 
+// MariaDB Node 驱动默认会为每个 pool 保留 10 条空闲连接；Next 与多个 worker 同时运行时会很快吃满数据库上限。
+// 这些值是单进程的保守缺省，运维仍可通过 DATABASE_URL 查询参数显式覆盖。
+export const MYSQL_POOL_DEFAULTS = {
+  connectionLimit: 5,
+  idleTimeout: 60,
+  minimumIdle: 1
+} as const;
+
+export function resolveMariaDbMinimumIdle(value: string | null) {
+  const parsed = value === null ? Number.NaN : Number(value);
+
+  // mariadb@3.4.5 的 pool 在 0 时无法建立首条连接；即使运维误配 0/负数/非数字也要收敛到 1。
+  return Number.isInteger(parsed) && parsed >= 1 ? parsed : MYSQL_POOL_DEFAULTS.minimumIdle;
+}
+
 function withMySqlConnectionDefaults(databaseUrl: string) {
   try {
     const url = new URL(databaseUrl);
@@ -23,6 +38,19 @@ function withMySqlConnectionDefaults(databaseUrl: string) {
     // 连接池等待时间也同步拉长，避免首个请求或冷启动时因为池子还没建好就直接失败。
     if (!url.searchParams.has("acquireTimeout")) {
       url.searchParams.set("acquireTimeout", "30000");
+    }
+
+    // Prisma MariaDB adapter 会把连接串查询参数原样交给 mariadb pool。
+    // 显式限制池大小并把默认 minimumIdle=connectionLimit 降到 1，避免空闲连接长时间占满 MySQL。
+    // mariadb@3.4.5 在 minimumIdle=0 时不会按需建立首条连接，因此这里不能使用 0。
+    if (!url.searchParams.has("connectionLimit")) {
+      url.searchParams.set("connectionLimit", String(MYSQL_POOL_DEFAULTS.connectionLimit));
+    }
+
+    url.searchParams.set("minimumIdle", String(resolveMariaDbMinimumIdle(url.searchParams.get("minimumIdle"))));
+
+    if (!url.searchParams.has("idleTimeout")) {
+      url.searchParams.set("idleTimeout", String(MYSQL_POOL_DEFAULTS.idleTimeout));
     }
 
     return url.toString();
@@ -58,9 +86,10 @@ export function getPrismaClient() {
     adapter
   });
 
-  if (process.env.NODE_ENV !== "production") {
-    globalForPrisma.aiPmPrisma = prisma;
-  }
+  // getPrismaClient 被 dashboard 读取、项目可见性和各类 worker 重复调用。
+  // 生产 `next start` 同样必须在进程内复用唯一实例；否则每次调用都会新建一个 MariaDB pool，最终让 SSR 卡在等待连接。
+  // globalThis 同时覆盖开发态热更新重复加载模块的情况，不依赖 NODE_ENV 分支。
+  globalForPrisma.aiPmPrisma = prisma;
 
   return prisma;
 }

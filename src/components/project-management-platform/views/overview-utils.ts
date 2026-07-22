@@ -3,8 +3,9 @@ import type { BugReport, FeishuUser, Task } from "@/types/dashboard";
 import { isMyOwnerRecord, normalizeIdentity } from "@/components/project-management-platform/identity";
 
 export const overviewTaskPriorityColor: Record<Task["priority"], string> = {
+  紧急: "volcano",
   高: "red",
-  中: "gold",
+  普通: "blue",
   低: "green"
 };
 
@@ -47,7 +48,7 @@ export function formatOverviewBugCreatedAt(createdAt: string) {
 }
 
 export function sortTasksForPersonalFocus(left: Task, right: Task) {
-  const priorityWeight: Record<Task["priority"], number> = { 高: 3, 中: 2, 低: 1 };
+  const priorityWeight: Record<Task["priority"], number> = { 紧急: 4, 高: 3, 普通: 2, 低: 1 };
   const overdueWeight = Number(isOverdueOverviewTask(right)) - Number(isOverdueOverviewTask(left));
 
   if (overdueWeight !== 0) {

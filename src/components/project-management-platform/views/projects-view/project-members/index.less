@@ -1,0 +1,93 @@
+.project-members {
+  display: grid;
+  gap: 12px;
+}
+
+.project-members-header,
+.project-member-role-editor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.project-members-header > span {
+  display: grid;
+  gap: 2px;
+}
+
+.project-members-header h5.ant-typography {
+  margin: 0;
+}
+
+.project-members-header .ant-typography-secondary {
+  font-size: 12px;
+}
+
+.project-member-identity {
+  display: grid;
+  max-width: 130px;
+  gap: 1px;
+}
+
+.project-member-identity strong,
+.project-member-identity .ant-typography {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-member-identity .ant-typography {
+  font-size: 11px;
+}
+
+.project-member-role-editor {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.project-member-role-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(130px, 0.8fr) minmax(150px, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.project-member-role-row .ant-form-item {
+  margin: 0;
+}
+
+.project-owner-transfer-form {
+  margin-top: 18px;
+}
+
+.project-effective-permission {
+  display: grid;
+  gap: 12px;
+}
+
+.project-effective-permission section {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.project-effective-permission section > .ant-typography:not(:first-child) {
+  font-size: 12px;
+}
+
+@media (max-width: 620px) {
+  .project-member-role-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+}

@@ -19,6 +19,7 @@ import {
   createQdrantVectorStore
 } from "@/lib/ai/knowledge";
 import type { BugReport, DashboardData, DashboardMember, Requirement, RequirementVersion, Risk, Task } from "@/types/dashboard";
+import { normalizeTaskPriority } from "@/lib/tasks/priority";
 
 const today = () => new Date();
 const defaultLimit = 8;
@@ -45,8 +46,8 @@ function isBeforeToday(dateText: string) {
 }
 
 function taskWeight(task: Task) {
-  const priorityWeight: Record<Task["priority"], number> = { 高: 3, 中: 2, 低: 1 };
-  const stageWeight: Record<Task["stage"], number> = { 待处理: 4, 进行中: 3, 评审中: 2, 已完成: 0 };
+  const priorityWeight: Record<Task["priority"], number> = { 紧急: 4, 高: 3, 普通: 2, 低: 1 };
+  const stageWeight: Record<Task["stage"], number> = { 待处理: 5, 进行中: 4, 评审中: 3, 验收中: 2, 已完成: 0 };
 
   return priorityWeight[task.priority] * 10 + stageWeight[task.stage] + (isBeforeToday(task.dueDate) ? 20 : 0);
 }
@@ -288,6 +289,26 @@ function createCurrentUserMatcher(data: DashboardData) {
   };
 }
 
+function resolveBulkActionActorMemberId(
+  data: DashboardData,
+  actionRuntime: AssistantInternalActionRuntime
+) {
+  const currentMember = data.meta?.currentMember;
+  const runtimeActorMemberId = actionRuntime.actorMemberId?.trim();
+
+  // route 传入的 actorMemberId 来自当前会话与工作区成员匹配；tool 加载数据后再交叉校验一次。
+  // 这样测试/本地调用可从 meta.currentMember 安全回退，生产请求则不会因 workspace 转换而将他人 ID 写入 job。
+  if (!currentMember || currentMember.status !== "active") {
+    return undefined;
+  }
+
+  if (runtimeActorMemberId && runtimeActorMemberId !== currentMember.id) {
+    return undefined;
+  }
+
+  return runtimeActorMemberId || currentMember.id;
+}
+
 function matchesVersion(version: RequirementVersion, query?: { versionId?: string; versionName?: string }) {
   const versionId = normalizeText(query?.versionId);
   const versionName = normalizeText(query?.versionName);
@@ -316,11 +337,7 @@ function addDays(date: Date, days: number) {
 }
 
 function normalizeTaskStageValue(value?: string): Task["stage"] {
-  return value === "进行中" || value === "评审中" || value === "已完成" ? value : "待处理";
-}
-
-function normalizeTaskPriorityValue(value?: string): Task["priority"] {
-  return value === "高" || value === "低" ? value : "中";
+  return value === "进行中" || value === "评审中" || value === "验收中" || value === "已完成" ? value : "待处理";
 }
 
 function findTaskVersionForDraft(
@@ -343,6 +360,20 @@ function findTaskVersionForDraft(
     data.requirementVersions.find((version) => version.name === "未规划需求池") ??
     data.requirementVersions[0]
   );
+}
+
+function findTaskRequirementForDraft(
+  data: DashboardData,
+  draft: {
+    requirementId?: string;
+    requirementTitle?: string;
+  }
+) {
+  const requirementId = normalizeText(draft.requirementId);
+  const requirementTitle = normalizeText(draft.requirementTitle);
+
+  return data.requirements.find((requirement) => requirementId && requirement.id.toLowerCase() === requirementId)
+    ?? data.requirements.find((requirement) => requirementTitle && requirement.title.toLowerCase().includes(requirementTitle));
 }
 
 function findTaskOwnerForDraft(
@@ -562,6 +593,8 @@ function createBulkOperationsTool(
       dueDate?: string;
       owner?: string;
       priority?: string;
+      requirementId?: string;
+      requirementTitle?: string;
       stage?: string;
       startDate?: string;
       title: string;
@@ -571,6 +604,7 @@ function createBulkOperationsTool(
   }) {
     const data = await loadData();
     const currentUserMatcher = createCurrentUserMatcher(data);
+    const actorMemberId = resolveBulkActionActorMemberId(data, actionRuntime);
     const workspaceId = data.meta?.currentWorkspace?.id ?? actionRuntime.workspaceId;
     const todayText = formatDate(today());
     const defaultDueDate = formatDate(addDays(today(), 7));
@@ -582,6 +616,14 @@ function createBulkOperationsTool(
         已执行: false,
         状态: "失败",
         业务结果: "缺少当前工作区，无法提交批量创建任务。"
+      };
+    }
+
+    if (!actorMemberId) {
+      return {
+        已执行: false,
+        状态: "拒绝",
+        业务结果: "当前会话没有匹配到启用的工作区成员，无法提交批量任务。"
       };
     }
 
@@ -602,7 +644,22 @@ function createBulkOperationsTool(
         continue;
       }
 
-      const version = findTaskVersionForDraft(data, task, {
+      const requirementRequested = Boolean(task.requirementId?.trim() || task.requirementTitle?.trim());
+      const requirement = findTaskRequirementForDraft(data, task);
+
+      if (requirementRequested && !requirement) {
+        return {
+          已执行: false,
+          状态: "失败",
+          业务结果: `未找到任务「${title}」指定的需求，未提交任何队列动作。`
+        };
+      }
+
+      const version = findTaskVersionForDraft(data, {
+        ...task,
+        versionId: task.versionId || requirement?.versionId,
+        versionName: task.versionName || requirement?.versionName
+      }, {
         versionId: defaultVersionId,
         versionName: defaultVersionName
       });
@@ -625,8 +682,12 @@ function createBulkOperationsTool(
         ...owner,
         aiHint: task.aiHint?.trim() || "由 AI 助手批量创建，请负责人补充细节。",
         dueDate,
-        priority: normalizeTaskPriorityValue(task.priority),
+        priority: normalizeTaskPriority(task.priority),
         project: version.project,
+        projectId: version.projectId
+          ?? data.projects.find((project) => project.name === version.project)?.id,
+        requirementId: requirement?.id,
+        requirementTitle: requirement?.title,
         stage: normalizeTaskStageValue(task.stage),
         startDate,
         title,
@@ -649,6 +710,7 @@ function createBulkOperationsTool(
       workspaceId,
       scope: "create",
       requestedBy: currentUserMatcher.currentUser.姓名,
+      requestedByMemberId: actorMemberId,
       recordIds,
       drafts,
       titles: Object.fromEntries(drafts.map((draft, index) => [recordIds[index], draft.title]))
@@ -681,6 +743,7 @@ function createBulkOperationsTool(
   }) {
     const data = await loadData();
     const currentUserMatcher = createCurrentUserMatcher(data);
+    const actorMemberId = resolveBulkActionActorMemberId(data, actionRuntime);
     const workspaceId = data.meta?.currentWorkspace?.id ?? actionRuntime.workspaceId;
     const idSet = new Set(ids ?? []);
     const rowLimit = Math.min(Math.max(Math.trunc(limit || 100), 1), 100);
@@ -690,6 +753,14 @@ function createBulkOperationsTool(
         已执行: false,
         状态: "失败",
         业务结果: "缺少当前工作区，无法提交批量归属任务。"
+      };
+    }
+
+    if (!actorMemberId) {
+      return {
+        已执行: false,
+        状态: "拒绝",
+        业务结果: "当前会话没有匹配到启用的工作区成员，无法提交批量归属。"
       };
     }
 
@@ -724,6 +795,7 @@ function createBulkOperationsTool(
       workspaceId,
       scope,
       requestedBy: currentUserMatcher.currentUser.姓名,
+      requestedByMemberId: actorMemberId,
       recordIds: selectedRecords.map((record) => record.id),
       owner: targetOwner,
       titles: Object.fromEntries(selectedRecords.map((record) => [record.id, record.title]))
@@ -758,6 +830,7 @@ function createBulkOperationsTool(
   }) {
     const data = await loadData();
     const currentUserMatcher = createCurrentUserMatcher(data);
+    const actorMemberId = resolveBulkActionActorMemberId(data, actionRuntime);
     const idSet = new Set(ids ?? []);
     const rowLimit = Math.min(Math.max(Math.trunc(limit || 100), 1), 100);
     const workspaceId = data.meta?.currentWorkspace?.id ?? actionRuntime.workspaceId;
@@ -791,6 +864,14 @@ function createBulkOperationsTool(
         已执行: false,
         状态: "失败",
         业务结果: "缺少当前工作区，无法提交批量动作。"
+      };
+    }
+
+    if (!actorMemberId) {
+      return {
+        已执行: false,
+        状态: "拒绝",
+        业务结果: "当前会话没有匹配到启用的工作区成员，无法提交批量动作。"
       };
     }
 
@@ -833,6 +914,7 @@ function createBulkOperationsTool(
       workspaceId,
       scope,
       requestedBy: currentUserMatcher.currentUser.姓名,
+      requestedByMemberId: actorMemberId,
       recordIds: selectedRecords.map((record) => record.id),
       titles: Object.fromEntries(selectedRecords.map((record) => [record.id, record.title]))
     });
@@ -864,9 +946,11 @@ function createBulkOperationsTool(
     title: z.string().min(1).max(160).describe("任务标题，必须是可执行事项"),
     versionId: z.string().min(1).optional().describe("明确知道版本 id 时填写"),
     versionName: z.string().min(1).optional().describe("版本名称或用户提到的版本关键词，例如 PC-UI"),
+    requirementId: z.string().min(1).optional().describe("任务明确归属的需求 id；系统会校验需求、版本与项目一致"),
+    requirementTitle: z.string().min(1).optional().describe("不知道需求 id 时可填需求标题关键词"),
     owner: z.string().min(1).optional().describe("负责人姓名或邮箱；未填时默认当前登录人"),
-    priority: z.enum(["高", "中", "低"]).default("中").describe("任务优先级"),
-    stage: z.enum(["待处理", "进行中", "评审中", "已完成"]).default("待处理").describe("任务阶段"),
+    priority: z.enum(["紧急", "高", "普通", "低"]).default("普通").describe("任务优先级"),
+    stage: z.enum(["待处理", "进行中", "评审中", "验收中", "已完成"]).default("待处理").describe("任务阶段"),
     startDate: z.string().min(1).optional().describe("开始日期，YYYY-MM-DD"),
     dueDate: z.string().min(1).optional().describe("截止日期，YYYY-MM-DD"),
     aiHint: z.string().max(500).optional().describe("AI 给负责人的补充说明、风险或验收提示")

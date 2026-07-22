@@ -2,6 +2,9 @@ import type { BugReport, Requirement, RequirementVersion, Task } from "@/types/d
 
 export const requirementVersionColor: Record<RequirementVersion["status"], string> = {
   规划中: "blue",
+  需求梳理: "gold",
+  开发中: "cyan",
+  验收中: "purple",
   进行中: "cyan",
   已发布: "green",
   已归档: "default"

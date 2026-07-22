@@ -6,6 +6,7 @@ type SmokeGroup = "all" | "auth" | "core" | "db" | "static";
 
 type SmokeCase = {
   description: string;
+  env?: NodeJS.ProcessEnv;
   groups: SmokeGroup[];
   id: string;
   script: string;
@@ -170,6 +171,16 @@ const smokeCases: SmokeCase[] = [
     timeoutMs: 180_000
   },
   {
+    description: "production Prisma 单例、MariaDB 小连接池及高并发读取连接上限。",
+    env: {
+      NODE_ENV: "production"
+    },
+    groups: ["all", "db"],
+    id: "database-connection",
+    script: "scripts/full-chain-database-connection-smoke.ts",
+    timeoutMs: 120_000
+  },
+  {
     description: "MySQL 队列、Dashboard 副作用队列、Bug 修复仓储状态机。",
     groups: ["all", "db"],
     id: "infra",
@@ -203,6 +214,41 @@ const smokeCases: SmokeCase[] = [
     id: "version-scope",
     script: "scripts/full-chain-version-scope-smoke.ts",
     timeoutMs: 180_000
+  },
+  {
+    description: "one2all PM 对齐的数据字段、项目详情、表单、治理 API、健康规则和历史兼容静态契约。",
+    groups: ["all", "core", "static"],
+    id: "project-management",
+    script: "scripts/full-chain-project-management-smoke.ts",
+    timeoutMs: 60_000
+  },
+  {
+    description: "需求下钻任务的 URL、SSR、刷新和 popstate 回放，以及跨工作区/不可见目标清理。",
+    groups: ["all", "core", "static"],
+    id: "task-requirement-deep-link",
+    script: "scripts/task-requirement-deep-link-smoke.ts",
+    timeoutMs: 60_000
+  },
+  {
+    description: "隔离工作区验证指派入成员、plan_unit 作用域、读可见性与无效成员原子回滚。",
+    groups: ["all", "db"],
+    id: "project-management-access",
+    script: "scripts/full-chain-project-management-access-smoke.ts",
+    timeoutMs: 120_000
+  },
+  {
+    description: "隔离工作区验证版本级交付标签保存刷新、隔离、软删除、节点同步和权限边界。",
+    groups: ["all", "db"],
+    id: "project-management-label",
+    script: "scripts/full-chain-project-management-label-smoke.ts",
+    timeoutMs: 120_000
+  },
+  {
+    description: "隔离工作区验证项目/版本/需求增量删除、legacy 引用和并发安全；需要已迁移的 MySQL。",
+    groups: ["all", "db"],
+    id: "project-management-delete",
+    script: "scripts/full-chain-project-management-delete-smoke.ts",
+    timeoutMs: 120_000
   }
 ];
 
@@ -272,7 +318,10 @@ function runSmokeCase(smokeCase: SmokeCase): Promise<RunResult> {
     const startTime = performance.now();
     const scriptPath = path.resolve(process.cwd(), smokeCase.script);
     const child = spawn("pnpm", ["exec", "tsx", scriptPath], {
-      env: process.env,
+      env: {
+        ...process.env,
+        ...smokeCase.env
+      },
       shell: false,
       stdio: "inherit"
     });

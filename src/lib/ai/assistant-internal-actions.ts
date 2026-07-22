@@ -7,6 +7,7 @@ const maxPayloadDepth = 4;
 const maxArrayItems = 8;
 
 export type AssistantInternalActionRuntime = {
+  actorMemberId?: string;
   cookieHeader?: string;
   origin: string;
   workspaceId?: string;

@@ -4,7 +4,7 @@ import "./index.less";
 import { Button, Empty, Space, Tooltip } from "antd";
 import { NodeIndexOutlined, PlusOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
-import type { BugReport, Requirement, RequirementVersion, Task } from "@/types/dashboard";
+import type { BugReport, Project, Requirement, RequirementVersion, Task } from "@/types/dashboard";
 import { PageTitle } from "@/components/project-management-platform/shared/page-shell";
 import { RequirementVersionCard } from "@/components/project-management-platform/requirements/requirement-version-card";
 import { RequirementVersionDetail } from "@/components/project-management-platform/requirements/requirement-version-detail";
@@ -12,15 +12,20 @@ import {
   getChildRequirementVersions,
   getRootRequirementVersions
 } from "@/components/project-management-platform/requirements/version-utils";
+import { resolveProjectIdForRecord } from "@/components/project-management-platform/views/projects-view/utils";
 
 // 需求管理主视图只负责版本树入口，版本详情和卡片已拆到独立组件。
 export function RequirementsView({
   bugs,
-  canCreateRequirements,
-  canDeleteRequirements,
-  canEditRequirements,
+  canBreakdownVersion,
+  canCreateRequirementForVersion,
+  canCreateSubVersion,
+  canCreateVersion,
+  canDeleteVersion,
+  canEditVersion,
   columns,
   permissionDeniedReason,
+  projects,
   requirements,
   selectedVersionId,
   tasks,
@@ -35,11 +40,15 @@ export function RequirementsView({
   onSelectVersion
 }: {
   bugs: BugReport[];
-  canCreateRequirements: boolean;
-  canDeleteRequirements: boolean;
-  canEditRequirements: boolean;
+  canBreakdownVersion: (version: RequirementVersion) => boolean;
+  canCreateRequirementForVersion: (version: RequirementVersion) => boolean;
+  canCreateSubVersion: (version: RequirementVersion) => boolean;
+  canCreateVersion: boolean;
+  canDeleteVersion: (version: RequirementVersion) => boolean;
+  canEditVersion: (version: RequirementVersion) => boolean;
   columns: ColumnsType<Requirement>;
   permissionDeniedReason: string;
+  projects: Project[];
   requirements: Requirement[];
   selectedVersionId: string | null;
   tasks: Task[];
@@ -56,17 +65,23 @@ export function RequirementsView({
   const selectedVersion = selectedVersionId ? versions.find((version) => version.id === selectedVersionId) : null;
 
   if (selectedVersion) {
+    const selectedProjectId = resolveProjectIdForRecord(selectedVersion, projects);
+    const legacyProjectDeliveryLabelCatalog = projects.find((project) => project.id === selectedProjectId)?.deliveryLabelCatalog;
+
     return (
       <RequirementVersionDetail
         bugs={bugs}
-        canCreateRequirements={canCreateRequirements}
-        canDeleteRequirements={canDeleteRequirements}
-        canEditRequirements={canEditRequirements}
+        canBreakdownVersion={canBreakdownVersion(selectedVersion)}
+        canCreateRequirement={canCreateRequirementForVersion(selectedVersion)}
+        canCreateSubVersion={canCreateSubVersion(selectedVersion)}
+        canDeleteVersion={canDeleteVersion(selectedVersion)}
+        canEditVersion={canEditVersion(selectedVersion)}
         childVersions={getChildRequirementVersions(versions, selectedVersion.id)}
         columns={columns}
         permissionDeniedReason={permissionDeniedReason}
         requirements={requirements}
         selectedVersion={selectedVersion}
+        legacyProjectDeliveryLabelCatalog={legacyProjectDeliveryLabelCatalog}
         tasks={tasks}
         onBack={onBack}
         onBreakdownVersion={onBreakdownVersion}
@@ -88,7 +103,7 @@ export function RequirementsView({
         title="需求版本"
         subtitle="给产品同学维护版本范围、子版本、角色负责人、需求优先级和上线状态。"
         extra={
-          canCreateRequirements ? (
+          canCreateVersion ? (
             <Button type="primary" icon={<PlusOutlined />} onClick={onCreateVersion}>
               新建版本
             </Button>
@@ -108,9 +123,10 @@ export function RequirementsView({
           {rootVersions.map((version) => (
             <RequirementVersionCard
               bugs={bugs}
-              canCreateRequirements={canCreateRequirements}
-              canDeleteRequirements={canDeleteRequirements}
-              canEditRequirements={canEditRequirements}
+              canBreakdownVersion={canBreakdownVersion(version)}
+              canCreateSubVersion={canCreateSubVersion(version)}
+              canDeleteVersion={canDeleteVersion(version)}
+              canEditVersion={canEditVersion(version)}
               childVersions={getChildRequirementVersions(versions, version.id)}
               permissionDeniedReason={permissionDeniedReason}
               key={version.id}

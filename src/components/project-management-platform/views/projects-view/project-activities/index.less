@@ -1,0 +1,70 @@
+.project-activities {
+  display: grid;
+  gap: 18px;
+  padding: 4px;
+}
+
+.project-activities-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.project-activities-header > span {
+  display: grid;
+  gap: 2px;
+}
+
+.project-activities-header h5.ant-typography {
+  margin: 0;
+}
+
+.project-activities-header .ant-typography-secondary {
+  font-size: 12px;
+}
+
+.project-activities-header .ant-select {
+  min-width: 140px;
+}
+
+.project-activities .ant-timeline {
+  margin: 8px 8px 0;
+}
+
+.project-activity-item {
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.project-activity-item > div,
+.project-activity-item > div > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.project-activity-item > div > span {
+  justify-content: flex-start;
+}
+
+.project-activity-item .ant-tag {
+  margin: 0;
+}
+
+.project-activity-item .ant-typography-secondary {
+  font-size: 12px;
+}
+
+@media (max-width: 560px) {
+  .project-activities-header .ant-select {
+    width: 100%;
+  }
+}

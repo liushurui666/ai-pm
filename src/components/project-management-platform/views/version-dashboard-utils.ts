@@ -132,6 +132,7 @@ export function createVersionDashboardSnapshots({
         待处理: 0,
         进行中: 0,
         评审中: 0,
+        验收中: 0,
         已完成: 0
       });
       const milestoneCount = scopeVersionIds

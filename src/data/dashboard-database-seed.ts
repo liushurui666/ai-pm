@@ -1,5 +1,11 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
+import {
+  normalizeProjectDeliveryLabelCatalog,
+  remapVersionDeliveryMilestones,
+  scopeDeliveryLabelCatalogToVersion
+} from "@/data/project-delivery-labels";
 import { toJsonValue } from "@/lib/database/json";
+import { normalizeTaskPriority } from "@/lib/tasks/priority";
 import type { DashboardData } from "@/types/dashboard";
 
 type DashboardDatabase = Omit<DashboardData, "meta"> & {
@@ -17,6 +23,38 @@ function asJson(value: unknown): Prisma.InputJsonValue {
 
 function getWorkspaceId(value: { workspaceId?: string }) {
   return value.workspaceId || "ws-default";
+}
+
+function getSeedVersionDeliveryState(
+  data: DashboardDatabase,
+  version: DashboardDatabase["requirementVersions"][number]
+) {
+  const existingCatalog = normalizeProjectDeliveryLabelCatalog(
+    version.deliveryLabelCatalog,
+    { fallbackToDefaults: false }
+  );
+  const legacyProjectCatalog = data.projects.find((project) => (
+    project.id === version.projectId && getWorkspaceId(project) === getWorkspaceId(version)
+  ))?.deliveryLabelCatalog;
+  const deliveryLabels = scopeDeliveryLabelCatalogToVersion(
+    version.id,
+    version.deliveryLabelCatalog,
+    {
+      fallbackValue: legacyProjectCatalog,
+      preserveIds: Array.isArray(version.deliveryLabelCatalog)
+        ? new Set(existingCatalog.map((label) => label.id))
+        : undefined
+    }
+  );
+
+  return {
+    catalog: deliveryLabels.catalog,
+    milestones: remapVersionDeliveryMilestones(
+      version.milestones,
+      deliveryLabels.catalog,
+      deliveryLabels.idMap
+    )
+  };
 }
 
 export async function seedDashboardDatabase(data: DashboardDatabase, prisma: PrismaClient) {
@@ -63,6 +101,7 @@ export async function seedDashboardDatabase(data: DashboardDatabase, prisma: Pri
             id: project.id,
             workspaceId: getWorkspaceId(project),
             name: project.name,
+            code: project.code,
             owner: project.owner,
             ownerMemberId: project.ownerMemberId,
             ownerOpenId: project.ownerOpenId,
@@ -71,12 +110,18 @@ export async function seedDashboardDatabase(data: DashboardDatabase, prisma: Pri
             ownerEmail: project.ownerEmail,
             ownerAvatarUrl: project.ownerAvatarUrl,
             status: project.status,
+            startDate: project.startDate,
             progress: project.progress,
             health: project.health,
+            riskLevel: project.riskLevel,
+            healthStatus: project.healthStatus,
+            healthReason: project.healthReason,
             dueDate: project.dueDate,
             team: project.team,
             riskCount: project.riskCount,
             summary: project.summary,
+            // 标签目录和项目同行种子化，新库首次启动即可在版本表单选择交付节点类型。
+            deliveryLabelCatalog: asJson(project.deliveryLabelCatalog),
             milestones: asJson(project.milestones)
           }))
         });
@@ -97,11 +142,20 @@ export async function seedDashboardDatabase(data: DashboardDatabase, prisma: Pri
             ownerEmail: task.ownerEmail,
             ownerAvatarUrl: task.ownerAvatarUrl,
             project: task.project,
+            projectId: task.projectId,
             versionId: task.versionId,
             versionName: task.versionName,
-            priority: task.priority,
+            requirementId: task.requirementId,
+            requirementTitle: task.requirementTitle,
+            description: task.description,
+            taskType: task.taskType,
+            storyPoints: task.storyPoints,
+            estimatedMinutes: task.estimatedMinutes,
+            // 新库种子也经过共享归一化，避免旧种子快照把“中”带回新库。
+            priority: normalizeTaskPriority(task.priority),
             startDate: task.startDate,
             dueDate: task.dueDate,
+            completedAt: task.completedAt,
             aiHint: task.aiHint
           }))
         });
@@ -122,6 +176,7 @@ export async function seedDashboardDatabase(data: DashboardDatabase, prisma: Pri
             ownerEmail: risk.ownerEmail,
             ownerAvatarUrl: risk.ownerAvatarUrl,
             project: risk.project,
+            projectId: risk.projectId,
             mitigation: risk.mitigation
           }))
         });
@@ -136,6 +191,7 @@ export async function seedDashboardDatabase(data: DashboardDatabase, prisma: Pri
             status: bug.status,
             severity: bug.severity,
             project: bug.project,
+            projectId: bug.projectId,
             versionId: bug.versionId,
             versionName: bug.versionName,
             reporter: bug.reporter,
@@ -203,40 +259,60 @@ export async function seedDashboardDatabase(data: DashboardDatabase, prisma: Pri
 
       if (data.requirementVersions.length) {
         await tx.requirementVersion.createMany({
-          data: data.requirementVersions.map((version) => ({
-            id: version.id,
-            workspaceId: getWorkspaceId(version),
-            parentVersionId: version.parentVersionId,
-            parentVersionName: version.parentVersionName,
-            name: version.name,
-            project: version.project,
-            status: version.status,
-            startDate: version.startDate,
-            releaseDate: version.releaseDate,
-            goal: version.goal,
-            productOwner: version.productOwner,
-            productOwnerMemberId: version.productOwnerMemberId,
-            productOwnerOpenId: version.productOwnerOpenId,
-            productOwnerUnionId: version.productOwnerUnionId,
-            productOwnerUserId: version.productOwnerUserId,
-            productOwnerEmail: version.productOwnerEmail,
-            productOwnerAvatarUrl: version.productOwnerAvatarUrl,
-            uiOwner: version.uiOwner,
-            uiOwnerMemberId: version.uiOwnerMemberId,
-            uiOwnerOpenId: version.uiOwnerOpenId,
-            uiOwnerUnionId: version.uiOwnerUnionId,
-            uiOwnerUserId: version.uiOwnerUserId,
-            uiOwnerEmail: version.uiOwnerEmail,
-            uiOwnerAvatarUrl: version.uiOwnerAvatarUrl,
-            devOwner: version.devOwner,
-            devOwnerMemberId: version.devOwnerMemberId,
-            devOwnerOpenId: version.devOwnerOpenId,
-            devOwnerUnionId: version.devOwnerUnionId,
-            devOwnerUserId: version.devOwnerUserId,
-            devOwnerEmail: version.devOwnerEmail,
-            devOwnerAvatarUrl: version.devOwnerAvatarUrl,
-            milestones: asJson(version.milestones)
-          }))
+          data: data.requirementVersions.map((version) => {
+            const delivery = getSeedVersionDeliveryState(data, version);
+
+            return {
+              id: version.id,
+              workspaceId: getWorkspaceId(version),
+              parentVersionId: version.parentVersionId,
+              parentVersionName: version.parentVersionName,
+              name: version.name,
+              project: version.project,
+              projectId: version.projectId,
+              type: version.type,
+              status: version.status,
+              startDate: version.startDate,
+              releaseDate: version.releaseDate,
+              actualStartDate: version.actualStartDate,
+              actualCompletedDate: version.actualCompletedDate,
+              progress: version.progress,
+              riskLevel: version.riskLevel,
+              healthStatus: version.healthStatus,
+              healthReason: version.healthReason,
+              goal: version.goal,
+              owner: version.owner,
+              ownerMemberId: version.ownerMemberId,
+              ownerOpenId: version.ownerOpenId,
+              ownerUnionId: version.ownerUnionId,
+              ownerUserId: version.ownerUserId,
+              ownerEmail: version.ownerEmail,
+              ownerAvatarUrl: version.ownerAvatarUrl,
+              productOwner: version.productOwner,
+              productOwnerMemberId: version.productOwnerMemberId,
+              productOwnerOpenId: version.productOwnerOpenId,
+              productOwnerUnionId: version.productOwnerUnionId,
+              productOwnerUserId: version.productOwnerUserId,
+              productOwnerEmail: version.productOwnerEmail,
+              productOwnerAvatarUrl: version.productOwnerAvatarUrl,
+              uiOwner: version.uiOwner,
+              uiOwnerMemberId: version.uiOwnerMemberId,
+              uiOwnerOpenId: version.uiOwnerOpenId,
+              uiOwnerUnionId: version.uiOwnerUnionId,
+              uiOwnerUserId: version.uiOwnerUserId,
+              uiOwnerEmail: version.uiOwnerEmail,
+              uiOwnerAvatarUrl: version.uiOwnerAvatarUrl,
+              devOwner: version.devOwner,
+              devOwnerMemberId: version.devOwnerMemberId,
+              devOwnerOpenId: version.devOwnerOpenId,
+              devOwnerUnionId: version.devOwnerUnionId,
+              devOwnerUserId: version.devOwnerUserId,
+              devOwnerEmail: version.devOwnerEmail,
+              devOwnerAvatarUrl: version.devOwnerAvatarUrl,
+              deliveryLabelCatalog: asJson(delivery.catalog),
+              milestones: asJson(delivery.milestones)
+            };
+          })
         });
       }
 
@@ -249,8 +325,10 @@ export async function seedDashboardDatabase(data: DashboardDatabase, prisma: Pri
             priority: requirement.priority,
             status: requirement.status,
             project: requirement.project,
+            projectId: requirement.projectId,
             versionId: requirement.versionId,
             versionName: requirement.versionName,
+            description: requirement.description,
             owner: requirement.owner,
             ownerMemberId: requirement.ownerMemberId,
             ownerOpenId: requirement.ownerOpenId,
@@ -258,6 +336,16 @@ export async function seedDashboardDatabase(data: DashboardDatabase, prisma: Pri
             ownerUserId: requirement.ownerUserId,
             ownerEmail: requirement.ownerEmail,
             ownerAvatarUrl: requirement.ownerAvatarUrl,
+            designOwner: requirement.designOwner,
+            designOwnerMemberId: requirement.designOwnerMemberId,
+            designOwnerOpenId: requirement.designOwnerOpenId,
+            designOwnerUnionId: requirement.designOwnerUnionId,
+            designOwnerUserId: requirement.designOwnerUserId,
+            designOwnerEmail: requirement.designOwnerEmail,
+            designOwnerAvatarUrl: requirement.designOwnerAvatarUrl,
+            developerMemberIds: asJson(requirement.developerMemberIds),
+            startDate: requirement.startDate,
+            dueDate: requirement.dueDate,
             uiLink: requirement.uiLink,
             documentLink: requirement.documentLink,
             acceptance: requirement.acceptance,

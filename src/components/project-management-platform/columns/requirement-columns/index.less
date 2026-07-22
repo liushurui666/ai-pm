@@ -9,6 +9,27 @@
   min-width: 0;
 }
 
+/* 需求标题是进入交付任务的主路径，保留表格文本密度，只用轻量颜色反馈表达可点击性。 */
+.requirement-title-open {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.requirement-title-open:hover .requirement-title-primary,
+.requirement-title-open:focus-visible .requirement-title-primary {
+  color: var(--brand);
+}
+
+.requirement-title-open:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid color-mix(in srgb, var(--brand) 36%, transparent);
+  outline-offset: 2px;
+}
+
 .requirement-title-primary,
 .requirement-title-summary,
 .requirement-title-acceptance {

@@ -1,11 +1,13 @@
 "use client";
 
 import "./index.less";
-import { Drawer, Form, Space } from "antd";
+import { Alert, Drawer, Form, Space } from "antd";
 import { EditOutlined } from "@ant-design/icons";
 import type { BugReport, Project, Requirement, RequirementVersion, Task } from "@/types/dashboard";
 import type { OwnerSelectableMember, RequirementVersionOption } from "@/components/project-management-platform/types";
 import { BugFields, ProjectFields, RequirementFields, RequirementVersionFields, TaskFields } from "@/components/project-management-platform/forms/form-fields";
+import type { TaskRequirementOption } from "@/components/project-management-platform/forms/task-fields";
+import type { RequirementFieldAccess } from "@/components/project-management-platform/forms/requirement-fields";
 import { DrawerFooterActions } from "@/components/project-management-platform/forms/drawer-footer-actions";
 
 // 项目编辑抽屉只维护基础信息，里程碑由需求版本表单统一承载。
@@ -16,6 +18,7 @@ export function ProjectEditDrawer({
   people,
   peopleLoading,
   peopleError,
+  canArchiveProject,
   onClose,
   onSubmit
 }: {
@@ -25,6 +28,7 @@ export function ProjectEditDrawer({
   people: OwnerSelectableMember[];
   peopleLoading: boolean;
   peopleError: string;
+  canArchiveProject: boolean;
   onClose: () => void;
   onSubmit: (values: Record<string, unknown>) => void;
 }) {
@@ -51,12 +55,21 @@ export function ProjectEditDrawer({
     >
       {project ? (
         <Form className="pm-record-form" form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
+          <Alert
+            type="info"
+            showIcon
+            message="负责人交接请在“成员与权限”页完成"
+            description="交接流程会校验新负责人、记录交接原因，并保留完整项目动态。"
+          />
           <ProjectFields
             form={form}
             people={people}
             peopleLoading={peopleLoading}
             peopleError={peopleError}
             ownerRequired={false}
+            showOwner={false}
+            canArchiveProject={canArchiveProject}
+            currentStatus={project.status}
           />
         </Form>
       ) : null}
@@ -70,6 +83,7 @@ export function TaskEditDrawer({
   task,
   submitting,
   versionOptions,
+  requirementOptions,
   people,
   peopleLoading,
   peopleError,
@@ -80,6 +94,7 @@ export function TaskEditDrawer({
   task: Task | null;
   submitting: boolean;
   versionOptions: RequirementVersionOption[];
+  requirementOptions: TaskRequirementOption[];
   people: OwnerSelectableMember[];
   peopleLoading: boolean;
   peopleError: string;
@@ -111,9 +126,11 @@ export function TaskEditDrawer({
         <Form className="pm-record-form" form={form} layout="vertical" onFinish={onSubmit} requiredMark={false}>
           <TaskFields
             form={form}
+            lockRelations
             people={people}
             peopleLoading={peopleLoading}
             peopleError={peopleError}
+            requirementOptions={requirementOptions}
             versionOptions={versionOptions}
           />
         </Form>
@@ -189,6 +206,7 @@ export function RequirementEditDrawer({
   people,
   peopleLoading,
   peopleError,
+  fieldAccess,
   onClose,
   onSubmit
 }: {
@@ -199,6 +217,7 @@ export function RequirementEditDrawer({
   people: OwnerSelectableMember[];
   peopleLoading: boolean;
   peopleError: string;
+  fieldAccess: RequirementFieldAccess;
   onClose: () => void;
   onSubmit: (values: Record<string, unknown>) => void;
 }) {
@@ -231,6 +250,8 @@ export function RequirementEditDrawer({
             people={people}
             peopleLoading={peopleLoading}
             peopleError={peopleError}
+            fieldAccess={fieldAccess}
+            lockRelations
           />
         </Form>
       ) : null}
@@ -246,7 +267,9 @@ export function RequirementVersionEditDrawer({
   people,
   peopleLoading,
   peopleError,
+  projects,
   versionOptions,
+  canManageDeliveryLabelCatalog,
   onClose,
   onSubmit
 }: {
@@ -256,7 +279,9 @@ export function RequirementVersionEditDrawer({
   people: OwnerSelectableMember[];
   peopleLoading: boolean;
   peopleError: string;
+  projects: Project[];
   versionOptions: RequirementVersionOption[];
+  canManageDeliveryLabelCatalog: boolean;
   onClose: () => void;
   onSubmit: (values: Record<string, unknown>) => void;
 }) {
@@ -288,8 +313,10 @@ export function RequirementVersionEditDrawer({
             people={people}
             peopleLoading={peopleLoading}
             peopleError={peopleError}
+            projects={projects}
             versionOptions={versionOptions}
             editingVersionId={version.id}
+            canManageDeliveryLabelCatalog={canManageDeliveryLabelCatalog}
           />
         </Form>
       ) : null}

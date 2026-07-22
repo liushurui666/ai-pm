@@ -52,6 +52,7 @@ export type RequirementVersionOption = {
   label: string;
   versionName: string;
   project: string;
+  projectId?: string;
   parentVersionId?: string;
 };
 

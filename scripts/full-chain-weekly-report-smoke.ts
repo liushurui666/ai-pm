@@ -4,6 +4,7 @@ import { createWeeklyReportAiPrompt } from "@/lib/reports/weekly-report-ai";
 import { createWeeklyReportFileName, createWeeklyReportMarkdown } from "@/lib/reports/weekly-report";
 import { createWeeklyReportScope } from "@/lib/reports/weekly-report-scope";
 import type { DashboardData } from "@/types/dashboard";
+import { cloneDefaultProjectDeliveryLabels } from "@/data/project-delivery-labels";
 
 type WeeklyReportCheck = {
   detail: Record<string, unknown>;
@@ -77,12 +78,16 @@ function createSmokeDashboardData(): DashboardData {
         ownerUnionId: ownerIdentity.unionId,
         ownerUserId: ownerIdentity.userId,
         status: "有风险",
+        startDate: "2026-06-18",
         progress: 62,
         health: 66,
+        riskLevel: "高",
+        healthStatus: "有风险",
         dueDate: "2026-06-30",
         team: 5,
         riskCount: 2,
         summary: "核心链路仍有阻塞项，需要项目负责人持续推进。",
+        deliveryLabelCatalog: cloneDefaultProjectDeliveryLabels(),
         milestones: [
           {
             id: "milestone-weekly-1",
@@ -100,12 +105,16 @@ function createSmokeDashboardData(): DashboardData {
         name: "无关项目",
         owner: "其他人",
         status: "进行中",
+        startDate: "2026-06-20",
         progress: 20,
         health: 90,
+        riskLevel: "低",
+        healthStatus: "正常",
         dueDate: "2026-07-10",
         team: 3,
         riskCount: 0,
         summary: "不应进入个人周报。",
+        deliveryLabelCatalog: cloneDefaultProjectDeliveryLabels(),
         milestones: []
       }
     ],
@@ -138,7 +147,7 @@ function createSmokeDashboardData(): DashboardData {
         project: "周报项目",
         versionId: "version-weekly",
         versionName: "周报版本",
-        priority: "中",
+        priority: "普通",
         startDate: "2026-06-18",
         dueDate: "2026-06-23",
         aiHint: "已完成周报基础模板。"
@@ -202,9 +211,13 @@ function createSmokeDashboardData(): DashboardData {
         workspaceId,
         name: "周报版本",
         project: "周报项目",
+        type: "版本",
         status: "进行中",
         startDate: "2026-06-18",
         releaseDate: "2026-06-30",
+        progress: 50,
+        riskLevel: "高",
+        healthStatus: "有风险",
         goal: "补齐周报导出全链路覆盖",
         milestones: []
       }
@@ -225,6 +238,7 @@ function createSmokeDashboardData(): DashboardData {
         ownerOpenId: ownerIdentity.openId,
         ownerUnionId: ownerIdentity.unionId,
         ownerUserId: ownerIdentity.userId,
+        developerMemberIds: ["member-weekly-owner"],
         acceptance: "导出时出现全局 loading，完成后下载 .md 文件。",
         aiSummary: "周报导出需要固定模板和 AI 失败兜底。"
       }
@@ -325,6 +339,7 @@ function verifyMarkdownAndScope() {
   assertSmoke(!missingHeadings.length, `周报 Markdown 缺少章节：${missingHeadings.join(", ")}`);
   assertSmoke(markdown.includes("2026-06-22 ~ 2026-06-28"), "周报周期未按参考日期计算自然周。");
   assertSmoke(markdown.includes("周报链路任务"), "周报未包含当前用户相关任务。");
+  assertSmoke(markdown.includes("普通"), "周报仍未输出对齐后的“普通”任务优先级。");
   assertSmoke(markdown.includes("周报导出严重 Bug"), "周报未包含当前用户相关 Bug。");
   assertSmoke(!markdown.includes("无关任务"), "个人周报不应包含无关项目任务。");
   assertSmoke(!markdown.includes("```"), "可下载 Markdown 不应包裹 fenced code block。");

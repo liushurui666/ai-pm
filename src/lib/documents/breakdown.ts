@@ -31,7 +31,7 @@ function inferPriority(line: string) {
     return "低" as const;
   }
 
-  return "中" as const;
+  return "普通" as const;
 }
 
 function inferDueDate(line: string, index: number) {

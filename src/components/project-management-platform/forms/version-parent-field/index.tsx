@@ -7,10 +7,15 @@ import type { RequirementVersionOption } from "@/components/project-management-p
 
 function getSelectableParentVersionOptions(
   versionOptions: RequirementVersionOption[],
-  editingVersionId?: string
+  editingVersionId?: string,
+  projectId?: string
 ) {
+  const sameProjectOptions = projectId
+    ? versionOptions.filter((option) => option.projectId === projectId)
+    : versionOptions;
+
   if (!editingVersionId) {
-    return versionOptions;
+    return sameProjectOptions;
   }
 
   const blockedIds = new Set([editingVersionId]);
@@ -19,7 +24,7 @@ function getSelectableParentVersionOptions(
   while (changed) {
     changed = false;
 
-    for (const option of versionOptions) {
+    for (const option of sameProjectOptions) {
       if (option.parentVersionId && blockedIds.has(option.parentVersionId) && !blockedIds.has(option.value)) {
         blockedIds.add(option.value);
         changed = true;
@@ -27,7 +32,7 @@ function getSelectableParentVersionOptions(
     }
   }
 
-  return versionOptions.filter((option) => !blockedIds.has(option.value));
+  return sameProjectOptions.filter((option) => !blockedIds.has(option.value));
 }
 
 // 选择父版本后同步父版本名称，并默认沿用父版本项目，减少子版本归属错配。
@@ -41,18 +46,22 @@ function useSyncParentVersion(
     const selectedParentVersion = parentVersionOptions.find((version) => version.value === selectedParentVersionId);
 
     if (!selectedParentVersionId) {
-      form.setFieldsValue({ parentVersionName: "", project: "跨项目" });
+      form.setFieldValue("parentVersionName", "");
 
       return;
     }
 
     if (!selectedParentVersion) {
+      // 切换归属项目后不能保留其它项目的父版本。
+      form.setFieldsValue({ parentVersionId: undefined, parentVersionName: "" });
+
       return;
     }
 
     form.setFieldsValue({
       parentVersionName: selectedParentVersion.versionName,
-      project: selectedParentVersion.project
+      project: selectedParentVersion.project,
+      projectId: selectedParentVersion.projectId
     });
   }, [form, parentVersionOptions, selectedParentVersionId]);
 }
@@ -67,9 +76,10 @@ export function VersionParentField({
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   versionOptions: RequirementVersionOption[];
 }) {
+  const projectId = Form.useWatch("projectId", form) as string | undefined;
   const parentVersionOptions = useMemo(
-    () => getSelectableParentVersionOptions(versionOptions, editingVersionId),
-    [editingVersionId, versionOptions]
+    () => getSelectableParentVersionOptions(versionOptions, editingVersionId, projectId),
+    [editingVersionId, projectId, versionOptions]
   );
 
   useSyncParentVersion(form, parentVersionOptions);

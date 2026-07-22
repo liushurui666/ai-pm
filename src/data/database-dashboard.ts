@@ -1,7 +1,14 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { DASHBOARD_SYNC_TRANSACTION_OPTIONS, seedDashboardDatabase } from "@/data/dashboard-database-seed";
+import {
+  normalizeProjectDeliveryLabelCatalog,
+  remapVersionDeliveryMilestones,
+  scopeDeliveryLabelCatalogToVersion
+} from "@/data/project-delivery-labels";
 import { fromJsonStringArray, toJsonValue } from "@/lib/database/json";
 import { getPrismaClient } from "@/lib/database/prisma";
+import { selectAutomaticRequirementVersionFallback } from "@/lib/project-management/deletion-policy";
+import { normalizeTaskPriority } from "@/lib/tasks/priority";
 import type {
   BugAttachment,
   BugFlowRecord,
@@ -29,6 +36,170 @@ type ReadDashboardDatabaseOptions = {
   scopeToWorkspace?: boolean;
   workspaceId?: string;
 };
+
+const DASHBOARD_DELETE_TRANSACTION_OPTIONS = {
+  ...DASHBOARD_SYNC_TRANSACTION_OPTIONS,
+  // 删除前的引用检查和最终删除必须看到同一份数据；Serializable 还会锁住已扫描的关联索引范围，
+  // 避免并发创建任务/需求在检查之后插入并成为孤儿。
+  isolationLevel: "Serializable" as const
+};
+
+const DASHBOARD_ASSIGNMENT_TRANSACTION_OPTIONS = {
+  ...DASHBOARD_SYNC_TRANSACTION_OPTIONS,
+  // 责任指派与项目成员权限是一个业务事实：两个并发保存不能在读取旧权限后相互覆盖。
+  isolationLevel: "Serializable" as const
+};
+
+export type AssignmentPermissionActor = {
+  memberId?: string;
+  name?: string;
+};
+
+type AssignmentPermissionSyncInput = {
+  actor?: AssignmentPermissionActor;
+  assignees: Array<{
+    memberId?: string;
+    roleLabel: string;
+  }>;
+  entityId: string;
+  entityLabel: string;
+  entityType: "requirement" | "requirementVersion";
+  projectId?: string;
+  workspaceId: string;
+};
+
+type AssignmentPermissionSyncResult = {
+  changedMemberIds: string[];
+};
+
+function uniqueAssignmentRoles(input: AssignmentPermissionSyncInput["assignees"]) {
+  const rolesByMemberId = new Map<string, string[]>();
+
+  for (const assignee of input) {
+    const memberId = assignee.memberId?.trim();
+
+    if (!memberId) {
+      continue;
+    }
+
+    const roles = rolesByMemberId.get(memberId) ?? [];
+
+    if (!roles.includes(assignee.roleLabel)) {
+      roles.push(assignee.roleLabel);
+    }
+    rolesByMemberId.set(memberId, roles);
+  }
+
+  return rolesByMemberId;
+}
+
+async function syncAssignmentProjectMemberPermissions(
+  prisma: Prisma.TransactionClient,
+  input: AssignmentPermissionSyncInput
+): Promise<AssignmentPermissionSyncResult> {
+  const rolesByMemberId = uniqueAssignmentRoles(input.assignees);
+  const memberIds = [...rolesByMemberId.keys()];
+
+  // 取消指派只删除责任事实，不能反向删除或降级已获得的项目成员权限。
+  if (!memberIds.length) {
+    return { changedMemberIds: [] };
+  }
+
+  if (!input.projectId) {
+    throw new Error(`无法为${input.entityLabel}负责人授予项目权限：记录缺少稳定 projectId。`);
+  }
+
+  const [project, activeMembers, existingPermissions] = await Promise.all([
+    prisma.project.findFirst({
+      where: { id: input.projectId, workspaceId: input.workspaceId },
+      select: { id: true }
+    }),
+    prisma.dashboardMember.findMany({
+      where: {
+        id: { in: memberIds },
+        workspaceId: input.workspaceId,
+        status: "active"
+      },
+      select: { id: true, name: true }
+    }),
+    prisma.projectMemberPermission.findMany({
+      where: { projectId: input.projectId, memberId: { in: memberIds } },
+      select: { accessLevel: true, memberId: true }
+    })
+  ]);
+
+  if (!project) {
+    throw new Error(`无法为${input.entityLabel}负责人授予项目权限：项目不存在或不属于当前工作区。`);
+  }
+
+  const activeMembersById = new Map(activeMembers.map((member) => [member.id, member]));
+  const invalidMemberIds = memberIds.filter((memberId) => !activeMembersById.has(memberId));
+
+  if (invalidMemberIds.length) {
+    throw new Error(`负责人必须是当前工作区的启用成员：${invalidMemberIds.join("、")}`);
+  }
+
+  const existingByMemberId = new Map(
+    existingPermissions.map((permission) => [permission.memberId, permission.accessLevel])
+  );
+  const createdMemberIds = memberIds.filter((memberId) => !existingByMemberId.has(memberId));
+  const upgradedMemberIds = memberIds.filter((memberId) => {
+    const accessLevel = existingByMemberId.get(memberId);
+
+    return accessLevel === "viewer" || accessLevel === "commenter";
+  });
+
+  // createMany(skipDuplicates) + 只针对显式只读行 updateMany，同时兼顾并发安全和不降级语义。
+  await prisma.projectMemberPermission.createMany({
+    data: memberIds.map((memberId) => ({
+      workspaceId: input.workspaceId,
+      projectId: input.projectId as string,
+      memberId,
+      accessLevel: "member",
+      functionalRoles: asJson([]),
+      createdByMemberId: input.actor?.memberId ?? null,
+      updatedByMemberId: input.actor?.memberId ?? null
+    })),
+    skipDuplicates: true
+  });
+  await prisma.projectMemberPermission.updateMany({
+    where: {
+      projectId: input.projectId,
+      memberId: { in: memberIds },
+      accessLevel: { in: ["viewer", "commenter"] }
+    },
+    data: {
+      accessLevel: "member",
+      updatedByMemberId: input.actor?.memberId ?? null
+    }
+  });
+
+  const changedMemberIds = [...new Set([...createdMemberIds, ...upgradedMemberIds])];
+
+  if (changedMemberIds.length) {
+    await prisma.projectActivity.createMany({
+      data: changedMemberIds.map((memberId) => {
+        const memberName = activeMembersById.get(memberId)?.name ?? memberId;
+        const roleLabels = rolesByMemberId.get(memberId) ?? [];
+        const wasUpgraded = upgradedMemberIds.includes(memberId);
+
+        return {
+          workspaceId: input.workspaceId,
+          projectId: input.projectId as string,
+          actorMemberId: input.actor?.memberId ?? null,
+          actorName: input.actor?.name?.trim() || "系统",
+          action: "assignment_permission_synced",
+          entityType: input.entityType,
+          entityId: input.entityId,
+          target: memberName,
+          detail: `因被指派为${input.entityLabel}的${roleLabels.join("、")}，${wasUpgraded ? "已将项目访问级别从只读提升为项目成员" : "已自动加入项目成员"}。`
+        };
+      })
+    });
+  }
+
+  return { changedMemberIds };
+}
 
 function asJson(value: unknown): Prisma.InputJsonValue {
   return toJsonValue(value);
@@ -128,11 +299,19 @@ function mapTaskRecord(task: {
   ownerEmail: string | null;
   ownerAvatarUrl: string | null;
   project: string;
+  projectId: string | null;
   versionId: string | null;
   versionName: string | null;
+  requirementId: string | null;
+  requirementTitle: string | null;
+  description: string | null;
+  taskType: string | null;
+  storyPoints: number | null;
+  estimatedMinutes: number | null;
   priority: string;
   startDate: string;
   dueDate: string;
+  completedAt: string | null;
   aiHint: string;
 }): Task {
   return {
@@ -148,11 +327,20 @@ function mapTaskRecord(task: {
     ownerEmail: toOptionalText(task.ownerEmail),
     ownerAvatarUrl: toOptionalText(task.ownerAvatarUrl),
     project: task.project,
+    projectId: toOptionalText(task.projectId),
     versionId: toOptionalText(task.versionId),
     versionName: toOptionalText(task.versionName),
-    priority: task.priority as Task["priority"],
+    requirementId: toOptionalText(task.requirementId),
+    requirementTitle: toOptionalText(task.requirementTitle),
+    description: toOptionalText(task.description),
+    taskType: toOptionalText(task.taskType),
+    storyPoints: task.storyPoints ?? undefined,
+    estimatedMinutes: task.estimatedMinutes ?? undefined,
+    // 历史 MySQL 行中的“中”在读模型边界统一转为“普通”，不让旧字段突破新的 TaskPriority 类型。
+    priority: normalizeTaskPriority(task.priority),
     startDate: task.startDate,
     dueDate: task.dueDate,
+    completedAt: toOptionalText(task.completedAt),
     aiHint: task.aiHint
   };
 }
@@ -164,10 +352,25 @@ function mapRequirementVersionRecord(version: {
   parentVersionName: string | null;
   name: string;
   project: string;
+  projectId: string | null;
+  type: string;
   status: string;
   startDate: string;
   releaseDate: string;
+  actualStartDate: string | null;
+  actualCompletedDate: string | null;
+  progress: number;
+  riskLevel: string;
+  healthStatus: string;
+  healthReason: string | null;
   goal: string;
+  owner: string | null;
+  ownerMemberId: string | null;
+  ownerOpenId: string | null;
+  ownerUnionId: string | null;
+  ownerUserId: string | null;
+  ownerEmail: string | null;
+  ownerAvatarUrl: string | null;
   productOwner: string | null;
   productOwnerMemberId: string | null;
   productOwnerOpenId: string | null;
@@ -189,6 +392,7 @@ function mapRequirementVersionRecord(version: {
   devOwnerUserId: string | null;
   devOwnerEmail: string | null;
   devOwnerAvatarUrl: string | null;
+  deliveryLabelCatalog: Prisma.JsonValue;
   milestones: Prisma.JsonValue;
 }): RequirementVersion {
   return {
@@ -198,10 +402,25 @@ function mapRequirementVersionRecord(version: {
     parentVersionName: toOptionalText(version.parentVersionName),
     name: version.name,
     project: version.project,
+    projectId: toOptionalText(version.projectId),
+    type: version.type as RequirementVersion["type"],
     status: version.status as RequirementVersion["status"],
     startDate: version.startDate,
     releaseDate: version.releaseDate,
+    actualStartDate: toOptionalText(version.actualStartDate),
+    actualCompletedDate: toOptionalText(version.actualCompletedDate),
+    progress: version.progress,
+    riskLevel: version.riskLevel as RequirementVersion["riskLevel"],
+    healthStatus: version.healthStatus as RequirementVersion["healthStatus"],
+    healthReason: toOptionalText(version.healthReason),
     goal: version.goal,
+    owner: toOptionalText(version.owner),
+    ownerMemberId: toOptionalText(version.ownerMemberId),
+    ownerOpenId: toOptionalText(version.ownerOpenId),
+    ownerUnionId: toOptionalText(version.ownerUnionId),
+    ownerUserId: toOptionalText(version.ownerUserId),
+    ownerEmail: toOptionalText(version.ownerEmail),
+    ownerAvatarUrl: toOptionalText(version.ownerAvatarUrl),
     productOwner: toOptionalText(version.productOwner),
     productOwnerMemberId: toOptionalText(version.productOwnerMemberId),
     productOwnerOpenId: toOptionalText(version.productOwnerOpenId),
@@ -223,6 +442,10 @@ function mapRequirementVersionRecord(version: {
     devOwnerUserId: toOptionalText(version.devOwnerUserId),
     devOwnerEmail: toOptionalText(version.devOwnerEmail),
     devOwnerAvatarUrl: toOptionalText(version.devOwnerAvatarUrl),
+    deliveryLabelCatalog: normalizeProjectDeliveryLabelCatalog(
+      version.deliveryLabelCatalog,
+      { fallbackToDefaults: false }
+    ),
     milestones: fromJsonArray<ProjectMilestone>(version.milestones)
   };
 }
@@ -234,6 +457,7 @@ function mapBugRecord(bug: {
   status: string;
   severity: string;
   project: string;
+  projectId: string | null;
   versionId: string | null;
   versionName: string | null;
   reporter: string;
@@ -283,6 +507,7 @@ function mapBugRecord(bug: {
     status: bug.status as BugReport["status"],
     severity: bug.severity as BugReport["severity"],
     project: bug.project,
+    projectId: toOptionalText(bug.projectId),
     versionId: toOptionalText(bug.versionId),
     versionName: toOptionalText(bug.versionName),
     reporter: bug.reporter,
@@ -364,6 +589,7 @@ function getProjectPayload(project: Project) {
   return {
     workspaceId: getWorkspaceId(project),
     name: project.name,
+    code: project.code ?? null,
     owner: project.owner,
     ownerMemberId: project.ownerMemberId,
     ownerOpenId: project.ownerOpenId,
@@ -372,12 +598,17 @@ function getProjectPayload(project: Project) {
     ownerEmail: project.ownerEmail,
     ownerAvatarUrl: project.ownerAvatarUrl,
     status: project.status,
+    startDate: project.startDate,
     progress: project.progress,
     health: project.health,
+    riskLevel: project.riskLevel,
+    healthStatus: project.healthStatus,
+    healthReason: project.healthReason ?? null,
     dueDate: project.dueDate,
     team: project.team,
     riskCount: project.riskCount,
     summary: project.summary,
+    deliveryLabelCatalog: asJson(normalizeProjectDeliveryLabelCatalog(project.deliveryLabelCatalog)),
     milestones: asJson(project.milestones)
   };
 }
@@ -397,11 +628,20 @@ function getTaskPayload(task: Task) {
     ownerEmail: task.ownerEmail ?? null,
     ownerAvatarUrl: task.ownerAvatarUrl ?? null,
     project: task.project,
+    projectId: task.projectId ?? null,
     versionId: task.versionId ?? null,
     versionName: task.versionName ?? null,
-    priority: task.priority,
+    requirementId: task.requirementId ?? null,
+    requirementTitle: task.requirementTitle ?? null,
+    description: task.description ?? null,
+    taskType: task.taskType ?? null,
+    storyPoints: task.storyPoints ?? null,
+    estimatedMinutes: task.estimatedMinutes ?? null,
+    // 所有普通表单、AI 和 legacy 数据的任务写入在 payload 边界二次收敛，避免“中”重新落库。
+    priority: normalizeTaskPriority(task.priority),
     startDate: task.startDate,
     dueDate: task.dueDate,
+    completedAt: task.completedAt ?? null,
     aiHint: task.aiHint
   };
 }
@@ -413,7 +653,22 @@ async function seedDatabaseIfEmpty(prisma: PrismaClient, createSeed: () => Dashb
     return;
   }
 
-  await seedDashboardDatabase(createSeed(), prisma);
+  const seed = createSeed();
+
+  await seedDashboardDatabase(seed, prisma);
+
+  // 旧种子器仍负责一次性批量初始化全部历史表；随后只补写本次新增字段，既不扩大修改范围到旧种子模块，
+  // 也避免 fresh database 只拿到 Prisma 默认值而丢失 dashboard.ts 中的项目 ID、健康状态和需求负责人数据。
+  await prisma.$transaction(
+    async (tx) => {
+      await syncProjects(tx, seed.projects);
+      await syncTasks(tx, seed.tasks);
+      await syncRisks(tx, seed.risks);
+      await syncRequirementVersions(tx, seed.requirementVersions);
+      await syncRequirements(tx, seed.requirements);
+    },
+    DASHBOARD_SYNC_TRANSACTION_OPTIONS
+  );
 }
 
 export async function readDashboardDatabase(
@@ -476,6 +731,7 @@ export async function readDashboardDatabase(
       id: project.id,
       workspaceId: project.workspaceId,
       name: project.name,
+      code: toOptionalText(project.code),
       owner: project.owner,
       ownerMemberId: toOptionalText(project.ownerMemberId),
       ownerOpenId: toOptionalText(project.ownerOpenId),
@@ -484,12 +740,17 @@ export async function readDashboardDatabase(
       ownerEmail: toOptionalText(project.ownerEmail),
       ownerAvatarUrl: toOptionalText(project.ownerAvatarUrl),
       status: project.status as Project["status"],
+      startDate: project.startDate,
       progress: project.progress,
       health: project.health,
+      riskLevel: project.riskLevel as Project["riskLevel"],
+      healthStatus: project.healthStatus as Project["healthStatus"],
+      healthReason: toOptionalText(project.healthReason),
       dueDate: project.dueDate,
       team: project.team,
       riskCount: project.riskCount,
       summary: project.summary,
+      deliveryLabelCatalog: normalizeProjectDeliveryLabelCatalog(project.deliveryLabelCatalog),
       milestones: fromJsonArray<ProjectMilestone>(project.milestones)
     })),
     tasks: tasks.map(mapTaskRecord),
@@ -506,6 +767,7 @@ export async function readDashboardDatabase(
       ownerEmail: toOptionalText(risk.ownerEmail),
       ownerAvatarUrl: toOptionalText(risk.ownerAvatarUrl),
       project: risk.project,
+      projectId: toOptionalText(risk.projectId),
       mitigation: risk.mitigation
     })),
     bugs: bugs.map(mapBugRecord),
@@ -517,8 +779,10 @@ export async function readDashboardDatabase(
       priority: requirement.priority as Requirement["priority"],
       status: requirement.status as Requirement["status"],
       project: requirement.project,
+      projectId: toOptionalText(requirement.projectId),
       versionId: toOptionalText(requirement.versionId),
       versionName: toOptionalText(requirement.versionName),
+      description: toOptionalText(requirement.description),
       owner: requirement.owner,
       ownerMemberId: toOptionalText(requirement.ownerMemberId),
       ownerOpenId: toOptionalText(requirement.ownerOpenId),
@@ -526,6 +790,16 @@ export async function readDashboardDatabase(
       ownerUserId: toOptionalText(requirement.ownerUserId),
       ownerEmail: toOptionalText(requirement.ownerEmail),
       ownerAvatarUrl: toOptionalText(requirement.ownerAvatarUrl),
+      designOwner: toOptionalText(requirement.designOwner),
+      designOwnerMemberId: toOptionalText(requirement.designOwnerMemberId),
+      designOwnerOpenId: toOptionalText(requirement.designOwnerOpenId),
+      designOwnerUnionId: toOptionalText(requirement.designOwnerUnionId),
+      designOwnerUserId: toOptionalText(requirement.designOwnerUserId),
+      designOwnerEmail: toOptionalText(requirement.designOwnerEmail),
+      designOwnerAvatarUrl: toOptionalText(requirement.designOwnerAvatarUrl),
+      developerMemberIds: fromJsonStringArray(requirement.developerMemberIds),
+      startDate: toOptionalText(requirement.startDate),
+      dueDate: toOptionalText(requirement.dueDate),
       uiLink: toOptionalText(requirement.uiLink),
       documentLink: toOptionalText(requirement.documentLink),
       acceptance: requirement.acceptance,
@@ -759,26 +1033,32 @@ async function syncTasks(prisma: DashboardPrisma, tasks: Task[]) {
   }
 }
 
+// 风险在全量同步和项目改名级联中都需要写入同一组字段，集中组装可避免两条路径遗漏 projectId。
+function getRiskPayload(risk: Risk) {
+  return {
+    workspaceId: getWorkspaceId(risk),
+    title: risk.title,
+    level: risk.level,
+    owner: risk.owner,
+    ownerMemberId: risk.ownerMemberId,
+    ownerOpenId: risk.ownerOpenId,
+    ownerUnionId: risk.ownerUnionId,
+    ownerUserId: risk.ownerUserId,
+    ownerEmail: risk.ownerEmail,
+    ownerAvatarUrl: risk.ownerAvatarUrl,
+    project: risk.project,
+    projectId: risk.projectId,
+    mitigation: risk.mitigation
+  };
+}
+
 async function syncRisks(prisma: DashboardPrisma, risks: Risk[]) {
   await prisma.risk.deleteMany({
     where: getDeleteWhere(risks.map((risk) => risk.id))
   });
 
   for (const risk of risks) {
-    const payload = {
-      workspaceId: getWorkspaceId(risk),
-      title: risk.title,
-      level: risk.level,
-      owner: risk.owner,
-      ownerMemberId: risk.ownerMemberId,
-      ownerOpenId: risk.ownerOpenId,
-      ownerUnionId: risk.ownerUnionId,
-      ownerUserId: risk.ownerUserId,
-      ownerEmail: risk.ownerEmail,
-      ownerAvatarUrl: risk.ownerAvatarUrl,
-      project: risk.project,
-      mitigation: risk.mitigation
-    };
+    const payload = getRiskPayload(risk);
 
     await prisma.risk.upsert({
       where: { id: risk.id },
@@ -798,6 +1078,7 @@ function getBugPayload(bug: BugReport) {
     status: bug.status,
     severity: bug.severity,
     project: bug.project,
+    projectId: bug.projectId,
     versionId: bug.versionId,
     versionName: bug.versionName,
     reporter: bug.reporter,
@@ -904,16 +1185,50 @@ async function syncRequirementVersions(prisma: DashboardPrisma, versions: Requir
 }
 
 function getRequirementVersionPayload(version: RequirementVersion) {
+  const existingCatalog = normalizeProjectDeliveryLabelCatalog(
+    version.deliveryLabelCatalog,
+    { fallbackToDefaults: false }
+  );
+  const deliveryLabels = scopeDeliveryLabelCatalogToVersion(
+    version.id,
+    version.deliveryLabelCatalog,
+    {
+      preserveIds: Array.isArray(version.deliveryLabelCatalog)
+        ? new Set(existingCatalog.map((label) => label.id))
+        : undefined
+    }
+  );
+  const milestones = remapVersionDeliveryMilestones(
+    version.milestones,
+    deliveryLabels.catalog,
+    deliveryLabels.idMap
+  );
+
   return {
     workspaceId: getWorkspaceId(version),
     parentVersionId: version.parentVersionId,
     parentVersionName: version.parentVersionName,
     name: version.name,
     project: version.project,
+    projectId: version.projectId ?? null,
+    type: version.type,
     status: version.status,
     startDate: version.startDate,
     releaseDate: version.releaseDate,
+    actualStartDate: version.actualStartDate ?? null,
+    actualCompletedDate: version.actualCompletedDate ?? null,
+    progress: version.progress,
+    riskLevel: version.riskLevel,
+    healthStatus: version.healthStatus,
+    healthReason: version.healthReason ?? null,
     goal: version.goal,
+    owner: version.owner ?? null,
+    ownerMemberId: version.ownerMemberId ?? null,
+    ownerOpenId: version.ownerOpenId ?? null,
+    ownerUnionId: version.ownerUnionId ?? null,
+    ownerUserId: version.ownerUserId ?? null,
+    ownerEmail: version.ownerEmail ?? null,
+    ownerAvatarUrl: version.ownerAvatarUrl ?? null,
     productOwner: version.productOwner,
     productOwnerMemberId: version.productOwnerMemberId,
     productOwnerOpenId: version.productOwnerOpenId,
@@ -935,7 +1250,8 @@ function getRequirementVersionPayload(version: RequirementVersion) {
     devOwnerUserId: version.devOwnerUserId,
     devOwnerEmail: version.devOwnerEmail,
     devOwnerAvatarUrl: version.devOwnerAvatarUrl,
-    milestones: asJson(version.milestones)
+    deliveryLabelCatalog: asJson(deliveryLabels.catalog),
+    milestones: asJson(milestones)
   };
 }
 
@@ -946,8 +1262,10 @@ function getRequirementPayload(requirement: Requirement) {
     priority: requirement.priority,
     status: requirement.status,
     project: requirement.project,
+    projectId: requirement.projectId ?? null,
     versionId: requirement.versionId,
     versionName: requirement.versionName,
+    description: requirement.description ?? null,
     owner: requirement.owner,
     ownerMemberId: requirement.ownerMemberId,
     ownerOpenId: requirement.ownerOpenId,
@@ -955,6 +1273,16 @@ function getRequirementPayload(requirement: Requirement) {
     ownerUserId: requirement.ownerUserId,
     ownerEmail: requirement.ownerEmail,
     ownerAvatarUrl: requirement.ownerAvatarUrl,
+    designOwner: requirement.designOwner ?? null,
+    designOwnerMemberId: requirement.designOwnerMemberId ?? null,
+    designOwnerOpenId: requirement.designOwnerOpenId ?? null,
+    designOwnerUnionId: requirement.designOwnerUnionId ?? null,
+    designOwnerUserId: requirement.designOwnerUserId ?? null,
+    designOwnerEmail: requirement.designOwnerEmail ?? null,
+    designOwnerAvatarUrl: requirement.designOwnerAvatarUrl ?? null,
+    developerMemberIds: asJson(requirement.developerMemberIds ?? []),
+    startDate: requirement.startDate ?? null,
+    dueDate: requirement.dueDate ?? null,
     uiLink: requirement.uiLink,
     documentLink: requirement.documentLink,
     acceptance: requirement.acceptance,
@@ -1066,28 +1394,133 @@ export async function upsertDashboardProjectDatabase(project: Project, client?: 
   });
 }
 
-export async function upsertDashboardRequirementVersionDatabase(version: RequirementVersion, client?: PrismaClient) {
+export async function upsertDashboardProjectScopeDatabase({
+  bugs,
+  project,
+  requirements,
+  risks,
+  tasks,
+  versions
+}: {
+  bugs: BugReport[];
+  project: Project;
+  requirements: Requirement[];
+  risks: Risk[];
+  tasks: Task[];
+  versions: RequirementVersion[];
+}, client?: PrismaClient) {
+  const prisma = client ?? getPrismaClient();
+
+  await prisma.$transaction(
+    async (tx) => {
+      const projectPayload = getProjectPayload(project);
+
+      // 项目改名后必须把所有稳定 projectId 关联行的展示名在同一事务中更新。
+      // 这里只遍历已在服务层按 projectId 筛选的项目作用域，不会因为项目同名误伤其他记录。
+      await tx.project.upsert({
+        where: { id: project.id },
+        update: projectPayload,
+        create: {
+          id: project.id,
+          ...projectPayload
+        }
+      });
+
+      for (const version of versions) {
+        const payload = getRequirementVersionPayload(version);
+
+        await tx.requirementVersion.upsert({
+          where: { id: version.id },
+          update: payload,
+          create: { id: version.id, ...payload }
+        });
+      }
+
+      for (const requirement of requirements) {
+        const payload = getRequirementPayload(requirement);
+
+        await tx.requirement.upsert({
+          where: { id: requirement.id },
+          update: payload,
+          create: { id: requirement.id, ...payload }
+        });
+      }
+
+      for (const task of tasks) {
+        const payload = getTaskPayload(task);
+
+        await tx.projectTask.upsert({
+          where: { id: task.id },
+          update: payload,
+          create: { id: task.id, ...payload }
+        });
+      }
+
+      for (const risk of risks) {
+        const payload = getRiskPayload(risk);
+
+        await tx.risk.upsert({
+          where: { id: risk.id },
+          update: payload,
+          create: { id: risk.id, ...payload }
+        });
+      }
+
+      for (const bug of bugs) {
+        const payload = getBugPayload(bug);
+
+        // 改名只修改 Bug 主记录的项目快照，附件和流转历史没有变化，因此不做先删后建。
+        await tx.bugReport.upsert({
+          where: { id: bug.id },
+          update: payload,
+          create: { id: bug.id, ...payload }
+        });
+      }
+    },
+    DASHBOARD_SYNC_TRANSACTION_OPTIONS
+  );
+}
+
+export async function upsertDashboardRequirementVersionDatabase(
+  version: RequirementVersion,
+  client?: PrismaClient,
+  actor?: AssignmentPermissionActor
+) {
   const prisma = client ?? getPrismaClient();
   const payload = getRequirementVersionPayload(version);
 
-  // 新建版本只影响 requirement_versions 当前行；子记录在后续创建时按 versionId 归一化，
-  // 不需要触发全量 dashboard 同步事务。
-  await prisma.requirementVersion.upsert({
-    where: { id: version.id },
-    update: payload,
-    create: {
-      id: version.id,
-      ...payload
-    }
-  });
+  await prisma.$transaction(async (tx) => {
+    // 版本总负责人的履职权限必须和版本主记录同成同败，不能依赖读取时的派生角色补救。
+    await syncAssignmentProjectMemberPermissions(tx, {
+      actor,
+      assignees: [{ memberId: version.ownerMemberId, roleLabel: "总负责人" }],
+      entityId: version.id,
+      entityLabel: `版本「${version.name}」`,
+      entityType: "requirementVersion",
+      projectId: version.projectId,
+      workspaceId: getWorkspaceId(version)
+    });
+
+    // 新建版本只影响 project_versions 当前行；子记录在后续创建时按 versionId 归一化。
+    await tx.requirementVersion.upsert({
+      where: { id: version.id },
+      update: payload,
+      create: {
+        id: version.id,
+        ...payload
+      }
+    });
+  }, DASHBOARD_ASSIGNMENT_TRANSACTION_OPTIONS);
 }
 
 export async function upsertDashboardRequirementVersionScopeDatabase({
+  actor,
   bugs,
   requirements,
   tasks,
   version
 }: {
+  actor?: AssignmentPermissionActor;
   bugs: BugReport[];
   requirements: Requirement[];
   tasks: Task[];
@@ -1098,6 +1531,16 @@ export async function upsertDashboardRequirementVersionScopeDatabase({
   await prisma.$transaction(
     async (tx) => {
       const versionPayload = getRequirementVersionPayload(version);
+
+      await syncAssignmentProjectMemberPermissions(tx, {
+        actor,
+        assignees: [{ memberId: version.ownerMemberId, roleLabel: "总负责人" }],
+        entityId: version.id,
+        entityLabel: `版本「${version.name}」`,
+        entityType: "requirementVersion",
+        projectId: version.projectId,
+        workspaceId: getWorkspaceId(version)
+      });
 
       // 编辑版本名称/项目后，只需要同步该版本及其直接关联记录；这条路径不能回退到整库同步，
       // 否则版本编辑会在公网 MySQL 上重写所有任务并触发 60 秒事务过期。
@@ -1150,7 +1593,7 @@ export async function upsertDashboardRequirementVersionScopeDatabase({
         await replaceBugChildRecords(tx, bug);
       }
     },
-    DASHBOARD_SYNC_TRANSACTION_OPTIONS
+    DASHBOARD_ASSIGNMENT_TRANSACTION_OPTIONS
   );
 }
 
@@ -1224,29 +1667,352 @@ export async function deleteDashboardBugDatabase(bugId: string, client?: PrismaC
   });
 }
 
-export async function upsertDashboardRequirementDatabase(requirement: Requirement, client?: PrismaClient) {
+type RequirementVersionDeleteInput = {
+  fallbackVersionId?: string;
+  versionId: string;
+  workspaceId: string;
+};
+
+type VersionProjectReference = {
+  project: string;
+  projectId: string | null;
+};
+
+async function resolveVersionProjectReference(
+  prisma: Prisma.TransactionClient,
+  workspaceId: string,
+  version: VersionProjectReference
+) {
+  if (version.projectId) {
+    return await prisma.project.findFirst({
+      where: { id: version.projectId, workspaceId },
+      select: { id: true, name: true }
+    }) ?? undefined;
+  }
+
+  if (version.project === "跨项目" || version.project === "未关联项目") {
+    return undefined;
+  }
+
+  const candidates = await prisma.project.findMany({
+    where: { name: version.project, workspaceId },
+    select: { id: true, name: true },
+    take: 2
+  });
+
+  // 旧版本只有项目名时必须唯一命中；同名项目下不能选择任意迁移目标。
+  return candidates.length === 1 ? candidates[0] : undefined;
+}
+
+export async function deleteDashboardRequirementVersionDatabase(
+  input: RequirementVersionDeleteInput,
+  client?: PrismaClient
+) {
+  const prisma = client ?? getPrismaClient();
+
+  await prisma.$transaction(async (tx) => {
+    const sourceVersion = await tx.requirementVersion.findFirst({
+      where: { id: input.versionId, workspaceId: input.workspaceId },
+      select: { id: true, project: true, projectId: true }
+    });
+
+    if (!sourceVersion) {
+      throw new Error("项目/版本不存在或不属于当前工作区。");
+    }
+
+    const [requirementCount, taskCount, bugCount] = await Promise.all([
+      tx.requirement.count({ where: { workspaceId: input.workspaceId, versionId: input.versionId } }),
+      tx.projectTask.count({ where: { workspaceId: input.workspaceId, versionId: input.versionId } }),
+      tx.bugReport.count({ where: { workspaceId: input.workspaceId, versionId: input.versionId } })
+    ]);
+    const referenceCount = requirementCount + taskCount + bugCount;
+    let fallbackVersion: {
+      id: string;
+      name: string;
+      project: string;
+      projectId: string | null;
+    } | undefined;
+    let fallbackProject: { id: string; name: string } | undefined;
+
+    if (referenceCount > 0) {
+      if (!input.fallbackVersionId) {
+        throw new Error("项目/版本仍有业务引用，但没有可迁移的同项目版本。");
+      }
+
+      const sourceProject = await resolveVersionProjectReference(tx, input.workspaceId, sourceVersion);
+      const candidateVersions = await tx.requirementVersion.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          NOT: { id: input.versionId }
+        },
+        select: { id: true, name: true, project: true, projectId: true }
+      });
+      const resolvedCandidates = await Promise.all(candidateVersions.map(async (version) => ({
+        project: await resolveVersionProjectReference(tx, input.workspaceId, version),
+        version
+      })));
+      const sameProjectCandidates = resolvedCandidates.filter((candidate) => {
+        const sameNeutralScope = !sourceProject
+          && !candidate.project
+          && ["跨项目", "未关联项目"].includes(sourceVersion.project)
+          && candidate.version.project === sourceVersion.project;
+
+        return sameNeutralScope || Boolean(sourceProject && sourceProject.id === candidate.project?.id);
+      });
+      const systemFallback = sameProjectCandidates.find((candidate) => candidate.version.id === "rv-backlog");
+      const siblingCandidates = sameProjectCandidates.filter((candidate) => candidate.version.id !== "rv-backlog");
+      const automaticFallback = selectAutomaticRequirementVersionFallback(systemFallback, siblingCandidates);
+
+      if (automaticFallback.ambiguous) {
+        throw new Error("当前项目有多个可迁移版本，请先保留唯一迁移目标或将关联记录手动迁移后再删除。");
+      }
+
+      if (!automaticFallback.fallback || automaticFallback.fallback.version.id !== input.fallbackVersionId) {
+        throw new Error("版本迁移目标已变化或不属于同一项目，已回滚本次删除。");
+      }
+
+      fallbackVersion = automaticFallback.fallback.version;
+      fallbackProject = automaticFallback.fallback.project;
+    }
+
+    if (fallbackVersion) {
+      const relationUpdate = {
+        versionId: fallbackVersion.id,
+        versionName: fallbackVersion.name,
+        ...(fallbackProject
+          ? { project: fallbackProject.name, projectId: fallbackProject.id }
+          : {})
+      };
+
+      // 版本及其需求/任务/Bug 的迁移在同一事务内完成，任何一张表失败都会回滚，避免半迁移状态。
+      await tx.requirement.updateMany({
+        where: { workspaceId: input.workspaceId, versionId: input.versionId },
+        data: relationUpdate
+      });
+      await tx.projectTask.updateMany({
+        where: { workspaceId: input.workspaceId, versionId: input.versionId },
+        data: relationUpdate
+      });
+      await tx.bugReport.updateMany({
+        where: { workspaceId: input.workspaceId, versionId: input.versionId },
+        data: relationUpdate
+      });
+    }
+
+    await tx.requirementVersion.updateMany({
+      where: { workspaceId: input.workspaceId, parentVersionId: input.versionId },
+      data: { parentVersionId: null, parentVersionName: null }
+    });
+    const deleted = await tx.requirementVersion.deleteMany({
+      where: { id: input.versionId, workspaceId: input.workspaceId }
+    });
+
+    if (deleted.count !== 1) {
+      throw new Error("项目/版本在删除期间发生并发变化，已回滚本次操作。");
+    }
+  }, DASHBOARD_DELETE_TRANSACTION_OPTIONS);
+}
+
+type ProjectDeleteInput = {
+  projectId: string;
+  workspaceId: string;
+};
+
+export async function deleteDashboardProjectDatabase(input: ProjectDeleteInput, client?: PrismaClient) {
+  const prisma = client ?? getPrismaClient();
+
+  await prisma.$transaction(async (tx) => {
+    const project = await tx.project.findFirst({
+      where: { id: input.projectId, workspaceId: input.workspaceId },
+      select: { id: true, name: true }
+    });
+
+    if (!project) {
+      throw new Error("项目不存在或不属于当前工作区。");
+    }
+
+    const sameNameProjects = await tx.project.findMany({
+      where: { workspaceId: input.workspaceId, name: project.name },
+      select: { id: true },
+      take: 2
+    });
+    const canUseLegacyName = sameNameProjects.length === 1 && sameNameProjects[0].id === project.id;
+    const relationWhere = {
+      workspaceId: input.workspaceId,
+      OR: [
+        { projectId: project.id },
+        ...(canUseLegacyName ? [{ projectId: null, project: project.name }] : [])
+      ]
+    };
+    const [versionCount, requirementCount, taskCount, riskCount, bugCount, repositoryCount] = await Promise.all([
+      tx.requirementVersion.count({ where: relationWhere }),
+      tx.requirement.count({ where: relationWhere }),
+      tx.projectTask.count({ where: relationWhere }),
+      tx.risk.count({ where: relationWhere }),
+      tx.bugReport.count({ where: relationWhere }),
+      tx.projectRepository.count({ where: { workspaceId: input.workspaceId, projectId: project.id } })
+    ]);
+    const relatedCount = versionCount + requirementCount + taskCount + riskCount + bugCount + repositoryCount;
+
+    if (relatedCount > 0) {
+      throw new Error(
+        `项目仍包含 ${versionCount} 个项目/版本、${requirementCount} 个需求、${taskCount} 个任务、${riskCount} 个风险、${bugCount} 个 Bug 和 ${repositoryCount} 个代码仓库，请先迁移关联数据或将项目归档。`
+      );
+    }
+
+    const deleted = await tx.project.deleteMany({
+      where: { id: project.id, workspaceId: input.workspaceId }
+    });
+
+    if (deleted.count !== 1) {
+      throw new Error("项目在删除期间发生并发变化，已回滚本次操作。");
+    }
+  }, DASHBOARD_DELETE_TRANSACTION_OPTIONS);
+}
+
+export async function deleteDashboardRiskDatabase(input: { riskId: string; workspaceId: string }, client?: PrismaClient) {
+  const prisma = client ?? getPrismaClient();
+  const deleted = await prisma.risk.deleteMany({
+    where: { id: input.riskId, workspaceId: input.workspaceId }
+  });
+
+  if (deleted.count !== 1) {
+    throw new Error("风险不存在或不属于当前工作区。");
+  }
+}
+
+export async function deleteDashboardDocumentDatabase(
+  input: { documentId: string; workspaceId: string },
+  client?: PrismaClient
+) {
+  const prisma = client ?? getPrismaClient();
+  const deleted = await prisma.documentItem.deleteMany({
+    where: { id: input.documentId, workspaceId: input.workspaceId }
+  });
+
+  if (deleted.count !== 1) {
+    throw new Error("文档不存在或不属于当前工作区。");
+  }
+}
+
+export async function upsertDashboardRequirementDatabase(
+  requirement: Requirement,
+  client?: PrismaClient,
+  actor?: AssignmentPermissionActor
+) {
   const prisma = client ?? getPrismaClient();
   const payload = getRequirementPayload(requirement);
 
-  // 需求创建/编辑和任务、Bug 一样是单条业务记录变更；如果回退到全量 dashboard 同步，
-  // 会在保存一个需求时重写项目、任务、Bug 等所有表，公网 MySQL 很容易超过 60 秒事务窗口。
-  await prisma.requirement.upsert({
-    where: { id: requirement.id },
-    update: payload,
-    create: {
-      id: requirement.id,
-      ...payload
-    }
-  });
+  await prisma.$transaction(async (tx) => {
+    await syncAssignmentProjectMemberPermissions(tx, {
+      actor,
+      assignees: [
+        { memberId: requirement.ownerMemberId, roleLabel: "产品负责人" },
+        { memberId: requirement.designOwnerMemberId, roleLabel: "设计负责人" },
+        ...(requirement.developerMemberIds ?? []).map((memberId) => ({
+          memberId,
+          roleLabel: "开发负责人"
+        }))
+      ],
+      entityId: requirement.id,
+      entityLabel: `需求「${requirement.title}」`,
+      entityType: "requirement",
+      projectId: requirement.projectId,
+      workspaceId: getWorkspaceId(requirement)
+    });
+
+    // 需求主记录和责任人的项目成员权限在同一事务内落库；其他 dashboard 表不参与重写。
+    await tx.requirement.upsert({
+      where: { id: requirement.id },
+      update: payload,
+      create: {
+        id: requirement.id,
+        ...payload
+      }
+    });
+  }, DASHBOARD_ASSIGNMENT_TRANSACTION_OPTIONS);
 }
 
-export async function deleteDashboardRequirementDatabase(requirementId: string, client?: PrismaClient) {
+export async function deleteDashboardRequirementDatabase(
+  input: { requirementId: string; workspaceId: string },
+  client?: PrismaClient
+) {
   const prisma = client ?? getPrismaClient();
 
-  // 需求删除只删除 requirements 当前行；知识索引 cleanup 由 API 层单独入队，避免删除需求时触发整库同步。
-  await prisma.requirement.delete({
-    where: { id: requirementId }
-  });
+  await prisma.$transaction(async (tx) => {
+    const requirement = await tx.requirement.findFirst({
+      where: { id: input.requirementId, workspaceId: input.workspaceId },
+      select: {
+        id: true,
+        project: true,
+        projectId: true,
+        title: true,
+        versionId: true
+      }
+    });
+
+    if (!requirement) {
+      throw new Error("需求不存在或不属于当前工作区。");
+    }
+
+    const [directTaskCount, projectCandidates, legacyTaskCandidates] = await Promise.all([
+      tx.projectTask.count({
+        where: { workspaceId: input.workspaceId, requirementId: requirement.id }
+      }),
+      tx.project.findMany({
+        where: { workspaceId: input.workspaceId },
+        select: { id: true, name: true }
+      }),
+      tx.projectTask.findMany({
+        where: {
+          workspaceId: input.workspaceId,
+          requirementId: null,
+          requirementTitle: requirement.title,
+          versionId: requirement.versionId
+        },
+        select: { project: true, projectId: true }
+      })
+    ]);
+    const normalizeProjectName = (value: string) => value.trim().toLowerCase();
+    const normalizedRequirementProject = normalizeProjectName(requirement.project);
+    const sameNameProjects = projectCandidates.filter(
+      (project) => normalizeProjectName(project.name) === normalizedRequirementProject
+    );
+    const uniqueNameProject = sameNameProjects.length === 1 ? sameNameProjects[0] : undefined;
+    const resolvedRequirementProjectId = requirement.projectId ?? uniqueNameProject?.id;
+    const matchingLegacyTasks = legacyTaskCandidates.filter((task) => {
+      if (task.projectId) {
+        return Boolean(resolvedRequirementProjectId && task.projectId === resolvedRequirementProjectId);
+      }
+
+      return normalizeProjectName(task.project) === normalizedRequirementProject;
+    });
+    const hasNameOnlyLegacyTask = matchingLegacyTasks.some((task) => !task.projectId);
+
+    if (
+      hasNameOnlyLegacyTask
+      && (!uniqueNameProject || uniqueNameProject.id !== resolvedRequirementProjectId)
+    ) {
+      // 老任务只有“需求标题 + 版本 + 项目名”快照时，只有项目名严格唯一且和需求稳定 ID 一致才可判定归属。
+      // 同名项目或悬空项目名都不能靠猜测放行，否则并发插入的旧格式任务会在需求删除后成为孤儿。
+      throw new Error("需求所属项目名称不唯一，无法安全核对历史关联，请先补齐 projectId/requirementId 后再删除。");
+    }
+
+    const relatedTaskCount = directTaskCount + matchingLegacyTasks.length;
+
+    if (relatedTaskCount > 0) {
+      throw new Error(`需求仍关联 ${relatedTaskCount} 个任务，请先迁移或解除任务关联后再删除。`);
+    }
+
+    // 稳定 ID 与 legacy 标题引用都在 Serializable 事务内重检，防止检查后插入任一种格式的新任务形成孤儿。
+    const deleted = await tx.requirement.deleteMany({
+      where: { id: requirement.id, workspaceId: input.workspaceId }
+    });
+
+    if (deleted.count !== 1) {
+      throw new Error("需求在删除期间发生并发变化，已回滚本次操作。");
+    }
+  }, DASHBOARD_DELETE_TRANSACTION_OPTIONS);
 }
 
 export async function writeDashboardIdentityDatabase(data: Pick<DashboardDatabase, "members" | "workspaces">, client?: PrismaClient) {

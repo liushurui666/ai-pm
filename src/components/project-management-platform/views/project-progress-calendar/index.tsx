@@ -65,6 +65,7 @@ export function ProjectProgressCalendar({
   const onTaskOrderChangeRef = useRef(onTaskOrderChange);
   const resizePreviewRef = useRef<ResizePreviewSource | null>(null);
   const schedulerModel = createProjectSchedulerModel(items, taskOrderByOwner);
+  const hasEditableItems = schedulerModel.visibleItems.some((item) => item.editable);
 
   useEffect(() => {
     onTaskOrderChangeRef.current = onTaskOrderChange;
@@ -85,7 +86,17 @@ export function ProjectProgressCalendar({
     const shellElement: HTMLDivElement = schedulerShell;
 
     function isTaskEvent(target: EventTarget | null) {
-      return target instanceof HTMLElement && Boolean(target.closest(".project-scheduler-event-task"));
+      return target instanceof HTMLElement && Boolean(target.closest(".project-scheduler-event-task:not(.project-scheduler-event-readonly)"));
+    }
+
+    function blockReadOnlyTaskInteraction(event: PointerEvent | MouseEvent) {
+      if (!(event.target instanceof HTMLElement) || !event.target.closest(".project-scheduler-event-readonly")) {
+        return;
+      }
+
+      // DayPilot 的拖拽监听早于业务回调启动；在捕获阶段阻止只读任务，避免先出现可拖影子、松手后才回滚。
+      event.preventDefault();
+      event.stopPropagation();
     }
 
     function handlePointerDown(event: PointerEvent) {
@@ -188,6 +199,8 @@ export function ProjectProgressCalendar({
       childList: true,
       subtree: true
     });
+    shellElement.addEventListener("pointerdown", blockReadOnlyTaskInteraction, true);
+    shellElement.addEventListener("mousedown", blockReadOnlyTaskInteraction, true);
     shellElement.addEventListener("pointerdown", handlePointerDown);
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerEnd);
@@ -199,6 +212,8 @@ export function ProjectProgressCalendar({
       }
 
       observer.disconnect();
+      shellElement.removeEventListener("pointerdown", blockReadOnlyTaskInteraction, true);
+      shellElement.removeEventListener("mousedown", blockReadOnlyTaskInteraction, true);
       shellElement.removeEventListener("pointerdown", handlePointerDown);
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerEnd);
@@ -213,17 +228,21 @@ export function ProjectProgressCalendar({
       return undefined;
     }
 
+    if (!hasEditableItems) {
+      return undefined;
+    }
+
     return attachProjectSchedulerRowSort({
       dragMoveThreshold,
       onTaskOrderChange: (change) => onTaskOrderChangeRef.current(change),
       shell: schedulerShell
     });
-  }, []);
+  }, [hasEditableItems]);
 
   function handleScheduleUpdate(args: DayPilot.SchedulerEventMoveArgs | DayPilot.SchedulerEventResizeArgs) {
     const item = args.e.data.tags as ProjectCalendarItem | undefined;
 
-    if (!item) {
+    if (!item || !item.editable) {
       args.preventDefault();
       return;
     }
@@ -259,7 +278,7 @@ export function ProjectProgressCalendar({
   }
 
   return (
-    <div className="project-scheduler-shell" ref={shellRef}>
+    <div className={`project-scheduler-shell${hasEditableItems ? "" : " is-readonly"}`} ref={shellRef}>
       <DayPilotScheduler
         startDate={schedulerModel.startDate}
         days={schedulerModel.days}
@@ -276,8 +295,8 @@ export function ProjectProgressCalendar({
         durationBarHeight={4}
         heightSpec="Auto"
         eventBorderRadius={8}
-        eventMoveHandling="Update"
-        eventResizeHandling="Update"
+        eventMoveHandling={hasEditableItems ? "Update" : "Disabled"}
+        eventResizeHandling={hasEditableItems ? "Update" : "Disabled"}
         eventResizeMargin={0}
         eventDeleteHandling="Disabled"
         eventClickHandling="Enabled"
@@ -297,7 +316,7 @@ export function ProjectProgressCalendar({
 
           const item = args.e.data.tags as ProjectCalendarItem | undefined;
 
-          if (item) {
+          if (item?.editable) {
             onOpenItem(item);
           }
         }}

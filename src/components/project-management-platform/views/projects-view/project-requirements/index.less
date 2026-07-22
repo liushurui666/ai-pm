@@ -1,0 +1,75 @@
+.project-requirements {
+  display: grid;
+  gap: 12px;
+}
+
+.project-requirements-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.project-requirements-toolbar .ant-input-affix-wrapper {
+  width: min(320px, 100%);
+}
+
+.project-requirements-toolbar .ant-select {
+  min-width: 132px;
+}
+
+.project-requirement-title {
+  display: grid;
+  width: 100%;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+}
+
+.project-requirement-title:not(:disabled) {
+  cursor: pointer;
+}
+
+.project-requirement-title strong {
+  color: var(--foreground);
+}
+
+.project-requirement-title .ant-typography {
+  max-width: 230px;
+  font-size: 12px;
+}
+
+.project-requirement-task-progress {
+  display: grid;
+  gap: 2px;
+}
+
+.project-requirement-task-progress .ant-progress {
+  margin: 0;
+}
+
+.project-requirement-task-progress .ant-progress-text,
+.project-requirement-task-progress .ant-typography {
+  font-size: 11px;
+}
+
+.project-requirement-task-progress .ant-tag {
+  width: fit-content;
+  margin: 2px 0 0;
+  font-size: 10px;
+}
+
+@media (max-width: 560px) {
+  .project-requirements-toolbar,
+  .project-requirements-toolbar > .ant-space,
+  .project-requirements-toolbar > .ant-space > .ant-space-item,
+  .project-requirements-toolbar .ant-input-affix-wrapper,
+  .project-requirements-toolbar .ant-select,
+  .project-requirements-toolbar .ant-btn {
+    width: 100%;
+  }
+}

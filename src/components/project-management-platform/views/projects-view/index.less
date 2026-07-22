@@ -1,149 +1,163 @@
-/* 项目视图是交付排期的主工作区，顶部摘要只服务筛选范围和交付信号，
-   不再做大 hero，避免日历主体在首屏被装饰区域挤下去。 */
-.project-calendar-toolbar .ant-btn,
-.project-calendar-toolbar .ant-select-selector {
-  border-radius: 8px;
-}
-
-.project-calendar-toolbar {
-  max-width: 100%;
-  justify-content: flex-end;
-}
-
-.project-calendar-filter-field {
-  display: inline-grid;
-  grid-template-columns: auto minmax(220px, 320px);
-  gap: 8px;
-  align-items: center;
-}
-
-.project-calendar-filter-field > span {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.project-calendar-project-select {
-  width: 320px !important;
-  max-width: 100%;
-}
-
-.project-calendar-summary {
+/* 项目管理控制台保持当前 Ant Design 密集工具风格：外层不横滚，
+   只让字段密集的交付/需求/成员表格在各自容器内横向滚动。 */
+.project-management-console {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.72fr);
-  gap: 12px;
-  align-items: stretch;
-  margin-bottom: 12px;
-}
-
-.project-calendar-summary-copy {
-  display: grid;
-  align-content: center;
-  gap: 8px;
-  min-height: 108px;
-  padding: 14px 16px;
-  border: 1px solid;
-  border-radius: 8px;
-  border-color: color-mix(in srgb, var(--brand) 10%, var(--border));
-  background: var(--surface);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
-}
-
-.project-calendar-summary-copy .ant-tag {
-  margin-inline-end: 0;
-  border-radius: 999px;
-  font-weight: 650;
-}
-
-.project-calendar-summary-copy h3 {
-  margin: 0;
-  color: var(--foreground);
-  font-size: 20px;
-  line-height: 1.2;
-}
-
-.project-calendar-summary-copy .ant-typography-secondary {
-  max-width: 720px;
-  font-size: 13px;
-  line-height: 1.55;
-}
-
-.project-calendar-summary-stats {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.project-calendar-summary-stats .ant-statistic {
   min-width: 0;
-  min-height: 78px;
-  padding: 12px;
-  border: 1px solid;
-  border-radius: 8px;
-  border-color: color-mix(in srgb, var(--border) 86%, transparent);
-  background: color-mix(in srgb, var(--surface) 88%, var(--surface-subtle) 12%);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface-elevated) 70%, transparent);
-}
-
-.project-calendar-summary-stats .ant-statistic-title {
-  margin-bottom: 4px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.project-calendar-summary-stats .ant-statistic-content {
-  color: var(--foreground);
-  font-size: 20px;
-  font-weight: 760;
-}
-
-.project-calendar-summary-stats .ant-statistic-content-prefix {
-  margin-inline-end: 6px;
-  color: var(--brand);
-}
-
-.project-calendar-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(260px, 288px) minmax(0, 1fr);
   gap: 12px;
   align-items: start;
 }
 
-@media (max-width: 768px) {
-  .project-calendar-summary {
+.project-management-delivery {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.project-set-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.project-set-summary > div {
+  display: grid;
+  min-width: min(100%, 360px);
+  flex: 1 1 480px;
+  gap: 6px;
+}
+
+.project-set-summary h4.ant-typography {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 18px;
+}
+
+.project-set-summary > div > .ant-typography-secondary {
+  max-width: 760px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.project-set-summary-meta .ant-typography {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.project-set-governance-tabs {
+  min-width: 0;
+  padding: 0 12px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.project-set-governance-tabs > .ant-tabs-nav {
+  margin-bottom: 12px;
+}
+
+.project-version-detail {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.project-version-detail-header {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.project-version-detail-header > .ant-btn {
+  width: fit-content;
+  height: auto;
+  padding: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.project-version-detail-header > div {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.project-version-detail-header > div > span {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.project-version-detail-header h3.ant-typography {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 21px;
+}
+
+.project-version-detail-header > div > span > .ant-typography-secondary {
+  max-width: 760px;
+  font-size: 12px;
+}
+
+.project-version-detail-meta .ant-typography {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.project-version-detail > .ant-tabs {
+  min-width: 0;
+}
+
+.project-version-detail > .ant-tabs > .ant-tabs-nav {
+  margin-bottom: 12px;
+}
+
+.project-version-detail > .ant-tabs .ant-tabs-tab {
+  padding-block: 8px;
+  font-weight: 650;
+}
+
+.project-version-detail .ant-table-wrapper {
+  min-width: 0;
+}
+
+@media (max-width: 1100px) {
+  .project-management-console {
     grid-template-columns: 1fr;
-    gap: 12px;
-  }
-
-  .project-calendar-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .project-calendar-summary-copy {
-    min-height: auto;
-    padding: 16px;
-  }
-
-  .project-calendar-summary-stats {
-    grid-template-columns: 1fr 1fr;
   }
 }
 
-@media (max-width: 520px) {
-  .project-calendar-toolbar,
-  .project-calendar-filter-field,
-  .project-calendar-toolbar .ant-picker,
-  .project-calendar-project-select {
-    width: 100% !important;
+@media (max-width: 560px) {
+  .project-set-summary,
+  .project-version-detail-header {
+    padding: 12px;
   }
 
-  .project-calendar-toolbar > .ant-space-item {
+  .project-set-summary > .ant-space,
+  .project-set-summary > .ant-space > .ant-space-item,
+  .project-set-summary .ant-btn {
     width: 100%;
   }
 
-  .project-calendar-filter-field {
-    grid-template-columns: 1fr;
+  .project-version-detail-header > div {
+    flex-direction: column;
+  }
+
+  .project-version-detail-header > div > .ant-btn {
+    width: 100%;
+  }
+
+  .project-version-detail > .ant-tabs > .ant-tabs-nav {
+    max-width: 100%;
   }
 }

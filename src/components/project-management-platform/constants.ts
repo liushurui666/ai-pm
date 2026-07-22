@@ -4,7 +4,7 @@ import type { DashboardMember, Project, ProjectMilestone, Requirement, Task, Tas
 import type { DashboardEntityType } from "@/types/records";
 import type { AppView } from "@/components/project-management-platform/types";
 
-export const taskStages: TaskStage[] = ["待处理", "进行中", "评审中", "已完成"];
+export const taskStages: TaskStage[] = ["待处理", "进行中", "评审中", "验收中", "已完成"];
 
 export const ownerRoleLabels: Record<DashboardMember["role"], string> = {
   owner: "所有者",
@@ -45,7 +45,8 @@ export const statusColor: Record<Project["status"], NonNullable<BadgeProps["stat
   进行中: "processing",
   有风险: "error",
   已完成: "success",
-  暂停: "default"
+  暂停: "default",
+  已归档: "default"
 };
 
 export const milestoneColor: Record<ProjectMilestone["status"], string> = {
@@ -56,9 +57,10 @@ export const milestoneColor: Record<ProjectMilestone["status"], string> = {
 };
 
 export const priorityColor: Record<Task["priority"] | Requirement["priority"], string> = {
+  紧急: "red",
   高: "red",
-  中: "gold",
   低: "green",
+  普通: "blue",
   P0: "red",
   P1: "blue",
   P2: "default"

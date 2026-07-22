@@ -14,23 +14,25 @@ model Workspace {
   createdAt   String
   updatedAt   String
 
-  members             DashboardMember[]
-  projects            Project[]
-  tasks               ProjectTask[]
-  risks               Risk[]
-  bugs                BugReport[]
-  requirements        Requirement[]
-  requirementVersions RequirementVersion[]
-  documents           DocumentItem[]
-  weeklyInsights      WeeklyInsight[]
-  repositories        ProjectRepository[]
-  bugFixJobs          BugFixJob[]
-  aiIndexSources      AiIndexSource[]
-  aiIndexChunks       AiIndexChunk[]
-  aiIndexJobs         AiIndexJob[]
-  aiIndexTraces       AiIndexTrace[]
-  assistantActionJobs AssistantActionJob[]
-  dashboardSideEffectJobs DashboardSideEffectJob[]
+  members                  DashboardMember[]
+  projects                 Project[]
+  projectMemberPermissions ProjectMemberPermission[]
+  projectActivities        ProjectActivity[]
+  tasks                    ProjectTask[]
+  risks                    Risk[]
+  bugs                     BugReport[]
+  requirements             Requirement[]
+  requirementVersions      RequirementVersion[]
+  documents                DocumentItem[]
+  weeklyInsights           WeeklyInsight[]
+  repositories             ProjectRepository[]
+  bugFixJobs               BugFixJob[]
+  aiIndexSources           AiIndexSource[]
+  aiIndexChunks            AiIndexChunk[]
+  aiIndexJobs              AiIndexJob[]
+  aiIndexTraces            AiIndexTrace[]
+  assistantActionJobs      AssistantActionJob[]
+  dashboardSideEffectJobs  DashboardSideEffectJob[]
 
   @@map("workspaces")
 }
@@ -57,57 +59,120 @@ model DashboardMember {
 }
 
 model Project {
-  id             String  @id
-  workspaceId    String
-  name           String
-  owner          String
-  ownerMemberId  String?
-  ownerOpenId    String?
-  ownerUnionId   String?
-  ownerUserId    String?
-  ownerEmail     String?
-  ownerAvatarUrl String? @db.VarChar(1024)
-  status         String
-  progress       Int
-  health         Int
-  dueDate        String
-  team           Int
-  riskCount      Int
-  summary        String  @db.Text
-  milestones     Json
+  id                   String  @id
+  workspaceId          String
+  name                 String
+  code                 String?
+  owner                String
+  ownerMemberId        String?
+  ownerOpenId          String?
+  ownerUnionId         String?
+  ownerUserId          String?
+  ownerEmail           String?
+  ownerAvatarUrl       String? @db.VarChar(1024)
+  status               String
+  startDate            String  @default("")
+  progress             Int
+  health               Int
+  riskLevel            String  @default("低")
+  healthStatus         String  @default("待评估")
+  healthReason         String? @db.Text
+  dueDate              String
+  team                 Int
+  riskCount            Int
+  summary              String  @db.Text
+  deliveryLabelCatalog Json
+  milestones           Json
 
-  workspace    Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  repositories ProjectRepository[]
+  workspace         Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  repositories      ProjectRepository[]
+  memberPermissions ProjectMemberPermission[]
+  activities        ProjectActivity[]
 
   @@index([workspaceId])
+  @@index([workspaceId, code])
   @@index([name])
   @@map("projects")
 }
 
+/// 项目成员权限只保存稳定访问级别和职能角色 key；角色展示文案由上层按语言环境解释。
+model ProjectMemberPermission {
+  id                String   @id @default(cuid())
+  workspaceId       String
+  projectId         String
+  memberId          String
+  accessLevel       String   @default("viewer")
+  functionalRoles   Json     @default("[]")
+  createdByMemberId String?
+  updatedByMemberId String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, memberId])
+  @@index([workspaceId, memberId])
+  @@map("project_member_permissions")
+}
+
+/// 项目活动记录承载跨实体审计时间线，detail 保留可读快照，避免实体后续删除后审计语义丢失。
+model ProjectActivity {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  projectId     String
+  actorMemberId String?
+  actorName     String
+  action        String
+  entityType    String
+  entityId      String
+  target        String
+  detail        String   @db.Text
+  createdAt     DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+  @@index([projectId, createdAt])
+  @@index([entityType, entityId])
+  @@map("project_activities")
+}
+
 model ProjectTask {
-  id             String  @id
-  workspaceId    String
-  title          String
-  stage          String
-  owner          String
-  ownerMemberId  String?
-  ownerOpenId    String?
-  ownerUnionId   String?
-  ownerUserId    String?
-  ownerEmail     String?
-  ownerAvatarUrl String? @db.VarChar(1024)
-  project        String
-  versionId      String?
-  versionName    String?
-  priority       String
-  startDate      String
-  dueDate        String
-  aiHint         String  @db.Text
+  id               String  @id
+  workspaceId      String
+  title            String
+  stage            String
+  owner            String
+  ownerMemberId    String?
+  ownerOpenId      String?
+  ownerUnionId     String?
+  ownerUserId      String?
+  ownerEmail       String?
+  ownerAvatarUrl   String? @db.VarChar(1024)
+  project          String
+  projectId        String?
+  versionId        String?
+  versionName      String?
+  requirementId    String?
+  requirementTitle String?
+  description      String? @db.Text
+  taskType         String?
+  storyPoints      Int?
+  estimatedMinutes Int?
+  priority         String
+  startDate        String
+  dueDate          String
+  completedAt      String?
+  aiHint           String  @db.Text
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
+  @@index([projectId])
   @@index([versionId])
+  @@index([requirementId])
   @@index([ownerMemberId])
   @@map("project_tasks")
 }
@@ -125,11 +190,13 @@ model Risk {
   ownerEmail     String?
   ownerAvatarUrl String? @db.VarChar(1024)
   project        String
+  projectId      String?
   mitigation     String  @db.Text
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
+  @@index([projectId])
   @@map("risks")
 }
 
@@ -140,6 +207,7 @@ model BugReport {
   status           String
   severity         String
   project          String
+  projectId        String?
   versionId        String?
   versionName      String?
   reporter         String
@@ -169,6 +237,7 @@ model BugReport {
   bugFixJobs  BugFixJob[]
 
   @@index([workspaceId])
+  @@index([projectId])
   @@index([versionId])
   @@index([ownerMemberId])
   @@map("bug_reports")
@@ -214,10 +283,25 @@ model RequirementVersion {
   parentVersionName     String?
   name                  String
   project               String
+  projectId             String?
+  type                  String  @default("版本")
   status                String
   startDate             String
   releaseDate           String
+  actualStartDate       String?
+  actualCompletedDate   String?
+  progress              Int     @default(0)
+  riskLevel             String  @default("低")
+  healthStatus          String  @default("待评估")
+  healthReason          String? @db.Text
   goal                  String  @db.Text
+  owner                 String?
+  ownerMemberId         String?
+  ownerOpenId           String?
+  ownerUnionId          String?
+  ownerUserId           String?
+  ownerEmail            String?
+  ownerAvatarUrl        String? @db.VarChar(1024)
   productOwner          String?
   productOwnerMemberId  String?
   productOwnerOpenId    String?
@@ -239,45 +323,61 @@ model RequirementVersion {
   devOwnerUserId        String?
   devOwnerEmail         String?
   devOwnerAvatarUrl     String? @db.VarChar(1024)
+  deliveryLabelCatalog Json
   milestones            Json
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
+  @@index([projectId])
   @@index([parentVersionId])
+  @@index([ownerMemberId])
   @@map("project_versions")
 }
 
 model Requirement {
-  id                  String  @id
-  workspaceId         String
-  title               String
-  priority            String
-  status              String
-  project             String
-  versionId           String?
-  versionName         String?
-  owner               String
-  ownerMemberId       String?
-  ownerOpenId         String?
-  ownerUnionId        String?
-  ownerUserId         String?
-  ownerEmail          String?
-  ownerAvatarUrl      String? @db.VarChar(1024)
-  uiLink              String? @db.Text
-  documentLink        String? @db.Text
-  acceptance          String  @db.Text
-  aiSummary           String? @db.Text
-  aiRisks             Json    @default("[]")
-  aiMissingItems      Json    @default("[]")
-  aiFrontendNotes     Json    @default("[]")
-  aiBackendNotes      Json    @default("[]")
-  aiTestingNotes      Json    @default("[]")
-  aiCompletenessScore Int?
+  id                   String  @id
+  workspaceId          String
+  title                String
+  priority             String
+  status               String
+  project              String
+  projectId            String?
+  versionId            String?
+  versionName          String?
+  description          String? @db.Text
+  owner                String
+  ownerMemberId        String?
+  ownerOpenId          String?
+  ownerUnionId         String?
+  ownerUserId          String?
+  ownerEmail           String?
+  ownerAvatarUrl       String? @db.VarChar(1024)
+  designOwner          String?
+  designOwnerMemberId  String?
+  designOwnerOpenId    String?
+  designOwnerUnionId   String?
+  designOwnerUserId    String?
+  designOwnerEmail     String?
+  designOwnerAvatarUrl String? @db.VarChar(1024)
+  developerMemberIds   Json    @default("[]")
+  startDate            String?
+  dueDate              String?
+  uiLink               String? @db.Text
+  documentLink         String? @db.Text
+  acceptance           String  @db.Text
+  aiSummary            String? @db.Text
+  aiRisks              Json    @default("[]")
+  aiMissingItems       Json    @default("[]")
+  aiFrontendNotes      Json    @default("[]")
+  aiBackendNotes       Json    @default("[]")
+  aiTestingNotes       Json    @default("[]")
+  aiCompletenessScore  Int?
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
+  @@index([projectId])
   @@index([versionId])
   @@map("requirements")
 }
@@ -509,29 +609,31 @@ model AiIndexTrace {
 }
 
 model AssistantActionJob {
-  id             String                   @id @default(cuid())
-  workspaceId    String
-  actionType     AssistantActionType
-  targetType     AssistantActionTargetType
-  scope          String
-  recordIds      Json                     @default("[]")
-  status         AssistantActionJobStatus @default(queued)
-  requestedCount Int                      @default(0)
-  successCount   Int                      @default(0)
-  failedCount    Int                      @default(0)
-  result         Json                     @default("{}")
-  error          String?                  @db.Text
-  requestedBy    String?
-  createdAt      DateTime                 @default(now())
-  updatedAt      DateTime                 @updatedAt
-  startedAt      DateTime?
-  finishedAt     DateTime?
-  lockedAt       DateTime?
-  lockedBy       String?
+  id                  String                    @id @default(cuid())
+  workspaceId         String
+  actionType          AssistantActionType
+  targetType          AssistantActionTargetType
+  scope               String
+  recordIds           Json                      @default("[]")
+  status              AssistantActionJobStatus  @default(queued)
+  requestedCount      Int                       @default(0)
+  successCount        Int                       @default(0)
+  failedCount         Int                       @default(0)
+  result              Json                      @default("{}")
+  error               String?                   @db.Text
+  requestedBy         String?
+  requestedByMemberId String?
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  startedAt           DateTime?
+  finishedAt          DateTime?
+  lockedAt            DateTime?
+  lockedBy            String?
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId, status, createdAt])
+  @@index([workspaceId, requestedByMemberId])
   @@index([status, createdAt])
   @@map("assistant_action_jobs")
 }

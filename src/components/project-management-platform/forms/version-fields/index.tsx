@@ -1,13 +1,17 @@
 "use client";
 
 import "./index.less";
-import { Col, DatePicker, Form, Input, Row, Select } from "antd";
-import { useEffect } from "react";
+import { Col, DatePicker, Form, Input, InputNumber, Row, Select } from "antd";
+import { useEffect, useMemo } from "react";
 import dayjs from "dayjs";
 import type { OwnerSelectableMember, RequirementVersionOption } from "@/components/project-management-platform/types";
+import type { Project } from "@/types/dashboard";
 import { MilestoneFields } from "@/components/project-management-platform/forms/milestone-fields";
+import { DeliveryLabelCatalogFields } from "@/components/project-management-platform/forms/delivery-label-catalog-fields";
+import { OwnerSelect } from "@/components/project-management-platform/forms/owner-select";
 import { VersionOwnerFields } from "@/components/project-management-platform/forms/version-owner-fields";
 import { VersionParentField } from "@/components/project-management-platform/forms/version-parent-field";
+import { normalizeProjectDeliveryLabelCatalog } from "@/data/project-delivery-labels";
 
 // 复用站内项目名称，避免任务、风险和版本表单各自维护一套项目选项。
 export function ProjectOptionSelect({
@@ -54,8 +58,13 @@ function useSyncProjectWithVersion(
       versionName: selectedVersion.versionName
     };
 
-    if (syncCrossProject || selectedVersion.project !== "跨项目") {
+    if (selectedVersion.project !== "跨项目") {
       nextValues.project = selectedVersion.project;
+      nextValues.projectId = selectedVersion.projectId;
+    } else if (syncCrossProject && !form.getFieldValue("project")) {
+      // 跨项目版本允许任务沿用所选需求的具体项目；只有表单尚无上下文时才回退为“跨项目”。
+      nextValues.project = selectedVersion.project;
+      nextValues.projectId = undefined;
     }
 
     form.setFieldsValue(nextValues);
@@ -92,6 +101,9 @@ export function VersionProjectFields({
             />
           </Form.Item>
           <Form.Item name="versionName" hidden>
+            <Input />
+          </Form.Item>
+          <Form.Item name="projectId" hidden>
             <Input />
           </Form.Item>
         </Col>
@@ -139,6 +151,9 @@ export function VersionOnlyField({
       <Form.Item name="project" hidden>
         <Input />
       </Form.Item>
+      <Form.Item name="projectId" hidden>
+        <Input />
+      </Form.Item>
     </>
   );
 }
@@ -147,11 +162,13 @@ export function VersionOnlyField({
 export function RequirementVersionSelectField({
   form,
   versionOptions,
+  disabled = false,
   versionLabel = "关联版本",
   versionMessage = "请选择关联版本"
 }: {
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   versionOptions: RequirementVersionOption[];
+  disabled?: boolean;
   versionLabel?: string;
   versionMessage?: string;
 }) {
@@ -162,6 +179,7 @@ export function RequirementVersionSelectField({
       <Form.Item label={versionLabel} name="versionId" rules={[{ required: true, message: versionMessage }]}>
         <Select
           showSearch
+          disabled={disabled}
           optionFilterProp="label"
           placeholder="选择版本"
           notFoundContent="请先新建版本"
@@ -174,6 +192,9 @@ export function RequirementVersionSelectField({
       <Form.Item name="project" hidden>
         <Input />
       </Form.Item>
+      <Form.Item name="projectId" hidden>
+        <Input />
+      </Form.Item>
     </>
   );
 }
@@ -184,28 +205,79 @@ export function RequirementVersionFields({
   people,
   peopleError,
   peopleLoading,
+  projects,
   versionOptions,
-  editingVersionId
+  editingVersionId,
+  canManageDeliveryLabelCatalog = true
 }: {
   form: ReturnType<typeof Form.useForm<Record<string, unknown>>>[0];
   people: OwnerSelectableMember[];
   peopleError: string;
   peopleLoading: boolean;
+  projects: Project[];
   versionOptions: RequirementVersionOption[];
   editingVersionId?: string;
+  canManageDeliveryLabelCatalog?: boolean;
 }) {
+  const rawLabelCatalog = Form.useWatch("deliveryLabelCatalog", form);
+  const milestones = Form.useWatch("milestones", form) as Array<{ labelId?: string }> | undefined;
+  const labelCatalog = useMemo(
+    () => normalizeProjectDeliveryLabelCatalog(rawLabelCatalog),
+    [rawLabelCatalog]
+  );
+  const labelUsageCounts = useMemo(() => (milestones ?? []).reduce<Record<string, number>>((counts, milestone) => {
+    if (milestone?.labelId) {
+      counts[milestone.labelId] = (counts[milestone.labelId] ?? 0) + 1;
+    }
+
+    return counts;
+  }, {}), [milestones]);
   return (
     <>
       <Form.Item label="版本名称" name="name" rules={[{ required: true, message: "请输入版本名称" }]}>
         <Input placeholder="例如：1.5 协同提效版本" />
       </Form.Item>
+      <Form.Item label="归属项目" name="projectId" rules={[{ required: true, message: "请选择归属项目" }]}>
+        <Select
+          disabled={Boolean(editingVersionId)}
+          showSearch
+          optionFilterProp="label"
+          placeholder="选择项目"
+          options={projects.map((project) => ({ value: project.id, label: project.name }))}
+          onChange={(nextProjectId) => {
+            const nextProject = projects.find((project) => project.id === nextProjectId);
+
+            form.setFieldValue("project", nextProject?.name ?? "");
+          }}
+        />
+      </Form.Item>
       <Form.Item name="project" hidden>
         <Input />
       </Form.Item>
-      <Form.Item label="版本状态" name="status">
-        <Select options={["规划中", "进行中", "已发布", "已归档"].map((value) => ({ value, label: value }))} />
+      <Row gutter={12}>
+        <Col xs={24} sm={12}>
+          <Form.Item label="单元类型" name="type">
+            <Select options={["项目", "版本"].map((value) => ({ value, label: value }))} />
+          </Form.Item>
+        </Col>
+        <Col xs={24} sm={12}>
+          <Form.Item label="风险级别" name="riskLevel">
+            <Select options={["低", "中", "高"].map((value) => ({ value, label: value }))} />
+          </Form.Item>
+        </Col>
+      </Row>
+      <Form.Item label="项目/版本状态" name="status">
+        <Select options={["规划中", "需求梳理", "开发中", "验收中", "进行中", "已发布", "已归档"].map((value) => ({ value, label: value }))} />
       </Form.Item>
       <VersionParentField form={form} versionOptions={versionOptions} editingVersionId={editingVersionId} />
+      <OwnerSelect
+        form={form}
+        people={people}
+        loading={peopleLoading}
+        error={peopleError}
+        label="交付总负责人"
+        required={false}
+      />
       <VersionOwnerFields
         form={form}
         people={people}
@@ -213,14 +285,14 @@ export function RequirementVersionFields({
         peopleLoading={peopleLoading}
       />
       <Row gutter={12}>
-        <Col span={12}>
-          <Form.Item label="开始日期" name="startDate">
+        <Col xs={24} sm={12}>
+          <Form.Item label="计划开始" name="startDate">
             <DatePicker className="pm-form-control" />
           </Form.Item>
         </Col>
-        <Col span={12}>
+        <Col xs={24} sm={12}>
           <Form.Item
-            label="发布日期"
+            label="计划完成"
             name="releaseDate"
             dependencies={["startDate"]}
             rules={[
@@ -232,7 +304,7 @@ export function RequirementVersionFields({
                     return Promise.resolve();
                   }
 
-                  return Promise.reject(new Error("发布日期不能早于开始日期"));
+                    return Promise.reject(new Error("计划完成日期不能早于开始日期"));
                 }
               })
             ]}
@@ -241,14 +313,52 @@ export function RequirementVersionFields({
           </Form.Item>
         </Col>
       </Row>
+      <Row gutter={12}>
+        <Col xs={24} sm={12}>
+          <Form.Item label="实际开始" name="actualStartDate">
+            <DatePicker className="pm-form-control" />
+          </Form.Item>
+        </Col>
+        <Col xs={24} sm={12}>
+          <Form.Item
+            label="实际完成"
+            name="actualCompletedDate"
+            dependencies={["actualStartDate"]}
+            rules={[
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  const actualStartDate = getFieldValue("actualStartDate");
+
+                  if (!value || !actualStartDate || !dayjs(value).isBefore(dayjs(actualStartDate), "day")) {
+                    return Promise.resolve();
+                  }
+
+                  return Promise.reject(new Error("实际完成日期不能早于实际开始日期"));
+                }
+              })
+            ]}
+          >
+            <DatePicker className="pm-form-control" />
+          </Form.Item>
+        </Col>
+      </Row>
+      <Form.Item label="进度（自动）" name="progress">
+        <InputNumber className="pm-form-control" min={0} max={100} suffix="%" disabled />
+      </Form.Item>
       <Form.Item label="版本目标" name="goal">
         <Input.TextArea rows={4} placeholder="这个版本要解决的问题、交付范围和验收口径" />
       </Form.Item>
+      <DeliveryLabelCatalogFields
+        disabled={!canManageDeliveryLabelCatalog}
+        form={form}
+        usageCounts={labelUsageCounts}
+      />
       <MilestoneFields
         addText="添加版本里程碑"
         defaultDueDateField="releaseDate"
         defaultNote="记录版本交付检查点、提测或上线前置条件。"
         form={form}
+        labelCatalog={labelCatalog}
         people={people}
         peopleError={peopleError}
         peopleLoading={peopleLoading}

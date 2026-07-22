@@ -1,11 +1,24 @@
-export type ProjectStatus = "进行中" | "有风险" | "已完成" | "暂停";
+export type ProjectStatus = "进行中" | "有风险" | "已完成" | "暂停" | "已归档";
+export type ProjectRiskLevel = "低" | "中" | "高";
+export type ProjectHealthStatus = "待评估" | "正常" | "有风险" | "已偏离";
 export type ProjectMilestoneStatus = "未开始" | "进行中" | "已完成" | "延期";
+
+export type ProjectDeliveryLabel = {
+  id: string;
+  name: string;
+  active: boolean;
+  deleted?: boolean;
+};
 
 export type ProjectMilestone = {
   id: string;
   title: string;
+  labelId?: string;
+  // type 保存选中标签当时的名称快照，即使目录之后改名或停用也能回溯。
+  type?: string;
   status: ProjectMilestoneStatus;
   dueDate: string;
+  actualCompletedDate?: string;
   owner: string;
   ownerMemberId?: string;
   ownerOpenId?: string;
@@ -20,6 +33,7 @@ export type Project = {
   id: string;
   workspaceId?: string;
   name: string;
+  code?: string;
   owner: string;
   ownerMemberId?: string;
   ownerOpenId?: string;
@@ -28,16 +42,22 @@ export type Project = {
   ownerEmail?: string;
   ownerAvatarUrl?: string;
   status: ProjectStatus;
+  startDate: string;
   progress: number;
   health: number;
+  riskLevel: ProjectRiskLevel;
+  healthStatus: ProjectHealthStatus;
+  healthReason?: string;
   dueDate: string;
   team: number;
   riskCount: number;
   summary: string;
+  deliveryLabelCatalog: ProjectDeliveryLabel[];
   milestones: ProjectMilestone[];
 };
 
-export type TaskStage = "待处理" | "进行中" | "评审中" | "已完成";
+export type TaskStage = "待处理" | "进行中" | "评审中" | "验收中" | "已完成";
+export type TaskPriority = "紧急" | "高" | "普通" | "低";
 export type BugSeverity = "阻塞" | "严重" | "一般" | "轻微";
 export type BugStatus = "新建" | "定位中" | "修复中" | "待验证" | "已关闭";
 export type BugAttachment = {
@@ -168,11 +188,19 @@ export type Task = {
   ownerEmail?: string;
   ownerAvatarUrl?: string;
   project: string;
+  projectId?: string;
   versionId?: string;
   versionName?: string;
-  priority: "高" | "中" | "低";
+  requirementId?: string;
+  requirementTitle?: string;
+  description?: string;
+  taskType?: string;
+  storyPoints?: number;
+  estimatedMinutes?: number;
+  priority: TaskPriority;
   startDate: string;
   dueDate: string;
+  completedAt?: string;
   aiHint: string;
 };
 
@@ -189,6 +217,7 @@ export type Risk = {
   ownerEmail?: string;
   ownerAvatarUrl?: string;
   project: string;
+  projectId?: string;
   mitigation: string;
 };
 
@@ -199,6 +228,7 @@ export type BugReport = {
   status: BugStatus;
   severity: BugSeverity;
   project: string;
+  projectId?: string;
   versionId?: string;
   versionName?: string;
   reporter: string;
@@ -223,11 +253,26 @@ export type Requirement = {
   id: string;
   workspaceId?: string;
   title: string;
-  priority: "P0" | "P1" | "P2";
-  status: "待评审" | "评审中" | "待排期" | "设计中" | "开发中" | "待上线" | "已上线" | "已关闭" | "已驳回";
+  priority: "P0" | "P1" | "P2" | "低" | "普通" | "高" | "紧急";
+  status:
+    | "待评审"
+    | "评审中"
+    | "待排期"
+    | "设计中"
+    | "开发中"
+    | "待上线"
+    | "已上线"
+    | "已关闭"
+    | "已驳回"
+    | "待梳理"
+    | "梳理中"
+    | "验收中"
+    | "已完成";
   project: string;
+  projectId?: string;
   versionId?: string;
   versionName?: string;
+  description?: string;
   owner: string;
   ownerMemberId?: string;
   ownerOpenId?: string;
@@ -235,6 +280,16 @@ export type Requirement = {
   ownerUserId?: string;
   ownerEmail?: string;
   ownerAvatarUrl?: string;
+  designOwner?: string;
+  designOwnerMemberId?: string;
+  designOwnerOpenId?: string;
+  designOwnerUnionId?: string;
+  designOwnerUserId?: string;
+  designOwnerEmail?: string;
+  designOwnerAvatarUrl?: string;
+  developerMemberIds: string[];
+  startDate?: string;
+  dueDate?: string;
   uiLink?: string;
   documentLink?: string;
   acceptance: string;
@@ -254,10 +309,25 @@ export type RequirementVersion = {
   parentVersionName?: string;
   name: string;
   project: string;
-  status: "规划中" | "进行中" | "已发布" | "已归档";
+  projectId?: string;
+  type: "项目" | "版本";
+  status: "规划中" | "需求梳理" | "开发中" | "验收中" | "进行中" | "已发布" | "已归档";
   startDate: string;
   releaseDate: string;
+  actualStartDate?: string;
+  actualCompletedDate?: string;
+  progress: number;
+  riskLevel: ProjectRiskLevel;
+  healthStatus: ProjectHealthStatus;
+  healthReason?: string;
   goal: string;
+  owner?: string;
+  ownerMemberId?: string;
+  ownerOpenId?: string;
+  ownerUnionId?: string;
+  ownerUserId?: string;
+  ownerEmail?: string;
+  ownerAvatarUrl?: string;
   productOwner?: string;
   productOwnerMemberId?: string;
   productOwnerOpenId?: string;
@@ -279,7 +349,60 @@ export type RequirementVersion = {
   devOwnerUserId?: string;
   devOwnerEmail?: string;
   devOwnerAvatarUrl?: string;
+  // one2all 的交付标签目录属于单个 plan unit/version；字段可选仅用于兼容历史项目级目录。
+  deliveryLabelCatalog?: ProjectDeliveryLabel[];
   milestones: ProjectMilestone[];
+};
+
+// 项目治理字段使用稳定英文 key，避免 API、数据库和后续中文 UI 文案相互耦合。
+export type ProjectAccessLevel = "admin" | "member" | "commenter" | "viewer";
+export type ProjectFunctionalRole =
+  | "delivery_manager"
+  | "product_owner"
+  | "design_owner"
+  | "developer"
+  | "tester"
+  | "quality_owner"
+  | "ops_release"
+  | "business_acceptor"
+  | "stakeholder";
+export type ProjectRoleScopeType = "project" | "requirement" | "plan_unit";
+export type ProjectFunctionalRoleAssignment = {
+  roleKey: ProjectFunctionalRole;
+  scopeType: ProjectRoleScopeType;
+  scopeId?: string;
+  sourceType?: "manual" | "requirement_assignment" | "version_assignment";
+  sourceId?: string;
+  sourceLabel?: string;
+};
+
+export type ProjectMemberPermission = {
+  id: string;
+  workspaceId: string;
+  projectId: string;
+  memberId: string;
+  accessLevel: ProjectAccessLevel;
+  functionalRoles: ProjectFunctionalRoleAssignment[];
+  createdByMemberId?: string;
+  updatedByMemberId?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProjectActivityEntityType = "project" | "requirementVersion" | "requirement" | "task" | "risk" | "bug";
+
+export type ProjectActivity = {
+  id: string;
+  workspaceId: string;
+  projectId: string;
+  actorMemberId?: string;
+  actorName: string;
+  action: string;
+  entityType: ProjectActivityEntityType;
+  entityId: string;
+  target: string;
+  detail: string;
+  createdAt: string;
 };
 
 export type DocumentItem = {

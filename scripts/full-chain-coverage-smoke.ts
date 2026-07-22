@@ -27,6 +27,8 @@ const requiredPackageScripts = [
   "full-chain:smoke:all",
   "full-chain:smoke:list",
   "full-chain:notification",
+  "full-chain:project-management",
+  "full-chain:project-management-delete",
   "full-chain:requirement-ai",
   "full-chain:weekly-report",
   "full-chain:workspace-management",
@@ -153,6 +155,14 @@ function verifyPackageScripts() {
 
     if (scriptName === "full-chain:notification") {
       return !command.includes("scripts/full-chain-notification-smoke.ts");
+    }
+
+    if (scriptName === "full-chain:project-management") {
+      return !command.includes("scripts/full-chain-project-management-smoke.ts");
+    }
+
+    if (scriptName === "full-chain:project-management-delete") {
+      return !command.includes("scripts/full-chain-project-management-delete-smoke.ts");
     }
 
     if (scriptName === "full-chain:requirement-ai") {

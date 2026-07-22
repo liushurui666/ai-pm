@@ -86,6 +86,24 @@
   cursor: grabbing;
 }
 
+.project-scheduler-event-readonly .scheduler_default_event_inner,
+.project-scheduler-shell.is-readonly .project-scheduler-event-task .scheduler_default_event_inner {
+  cursor: not-allowed;
+  filter: saturate(0.42);
+  opacity: 0.72;
+}
+
+.project-scheduler-readonly-mark {
+  flex: 0 0 auto;
+  padding: 2px 5px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
 .project-scheduler-resize-handle {
   z-index: 4;
   display: grid;

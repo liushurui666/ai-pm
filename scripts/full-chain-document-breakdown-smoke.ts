@@ -64,9 +64,10 @@ function verifyFallbackBreakdown() {
   assertSmoke(breakdown.documentType === "技术方案", "fallback 未根据内容识别技术方案类型。");
   assertSmoke(breakdown.tasks.length >= 3, "fallback 至少应拆出前端/后端/测试任务。");
   assertSmoke(roles.has("前端") && roles.has("后端") && roles.has("测试"), "fallback 未覆盖前端/后端/测试角色任务。");
-  assertSmoke(breakdown.tasks.every((task) => task.priority === "高" || task.priority === "中" || task.priority === "低"), "fallback 任务优先级不合法。");
+  assertSmoke(breakdown.tasks.every((task) => ["紧急", "高", "普通", "低"].includes(task.priority)), "fallback 任务优先级不合法。");
   assertSmoke(breakdown.tasks.every((task) => task.dueDate && task.aiHint), "fallback 任务缺少截止日期或 AI 提示。");
   assertSmoke(emptyBreakdown.tasks.length >= 3, "空文档 fallback 仍应生成兜底任务。");
+  assertSmoke(emptyBreakdown.tasks.every((task) => task.priority === "普通"), "空文档 fallback 新写入应统一使用“普通”。");
 
   return {
     emptyTaskCount: emptyBreakdown.tasks.length,
@@ -112,6 +113,7 @@ function verifyRouteContract() {
 }
 
 function verifyFrontendContract() {
+  const routeText = readText(routePath);
   const drawerText = readText(drawerPath);
   const platformText = readText(platformPath);
   const formUtilsText = readText(formUtilsPath);
@@ -155,6 +157,10 @@ function verifyFrontendContract() {
   assertSmoke(platformText.includes("openVersionBreakdownDrawer(version"), "版本详情/卡片入口没有传入版本上下文。");
   assertSmoke(platformText.includes("versionId: version.id"), "版本拆任务入口没有预填 versionId。");
   assertSmoke(platformText.includes("project: version.project === \"跨项目\" ? undefined : version.project"), "版本拆任务入口没有隐藏同步项目。");
+  assertSmoke(routeText.includes("entityType: \"requirementVersion\""), "版本拆解仍错误复用普通 task:create 权限。");
+  assertSmoke(routeText.includes("action: \"update\""), "版本拆解没有复用 canUpdateVersion 权限口径。");
+  assertSmoke(routeText.includes("ownerMemberId: targetVersion.ownerMemberId"), "版本拆解没有把总体负责人纳入授权。");
+  assertSmoke(routeText.includes("if (!breakdownAuthorization.allowed)"), "版本拆解缺少无权拒绝分支。");
 
   // Form 工具和本地状态更新负责让上传值可提交、生成任务即时进入看板并触发指标刷新。
   assertSmoke(formUtilsText.includes("getSelectedUploadFile"), "表单工具缺少文件提取函数。");

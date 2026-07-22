@@ -68,6 +68,7 @@ import {
   serializeCreateValues
 } from "@/components/project-management-platform/forms/form-utils";
 import type { BugAiFixFormValues } from "@/components/project-management-platform/forms/bug-ai-fix-drawer";
+import type { RequirementFieldAccess } from "@/components/project-management-platform/forms/requirement-fields";
 import { createOwnerFormFieldsFromMember, hydrateOwnerFormValues } from "@/components/project-management-platform/forms/owner-select";
 import {
   BugEditDrawer,
@@ -112,11 +113,35 @@ import {
   type ProjectCalendarScheduleChange
 } from "@/components/project-management-platform/views/project-calendar-utils";
 import { ProjectsView } from "@/components/project-management-platform/views/projects-view";
+import { resolveProjectIdForRecord } from "@/components/project-management-platform/views/projects-view/utils";
+import type {
+  ProjectDeliveryNode,
+  ProjectEffectivePermission,
+  ProjectOwnerTransferInput,
+  ProjectPermission,
+  ProjectPermissionInput
+} from "@/components/project-management-platform/views/projects-view/types";
 import { RequirementsView } from "@/components/project-management-platform/views/requirements-view";
 import { TasksView } from "@/components/project-management-platform/views/tasks-view";
 import { VersionDashboardView } from "@/components/project-management-platform/views/version-dashboard-view";
 import { getAiPmAuthLogoutHref } from "@/lib/auth/client";
+import type { ProjectManagementSnapshot } from "@/lib/project-management/types";
 import { createWeeklyReportFileName } from "@/lib/reports/weekly-report";
+import { getVersionDeliveryLabelCatalog } from "@/data/project-delivery-labels";
+import {
+  applyProjectDeepLinkToUrl,
+  normalizeProjectDetailTab,
+  readProjectDeepLink,
+  resolveProjectDeepLink,
+  type ProjectDeepLinkState,
+  type ProjectDetailTab
+} from "@/components/project-management-platform/project-deep-link";
+import {
+  applyTaskRequirementDeepLinkToUrl,
+  readTaskRequirementDeepLink,
+  resolveTaskRequirementDeepLink,
+  type TaskRequirementDeepLinkState
+} from "@/components/project-management-platform/task-requirement-deep-link";
 
 export type { AppView } from "@/components/project-management-platform/types";
 
@@ -125,6 +150,39 @@ const { Text } = Typography;
 const { useBreakpoint } = Grid;
 const feishuPeopleCacheTtlMs = 5 * 60 * 1000;
 const dashboardRefreshDebounceMs = 1800;
+const projectManagementFailureRetryMs = 30 * 1000;
+
+type TaskRequirementFilter = {
+  id: string;
+  title: string;
+  project?: string;
+  projectId: string;
+  versionId?: string;
+};
+
+// URL 中保留的是经当前工作区校验后的稳定 ID，展示文案则始终从最新需求记录派生。
+// 这样需求改名后刷新链接不会丢失筛选，也不会把旧标题当成关系主键。
+function createTaskRequirementFilter(
+  requirement: Requirement,
+  state: TaskRequirementDeepLinkState
+): TaskRequirementFilter | null {
+  if (!state.requirementId || !state.projectId) {
+    return null;
+  }
+
+  return {
+    id: state.requirementId,
+    title: requirement.title,
+    project: requirement.project,
+    projectId: state.projectId,
+    versionId: state.versionId
+  };
+}
+
+// 同一浏览器会切换工作区，缓存键必须同时包含 workspaceId，避免全局唯一假设失效时复用旧权限。
+function getProjectManagementSnapshotCacheKey(workspaceId: string, projectId: string) {
+  return `${workspaceId}:${projectId}`;
+}
 
 // 周报导出在浏览器侧完成，避免为了一个 Markdown 文件额外落库或新增下载接口。
 function downloadMarkdownFile(fileName: string, content: string) {
@@ -146,13 +204,25 @@ export function ProjectManagementPlatform({
   initialData,
   initialLoadError = "",
   initialView = "overview",
-  initialWorkspaceId
+  initialWorkspaceId,
+  initialProjectId,
+  initialProjectVersionId,
+  initialProjectDetailTab,
+  initialTaskRequirementId,
+  initialTaskProjectId,
+  initialTaskVersionId
 }: {
   initialBugId?: string;
   initialData?: DashboardData;
   initialLoadError?: string;
   initialView?: AppView;
   initialWorkspaceId?: string;
+  initialProjectId?: string;
+  initialProjectVersionId?: string;
+  initialProjectDetailTab?: string;
+  initialTaskRequirementId?: string;
+  initialTaskProjectId?: string;
+  initialTaskVersionId?: string;
 }) {
   const [data, setData] = useState<DashboardData | null>(initialData ?? null);
   const [loading, setLoading] = useState(!initialData && !initialLoadError);
@@ -164,6 +234,11 @@ export function ProjectManagementPlatform({
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editingBug, setEditingBug] = useState<BugReport | null>(null);
   const [editingRequirement, setEditingRequirement] = useState<Requirement | null>(null);
+  const [editingRequirementFieldAccess, setEditingRequirementFieldAccess] = useState<RequirementFieldAccess>({
+    design: true,
+    governance: true,
+    product: true
+  });
   const [editingRequirementVersion, setEditingRequirementVersion] = useState<RequirementVersion | null>(null);
   const [projectEditSubmitting, setProjectEditSubmitting] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
@@ -178,6 +253,36 @@ export function ProjectManagementPlatform({
   const [activeView, setActiveView] = useState<AppView>(validViews.has(initialView) ? initialView : "overview");
   const [projectCalendarVersionId, setProjectCalendarVersionId] = useState(allProjectCalendarVersionsValue);
   const [selectedRequirementVersionId, setSelectedRequirementVersionId] = useState<string | null>(null);
+  const [taskRequirementFilter, setTaskRequirementFilter] = useState<TaskRequirementFilter | null>(() => {
+    if (initialView !== "tasks" || !initialData || !initialTaskRequirementId) {
+      return null;
+    }
+
+    // SSR 只负责把有界参数传进工作台；首次状态仍要用服务端已过滤的 dashboard 再校验归属。
+    const resolved = resolveTaskRequirementDeepLink({
+      requested: {
+        requirementId: initialTaskRequirementId,
+        projectId: initialTaskProjectId,
+        versionId: initialTaskVersionId
+      },
+      projects: initialData.projects,
+      requirements: initialData.requirements,
+      versions: initialData.requirementVersions
+    });
+    const requirement = resolved.requirementId
+      ? initialData.requirements.find((candidate) => candidate.id === resolved.requirementId)
+      : undefined;
+
+    return requirement ? createTaskRequirementFilter(requirement, resolved) : null;
+  });
+  const [activeProjectId, setActiveProjectId] = useState(initialProjectId ?? initialData?.projects[0]?.id ?? "");
+  const [activeProjectVersionId, setActiveProjectVersionId] = useState<string | undefined>(initialProjectVersionId);
+  const [projectDetailTab, setProjectDetailTab] = useState<ProjectDetailTab>(
+    normalizeProjectDetailTab(initialProjectDetailTab)
+  );
+  const [projectManagementSnapshots, setProjectManagementSnapshots] = useState<Map<string, ProjectManagementSnapshot>>(
+    () => new Map()
+  );
   const [people, setPeople] = useState<FeishuPerson[]>([]);
   const [peopleLoaded, setPeopleLoaded] = useState(false);
   const [peopleLoadedAt, setPeopleLoadedAt] = useState(0);
@@ -199,6 +304,13 @@ export function ProjectManagementPlatform({
   const workspaceSwitchSeqRef = useRef(0);
   const dashboardRefreshTimerRef = useRef<number | null>(null);
   const dashboardRefreshSeqRef = useRef(0);
+  const projectManagementSnapshotCacheRef = useRef<Map<string, ProjectManagementSnapshot>>(new Map());
+  const projectManagementFailuresRef = useRef<Map<string, number>>(new Map());
+  const projectManagementRequestSequencesRef = useRef<Map<string, number>>(new Map());
+  const projectManagementRequestsRef = useRef<Map<string, {
+    promise: Promise<ProjectManagementSnapshot | null>;
+    sequence: number;
+  }>>(new Map());
   const [createForm] = Form.useForm<Record<string, unknown>>();
   const [projectEditForm] = Form.useForm<Record<string, unknown>>();
   const [editForm] = Form.useForm<Record<string, unknown>>();
@@ -212,9 +324,6 @@ export function ProjectManagementPlatform({
   const screens = useBreakpoint();
   const isMobile = screens.md === false;
   const permissions = data?.meta?.permissions;
-  const canCreateRequirements = Boolean(permissions?.canCreateRequirements);
-  const canEditRequirements = Boolean(permissions?.canEditRequirements);
-  const canDeleteRequirements = Boolean(permissions?.canDeleteRequirements);
   const canEditBugs = Boolean(permissions?.canEditBugs);
   const canEditBugsFully = Boolean(permissions?.canEditBugsFully);
   const canDeleteBugs = Boolean(permissions?.canDeleteBugs);
@@ -235,7 +344,7 @@ export function ProjectManagementPlatform({
     return workspaceId;
   }
 
-  function replaceWorkbenchUrl(workspaceId: string, view = activeView) {
+  function replaceWorkbenchUrl(workspaceId: string, view = activeView, clearScopedDeepLink = false) {
     if (typeof window === "undefined") {
       return;
     }
@@ -243,8 +352,50 @@ export function ProjectManagementPlatform({
     const url = new URL(window.location.href);
     url.searchParams.set("workspaceId", workspaceId);
     url.searchParams.set("view", view);
+
+    if (clearScopedDeepLink || !["projects", "tasks"].includes(view)) {
+      // requirement helper 会同时清理两种深链共用的 project/version 参数。
+      applyTaskRequirementDeepLinkToUrl(url);
+    }
+
     window.history.replaceState(null, "", url.toString());
   }
+
+  const writeProjectDeepLink = useCallback((
+    state: Partial<ProjectDeepLinkState> | undefined,
+    mode: "push" | "replace" = "push"
+  ) => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const url = applyTaskRequirementDeepLinkToUrl(new URL(window.location.href));
+
+    applyProjectDeepLinkToUrl(url, state);
+
+    url.searchParams.set("view", "projects");
+    if (currentWorkspaceId) {
+      url.searchParams.set("workspaceId", currentWorkspaceId);
+    }
+    window.history[mode === "push" ? "pushState" : "replaceState"](null, "", url.toString());
+  }, [currentWorkspaceId]);
+
+  const writeTaskRequirementDeepLink = useCallback((
+    state: TaskRequirementDeepLinkState | undefined,
+    mode: "push" | "replace" = "push"
+  ) => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const url = applyTaskRequirementDeepLinkToUrl(new URL(window.location.href), state);
+
+    url.searchParams.set("view", "tasks");
+    if (currentWorkspaceId) {
+      url.searchParams.set("workspaceId", currentWorkspaceId);
+    }
+    window.history[mode === "push" ? "pushState" : "replaceState"](null, "", url.toString());
+  }, [currentWorkspaceId]);
 
   // 静默刷新用于校准乐观更新结果，失败时保留当前 UI 避免打断用户操作。
   // 这类刷新通常发生在拖拽、保存后的后台同步或助手动作完成后；一次 401/网络抖动不应直接把用户踢到登录页。
@@ -423,6 +574,706 @@ export function ProjectManagementPlatform({
 
     return data.projects;
   }, [data]);
+  useEffect(() => {
+    if (activeView !== "projects" || !data) {
+      return;
+    }
+
+    const resolved = resolveProjectDeepLink({
+      requested: {
+        projectId: activeProjectId || undefined,
+        versionId: activeProjectVersionId,
+        detailTab: projectDetailTab
+      },
+      projects: data.projects,
+      versions: data.requirementVersions,
+      fallbackProjectId: data.projects[0]?.id
+    });
+    const stateMatches = resolved.projectId === (activeProjectId || undefined)
+      && resolved.versionId === activeProjectVersionId
+      && resolved.detailTab === projectDetailTab;
+    const urlState = typeof window === "undefined" ? resolved : readProjectDeepLink(window.location.search);
+    const urlMatches = urlState.projectId === resolved.projectId
+      && urlState.versionId === resolved.versionId
+      && urlState.detailTab === resolved.detailTab;
+
+    if (stateMatches && urlMatches) {
+      return;
+    }
+
+    // 非法 project/version 深链只能回退到当前工作区内的稳定 ID，并 replace 掉坏 URL 避免回退重复命中。
+    const syncTimer = window.setTimeout(() => {
+      setActiveProjectId(resolved.projectId ?? "");
+      setActiveProjectVersionId(resolved.versionId);
+      setProjectDetailTab(resolved.detailTab);
+      writeProjectDeepLink(resolved.projectId ? resolved : undefined, "replace");
+    }, 0);
+
+    return () => window.clearTimeout(syncTimer);
+  }, [
+    activeProjectId,
+    activeProjectVersionId,
+    activeView,
+    data,
+    projectDetailTab,
+    writeProjectDeepLink
+  ]);
+
+  useEffect(() => {
+    if (activeView !== "tasks" || !data) {
+      return;
+    }
+
+    const urlState = readTaskRequirementDeepLink(window.location.search);
+    const resolved = resolveTaskRequirementDeepLink({
+      requested: urlState,
+      projects: data.projects,
+      requirements: data.requirements,
+      versions: data.requirementVersions
+    });
+    const requirement = resolved.requirementId
+      ? data.requirements.find((candidate) => candidate.id === resolved.requirementId)
+      : undefined;
+    const nextFilter = requirement ? createTaskRequirementFilter(requirement, resolved) : null;
+    const stateMatches = taskRequirementFilter?.id === nextFilter?.id
+      && taskRequirementFilter?.title === nextFilter?.title
+      && taskRequirementFilter?.project === nextFilter?.project
+      && taskRequirementFilter?.projectId === nextFilter?.projectId
+      && taskRequirementFilter?.versionId === nextFilter?.versionId;
+    const urlMatches = urlState.requirementId === resolved.requirementId
+      && urlState.projectId === resolved.projectId
+      && urlState.versionId === resolved.versionId;
+
+    if (stateMatches && urlMatches) {
+      return;
+    }
+
+    // 刷新数据后需求/版本可能被删除或权限不再可见；replace 清理坏参数，避免回退时重复命中失效条目。
+    const syncTimer = window.setTimeout(() => {
+      setTaskRequirementFilter(nextFilter);
+      writeTaskRequirementDeepLink(nextFilter ? resolved : undefined, "replace");
+    }, 0);
+
+    return () => window.clearTimeout(syncTimer);
+  }, [activeView, data, taskRequirementFilter, writeTaskRequirementDeepLink]);
+
+  useEffect(() => {
+    if (!data) {
+      return;
+    }
+
+    function replayWorkbenchDeepLink() {
+      const url = new URL(window.location.href);
+      const requestedView = url.searchParams.get("view");
+      const nextView = requestedView
+        && requestedView !== "bugEdit"
+        && validViews.has(requestedView as AppView)
+        ? requestedView as AppView
+        : "overview";
+      const dashboardWorkspaceId = data!.meta?.currentWorkspace?.id;
+      const originalUrl = url.toString();
+
+      url.searchParams.set("view", nextView);
+
+      if (!dashboardWorkspaceId || url.searchParams.get("workspaceId") !== dashboardWorkspaceId) {
+        // 浏览器后退可能命中另一工作区的历史条目；当前 dashboard 未切换前不得拿其 ID 跨租户回放。
+        if (dashboardWorkspaceId) {
+          url.searchParams.set("workspaceId", dashboardWorkspaceId);
+        }
+
+        applyTaskRequirementDeepLinkToUrl(url);
+        setTaskRequirementFilter(null);
+
+        if (nextView === "projects") {
+          const fallbackProject = resolveProjectDeepLink({
+            requested: readProjectDeepLink(url.search),
+            projects: data!.projects,
+            versions: data!.requirementVersions,
+            fallbackProjectId: data!.projects[0]?.id
+          });
+
+          setActiveProjectId(fallbackProject.projectId ?? "");
+          setActiveProjectVersionId(fallbackProject.versionId);
+          setProjectDetailTab(fallbackProject.detailTab);
+          applyProjectDeepLinkToUrl(url, fallbackProject.projectId ? fallbackProject : undefined);
+        }
+
+        setActiveView(nextView);
+        window.history.replaceState(null, "", url.toString());
+
+        return;
+      }
+
+      if (nextView === "projects") {
+        const resolved = resolveProjectDeepLink({
+          requested: readProjectDeepLink(url.search),
+          projects: data!.projects,
+          versions: data!.requirementVersions,
+          fallbackProjectId: data!.projects[0]?.id
+        });
+
+        setTaskRequirementFilter(null);
+        setActiveProjectId(resolved.projectId ?? "");
+        setActiveProjectVersionId(resolved.versionId);
+        setProjectDetailTab(resolved.detailTab);
+        applyTaskRequirementDeepLinkToUrl(url);
+        applyProjectDeepLinkToUrl(url, resolved.projectId ? resolved : undefined);
+      } else if (nextView === "tasks") {
+        const resolved = resolveTaskRequirementDeepLink({
+          requested: readTaskRequirementDeepLink(url.search),
+          projects: data!.projects,
+          requirements: data!.requirements,
+          versions: data!.requirementVersions
+        });
+        const requirement = resolved.requirementId
+          ? data!.requirements.find((candidate) => candidate.id === resolved.requirementId)
+          : undefined;
+
+        setTaskRequirementFilter(requirement ? createTaskRequirementFilter(requirement, resolved) : null);
+        applyTaskRequirementDeepLinkToUrl(url, requirement ? resolved : undefined);
+      } else {
+        // 非任务历史条目必须清掉隐藏筛选，之后前进到任务条目时再从它自己的 URL 精确恢复。
+        setTaskRequirementFilter(null);
+        applyTaskRequirementDeepLinkToUrl(url);
+      }
+
+      setActiveView(nextView);
+
+      if (url.toString() !== originalUrl) {
+        window.history.replaceState(null, "", url.toString());
+      }
+    }
+
+    window.addEventListener("popstate", replayWorkbenchDeepLink);
+
+    return () => window.removeEventListener("popstate", replayWorkbenchDeepLink);
+  }, [data]);
+
+  // 项目管理页使用受控项目选择；项目被删除或切换工作区后自动回退到当前数据里的首个项目，
+  // 不额外在 effect 中同步 state，避免 React 19 下产生级联渲染。
+  const resolvedActiveProject = useMemo(
+    () => filteredProjects.find((project) => project.id === activeProjectId) ?? filteredProjects[0],
+    [activeProjectId, filteredProjects]
+  );
+  const resolvedActiveProjectId = resolvedActiveProject?.id ?? "";
+  const canManageWorkspaceProjects = Boolean(permissions?.canManageMembers);
+  const taskScopedProjectIds = useMemo(() => {
+    if (!data) {
+      return [];
+    }
+
+    if (taskRequirementFilter) {
+      const filteredProjectId = resolveProjectIdForRecord(taskRequirementFilter, filteredProjects);
+
+      return filteredProjectId ? [filteredProjectId] : [];
+    }
+
+    // 直接进入任务页会混合多个项目；按稳定 ID 去重，历史名称仅由共享 helper 在唯一时回退。
+    return Array.from(new Set(
+      data.tasks
+        .map((task) => resolveProjectIdForRecord(task, filteredProjects))
+        .filter((projectId): projectId is string => Boolean(projectId))
+    ));
+  }, [data, filteredProjects, taskRequirementFilter]);
+  const requirementScopedProjectIds = useMemo(
+    () => activeView === "requirements" ? filteredProjects.map((project) => project.id) : [],
+    [activeView, filteredProjects]
+  );
+  const bugScopedProjectIds = useMemo(() => {
+    if (!data || !["bugs", "bugEdit"].includes(activeView)) {
+      return [];
+    }
+
+    const scopedBugs = activeView === "bugEdit" && routeBug ? [routeBug] : data.bugs;
+
+    return Array.from(new Set(
+      scopedBugs
+        .map((bug) => resolveProjectIdForRecord(bug, filteredProjects))
+        .filter((projectId): projectId is string => Boolean(projectId))
+    ));
+  }, [activeView, data, filteredProjects, routeBug]);
+
+  const loadProjectManagementSnapshot = useCallback(async (
+    projectId: string,
+    options: { force?: boolean } = {}
+  ) => {
+    if (!projectId || !currentWorkspaceId) {
+      return null;
+    }
+
+    const workspaceId = currentWorkspaceId;
+    const cacheKey = getProjectManagementSnapshotCacheKey(workspaceId, projectId);
+
+    if (!options.force) {
+      const cachedSnapshot = projectManagementSnapshotCacheRef.current.get(cacheKey);
+
+      if (cachedSnapshot) {
+        return cachedSnapshot;
+      }
+
+      // 同一项目失败后保持保守只读，不因组件重渲染持续轰炸治理接口；显式业务变更会用 force 重试。
+      const failedAt = projectManagementFailuresRef.current.get(cacheKey);
+
+      if (failedAt) {
+        if (Date.now() - failedAt < projectManagementFailureRetryMs) {
+          return null;
+        }
+
+        projectManagementFailuresRef.current.delete(cacheKey);
+      }
+
+      const inFlightRequest = projectManagementRequestsRef.current.get(cacheKey);
+
+      if (inFlightRequest) {
+        return inFlightRequest.promise;
+      }
+    } else {
+      projectManagementFailuresRef.current.delete(cacheKey);
+    }
+
+    const sequence = (projectManagementRequestSequencesRef.current.get(cacheKey) ?? 0) + 1;
+    projectManagementRequestSequencesRef.current.set(cacheKey, sequence);
+
+    const request = (async () => {
+      try {
+        const url = new URL("/api/project-management", window.location.origin);
+
+        url.searchParams.set("workspaceId", workspaceId);
+        url.searchParams.set("projectId", projectId);
+        const response = await fetchWithAuthRedirect(url.toString(), undefined, {
+          redirectOnUnauthorized: false
+        });
+        const payload = (await response.json()) as ProjectManagementSnapshot & { error?: string };
+
+        if (!response.ok || payload.error) {
+          throw new Error(payload.error || "读取项目权限与动态失败");
+        }
+
+        if (projectManagementRequestSequencesRef.current.get(cacheKey) === sequence) {
+          projectManagementFailuresRef.current.delete(cacheKey);
+          projectManagementSnapshotCacheRef.current.set(cacheKey, payload);
+          setProjectManagementSnapshots((currentSnapshots) => {
+            const nextSnapshots = new Map(currentSnapshots);
+            nextSnapshots.set(cacheKey, payload);
+
+            return nextSnapshots;
+          });
+        }
+
+        return payload;
+      } catch {
+        if (projectManagementRequestSequencesRef.current.get(cacheKey) === sequence) {
+          // 强制刷新失败时旧快照也可能已经过期；移除它比继续沿用潜在过授权更安全。
+          projectManagementFailuresRef.current.set(cacheKey, Date.now());
+          projectManagementSnapshotCacheRef.current.delete(cacheKey);
+          setProjectManagementSnapshots((currentSnapshots) => {
+            if (!currentSnapshots.has(cacheKey)) {
+              return currentSnapshots;
+            }
+
+            const nextSnapshots = new Map(currentSnapshots);
+            nextSnapshots.delete(cacheKey);
+
+            return nextSnapshots;
+          });
+        }
+
+        return null;
+      } finally {
+        if (projectManagementRequestsRef.current.get(cacheKey)?.sequence === sequence) {
+          projectManagementRequestsRef.current.delete(cacheKey);
+        }
+      }
+    })();
+
+    projectManagementRequestsRef.current.set(cacheKey, { promise: request, sequence });
+
+    return request;
+  }, [currentWorkspaceId]);
+
+  async function refreshProjectManagementSnapshotsForRecords(
+    records: Array<{ projectId?: string; project?: string } | null | undefined>,
+    explicitProjectIds: Array<string | null | undefined> = []
+  ) {
+    const projectIds = new Set(explicitProjectIds.filter((projectId): projectId is string => Boolean(projectId)));
+
+    records.forEach((record) => {
+      if (!record) {
+        return;
+      }
+
+      const projectId = resolveProjectIdForRecord(record, filteredProjects);
+
+      if (projectId) {
+        projectIds.add(projectId);
+      }
+    });
+
+    // 任何项目内写操作都可能改变活动流、责任派生角色或有效权限；旧/新归属项目都必须强制校准。
+    await Promise.all(Array.from(projectIds, (projectId) =>
+      loadProjectManagementSnapshot(projectId, { force: true })
+    ));
+  }
+
+  useEffect(() => {
+    if (activeView !== "projects" || !resolvedActiveProjectId) {
+      return;
+    }
+
+    // 项目治理数据是项目页的第二阶段数据，延后一拍读取以保证工作台主数据优先完成渲染。
+    const loadTimer = window.setTimeout(() => {
+      void loadProjectManagementSnapshot(resolvedActiveProjectId);
+    }, 0);
+
+    return () => window.clearTimeout(loadTimer);
+  }, [activeView, data, loadProjectManagementSnapshot, resolvedActiveProjectId]);
+
+  useEffect(() => {
+    if (activeView !== "tasks" || canManageWorkspaceProjects || !taskScopedProjectIds.length) {
+      return;
+    }
+
+    // 任务页可能一次混合多个项目；并发预取所有缺失快照，load helper 会按项目去重并隔离竞态。
+    const loadTimer = window.setTimeout(() => {
+      void Promise.all(taskScopedProjectIds.map((projectId) => loadProjectManagementSnapshot(projectId)));
+    }, 0);
+
+    return () => window.clearTimeout(loadTimer);
+  }, [activeView, canManageWorkspaceProjects, loadProjectManagementSnapshot, taskScopedProjectIds]);
+
+  useEffect(() => {
+    if (activeView !== "requirements" || canManageWorkspaceProjects || !requirementScopedProjectIds.length) {
+      return;
+    }
+
+    // 需求主视图同时展示多项目版本卡片，预读各项目快照才能做逐版本和逐需求判权。
+    const loadTimer = window.setTimeout(() => {
+      void Promise.all(
+        requirementScopedProjectIds.map((projectId) => loadProjectManagementSnapshot(projectId))
+      );
+    }, 0);
+
+    return () => window.clearTimeout(loadTimer);
+  }, [activeView, canManageWorkspaceProjects, loadProjectManagementSnapshot, requirementScopedProjectIds]);
+
+  useEffect(() => {
+    if (!["bugs", "bugEdit"].includes(activeView) || canManageWorkspaceProjects || !bugScopedProjectIds.length) {
+      return;
+    }
+
+    const loadTimer = window.setTimeout(() => {
+      void Promise.all(bugScopedProjectIds.map((projectId) => loadProjectManagementSnapshot(projectId)));
+    }, 0);
+
+    return () => window.clearTimeout(loadTimer);
+  }, [activeView, bugScopedProjectIds, canManageWorkspaceProjects, loadProjectManagementSnapshot]);
+
+  const activeProjectManagementSnapshot = currentWorkspaceId && resolvedActiveProjectId
+    ? projectManagementSnapshots.get(
+        getProjectManagementSnapshotCacheKey(currentWorkspaceId, resolvedActiveProjectId)
+      ) ?? null
+    : null;
+  const activeProjectCapabilities = activeProjectManagementSnapshot?.capabilities;
+  const activeProjectActorAccess = activeProjectManagementSnapshot?.actorAccess;
+  const canUpdateActiveProject = canManageWorkspaceProjects || Boolean(activeProjectCapabilities?.canUpdateProject);
+  const canDeleteActiveProject = canManageWorkspaceProjects || Boolean(activeProjectCapabilities?.canDeleteProject);
+  const canCreateActiveRequirements = canManageWorkspaceProjects || Boolean(
+    activeProjectCapabilities
+    && activeProjectActorAccess
+    && (
+      activeProjectCapabilities.canManageMembers
+      || activeProjectCapabilities.canCreatePlanUnit
+      || activeProjectActorAccess.legacyProductRole
+      || activeProjectActorAccess.functionalRoles.some((role) =>
+        role.roleKey === "product_owner" && role.scopeType === "project"
+      )
+    )
+  );
+  const canCreateActivePlanUnits = canManageWorkspaceProjects || Boolean(activeProjectCapabilities?.canManageMembers);
+  const canDeleteActivePlanUnits = canManageWorkspaceProjects || Boolean(activeProjectCapabilities?.canManageMembers);
+  const canManageActiveProjectMembers = canManageWorkspaceProjects || Boolean(activeProjectCapabilities?.canManageMembers);
+  const canTransferActiveProjectOwner = canManageWorkspaceProjects || Boolean(activeProjectCapabilities?.canTransferOwner);
+  const canCreateAnyPlanUnit = canManageWorkspaceProjects || Boolean(
+    currentWorkspaceId
+    && requirementScopedProjectIds.some((projectId) =>
+      projectManagementSnapshots.get(
+        getProjectManagementSnapshotCacheKey(currentWorkspaceId, projectId)
+      )?.capabilities.canManageMembers
+    )
+  );
+
+  function getProjectManagementSnapshotForRecord(record: { projectId?: string; project?: string }) {
+    const projectId = resolveProjectIdForRecord(record, filteredProjects);
+
+    if (!projectId || !currentWorkspaceId) {
+      return null;
+    }
+
+    // 只读 state Map 触发 React 重渲染；缓存 ref 只服务请求去重，判权必须读取当前渲染快照。
+    return projectManagementSnapshots.get(
+      getProjectManagementSnapshotCacheKey(currentWorkspaceId, projectId)
+    ) ?? null;
+  }
+
+  function canArchiveProjectForActor(project: Project) {
+    if (canManageWorkspaceProjects) {
+      return true;
+    }
+
+    if (!currentWorkspaceId) {
+      return false;
+    }
+
+    return Boolean(projectManagementSnapshots.get(
+      getProjectManagementSnapshotCacheKey(currentWorkspaceId, project.id)
+    )?.capabilities.canArchiveProject);
+  }
+
+  function hasProjectWriteAccessForRecord(record: { projectId?: string; project?: string }) {
+    if (canManageWorkspaceProjects) {
+      return true;
+    }
+
+    const hasProjectIdentity = Boolean(record.projectId || record.project?.trim());
+
+    if (!hasProjectIdentity) {
+      return true;
+    }
+
+    const snapshot = getProjectManagementSnapshotForRecord(record);
+
+    return Boolean(
+      snapshot?.capabilities.canManageMembers
+      || (snapshot?.actorAccess.accessLevel && ["admin", "member"].includes(snapshot.actorAccess.accessLevel))
+    );
+  }
+
+  function canEditBugForActor(bug: BugReport) {
+    return canEditBugs && hasProjectWriteAccessForRecord(bug);
+  }
+
+  function canDeleteBugForActor(bug: BugReport) {
+    return canDeleteBugs && hasProjectWriteAccessForRecord(bug);
+  }
+
+  async function ensureProjectManagementSnapshotForRecord(record: { projectId?: string; project?: string }) {
+    const cachedSnapshot = getProjectManagementSnapshotForRecord(record);
+
+    if (cachedSnapshot) {
+      return cachedSnapshot;
+    }
+
+    const projectId = resolveProjectIdForRecord(record, filteredProjects);
+
+    return projectId ? loadProjectManagementSnapshot(projectId) : null;
+  }
+
+  function getRequirementFieldAccess(
+    requirement: Requirement,
+    snapshot: ProjectManagementSnapshot | null
+  ): RequirementFieldAccess {
+    if (canManageWorkspaceProjects) {
+      return { design: true, governance: true, product: true };
+    }
+
+    if (!snapshot) {
+      return { design: false, governance: false, product: false };
+    }
+
+    const targetVersion = data?.requirementVersions.find((version) =>
+      requirement.versionId
+        ? version.id === requirement.versionId
+        : version.name === requirement.versionName
+    );
+    const isVersionOwner = Boolean(
+      targetVersion?.ownerMemberId
+      && targetVersion.ownerMemberId === snapshot.actorAccess.memberId
+    );
+    const isProjectManager = snapshot.capabilities.canManageMembers;
+    const canUseScopedRequirementRole = snapshot.capabilities.canManageRequirements;
+    const targetVersionId = targetVersion?.id || requirement.versionId;
+    const hasScopedRole = (roleKey: "product_owner" | "design_owner") =>
+      snapshot.actorAccess.functionalRoles.some((role) =>
+        role.roleKey === roleKey
+        && (role.scopeType === "project"
+          || (role.scopeType === "requirement" && role.scopeId === requirement.id)
+          || (role.scopeType === "plan_unit" && Boolean(targetVersionId) && role.scopeId === targetVersionId))
+      );
+    const legacyProduct = Boolean(snapshot.actorAccess.legacyProductRole);
+    const governance = isProjectManager || isVersionOwner;
+
+    if (legacyProduct && canUseScopedRequirementRole) {
+      return { design: true, governance: true, product: true };
+    }
+
+    // one2all 将需求编辑拆为产品、设计和治理三组字段，避免单一 update 权限让参与者越权改排期或开发分工。
+    return {
+      governance,
+      product: governance || (canUseScopedRequirementRole && (legacyProduct || hasScopedRole("product_owner"))),
+      design: governance || (canUseScopedRequirementRole && hasScopedRole("design_owner"))
+    };
+  }
+
+  function canManageRequirementWithSnapshot(
+    requirement: Requirement,
+    action: "update" | "delete",
+    snapshot: ProjectManagementSnapshot
+  ) {
+    if (action === "delete") {
+      return snapshot.capabilities.canManageMembers;
+    }
+
+    return Object.values(getRequirementFieldAccess(requirement, snapshot)).some(Boolean);
+  }
+
+  function canManageActiveProjectRequirement(
+    requirement: Requirement,
+    action: "update" | "delete"
+  ) {
+    if (canManageWorkspaceProjects) {
+      return true;
+    }
+
+    const snapshot = getProjectManagementSnapshotForRecord(requirement);
+
+    if (!snapshot) {
+      return false;
+    }
+
+    return canManageRequirementWithSnapshot(requirement, action, snapshot);
+  }
+
+  function canManageActiveProjectTask(task: Task) {
+    if (canManageWorkspaceProjects) {
+      return true;
+    }
+
+    const snapshot = getProjectManagementSnapshotForRecord(task);
+
+    if (!snapshot) {
+      return false;
+    }
+
+    return canManageTaskWithSnapshot(task, snapshot);
+  }
+
+  function canManageTaskWithSnapshot(task: Task, snapshot: ProjectManagementSnapshot) {
+    if (snapshot.capabilities.canManageMembers) {
+      return true;
+    }
+
+    const ownsTask = Boolean(
+      task.ownerMemberId
+      && snapshot.actorAccess.memberId
+      && task.ownerMemberId === snapshot.actorAccess.memberId
+    );
+    const taskVersionId = task.versionId
+      || data?.requirements.find((requirement) => requirement.id === task.requirementId)?.versionId;
+    const participatesInRequirement = snapshot.actorAccess.functionalRoles.some((role) =>
+      ["product_owner", "design_owner", "developer"].includes(role.roleKey)
+      && (role.scopeType === "project"
+        || (role.scopeType === "requirement" && role.scopeId === task.requirementId)
+        || (role.scopeType === "plan_unit" && Boolean(taskVersionId) && role.scopeId === taskVersionId))
+    );
+
+    return ownsTask || participatesInRequirement;
+  }
+
+  function canDeleteTaskForActor(task: Task) {
+    if (canManageWorkspaceProjects) {
+      return true;
+    }
+
+    const snapshot = getProjectManagementSnapshotForRecord(task);
+
+    // one2all 的任务经办人/需求参与者可更新但不可删除；删除仅留给项目管理者。
+    return Boolean(snapshot?.capabilities.canManageMembers);
+  }
+
+  function canManageVersionForActor(
+    version: RequirementVersion,
+    action: "update" | "createRequirement" | "createSubVersion" | "breakdown" | "delete"
+  ) {
+    if (canManageWorkspaceProjects) {
+      return true;
+    }
+
+    const snapshot = getProjectManagementSnapshotForRecord(version);
+
+    if (!snapshot) {
+      return false;
+    }
+
+    return canManageVersionWithSnapshot(version, action, snapshot);
+  }
+
+  function canManageVersionWithSnapshot(
+    version: RequirementVersion,
+    action: "update" | "createRequirement" | "createSubVersion" | "breakdown" | "delete",
+    snapshot: ProjectManagementSnapshot
+  ) {
+    const isProjectManager = snapshot.capabilities.canManageMembers;
+    const ownerAction = action === "update" || action === "createRequirement" || action === "breakdown";
+    const isVersionOwner = ownerAction && Boolean(
+      snapshot.actorAccess.memberId
+      && version.ownerMemberId === snapshot.actorAccess.memberId
+    );
+    const roleAppliesToVersion = (roleKey: "delivery_manager" | "product_owner") =>
+      snapshot.actorAccess.functionalRoles.some((role) =>
+        role.roleKey === roleKey
+        && (role.scopeType === "project"
+          || (role.scopeType === "plan_unit" && role.scopeId === version.id))
+      );
+    const isScopedDeliveryManager = roleAppliesToVersion("delivery_manager");
+
+    if (action === "delete" || action === "createSubVersion") {
+      // plan_unit 职能角色不可上溢到层级创建或删除。
+      return isProjectManager;
+    }
+
+    if (action === "createRequirement") {
+      return isProjectManager
+        || isVersionOwner
+        || isScopedDeliveryManager
+        || Boolean(snapshot.actorAccess.legacyProductRole)
+        || roleAppliesToVersion("product_owner");
+    }
+
+    // 交付总负责人和 manual delivery_manager 只获得目标版本更新/拆解权，不外溢其它 plan unit。
+    return isProjectManager || isVersionOwner || isScopedDeliveryManager;
+  }
+
+  function canCreateTaskForRequirement(requirement?: Requirement) {
+    if (canManageWorkspaceProjects) {
+      return true;
+    }
+
+    if (!requirement) {
+      return false;
+    }
+
+    const snapshot = getProjectManagementSnapshotForRecord(requirement);
+
+    if (!snapshot) {
+      return false;
+    }
+
+    if (snapshot.capabilities.canManageMembers) {
+      return true;
+    }
+
+    if (snapshot.actorAccess.accessLevel !== "member") {
+      return false;
+    }
+
+    // 新建和更新是两套规则：不能把“把自己设为经办人”伪装成已有任务的 assignee 更新权。
+    return snapshot.actorAccess.functionalRoles.some((role) =>
+      ["product_owner", "developer"].includes(role.roleKey)
+      && (role.scopeType === "project"
+        || (role.scopeType === "requirement" && role.scopeId === requirement.id)
+        || (role.scopeType === "plan_unit" && Boolean(requirement.versionId) && role.scopeId === requirement.versionId))
+    );
+  }
 
   const ownerOptions = useMemo<OwnerSelectableMember[]>(() => {
     return (data?.members ?? [])
@@ -442,11 +1293,12 @@ export function ProjectManagementPlatform({
   const ownerSelectError = !ownerSelectLoading && data && !ownerOptions.length ? "暂无可选平台成员，请先在成员管理添加成员。" : "";
 
   const requirementColumns = createRequirementColumns({
-    canDeleteRequirements,
-    canEditRequirements,
+    canDeleteRequirements: (requirement) => canManageActiveProjectRequirement(requirement, "delete"),
+    canEditRequirements: (requirement) => canManageActiveProjectRequirement(requirement, "update"),
     permissionDeniedReason,
     onDelete: (requirementId) => handleDeleteRecord("requirement", requirementId),
-    onEdit: openEditRequirementDrawer
+    onEdit: openEditRequirementDrawer,
+    onOpenTasks: openRequirementTasks
   });
 
   async function handleGenerateWeeklyReport() {
@@ -504,9 +1356,217 @@ export function ProjectManagementPlatform({
     messageApi.success(resultMessage);
   }
 
+  async function requestProjectManagementMutation(
+    method: "POST" | "PATCH" | "DELETE",
+    values: Record<string, unknown>
+  ) {
+    const response = await fetchWithAuthRedirect("/api/project-management", {
+      method,
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        workspaceId: currentWorkspaceId,
+        ...values
+      })
+    });
+    const payload = (await response.json()) as { error?: string; message?: string };
+
+    if (!response.ok || payload.error) {
+      throw new Error(payload.error || "更新项目治理信息失败");
+    }
+
+    return payload;
+  }
+
+  async function handleSaveProjectPermission(input: ProjectPermissionInput) {
+    try {
+      // 需求责任自动生成的角色只由服务端派生；前端保存时仅提交可编辑的手工角色，
+      // 避免需求负责人变化后遗留一份无法自动回收的伪自动授权。
+      const functionalRoles = input.functionalRoles.filter((role) => role.sourceType === "manual");
+
+      if (!input.permissionId) {
+        const memberIds = input.memberIds?.length
+          ? input.memberIds
+          : input.memberId ? [input.memberId] : [];
+
+        if (!memberIds.length) {
+          throw new Error("请至少选择一名项目成员");
+        }
+
+        await requestProjectManagementMutation("POST", {
+          action: "members",
+          projectId: input.projectId,
+          memberIds,
+          accessLevel: input.accessLevel,
+          functionalRoles
+        });
+      } else {
+        if (!input.memberId) {
+          throw new Error("缺少待编辑的项目成员");
+        }
+
+        // 已有显式权限行才走 PATCH；新增成员已由 POST 在一个事务中写入初始访问级别和角色。
+        await requestProjectManagementMutation("PATCH", {
+          action: "member",
+          projectId: input.projectId,
+          permissionId: input.permissionId,
+          memberId: input.memberId,
+          accessLevel: input.accessLevel,
+          functionalRoles
+        });
+      }
+      await loadProjectManagementSnapshot(input.projectId, { force: true });
+
+      return true;
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "保存项目成员权限失败");
+
+      return false;
+    }
+  }
+
+  async function handleRemoveProjectPermission(permission: ProjectPermission) {
+    try {
+      await requestProjectManagementMutation("DELETE", {
+        projectId: permission.projectId,
+        permissionId: permission.id,
+        memberId: permission.memberId
+      });
+      await loadProjectManagementSnapshot(permission.projectId, { force: true });
+
+      return true;
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "移除项目成员失败");
+
+      return false;
+    }
+  }
+
+  async function handleLoadEffectivePermission(permission: ProjectPermission): Promise<ProjectEffectivePermission | void> {
+    const snapshot = await loadProjectManagementSnapshot(permission.projectId, { force: true });
+    const refreshedPermission = snapshot?.permissions.find((item) => item.memberId === permission.memberId);
+
+    return refreshedPermission?.effectivePermission ?? permission.effectivePermission;
+  }
+
+  async function handleTransferProjectOwner(input: ProjectOwnerTransferInput) {
+    try {
+      await requestProjectManagementMutation("POST", {
+        action: "transferOwner",
+        ...input
+      });
+      await Promise.all([
+        refreshDashboardState(),
+        loadProjectManagementSnapshot(input.projectId, { force: true })
+      ]);
+
+      return true;
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "项目负责人交接失败");
+
+      return false;
+    }
+  }
+
+  async function handleUpdateVersionDeliveryNodes(
+    version: RequirementVersion,
+    deliveryNodes: ProjectDeliveryNode[]
+  ) {
+    if (!canManageVersionForActor(version, "update")) {
+      messageApi.warning(permissionDeniedReason);
+
+      return false;
+    }
+
+    const milestones = deliveryNodes.map((node, index) => {
+      const previous = version.milestones.find((milestone) => milestone.id === node.id) ?? version.milestones[index];
+      const member = node.ownerMemberId
+        ? ownerOptions.find((item) => item.id === node.ownerMemberId)
+        : undefined;
+      const ownerFields = member
+        ? createOwnerFormFieldsFromMember(member)
+        : {
+            // ownerMemberId 为空表示用户主动清空，不能再用旧节点负责人兜底回填。
+            owner: node.owner ?? previous?.owner ?? "",
+            ownerMemberId: node.ownerMemberId
+          };
+
+      return {
+        ...previous,
+        ...ownerFields,
+        id: node.id || previous?.id || `milestone-${version.id}-${index + 1}`,
+        title: node.label,
+        type: previous?.type || node.label,
+        status: node.actualCompletedDate ? "已完成" : previous?.status || "未开始",
+        dueDate: node.plannedDate || node.dueDate || previous?.dueDate || version.releaseDate,
+        actualCompletedDate: node.actualCompletedDate || undefined,
+        note: previous?.note || "交付节点快捷更新。"
+      };
+    });
+    const versionProjectId = resolveProjectIdForRecord(version, filteredProjects);
+    const legacyProjectCatalog = filteredProjects.find((project) => project.id === versionProjectId)?.deliveryLabelCatalog;
+
+    try {
+      const response = await fetchWithAuthRedirect("/api/records", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          workspaceId: currentWorkspaceId,
+          type: "requirementVersion",
+          id: version.id,
+          values: serializeCreateValues({
+            ...version,
+            deliveryLabelCatalog: getVersionDeliveryLabelCatalog(version, legacyProjectCatalog),
+            milestones
+          })
+        })
+      });
+      const payload = (await response.json()) as CreateRecordResult | { error?: string };
+
+      if (!response.ok) {
+        throw new Error("error" in payload ? payload.error || "更新交付节点失败" : "更新交付节点失败");
+      }
+
+      if ("error" in payload) {
+        throw new Error(payload.error || "更新交付节点失败");
+      }
+
+      const result = payload as CreateRecordResult;
+
+      setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
+      await refreshProjectManagementSnapshotsForRecords([
+        version,
+        result.record as { projectId?: string; project?: string }
+      ], [version.projectId || resolvedActiveProjectId]);
+
+      return true;
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : "更新交付节点失败");
+
+      return false;
+    }
+  }
+
   // 新建抽屉统一在打开前合并默认值和上下文值，减少各入口重复设置字段。
-  function openCreateDrawer(type: DashboardEntityType, initialValues: Record<string, unknown> = {}) {
-    if ((type === "requirement" || type === "requirementVersion") && !canCreateRequirements) {
+  function openCreateDrawer(
+    type: DashboardEntityType,
+    initialValues: Record<string, unknown> = {},
+    options: { projectPermissionGranted?: boolean } = {}
+  ) {
+    const canCreateRequirementInContext = options.projectPermissionGranted ?? canCreateActiveRequirements;
+    const lacksProjectPermission = (
+      type === "requirement" && options.projectPermissionGranted === false
+    ) || (
+      activeView === "projects" && (
+        (type === "requirement" && !canCreateRequirementInContext)
+        || (type === "requirementVersion" && !canCreateActivePlanUnits)
+      )
+    );
+
+    if (lacksProjectPermission) {
       messageApi.warning(permissionDeniedReason);
 
       return;
@@ -520,32 +1580,90 @@ export function ProjectManagementPlatform({
     }, ownerOptions));
   }
 
-  function openEditProjectDrawer(project: Project) {
+  async function openEditProjectDrawer(project: Project) {
+    let canEditTarget = canManageWorkspaceProjects || Boolean(
+      currentWorkspaceId
+      && projectManagementSnapshots.get(
+        getProjectManagementSnapshotCacheKey(currentWorkspaceId, project.id)
+      )?.capabilities.canUpdateProject
+    );
+
+    if (!canEditTarget) {
+      const snapshot = await loadProjectManagementSnapshot(project.id);
+
+      canEditTarget = Boolean(snapshot?.capabilities.canUpdateProject);
+    }
+
+    if (!canEditTarget) {
+      messageApi.warning(permissionDeniedReason);
+
+      return;
+    }
+
     setEditingProject(project);
     projectEditForm.resetFields();
     projectEditForm.setFieldsValue(hydrateOwnerFormValues(getProjectFormValues(project), ownerOptions));
   }
 
-  function openEditTaskDrawer(task: Task) {
+  async function openEditTaskDrawer(task: Task) {
+    let canEditTarget = canManageActiveProjectTask(task);
+
+    if (!canEditTarget && !canManageWorkspaceProjects) {
+      const projectId = resolveProjectIdForRecord(task, filteredProjects);
+      const snapshot = projectId
+        ? await loadProjectManagementSnapshot(projectId)
+        : null;
+
+      // 搜索和日历可以在任务页 effect 执行前直达编辑；用本次返回快照立即判权，
+      // 不能等待 React state 下一轮渲染，否则合法用户第一次点击也会被误判为只读。
+      canEditTarget = Boolean(snapshot && canManageTaskWithSnapshot(task, snapshot));
+    }
+
+    if (!canEditTarget) {
+      messageApi.warning("当前任务不在你的项目或需求职责范围内，请从已授权的项目详情进入。");
+
+      return;
+    }
+
     setEditingTask(task);
     editForm.resetFields();
     editForm.setFieldsValue(hydrateOwnerFormValues(getTaskFormValues(task), ownerOptions));
   }
 
-  function openEditRequirementDrawer(requirement: Requirement) {
-    if (!canEditRequirements) {
+  async function openEditRequirementDrawer(requirement: Requirement) {
+    let snapshot = getProjectManagementSnapshotForRecord(requirement);
+    let fieldAccess = getRequirementFieldAccess(requirement, snapshot);
+    let canEditTarget = Object.values(fieldAccess).some(Boolean);
+
+    if (!canEditTarget && !canManageWorkspaceProjects) {
+      snapshot = await ensureProjectManagementSnapshotForRecord(requirement);
+      fieldAccess = getRequirementFieldAccess(requirement, snapshot);
+
+      canEditTarget = Object.values(fieldAccess).some(Boolean);
+    }
+
+    if (!canEditTarget) {
       messageApi.warning(permissionDeniedReason);
 
       return;
     }
 
     setEditingRequirement(requirement);
+    setEditingRequirementFieldAccess(fieldAccess);
     requirementEditForm.resetFields();
     requirementEditForm.setFieldsValue(hydrateOwnerFormValues(getRequirementFormValues(requirement), ownerOptions));
   }
 
-  function openEditRequirementVersionDrawer(version: RequirementVersion) {
-    if (!canEditRequirements) {
+  async function openEditRequirementVersionDrawer(version: RequirementVersion) {
+    let canEditTarget = canManageVersionForActor(version, "update");
+
+    if (!canEditTarget && !canManageWorkspaceProjects) {
+      const snapshot = await ensureProjectManagementSnapshotForRecord(version);
+
+      canEditTarget = Boolean(snapshot && canManageVersionWithSnapshot(version, "update", snapshot));
+    }
+
+    if (!canEditTarget) {
       messageApi.warning(permissionDeniedReason);
 
       return;
@@ -553,7 +1671,16 @@ export function ProjectManagementPlatform({
 
     setEditingRequirementVersion(version);
     requirementVersionEditForm.resetFields();
-    requirementVersionEditForm.setFieldsValue(getRequirementVersionFormValues(version));
+    const versionProjectId = resolveProjectIdForRecord(version, filteredProjects);
+    const legacyProjectCatalog = filteredProjects.find((project) => project.id === versionProjectId)?.deliveryLabelCatalog;
+
+    requirementVersionEditForm.setFieldsValue(
+      {
+        ...getRequirementVersionFormValues(version, legacyProjectCatalog),
+        // 名称唯一的 legacy 版本首次编辑时回填稳定 projectId，编辑态仍不允许改绑。
+        projectId: version.projectId || versionProjectId
+      }
+    );
   }
 
   function openDocumentBreakdownDrawer(initialValues: Record<string, unknown> = {}) {
@@ -576,7 +1703,36 @@ export function ProjectManagementPlatform({
     openCreateDrawer("requirementVersion", {
       parentVersionId: version.id,
       parentVersionName: version.name,
-      project: version.project
+      project: version.project,
+      projectId: version.projectId
+    });
+  }
+
+  function openCreateProjectVersionDrawer() {
+    if (!resolvedActiveProject) {
+      messageApi.warning("请先选择项目集，再新建项目或版本。");
+
+      return;
+    }
+
+    openCreateDrawer("requirementVersion", {
+      project: resolvedActiveProject.name,
+      projectId: resolvedActiveProject.id,
+      type: "版本"
+    });
+  }
+
+  function openCreateProjectRequirementDrawer(version: RequirementVersion) {
+    const targetProjectId = resolveProjectIdForRecord(version, filteredProjects);
+    const targetProject = filteredProjects.find((project) => project.id === targetProjectId);
+
+    openCreateDrawer("requirement", {
+      project: targetProject?.name || version.project,
+      projectId: targetProject?.id || version.projectId,
+      versionId: version.id,
+      versionName: version.name
+    }, {
+      projectPermissionGranted: canManageVersionForActor(version, "createRequirement")
     });
   }
 
@@ -597,7 +1753,9 @@ export function ProjectManagementPlatform({
         body: JSON.stringify({
           workspaceId: currentWorkspaceId,
           type: createType,
-          values: serializeCreateValues(values)
+          values: serializeCreateValues(values, {
+            dateTimeFields: submittedType === "task" ? ["startDate", "dueDate"] : []
+          })
         })
       });
       const payload = (await response.json()) as CreateRecordResult | { error?: string };
@@ -612,12 +1770,18 @@ export function ProjectManagementPlatform({
       const result = payload as CreateRecordResult;
 
       setData((current) => (current ? updateDashboardWithRecord(current, result) : current));
+      await refreshProjectManagementSnapshotsForRecords(
+        [result.record as { projectId?: string; project?: string }],
+        submittedType === "project" ? [(result.record as Project).id] : []
+      );
       void refreshDashboardState();
       showRecordResultMessage(result.message);
       setCreateType(null);
       createForm.resetFields();
 
       if (submittedType === "project") {
+        setActiveProjectId((result.record as Project).id);
+        setActiveProjectVersionId(undefined);
         switchView("projects");
       }
 
@@ -636,12 +1800,33 @@ export function ProjectManagementPlatform({
       return;
     }
 
+    const nextStatus = typeof values.status === "string" ? values.status : editingProject.status;
+    const changesArchiveState = nextStatus !== editingProject.status
+      && (nextStatus === "已归档" || editingProject.status === "已归档");
+
+    if (changesArchiveState && !canArchiveProjectForActor(editingProject)) {
+      messageApi.warning("只有项目负责人或工作区管理员可以归档或恢复项目。");
+
+      return;
+    }
+
     setProjectEditSubmitting(true);
 
     try {
-      // 项目表单不再展示里程碑，更新基础信息时保留历史项目里程碑数据。
+      // 项目表单不再展示里程碑或负责人：前者保留历史值，后者只能通过带审计的负责人交接流程修改。
+      const projectOwnerFieldNames = new Set([
+        "owner",
+        "ownerMemberId",
+        "ownerOpenId",
+        "ownerUnionId",
+        "ownerUserId",
+        "ownerEmail",
+        "ownerAvatarUrl"
+      ]);
       const submittedValues = {
-        ...values,
+        ...Object.fromEntries(Object.entries(values).filter(([key]) => !projectOwnerFieldNames.has(key))),
+        // 项目级目录只作为 legacy 版本读取回退，项目资料编辑不应清空它。
+        deliveryLabelCatalog: editingProject.deliveryLabelCatalog,
         milestones: Array.isArray(values.milestones) ? values.milestones : editingProject.milestones
       };
       const response = await fetchWithAuthRedirect("/api/records", {
@@ -668,6 +1853,13 @@ export function ProjectManagementPlatform({
       const result = payload as CreateRecordResult;
 
       setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
+      await refreshProjectManagementSnapshotsForRecords(
+        [
+          { project: editingProject.name },
+          result.record as { projectId?: string; project?: string }
+        ],
+        [editingProject.id]
+      );
       void refreshDashboardState();
       showRecordResultMessage(result.message);
       setEditingProject(null);
@@ -684,6 +1876,11 @@ export function ProjectManagementPlatform({
       return;
     }
 
+    if (!canManageActiveProjectTask(editingTask)) {
+      messageApi.warning("当前任务不在你的项目或需求职责范围内，已拒绝保存。");
+      return;
+    }
+
     setEditSubmitting(true);
 
     try {
@@ -696,7 +1893,7 @@ export function ProjectManagementPlatform({
           workspaceId: currentWorkspaceId,
           type: "task",
           id: editingTask.id,
-          values: serializeCreateValues(values)
+          values: serializeCreateValues(values, { dateTimeFields: ["startDate", "dueDate"] })
         })
       });
       const payload = (await response.json()) as CreateRecordResult | { error?: string };
@@ -711,6 +1908,10 @@ export function ProjectManagementPlatform({
       const result = payload as CreateRecordResult;
 
       setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
+      await refreshProjectManagementSnapshotsForRecords([
+        editingTask,
+        result.record as { projectId?: string; project?: string }
+      ]);
       void refreshDashboardState();
       showRecordResultMessage(result.message);
       setEditingTask(null);
@@ -729,6 +1930,11 @@ export function ProjectManagementPlatform({
 
     if (task.stage === stage) {
       return true;
+    }
+
+    if (!canManageActiveProjectTask(task)) {
+      messageApi.warning("当前任务只读，不能拖拽变更阶段。");
+      return false;
     }
 
     const optimisticTask = {
@@ -765,7 +1971,7 @@ export function ProjectManagementPlatform({
           id: task.id,
           values: serializeCreateValues({
             __quickTaskUpdate: true,
-            ...optimisticTask
+            stage: optimisticTask.stage
           })
         })
       }, {
@@ -783,6 +1989,10 @@ export function ProjectManagementPlatform({
       const result = payload as CreateRecordResult;
 
       setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
+      await refreshProjectManagementSnapshotsForRecords([
+        task,
+        result.record as { projectId?: string; project?: string }
+      ]);
       scheduleDashboardRefresh();
       showRecordResultMessage(result.message);
 
@@ -802,6 +2012,11 @@ export function ProjectManagementPlatform({
 
   async function handleUpdateTaskOwner(task: Task, owner: OwnerSelectableMember | null) {
     if (!data) {
+      return false;
+    }
+
+    if (!canManageActiveProjectTask(task)) {
+      messageApi.warning("当前任务只读，不能变更负责人。");
       return false;
     }
 
@@ -854,7 +2069,7 @@ export function ProjectManagementPlatform({
           id: task.id,
           values: serializeCreateValues({
             __quickTaskUpdate: true,
-            ...optimisticTask
+            ...nextOwnerFields
           })
         })
       }, {
@@ -872,6 +2087,10 @@ export function ProjectManagementPlatform({
       const result = payload as CreateRecordResult;
 
       setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
+      await refreshProjectManagementSnapshotsForRecords([
+        task,
+        result.record as { projectId?: string; project?: string }
+      ]);
       scheduleDashboardRefresh();
       showRecordResultMessage(result.message);
 
@@ -911,6 +2130,11 @@ export function ProjectManagementPlatform({
       return false;
     }
 
+    if (!canManageActiveProjectTask(task)) {
+      messageApi.warning("当前任务只读，不能拖拽或缩放调整排期。");
+      return false;
+    }
+
     if (change.owner !== (item.owner || "未分配")) {
       messageApi.warning("拖拽改期暂不支持跨负责人移动，请在任务编辑抽屉里调整负责人。");
 
@@ -937,7 +2161,7 @@ export function ProjectManagementPlatform({
           workspaceId: currentWorkspaceId,
           type: "task",
           id: task.id,
-          values: serializeCreateValues(rescheduledTaskValues)
+          values: serializeCreateValues(rescheduledTaskValues, { dateTimeFields: ["startDate", "dueDate"] })
         })
       });
       const payload = (await response.json()) as CreateRecordResult | { error?: string };
@@ -953,6 +2177,10 @@ export function ProjectManagementPlatform({
 
       // 排期拖拽需要保持画布不中断，先乐观更新，再静默刷新校准服务端数据。
       setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
+      await refreshProjectManagementSnapshotsForRecords([
+        task,
+        result.record as { projectId?: string; project?: string }
+      ]);
       void refreshDashboardState();
       showRecordResultMessage(result.message);
 
@@ -972,6 +2200,12 @@ export function ProjectManagementPlatform({
     const targetBug = bugOverride ?? editingBug;
 
     if (!targetBug) {
+      return;
+    }
+
+    if (!canEditBugForActor(targetBug)) {
+      messageApi.warning(permissionDeniedReason);
+
       return;
     }
 
@@ -1002,6 +2236,10 @@ export function ProjectManagementPlatform({
       const result = payload as CreateRecordResult;
 
       setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
+      await refreshProjectManagementSnapshotsForRecords([
+        targetBug,
+        result.record as { projectId?: string; project?: string }
+      ]);
       void refreshDashboardState();
       showRecordResultMessage(result.message);
       if (!options.keepFormOpen) {
@@ -1048,6 +2286,39 @@ export function ProjectManagementPlatform({
       return;
     }
 
+    const productFields = [
+      "title", "description", "owner", "ownerMemberId", "ownerOpenId", "ownerUnionId", "ownerUserId",
+      "ownerEmail", "ownerAvatarUrl", "priority", "documentLink", "acceptance", "aiSummary", "aiRisks",
+      "aiMissingItems", "aiFrontendNotes", "aiBackendNotes", "aiTestingNotes", "aiCompletenessScore"
+    ];
+    const designFields = [
+      "designOwner", "designOwnerMemberId", "designOwnerOpenId", "designOwnerUnionId", "designOwnerUserId",
+      "designOwnerEmail", "designOwnerAvatarUrl", "uiLink"
+    ];
+    const governanceFields = [
+      "status", "startDate", "dueDate", "developerMemberIds"
+    ];
+    const allowedFields = new Set([
+      ...(editingRequirementFieldAccess.product ? productFields : []),
+      ...(editingRequirementFieldAccess.design ? designFields : []),
+      ...(editingRequirementFieldAccess.governance ? governanceFields : [])
+    ]);
+    const serializedValues = serializeCreateValues(values);
+    const baselineValues = serializeCreateValues(
+      hydrateOwnerFormValues(getRequirementFormValues(editingRequirement), ownerOptions)
+    );
+    const submittedValues = Object.fromEntries(
+      Object.entries(serializedValues).filter(([key, value]) =>
+        allowedFields.has(key) && JSON.stringify(value) !== JSON.stringify(baselineValues[key])
+      )
+    );
+
+    if (!Object.keys(submittedValues).length) {
+      messageApi.info("没有可保存的职责范围内变更。");
+
+      return;
+    }
+
     setRequirementEditSubmitting(true);
 
     try {
@@ -1060,7 +2331,7 @@ export function ProjectManagementPlatform({
           workspaceId: currentWorkspaceId,
           type: "requirement",
           id: editingRequirement.id,
-          values: serializeCreateValues(values)
+          values: submittedValues
         })
       });
       const payload = (await response.json()) as CreateRecordResult | { error?: string };
@@ -1075,6 +2346,10 @@ export function ProjectManagementPlatform({
       const result = payload as CreateRecordResult;
 
       setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
+      await refreshProjectManagementSnapshotsForRecords([
+        editingRequirement,
+        result.record as { projectId?: string; project?: string }
+      ]);
       void refreshDashboardState();
       showRecordResultMessage(result.message);
       setEditingRequirement(null);
@@ -1091,6 +2366,9 @@ export function ProjectManagementPlatform({
       return;
     }
 
+    const lockedProjectId = editingRequirementVersion.projectId
+      || resolveProjectIdForRecord(editingRequirementVersion, filteredProjects);
+
     setRequirementVersionEditSubmitting(true);
 
     try {
@@ -1103,7 +2381,12 @@ export function ProjectManagementPlatform({
           workspaceId: currentWorkspaceId,
           type: "requirementVersion",
           id: editingRequirementVersion.id,
-          values: serializeCreateValues(values)
+          values: serializeCreateValues({
+            ...values,
+            // 编辑时项目归属为稳定关系，即使表单值被外部修改也只提交原归属。
+            project: editingRequirementVersion.project,
+            projectId: lockedProjectId
+          })
         })
       });
       const payload = (await response.json()) as CreateRecordResult | { error?: string };
@@ -1118,6 +2401,10 @@ export function ProjectManagementPlatform({
       const result = payload as CreateRecordResult;
 
       setData((current) => (current ? updateDashboardWithRecordUpdate(current, result) : current));
+      await refreshProjectManagementSnapshotsForRecords([
+        editingRequirementVersion,
+        result.record as { projectId?: string; project?: string }
+      ]);
       void refreshDashboardState();
       showRecordResultMessage(result.message);
       setEditingRequirementVersion(null);
@@ -1130,12 +2417,32 @@ export function ProjectManagementPlatform({
   }
 
   async function handleDeleteRecord(type: DashboardEntityType, id: string) {
-    const canDelete =
-      type === "requirement" || type === "requirementVersion"
-        ? canDeleteRequirements
-        : type === "bug"
-          ? canDeleteBugs
-          : Boolean(permissions?.canDeleteRecords);
+    const targetProject = type === "project" ? data?.projects.find((item) => item.id === id) : undefined;
+    const targetRequirement = type === "requirement" ? data?.requirements.find((item) => item.id === id) : undefined;
+    const targetVersion = type === "requirementVersion"
+      ? data?.requirementVersions.find((item) => item.id === id)
+      : undefined;
+    const targetTask = type === "task" ? data?.tasks.find((item) => item.id === id) : undefined;
+    const targetRisk = type === "risk" ? data?.risks.find((item) => item.id === id) : undefined;
+    const targetBug = type === "bug" ? data?.bugs.find((item) => item.id === id) : undefined;
+    const targetProjectScopedRecord = targetRequirement || targetVersion || targetTask || targetRisk || targetBug;
+    const projectScopedCanDelete =
+      type === "project"
+        ? Boolean(activeProjectCapabilities?.canDeleteProject)
+        : type === "requirementVersion"
+          ? Boolean(targetVersion && canManageVersionForActor(targetVersion, "delete"))
+          : type === "risk"
+            ? Boolean(activeProjectCapabilities?.canDeletePlanUnit)
+          : type === "requirement"
+            ? Boolean(targetRequirement && canManageActiveProjectRequirement(targetRequirement, "delete"))
+            : type === "task"
+              ? Boolean(targetTask && canDeleteTaskForActor(targetTask))
+              : false;
+    const canDelete = projectScopedCanDelete || (
+      type === "bug"
+          ? Boolean(targetBug && canDeleteBugForActor(targetBug))
+          : !["requirement", "requirementVersion", "task"].includes(type) && Boolean(permissions?.canDeleteRecords)
+    );
 
     if (!canDelete) {
       messageApi.warning(permissionDeniedReason);
@@ -1173,6 +2480,11 @@ export function ProjectManagementPlatform({
       if (type === "requirementVersion" && selectedRequirementVersionId === id) {
         setSelectedRequirementVersionId(null);
       }
+
+      await refreshProjectManagementSnapshotsForRecords([
+        targetProjectScopedRecord,
+        result.fallbackVersion
+      ], targetProject ? [targetProject.id] : []);
 
       return true;
     } catch (error) {
@@ -1359,7 +2671,7 @@ export function ProjectManagementPlatform({
     {
       title: "交付管理",
       items: [
-        { key: "projects", icon: <ProjectOutlined />, label: "项目视图" },
+        { key: "projects", icon: <ProjectOutlined />, label: "项目管理" },
         { key: "versionDashboard", icon: <FundProjectionScreenOutlined />, label: "版本大屏" },
         { key: "tasks", icon: <CheckCircleOutlined />, label: "任务看板" }
       ]
@@ -1439,9 +2751,27 @@ export function ProjectManagementPlatform({
         label: formatRequirementVersionOptionLabel(version, requirementVersions),
         versionName: version.name,
         project: version.project,
+        projectId: version.projectId,
         parentVersionId: version.parentVersionId
       })),
     [requirementVersions]
+  );
+  const taskRequirementOptions = useMemo(
+    () => (data?.requirements ?? []).map((requirement) => ({
+      value: requirement.id,
+      label: requirement.title,
+      project: requirement.project,
+      projectId: requirement.projectId,
+      versionId: requirement.versionId,
+      versionName: requirement.versionName
+    })),
+    [data?.requirements]
+  );
+  const taskFilterRequirement = useMemo(
+    () => taskRequirementFilter
+      ? data?.requirements.find((requirement) => requirement.id === taskRequirementFilter.id)
+      : undefined,
+    [data?.requirements, taskRequirementFilter]
   );
   const globalSearchResults = useMemo(() => (data ? createSearchResults(data, searchQuery) : []), [data, searchQuery]);
 
@@ -1524,6 +2854,46 @@ export function ProjectManagementPlatform({
     window.location.assign(`/workbench${getWorkspaceQueryString(view)}`);
   }
 
+  // 从项目详情或需求视图进入任务页时，先用当前可见数据生成标准深链，再 push 一条可回退的历史记录。
+  function openRequirementTasks(requirement: Requirement) {
+    if (!data) {
+      return;
+    }
+
+    const resolved = resolveTaskRequirementDeepLink({
+      requested: { requirementId: requirement.id },
+      projects: data.projects,
+      requirements: data.requirements,
+      versions: data.requirementVersions
+    });
+    const resolvedRequirement = resolved.requirementId
+      ? data.requirements.find((candidate) => candidate.id === resolved.requirementId)
+      : undefined;
+    const nextFilter = resolvedRequirement
+      ? createTaskRequirementFilter(resolvedRequirement, resolved)
+      : null;
+
+    if (!nextFilter || !resolvedRequirement) {
+      messageApi.warning("当前需求的项目或版本归属已失效，无法安全打开任务筛选。");
+
+      return;
+    }
+
+    setTaskRequirementFilter(nextFilter);
+    setActiveView("tasks");
+    writeTaskRequirementDeepLink(resolved, "push");
+    messageApi.info(`已筛选“${resolvedRequirement.title}”的交付任务。`);
+  }
+
+  // 关闭筛选是当前历史条目内的状态修正，用 replace 避免用户后退时又回到刚手动清除的筛选。
+  function clearTaskRequirementFilter() {
+    setTaskRequirementFilter(null);
+
+    if (activeView === "tasks") {
+      writeTaskRequirementDeepLink(undefined, "replace");
+    }
+  }
+
   // 视图切换同步写入 URL 查询参数，让刷新和分享链接能保留当前模块。
   function switchView(view: AppView) {
     if (view === "bugEdit") {
@@ -1531,6 +2901,10 @@ export function ProjectManagementPlatform({
     }
 
     setActiveView(view);
+
+    if (view !== "tasks") {
+      setTaskRequirementFilter(null);
+    }
 
     if (typeof window !== "undefined") {
       if (window.location.pathname !== "/workbench") {
@@ -1543,6 +2917,22 @@ export function ProjectManagementPlatform({
       url.searchParams.set("view", view);
       if (currentWorkspaceId) {
         url.searchParams.set("workspaceId", currentWorkspaceId);
+      }
+      if (view === "projects") {
+        applyTaskRequirementDeepLinkToUrl(url);
+        applyProjectDeepLinkToUrl(url, resolvedActiveProjectId ? {
+          projectId: resolvedActiveProjectId,
+          versionId: activeProjectVersionId,
+          detailTab: projectDetailTab
+        } : undefined);
+      } else if (view === "tasks") {
+        applyTaskRequirementDeepLinkToUrl(url, taskRequirementFilter ? {
+          requirementId: taskRequirementFilter.id,
+          projectId: taskRequirementFilter.projectId,
+          versionId: taskRequirementFilter.versionId
+        } : undefined);
+      } else {
+        applyTaskRequirementDeepLinkToUrl(url);
       }
       window.history.replaceState(null, "", url.toString());
     }
@@ -1562,7 +2952,19 @@ export function ProjectManagementPlatform({
     const switchSeq = workspaceSwitchSeqRef.current + 1;
 
     workspaceSwitchSeqRef.current = switchSeq;
+    // 工作区切换时同时作废旧请求序号；即使旧请求稍后返回，也不能再把权限快照写回缓存。
+    projectManagementSnapshotCacheRef.current.clear();
+    projectManagementFailuresRef.current.clear();
+    for (const [cacheKey, sequence] of projectManagementRequestSequencesRef.current) {
+      projectManagementRequestSequencesRef.current.set(cacheKey, sequence + 1);
+    }
+    projectManagementRequestsRef.current.clear();
+    setProjectManagementSnapshots(new Map());
     setActiveWorkspaceId(workspaceId);
+    setActiveProjectId("");
+    setActiveProjectVersionId(undefined);
+    setProjectDetailTab("overview");
+    setTaskRequirementFilter(null);
     setSelectedRequirementVersionId(null);
     setProjectCalendarVersionId(allProjectCalendarVersionsValue);
     setWorkspaceSelectOpen(false);
@@ -1573,7 +2975,7 @@ export function ProjectManagementPlatform({
       setData(cachedWorkspaceData);
       setActiveWorkspaceId(cachedWorkspaceId);
       setLoadError("");
-      replaceWorkbenchUrl(cachedWorkspaceId);
+      replaceWorkbenchUrl(cachedWorkspaceId, activeView, true);
     }
 
     try {
@@ -1591,7 +2993,7 @@ export function ProjectManagementPlatform({
         setData(nextData);
         setActiveWorkspaceId(nextWorkspaceId);
         setLoadError("");
-        replaceWorkbenchUrl(nextWorkspaceId);
+        replaceWorkbenchUrl(nextWorkspaceId, activeView, true);
       }
     } catch (error) {
       if (workspaceSwitchSeqRef.current !== switchSeq) {
@@ -1821,15 +3223,72 @@ export function ProjectManagementPlatform({
                   ) : null}
                   {contentView === "projects" ? (
                     <ProjectsView
+                      activeProjectId={resolvedActiveProjectId}
+                      activeVersionId={activeProjectVersionId}
+                      activities={activeProjectManagementSnapshot?.activities ?? []}
+                      bugs={data.bugs}
+                      currentMemberId={data.meta?.currentMember?.id}
+                      activeDetailTab={projectDetailTab}
+                      members={data.members}
+                      projectPermissions={activeProjectManagementSnapshot?.permissions ?? []}
                       projects={filteredProjects}
+                      requirements={data.requirements}
+                      risks={data.risks}
                       tasks={data.tasks}
                       versionFilter={projectCalendarVersionId}
                       versionOptions={requirementVersionOptions}
                       versions={requirementVersions}
-                      onCreateVersion={() => openCreateDrawer("requirementVersion")}
+                      canDeleteRequirement={(requirement) => canManageActiveProjectRequirement(requirement, "delete")}
+                      canEditRequirement={(requirement) => canManageActiveProjectRequirement(requirement, "update")}
+                      canEditTask={canManageActiveProjectTask}
+                      onActiveProjectChange={(projectId) => {
+                        setActiveProjectId(projectId);
+                        setActiveProjectVersionId(undefined);
+                        setProjectDetailTab("overview");
+                        setProjectCalendarVersionId(allProjectCalendarVersionsValue);
+                        writeProjectDeepLink({ projectId, detailTab: "overview" });
+                      }}
+                      onActiveVersionChange={(versionId) => {
+                        setActiveProjectVersionId(versionId);
+                        setProjectDetailTab("overview");
+                        writeProjectDeepLink({
+                          projectId: resolvedActiveProjectId,
+                          versionId,
+                          detailTab: "overview"
+                        });
+                      }}
+                      onActiveDetailTabChange={(detailTab) => {
+                        setProjectDetailTab(detailTab);
+                        writeProjectDeepLink({
+                          projectId: resolvedActiveProjectId,
+                          versionId: activeProjectVersionId,
+                          detailTab
+                        });
+                      }}
+                      onCreateProject={canManageWorkspaceProjects ? () => openCreateDrawer("project") : undefined}
+                      canCreateRequirementForVersion={(version) => canManageVersionForActor(version, "createRequirement")}
+                      canEditVersion={(version) => canManageVersionForActor(version, "update")}
+                      canUpdateVersionDeliveryNodes={(version) => canManageVersionForActor(version, "update")}
+                      onCreateRequirement={openCreateProjectRequirementDrawer}
+                      onCreateVersion={canCreateActivePlanUnits ? openCreateProjectVersionDrawer : undefined}
+                      onDeleteProject={canDeleteActiveProject
+                        ? (project) => { void handleDeleteRecord("project", project.id); }
+                        : undefined}
+                      onDeleteRequirement={(requirement) => { void handleDeleteRecord("requirement", requirement.id); }}
+                      onDeleteVersion={canDeleteActivePlanUnits
+                        ? (version) => { void handleDeleteRecord("requirementVersion", version.id); }
+                        : undefined}
+                      onEditProject={canUpdateActiveProject ? openEditProjectDrawer : undefined}
+                      onEditRequirement={openEditRequirementDrawer}
                       onEditVersion={openEditRequirementVersionDrawer}
+                      onLoadEffectivePermission={handleLoadEffectivePermission}
                       onOpenCalendarItem={openProjectCalendarItem}
+                      onOpenRequirement={openRequirementTasks}
+                      onRemoveProjectPermission={canManageActiveProjectMembers ? handleRemoveProjectPermission : undefined}
                       onRescheduleCalendarItem={handleRescheduleProjectCalendarItem}
+                      onSaveProjectPermission={canManageActiveProjectMembers ? handleSaveProjectPermission : undefined}
+                      onTransferProjectOwner={canTransferActiveProjectOwner ? handleTransferProjectOwner : undefined}
+                      onUpdateVersionDeliveryNodes={handleUpdateVersionDeliveryNodes}
                       onVersionFilterChange={setProjectCalendarVersionId}
                     />
                   ) : null}
@@ -1848,7 +3307,20 @@ export function ProjectManagementPlatform({
                       currentUser={data.meta?.user}
                       ownerOptions={ownerOptions}
                       versionOptions={requirementVersionOptions}
-                      onCreate={() => openCreateDrawer("task")}
+                      requirementFilter={taskRequirementFilter ?? undefined}
+                      onClearRequirementFilter={clearTaskRequirementFilter}
+                      canCreate={taskRequirementFilter
+                        ? canCreateTaskForRequirement(taskFilterRequirement)
+                        : canManageWorkspaceProjects}
+                      canEditTask={canManageActiveProjectTask}
+                      onCreate={() => openCreateDrawer("task", taskFilterRequirement ? {
+                        project: taskFilterRequirement.project,
+                        projectId: taskFilterRequirement.projectId,
+                        requirementId: taskFilterRequirement.id,
+                        requirementTitle: taskFilterRequirement.title,
+                        versionId: taskFilterRequirement.versionId,
+                        versionName: taskFilterRequirement.versionName
+                      } : {})}
                       onEdit={openEditTaskDrawer}
                       onOwnerChange={handleUpdateTaskOwner}
                       onStageChange={handleUpdateTaskStage}
@@ -1857,8 +3329,8 @@ export function ProjectManagementPlatform({
                   {contentView === "bugs" ? (
                     <BugsView
                       bugs={data.bugs}
-                      canEditBugs={canEditBugs}
-                      canDeleteBugs={canDeleteBugs}
+                      canEditBugs={canEditBugForActor}
+                      canDeleteBugs={canDeleteBugForActor}
                       currentUser={data.meta?.user}
                       editDeniedReason={permissions?.deniedReason ?? "当前角色无 Bug 编辑权限。"}
                       permissionDeniedReason={permissions?.deniedReason ?? "只有所有者、管理员或测试可以删除 Bug。"}
@@ -1871,9 +3343,9 @@ export function ProjectManagementPlatform({
                   {contentView === "bugEdit" ? (
                     <BugRouteEditView
                       bug={routeBug}
-                      canEditBugs={canEditBugs}
-                      canEditBugsFully={canEditBugsFully}
-                      canDeleteBugs={canDeleteBugs}
+                      canEditBugs={Boolean(routeBug && canEditBugForActor(routeBug))}
+                      canEditBugsFully={Boolean(routeBug && canEditBugsFully && hasProjectWriteAccessForRecord(routeBug))}
+                      canDeleteBugs={Boolean(routeBug && canDeleteBugForActor(routeBug))}
                       form={bugEditForm}
                       people={ownerOptions}
                       peopleError={ownerSelectError}
@@ -1898,23 +3370,21 @@ export function ProjectManagementPlatform({
                   {contentView === "requirements" ? (
                     <RequirementsView
                       bugs={data.bugs}
-                      canCreateRequirements={canCreateRequirements}
-                      canDeleteRequirements={canDeleteRequirements}
-                      canEditRequirements={canEditRequirements}
+                      canBreakdownVersion={(version) => canManageVersionForActor(version, "breakdown")}
+                      canCreateRequirementForVersion={(version) => canManageVersionForActor(version, "createRequirement")}
+                      canCreateSubVersion={(version) => canManageVersionForActor(version, "createSubVersion")}
+                      canCreateVersion={canCreateAnyPlanUnit}
+                      canDeleteVersion={(version) => canManageVersionForActor(version, "delete")}
+                      canEditVersion={(version) => canManageVersionForActor(version, "update")}
                       columns={requirementColumns}
                       permissionDeniedReason={permissionDeniedReason}
+                      projects={filteredProjects}
                       requirements={data.requirements}
                       selectedVersionId={selectedRequirementVersionId}
                       tasks={data.tasks}
                       versions={requirementVersions}
                       onBack={() => setSelectedRequirementVersionId(null)}
-                      onCreateRequirement={(version) =>
-                        openCreateDrawer("requirement", {
-                          versionId: version.id,
-                          versionName: version.name,
-                          project: version.project === "跨项目" ? undefined : version.project
-                        })
-                      }
+                      onCreateRequirement={openCreateProjectRequirementDrawer}
                       onCreateVersion={() => openCreateDrawer("requirementVersion")}
                       onCreateSubVersion={openCreateSubRequirementVersionDrawer}
                       onBreakdownVersion={openVersionBreakdownDrawer}
@@ -1975,7 +3445,9 @@ export function ProjectManagementPlatform({
             type={createType}
             submitting={createSubmitting}
             projectOptions={projectOptions}
+            projects={data?.projects ?? []}
             requirementVersionOptions={requirementVersionOptions}
+            requirementOptions={taskRequirementOptions}
             people={ownerOptions}
             peopleLoading={ownerSelectLoading}
             peopleError={ownerSelectError}
@@ -1990,6 +3462,7 @@ export function ProjectManagementPlatform({
             people={ownerOptions}
             peopleLoading={ownerSelectLoading}
             peopleError={ownerSelectError}
+            canArchiveProject={Boolean(editingProject && canArchiveProjectForActor(editingProject))}
             onClose={() => setEditingProject(null)}
             onSubmit={handleUpdateProject}
           />
@@ -1999,6 +3472,7 @@ export function ProjectManagementPlatform({
             task={editingTask}
             submitting={editSubmitting}
             versionOptions={requirementVersionOptions}
+            requirementOptions={taskRequirementOptions}
             people={ownerOptions}
             peopleLoading={ownerSelectLoading}
             peopleError={ownerSelectError}
@@ -2020,6 +3494,7 @@ export function ProjectManagementPlatform({
 
           <RequirementEditDrawer
             form={requirementEditForm}
+            fieldAccess={editingRequirementFieldAccess}
             requirement={editingRequirement}
             submitting={requirementEditSubmitting}
             versionOptions={requirementVersionOptions}
@@ -2037,7 +3512,13 @@ export function ProjectManagementPlatform({
             people={ownerOptions}
             peopleLoading={ownerSelectLoading}
             peopleError={ownerSelectError}
+            projects={data?.projects ?? []}
             versionOptions={requirementVersionOptions}
+            canManageDeliveryLabelCatalog={Boolean(
+              canManageWorkspaceProjects
+              || (editingRequirementVersion
+                && getProjectManagementSnapshotForRecord(editingRequirementVersion)?.capabilities.canManageMembers)
+            )}
             onClose={() => setEditingRequirementVersion(null)}
             onSubmit={handleUpdateRequirementVersion}
           />

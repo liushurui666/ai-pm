@@ -30,7 +30,15 @@ function renderTags(items: string[], color: string) {
   ));
 }
 
-export function RequirementAiLinkAnalyzer({ form }: { form: FormInstance<Record<string, unknown>> }) {
+export function RequirementAiLinkAnalyzer({
+  form,
+  disabled = false,
+  canUpdateStatus = true
+}: {
+  form: FormInstance<Record<string, unknown>>;
+  disabled?: boolean;
+  canUpdateStatus?: boolean;
+}) {
   const { message } = App.useApp();
   const [loading, setLoading] = useState(false);
   const [analysis, setAnalysis] = useState<RequirementAnalyzeResult | null>(null);
@@ -71,7 +79,7 @@ export function RequirementAiLinkAnalyzer({ form }: { form: FormInstance<Record<
       form.setFieldsValue({
         title: getFieldText(form.getFieldValue("title")) || analysisPayload.title,
         priority: analysisPayload.suggestedPriority,
-        status: analysisPayload.suggestedStatus,
+        ...(canUpdateStatus ? { status: analysisPayload.suggestedStatus } : {}),
         acceptance: analysisPayload.acceptance,
         aiSummary: analysisPayload.summary,
         aiRisks: JSON.stringify(analysisPayload.risks),
@@ -102,7 +110,7 @@ export function RequirementAiLinkAnalyzer({ form }: { form: FormInstance<Record<
             填入飞书新版文档或知识库链接后，系统会读取正文并生成摘要、验收标准、缺失项和研发测试关注点。
           </Paragraph>
         </div>
-        <Button type="primary" icon={<RobotOutlined />} loading={loading} onClick={analyzeRequirementLink}>
+        <Button type="primary" icon={<RobotOutlined />} loading={loading} disabled={disabled} onClick={analyzeRequirementLink}>
           读取飞书文档并分析
         </Button>
       </Space>

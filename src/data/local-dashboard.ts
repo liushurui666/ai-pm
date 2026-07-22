@@ -3,7 +3,11 @@ import {
   createDashboardWorkspaceDatabase,
   DASHBOARD_DATABASE_STORAGE,
   deleteDashboardBugDatabase,
+  deleteDashboardDocumentDatabase,
+  deleteDashboardProjectDatabase,
   deleteDashboardRequirementDatabase,
+  deleteDashboardRequirementVersionDatabase,
+  deleteDashboardRiskDatabase,
   deleteDashboardTaskDatabase,
   readDashboardBugDatabase,
   readDashboardMemberDatabase,
@@ -15,6 +19,7 @@ import {
   updateDashboardTaskDatabase,
   upsertDashboardBugDatabase,
   upsertDashboardProjectDatabase,
+  upsertDashboardProjectScopeDatabase,
   upsertDashboardRequirementVersionDatabase,
   upsertDashboardRequirementVersionScopeDatabase,
   upsertDashboardRequirementDatabase,
@@ -24,9 +29,27 @@ import {
   writeDashboardIdentityDatabase
 } from "@/data/database-dashboard";
 import { dashboardData } from "@/data/dashboard";
+import {
+  findDuplicateDeliveryMilestoneLabelId,
+  normalizeProjectDeliveryLabelCatalog,
+  remapVersionDeliveryMilestones,
+  scopeDeliveryLabelCatalogToVersion
+} from "@/data/project-delivery-labels";
 import { createDashboardSideEffectQueue, createNotificationPayload } from "@/lib/dashboard-side-effects";
 import { getEmailNotificationSettings } from "@/lib/notifications/email/settings";
 import { findWorkspaceMemberForUser, getDashboardPermissions } from "@/lib/access/permissions";
+import { isAuthServiceConfigured } from "@/lib/auth/client";
+import {
+  requiresRequirementVersionFallback,
+  selectAutomaticRequirementVersionFallback
+} from "@/lib/project-management/deletion-policy";
+import { selectUniqueProjectNameCandidate } from "@/lib/project-management/record-scope-core";
+import { normalizeTaskPriority } from "@/lib/tasks/priority";
+import {
+  resolveVisibleProjectIds,
+  resolveVisibleRecordProjectId,
+  uniqueProjectIdByName
+} from "@/lib/project-management/visibility";
 import type {
   BugReport,
   BugAttachment,
@@ -43,8 +66,10 @@ import type {
   MemberRole,
   MemberStatus,
   Project,
+  ProjectHealthStatus,
   ProjectMilestone,
   ProjectMilestoneStatus,
+  ProjectRiskLevel,
   ProjectStatus,
   Requirement,
   RequirementVersion,
@@ -67,14 +92,21 @@ const DEFAULT_REQUIREMENT_VERSION: RequirementVersion = {
   workspaceId: DEFAULT_WORKSPACE.id,
   name: "未规划需求池",
   project: "跨项目",
+  type: "版本",
   status: "规划中",
   startDate: "2026-05-01",
   releaseDate: "2026-06-30",
+  progress: 0,
+  riskLevel: "低",
+  healthStatus: "待评估",
+  healthReason: "需求池暂无可评估的交付任务。",
   goal: "收纳尚未进入明确版本的需求，评审后再绑定到目标版本。",
   milestones: [
     {
       id: "rv-backlog-m-1",
       title: "需求池梳理",
+      labelId: "delivery-product-review",
+      type: "产品评审",
       status: "进行中",
       dueDate: "2026-05-15",
       owner: "",
@@ -138,6 +170,16 @@ function createLocalId(type: DashboardEntityType | "bugFlow" | "member" | "miles
   return `${type}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function getAssignmentPermissionActor(data: LocalDatabase, workspaceId: string, user?: FeishuUser) {
+  const member = findWorkspaceMemberForUser(data.members, workspaceId, user);
+  const activeMember = member?.status === "active" ? member : undefined;
+
+  return {
+    memberId: activeMember?.id,
+    name: activeMember?.name || user?.name
+  };
+}
+
 async function readDatabase(workspaceId?: string, options: { scopeToWorkspace?: boolean } = {}) {
   // 项目进度、健康度和风险数本质上是任务/Bug/风险的派生值；任务拖拽现在只持久化单行任务，读取时统一重算可以保证项目视图不读到旧统计。
   return applyProjectMetrics(await readDashboardDatabase(
@@ -193,6 +235,23 @@ function asTextArray(value: unknown) {
     .map((item) => (typeof item === "string" ? item.trim() : ""))
     .filter(Boolean)
     .slice(0, 12);
+}
+
+function asMemberIdArray(value: unknown): string[] {
+  if (typeof value === "string" && value.trim()) {
+    try {
+      return asMemberIdArray(JSON.parse(value) as unknown);
+    } catch {
+      return [...new Set(value.split(/[,\n，、]/).map((item) => item.trim()).filter(Boolean))];
+    }
+  }
+
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  // 开发负责人集合必须完整保留，不能复用 AI 摘要列表的 12 项展示上限；去重即可避免重复授权和重复通知。
+  return [...new Set(value.map((item) => (typeof item === "string" ? item.trim() : "")).filter(Boolean))];
 }
 
 function normalizeMemberIdentityProvider(value: unknown, fallback: MemberIdentityProvider = "email") {
@@ -415,10 +474,31 @@ function createVersionRoleOwnerLink(values: Record<string, unknown>, prefix: "pr
   };
 }
 
+function createDesignOwnerLink(values: Record<string, unknown>) {
+  return {
+    designOwnerMemberId: asText(values.designOwnerMemberId) || undefined,
+    designOwnerOpenId: asText(values.designOwnerOpenId) || undefined,
+    designOwnerUnionId: asText(values.designOwnerUnionId) || undefined,
+    designOwnerUserId: asText(values.designOwnerUserId) || undefined,
+    designOwnerEmail: asText(values.designOwnerEmail) || undefined,
+    designOwnerAvatarUrl: asText(values.designOwnerAvatarUrl) || undefined
+  };
+}
+
 function asNumber(value: unknown, fallback: number) {
   const nextValue = typeof value === "number" ? value : Number(value);
 
   return Number.isFinite(nextValue) ? nextValue : fallback;
+}
+
+function asOptionalNonNegativeNumber(value: unknown) {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+
+  const number = asNumber(value, Number.NaN);
+
+  return Number.isFinite(number) ? Math.max(0, Math.round(number)) : undefined;
 }
 
 function asBoolean(value: unknown, fallback = false) {
@@ -450,6 +530,10 @@ function asDateTimeString(value: unknown, fallback = dayjs().format("YYYY-MM-DD 
 }
 
 function normalizeProjectStatus(value: string): ProjectStatus {
+  if (value.includes("归档")) {
+    return "已归档";
+  }
+
   if (value.includes("风险") || value.includes("延期")) {
     return "有风险";
   }
@@ -482,11 +566,19 @@ function normalizeMilestoneStatus(value: string): ProjectMilestoneStatus {
 }
 
 function normalizeTaskStage(value: string): TaskStage {
+  if (["待处理", "进行中", "评审中", "验收中", "已完成"].includes(value)) {
+    return value as TaskStage;
+  }
+
   if (value.includes("完成")) {
     return "已完成";
   }
 
-  if (value.includes("评审") || value.includes("验收")) {
+  if (value.includes("验收")) {
+    return "验收中";
+  }
+
+  if (value.includes("评审")) {
     return "评审中";
   }
 
@@ -495,18 +587,6 @@ function normalizeTaskStage(value: string): TaskStage {
   }
 
   return "待处理";
-}
-
-function normalizeTaskPriority(value: string): Task["priority"] {
-  if (value.includes("高") || value.includes("P0")) {
-    return "高";
-  }
-
-  if (value.includes("低") || value.includes("P2")) {
-    return "低";
-  }
-
-  return "中";
 }
 
 function normalizeBugSeverity(value: string): BugReport["severity"] {
@@ -546,6 +626,14 @@ function normalizeBugStatus(value: string): BugReport["status"] {
 }
 
 function normalizeRequirementPriority(value: string): Requirement["priority"] {
+  if (["P0", "P1", "P2", "低", "普通", "高", "紧急"].includes(value)) {
+    return value as Requirement["priority"];
+  }
+
+  if (value.includes("紧急")) {
+    return "紧急";
+  }
+
   if (value.includes("P0") || value.includes("高")) {
     return "P0";
   }
@@ -558,6 +646,27 @@ function normalizeRequirementPriority(value: string): Requirement["priority"] {
 }
 
 function normalizeRequirementStatus(value: string): Requirement["status"] {
+  const supportedStatuses: Requirement["status"][] = [
+    "待评审",
+    "评审中",
+    "待排期",
+    "设计中",
+    "开发中",
+    "待上线",
+    "已上线",
+    "已关闭",
+    "已驳回",
+    "待梳理",
+    "梳理中",
+    "验收中",
+    "已完成"
+  ];
+
+  // one2all 与旧 AI PM 使用两套状态枚举；合法精确值必须原样保留，不能在一次编辑后被偷偷降级成旧状态。
+  if (supportedStatuses.includes(value as Requirement["status"])) {
+    return value as Requirement["status"];
+  }
+
   if (value.includes("驳回")) {
     return "已驳回";
   }
@@ -590,10 +699,36 @@ function normalizeRequirementStatus(value: string): Requirement["status"] {
     return "评审中";
   }
 
+  if (value.includes("验收")) {
+    return "验收中";
+  }
+
+  if (value.includes("梳理")) {
+    return value.includes("待") ? "待梳理" : "梳理中";
+  }
+
+  if (value.includes("完成")) {
+    return "已完成";
+  }
+
   return "待评审";
 }
 
 function normalizeRequirementVersionStatus(value: string): RequirementVersion["status"] {
+  const supportedStatuses: RequirementVersion["status"][] = [
+    "规划中",
+    "需求梳理",
+    "开发中",
+    "验收中",
+    "进行中",
+    "已发布",
+    "已归档"
+  ];
+
+  if (supportedStatuses.includes(value as RequirementVersion["status"])) {
+    return value as RequirementVersion["status"];
+  }
+
   if (value.includes("发布") || value.includes("上线")) {
     return "已发布";
   }
@@ -602,11 +737,47 @@ function normalizeRequirementVersionStatus(value: string): RequirementVersion["s
     return "已归档";
   }
 
+  if (value.includes("需求") || value.includes("梳理")) {
+    return "需求梳理";
+  }
+
+  if (value.includes("验收") || value.includes("测试")) {
+    return "验收中";
+  }
+
+  if (value.includes("开发")) {
+    return "开发中";
+  }
+
   if (value.includes("进行") || value.includes("开发") || value.includes("执行")) {
     return "进行中";
   }
 
   return "规划中";
+}
+
+function normalizeProjectRiskLevel(value: string): ProjectRiskLevel {
+  return normalizeRiskLevel(value);
+}
+
+function normalizeProjectHealthStatus(value: string): ProjectHealthStatus {
+  if (["待评估", "正常", "有风险", "已偏离"].includes(value)) {
+    return value as ProjectHealthStatus;
+  }
+
+  if (value.includes("偏离") || value.includes("延期")) {
+    return "已偏离";
+  }
+
+  if (value.includes("风险")) {
+    return "有风险";
+  }
+
+  if (value.includes("正常") || value.includes("健康")) {
+    return "正常";
+  }
+
+  return "待评估";
 }
 
 function normalizeRiskLevel(value: string): Risk["level"] {
@@ -637,71 +808,6 @@ function normalizeDocumentType(value: string): DocumentItem["type"] {
   return "PRD";
 }
 
-function createFallbackMilestones({
-  dueDate,
-  endNote = "按里程碑确认交付范围、风险和下一步行动。",
-  endTitle = "阶段验收",
-  owner,
-  ownerMemberId,
-  ownerAvatarUrl,
-  ownerEmail,
-  ownerOpenId,
-  ownerUnionId,
-  ownerUserId,
-  progress,
-  projectName,
-  startDate,
-  startNote,
-  startTitle = "项目启动"
-}: {
-  dueDate: string;
-  endNote?: string;
-  endTitle?: string;
-  owner: string;
-  ownerMemberId?: string;
-  ownerAvatarUrl?: string;
-  ownerEmail?: string;
-  ownerOpenId?: string;
-  ownerUnionId?: string;
-  ownerUserId?: string;
-  progress: number;
-  projectName: string;
-  startDate?: string;
-  startNote?: string;
-  startTitle?: string;
-}): ProjectMilestone[] {
-  return [
-    {
-      id: createLocalId("milestone"),
-      title: startTitle,
-      status: progress > 0 ? "已完成" : "未开始",
-      dueDate: startDate ?? asDateString(dayjs(dueDate).subtract(14, "day").format("YYYY-MM-DD")),
-      owner,
-      ownerMemberId,
-      ownerOpenId,
-      ownerUnionId,
-      ownerUserId,
-      ownerEmail,
-      ownerAvatarUrl,
-      note: startNote ?? `${projectName} 立项、目标和成员范围确认。`
-    },
-    {
-      id: createLocalId("milestone"),
-      title: endTitle,
-      status: progress >= 100 ? "已完成" : progress >= 60 ? "进行中" : "未开始",
-      dueDate,
-      owner,
-      ownerMemberId,
-      ownerOpenId,
-      ownerUnionId,
-      ownerUserId,
-      ownerEmail,
-      ownerAvatarUrl,
-      note: endNote
-    }
-  ];
-}
-
 function normalizeProjectMilestone(
   value: unknown,
   index: number,
@@ -712,8 +818,13 @@ function normalizeProjectMilestone(
   return {
     id: asText(milestone.id, createLocalId("milestone")),
     title: asText(milestone.title, `里程碑 ${index + 1}`),
+    labelId: asText(milestone.labelId) || undefined,
+    type: asText(milestone.type) || undefined,
     status: normalizeMilestoneStatus(asText(milestone.status, index === 0 ? "进行中" : "未开始")),
     dueDate: asDateString(milestone.dueDate, fallback.dueDate),
+    actualCompletedDate: asText(milestone.actualCompletedDate)
+      ? asDateString(milestone.actualCompletedDate, fallback.dueDate)
+      : undefined,
     owner: asText(milestone.owner, fallback.owner),
     ownerMemberId: asText(milestone.ownerMemberId, fallback.ownerMemberId) || undefined,
     ownerOpenId: asText(milestone.ownerOpenId) || undefined,
@@ -757,20 +868,27 @@ function normalizeCreateProject(values: Record<string, unknown>, id = createLoca
   const owner = asOwnerName(values);
   const ownerLink = createOwnerLink(values);
   const dueDate = asDateString(values.dueDate, dayjs().add(14, "day").format("YYYY-MM-DD"));
+  const startDate = asDateString(values.startDate, dayjs(dueDate).subtract(30, "day").format("YYYY-MM-DD"));
 
   return {
     id,
     workspaceId: asText(values.workspaceId, DEFAULT_WORKSPACE.id),
     name,
+    code: asText(values.code) || undefined,
     owner,
     ...ownerLink,
     status: normalizeProjectStatus(asText(values.status, "进行中")),
+    startDate,
     progress,
     health,
+    riskLevel: normalizeProjectRiskLevel(asText(values.riskLevel, "低")),
+    healthStatus: normalizeProjectHealthStatus(asText(values.healthStatus, "待评估")),
+    healthReason: asText(values.healthReason) || undefined,
     dueDate,
     team: asNumber(values.team, 1),
     riskCount: asNumber(values.riskCount, 0),
     summary: asText(values.summary, "暂无项目摘要。"),
+    deliveryLabelCatalog: normalizeProjectDeliveryLabelCatalog(values.deliveryLabelCatalog),
     milestones: normalizeProjectMilestones(values.milestones, {
       dueDate,
       owner,
@@ -787,21 +905,33 @@ function normalizeCreateProject(values: Record<string, unknown>, id = createLoca
 }
 
 function normalizeCreateTask(values: Record<string, unknown>, id = createLocalId("task")): Task {
-  const dueDate = asDateString(values.dueDate, dayjs().add(7, "day").format("YYYY-MM-DD"));
+  const dueDate = asDateTimeString(values.dueDate, dayjs().add(7, "day").format("YYYY-MM-DD HH:mm"));
+  const stage = normalizeTaskStage(asText(values.stage, "待处理"));
 
   return {
     id,
     workspaceId: asText(values.workspaceId, DEFAULT_WORKSPACE.id),
     title: asText(values.title, "未命名任务"),
-    stage: normalizeTaskStage(asText(values.stage, "待处理")),
+    stage,
     owner: asOwnerName(values),
     ...createOwnerLink(values),
     project: asText(values.project, "未关联项目"),
+    projectId: asText(values.projectId) || undefined,
     versionId: asText(values.versionId) || DEFAULT_REQUIREMENT_VERSION.id,
     versionName: asText(values.versionName) || DEFAULT_REQUIREMENT_VERSION.name,
-    priority: normalizeTaskPriority(asText(values.priority, "中")),
-    startDate: asDateString(values.startDate, dayjs(dueDate).subtract(3, "day").format("YYYY-MM-DD")),
+    requirementId: asText(values.requirementId) || undefined,
+    requirementTitle: asText(values.requirementTitle) || undefined,
+    description: asText(values.description) || undefined,
+    taskType: asText(values.taskType) || undefined,
+    storyPoints: asOptionalNonNegativeNumber(values.storyPoints),
+    estimatedMinutes: asOptionalNonNegativeNumber(values.estimatedMinutes),
+    priority: normalizeTaskPriority(values.priority),
+    startDate: asDateTimeString(values.startDate, dayjs(dueDate).subtract(3, "day").format("YYYY-MM-DD HH:mm")),
     dueDate,
+    completedAt:
+      stage === "已完成"
+        ? asText(values.completedAt) || dayjs().format("YYYY-MM-DD HH:mm")
+        : undefined,
     aiHint: asText(values.aiHint, "AI 暂未发现额外风险。")
   };
 }
@@ -819,6 +949,7 @@ function normalizeCreateBug(values: Record<string, unknown>, id = createLocalId(
     status,
     severity: normalizeBugSeverity(asText(values.severity, "一般")),
     project: asText(values.project, "未关联项目"),
+    projectId: asText(values.projectId) || undefined,
     versionId: asText(values.versionId) || DEFAULT_REQUIREMENT_VERSION.id,
     versionName: asText(values.versionName) || DEFAULT_REQUIREMENT_VERSION.name,
     reporter,
@@ -913,61 +1044,56 @@ function appendBugUpdateFlowRecords(previous: BugReport, next: BugReport, operat
   return [...existingRecords, ...nextRecords].slice(-30);
 }
 
-function getRequirementVersionMilestoneProgress(status: RequirementVersion["status"]) {
-  if (status === "已发布" || status === "已归档") {
-    return 100;
-  }
-
-  return status === "进行中" ? 50 : 0;
-}
-
 function normalizeRequirementVersionMilestones(
   value: unknown,
-  fallback: {
-    name: string;
-    releaseDate: string;
-    startDate: string;
-    status: RequirementVersion["status"];
-  }
+  releaseDate: string
 ) {
   const milestones = Array.isArray(value)
     ? value
         .filter((milestone) => typeof milestone === "object" && milestone)
         .map((milestone, index) =>
           normalizeProjectMilestone(milestone, index, {
-            dueDate: fallback.releaseDate,
+            dueDate: releaseDate,
             owner: "",
             ownerMemberId: undefined
           })
         )
         .filter((milestone) => milestone.title)
     : [];
+  const duplicateLabelId = findDuplicateDeliveryMilestoneLabelId(milestones);
 
-  // 版本没有配置里程碑时给出启动和验收兜底，确保需求管理仍能展示交付检查点。
-  return milestones.length
-    ? milestones
-    : createFallbackMilestones({
-        dueDate: fallback.releaseDate,
-        endNote: "检查需求、任务、Bug 和上线准备。",
-        endTitle: "提测验收",
-        owner: "",
-        progress: getRequirementVersionMilestoneProgress(fallback.status),
-        projectName: fallback.name,
-        startDate: fallback.startDate,
-        startNote: "确认版本目标、需求范围和负责人。",
-        startTitle: "版本启动"
-      });
+  if (duplicateLabelId) {
+    throw new Error(`同一版本不能重复使用交付节点标签「${duplicateLabelId}」。`);
+  }
+
+  // 空目录保持为空，不再伪造没有 labelId 的兜底节点；新建表单会依项目启用标签生成默认节点。
+  return milestones;
 }
 
 function normalizeCreateRequirementVersion(
   values: Record<string, unknown>,
-  id = createLocalId("requirementVersion")
+  id = createLocalId("requirementVersion"),
+  previousCatalog?: unknown
 ): RequirementVersion {
   const name = asText(values.name, "未命名版本");
   const status = normalizeRequirementVersionStatus(asText(values.status, "规划中"));
   const startDate = asDateString(values.startDate, dayjs().format("YYYY-MM-DD"));
   const releaseDate = asDateString(values.releaseDate, dayjs().add(30, "day").format("YYYY-MM-DD"));
   const parentVersionId = asText(values.parentVersionId);
+  const previousLabelIds = new Set(
+    normalizeProjectDeliveryLabelCatalog(previousCatalog, { fallbackToDefaults: false })
+      .map((label) => label.id)
+  );
+  const scopedDeliveryLabels = scopeDeliveryLabelCatalogToVersion(
+    id,
+    values.deliveryLabelCatalog,
+    { preserveIds: previousLabelIds }
+  );
+  const milestones = remapVersionDeliveryMilestones(
+    values.milestones,
+    scopedDeliveryLabels.catalog,
+    scopedDeliveryLabels.idMap
+  );
 
   return {
     id,
@@ -976,22 +1102,32 @@ function normalizeCreateRequirementVersion(
     parentVersionName: parentVersionId && parentVersionId !== id ? asText(values.parentVersionName) || undefined : undefined,
     name,
     project: asText(values.project, "跨项目"),
+    projectId: asText(values.projectId) || undefined,
+    type: asText(values.type) === "项目" ? "项目" : "版本",
     status,
     startDate,
     releaseDate,
+    actualStartDate: asText(values.actualStartDate)
+      ? asDateString(values.actualStartDate, startDate)
+      : undefined,
+    actualCompletedDate: asText(values.actualCompletedDate)
+      ? asDateString(values.actualCompletedDate, releaseDate)
+      : undefined,
+    progress: Math.min(100, Math.max(0, asNumber(values.progress, 0))),
+    riskLevel: normalizeProjectRiskLevel(asText(values.riskLevel, "低")),
+    healthStatus: normalizeProjectHealthStatus(asText(values.healthStatus, "待评估")),
+    healthReason: asText(values.healthReason) || undefined,
     goal: asText(values.goal, "暂无版本目标。"),
+    owner: asText(values.owner) || undefined,
+    ...createOwnerLink(values),
     productOwner: asText(values.productOwner) || undefined,
     ...createVersionRoleOwnerLink(values, "product"),
     uiOwner: asText(values.uiOwner) || undefined,
     ...createVersionRoleOwnerLink(values, "ui"),
     devOwner: asText(values.devOwner) || undefined,
     ...createVersionRoleOwnerLink(values, "dev"),
-    milestones: normalizeRequirementVersionMilestones(values.milestones, {
-      name,
-      releaseDate,
-      startDate,
-      status
-    })
+    deliveryLabelCatalog: scopedDeliveryLabels.catalog,
+    milestones: normalizeRequirementVersionMilestones(milestones, releaseDate)
   };
 }
 
@@ -1006,10 +1142,17 @@ function normalizeCreateRequirement(
     priority: normalizeRequirementPriority(asText(values.priority, "P1")),
     status: normalizeRequirementStatus(asText(values.status, "评审中")),
     project: asText(values.project, "未关联项目"),
+    projectId: asText(values.projectId) || undefined,
     versionId: asText(values.versionId) || DEFAULT_REQUIREMENT_VERSION.id,
     versionName: asText(values.versionName) || DEFAULT_REQUIREMENT_VERSION.name,
+    description: asText(values.description) || undefined,
     owner: asOwnerName(values),
     ...createOwnerLink(values),
+    designOwner: asText(values.designOwner) || undefined,
+    ...createDesignOwnerLink(values),
+    developerMemberIds: asMemberIdArray(values.developerMemberIds),
+    startDate: asText(values.startDate) ? asDateString(values.startDate) : undefined,
+    dueDate: asText(values.dueDate) ? asDateString(values.dueDate) : undefined,
     uiLink: asText(values.uiLink),
     documentLink: asText(values.documentLink),
     acceptance: asText(values.acceptance, "暂无验收标准。"),
@@ -1740,6 +1883,31 @@ function scopeDataToWorkspace(data: LocalDatabase, workspaceId: string): LocalDa
   };
 }
 
+function scopeDataToVisibleProjects(data: LocalDatabase, visibleIds: Set<string>): LocalDatabase {
+  const allProjectIds = new Set(data.projects.map((project) => project.id));
+  const uniqueIdsByName = uniqueProjectIdByName(data.projects);
+  const belongsToVisibleProject = (record: { project: string; projectId?: string }) => {
+    const projectId = resolveVisibleRecordProjectId(record, allProjectIds, uniqueIdsByName);
+
+    return Boolean(projectId && visibleIds.has(projectId));
+  };
+
+  // 项目及关联 PM 记录使用同一个 visibleProjectIds 边界。legacy 只有项目名的行仅在工作区唯一命中时可见，
+  // 否则既不归入任何项目，也不能作为“孤儿记录”随 dashboard 泄露。
+  return {
+    ...data,
+    projects: data.projects.filter((project) => visibleIds.has(project.id)),
+    requirementVersions: data.requirementVersions.filter(belongsToVisibleProject),
+    requirements: data.requirements.filter(belongsToVisibleProject),
+    tasks: data.tasks.filter(belongsToVisibleProject),
+    risks: data.risks.filter(belongsToVisibleProject),
+    bugs: data.bugs.filter(belongsToVisibleProject),
+    repositories: (data.repositories ?? []).filter((repository) => Boolean(
+      repository.projectId && visibleIds.has(repository.projectId)
+    ))
+  };
+}
+
 function normalizeCreateRisk(values: Record<string, unknown>, id = createLocalId("risk")): Risk {
   return {
     id,
@@ -1749,6 +1917,7 @@ function normalizeCreateRisk(values: Record<string, unknown>, id = createLocalId
     owner: asOwnerName(values),
     ...createOwnerLink(values),
     project: asText(values.project, "未关联项目"),
+    projectId: asText(values.projectId) || undefined,
     mitigation: asText(values.mitigation, "暂无应对措施。")
   };
 }
@@ -1766,7 +1935,8 @@ function normalizeCreateDocument(values: Record<string, unknown>, id = createLoc
 
 function createRecord<T extends DashboardEntityType>(
   type: T,
-  values: Record<string, unknown>
+  values: Record<string, unknown>,
+  previousRecord?: DashboardEntityMap[DashboardEntityType]
 ): DashboardEntityMap[T] {
   if (type === "project") {
     return normalizeCreateProject(values) as DashboardEntityMap[T];
@@ -1785,7 +1955,13 @@ function createRecord<T extends DashboardEntityType>(
   }
 
   if (type === "requirementVersion") {
-    return normalizeCreateRequirementVersion(values) as DashboardEntityMap[T];
+    const previousVersion = previousRecord as RequirementVersion | undefined;
+
+    return normalizeCreateRequirementVersion(
+      values,
+      previousVersion?.id ?? createLocalId("requirementVersion"),
+      previousVersion?.deliveryLabelCatalog
+    ) as DashboardEntityMap[T];
   }
 
   if (type === "requirement") {
@@ -1799,16 +1975,18 @@ function normalizeProjectName(value: string) {
   return value.trim().toLowerCase();
 }
 
-function getProjectMetricKey(workspaceId: string, projectName: string) {
-  return `${workspaceId}:${normalizeProjectName(projectName)}`;
+function getProjectMetricKey(workspaceId: string, projectName: string, projectId?: string) {
+  return projectId
+    ? `${workspaceId}:id:${projectId}`
+    : `${workspaceId}:name:${normalizeProjectName(projectName)}`;
 }
 
-function groupRecordsByProject<T extends { project?: string; workspaceId?: string }>(records: T[]) {
+function groupRecordsByProject<T extends { project?: string; projectId?: string; workspaceId?: string }>(records: T[]) {
   const groupedRecords = new Map<string, T[]>();
 
   // dashboard 读取会频繁派生项目进度、健康度和风险数；如果每个项目都全量 filter 任务/Bug/风险，
-  // 多工作区和长列表下会退化成 `项目数 × 记录数` 的重复扫描。这里按“工作区 + 项目名”预分组，
-  // 既减少单次 `/api/dashboard` CPU 成本，也避免同名项目在不同工作区之间互相污染指标。
+  // 多工作区和长列表下会退化成 `项目数 × 记录数` 的重复扫描。新数据优先按稳定 projectId 分组，
+  // 没有 ID 的历史行和 Bug 仍按“工作区 + 项目名”兼容，避免升级期间指标突然归零。
   for (const record of records) {
     const projectName = asText(record.project);
 
@@ -1816,7 +1994,7 @@ function groupRecordsByProject<T extends { project?: string; workspaceId?: strin
       continue;
     }
 
-    const metricKey = getProjectMetricKey(getWorkspaceId(record), projectName);
+    const metricKey = getProjectMetricKey(getWorkspaceId(record), projectName, asText(record.projectId) || undefined);
     const projectRecords = groupedRecords.get(metricKey);
 
     if (projectRecords) {
@@ -1829,59 +2007,207 @@ function groupRecordsByProject<T extends { project?: string; workspaceId?: strin
   return groupedRecords;
 }
 
+function getProjectRecords<T>(groupedRecords: Map<string, T[]>, project: Project) {
+  const workspaceId = getWorkspaceId(project);
+
+  // 进入指标分组前已对唯一项目名补齐 ID；仍留在名称分组的只可能是同名歧义数据，不应计入任一项目。
+  return groupedRecords.get(getProjectMetricKey(workspaceId, project.name, project.id)) ?? [];
+}
+
+function getUniqueProjectIdByName(projects: Project[]) {
+  const projectIdsByName = new Map<string, string[]>();
+
+  for (const project of projects) {
+    const key = getProjectMetricKey(getWorkspaceId(project), project.name);
+    const candidateIds = projectIdsByName.get(key) ?? [];
+
+    candidateIds.push(project.id);
+    projectIdsByName.set(key, candidateIds);
+  }
+
+  // 历史记录只有项目名时，唯一命中才能安全补 ID；同一工作区存在同名项目时保持未归属，等待人工迁移。
+  return new Map(
+    [...projectIdsByName.entries()]
+      .flatMap(([key, candidateIds]) => {
+        const uniqueCandidateId = selectUniqueProjectNameCandidate(candidateIds);
+
+        return uniqueCandidateId ? [[key, uniqueCandidateId] as const] : [];
+      })
+  );
+}
+
+function backfillProjectId<T extends { project: string; projectId?: string; workspaceId?: string }>(
+  records: T[],
+  projects: Project[]
+) {
+  const projectIdByName = getUniqueProjectIdByName(projects);
+
+  // 迁移会持久化大部分旧行的 projectId；这里仍保留读取期唯一命名兜底，覆盖本地种子、未跑迁移的开发库和旧脚本写入。
+  return records.map((record) => ({
+    ...record,
+    projectId:
+      record.projectId ??
+      projectIdByName.get(getProjectMetricKey(getWorkspaceId(record), record.project))
+  }));
+}
+
+function backfillBugProjectId(
+  bugs: BugReport[],
+  versions: RequirementVersion[],
+  projects: Project[]
+) {
+  const projectIdByVersion = new Map(
+    versions
+      .filter((version) => Boolean(version.projectId))
+      .map((version) => [`${getWorkspaceId(version)}:${version.id}`, version.projectId as string] as const)
+  );
+  const projectIdByName = getUniqueProjectIdByName(projects);
+
+  // Bug 的 versionId 比可编辑项目名更稳定：先用同工作区版本归属，只在版本无稳定项目时才用唯一项目名兜底。
+  return bugs.map((bug) => ({
+    ...bug,
+    projectId:
+      bug.projectId
+      ?? (bug.versionId ? projectIdByVersion.get(`${getWorkspaceId(bug)}:${bug.versionId}`) : undefined)
+      ?? projectIdByName.get(getProjectMetricKey(getWorkspaceId(bug), bug.project))
+  }));
+}
+
 function clampScore(value: number) {
   return Math.min(100, Math.max(0, Math.round(value)));
 }
 
-function getMilestoneProgress(status: ProjectMilestoneStatus) {
-  const progressByStatus: Record<ProjectMilestoneStatus, number> = {
-    未开始: 0,
-    进行中: 50,
-    已完成: 100,
-    延期: 30
-  };
-
-  return progressByStatus[status];
-}
-
-function getTaskStageProgress(stage: TaskStage) {
-  const progressByStage: Record<TaskStage, number> = {
-    待处理: 0,
-    进行中: 50,
-    评审中: 80,
-    已完成: 100
-  };
-
-  return progressByStage[stage];
-}
-
-function average(values: number[]) {
-  if (!values.length) {
+function calculateTaskCompletionProgress(tasks: Task[]) {
+  if (!tasks.length) {
     return 0;
   }
 
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
+  const completedTaskCount = tasks.filter((task) => task.stage === "已完成").length;
+
+  // one2all 的交付进度是客观完成率，评审中/验收中不再折算部分分值，避免看板显示高进度但实际没有完成项。
+  return clampScore((completedTaskCount / tasks.length) * 100);
 }
 
-function calculateProjectProgress(project: Project, tasks: Task[]) {
-  const milestoneScore = project.milestones.length
-    ? average(project.milestones.map((milestone) => getMilestoneProgress(milestone.status)))
-    : null;
-  const taskScore = tasks.length ? average(tasks.map((task) => getTaskStageProgress(task.stage))) : null;
+function getHighestProjectRiskLevel(levels: ProjectRiskLevel[]): ProjectRiskLevel {
+  const rank: Record<ProjectRiskLevel, number> = { 低: 1, 中: 2, 高: 3 };
 
-  if (milestoneScore !== null && taskScore !== null) {
-    return clampScore(milestoneScore * 0.65 + taskScore * 0.35);
+  return levels.reduce((highest, level) => (rank[level] > rank[highest] ? level : highest), "低");
+}
+
+function deriveProjectRiskLevel(project: Project, risks: Risk[]): ProjectRiskLevel {
+  return getHighestProjectRiskLevel([project.riskLevel, ...risks.map((risk) => risk.level)]);
+}
+
+function hasMilestoneScheduleDeviation(milestone: ProjectMilestone) {
+  const actualCompletedDate = milestone.actualCompletedDate ? dayjs(milestone.actualCompletedDate) : null;
+  const dueDate = dayjs(milestone.dueDate);
+
+  return (
+    milestone.status === "延期" ||
+    (actualCompletedDate !== null &&
+      actualCompletedDate.isValid() &&
+      dueDate.isValid() &&
+      actualCompletedDate.isAfter(dueDate, "day"))
+  );
+}
+
+function deriveDeliveryHealth({
+  actualCompletedDate,
+  actualStartDate,
+  milestones,
+  plannedEndDate,
+  plannedStartDate,
+  progress,
+  riskLevel,
+  tasks
+}: {
+  actualCompletedDate?: string;
+  actualStartDate?: string;
+  milestones: ProjectMilestone[];
+  plannedEndDate: string;
+  plannedStartDate: string;
+  progress: number;
+  riskLevel: ProjectRiskLevel;
+  tasks: Task[];
+}): { healthStatus: ProjectHealthStatus; healthReason: string } {
+  const today = dayjs().startOf("day");
+  const plannedStart = dayjs(plannedStartDate).startOf("day");
+  const plannedEnd = dayjs(plannedEndDate).startOf("day");
+  const actualStart = actualStartDate ? dayjs(actualStartDate).startOf("day") : null;
+  const actualCompleted = actualCompletedDate ? dayjs(actualCompletedDate).startOf("day") : null;
+  const overdueTasks = tasks.filter((task) => {
+    const dueDate = dayjs(task.dueDate).startOf("day");
+
+    return task.stage !== "已完成" && dueDate.isValid() && dueDate.isBefore(today);
+  });
+  const delayedMilestoneCount = milestones.filter(hasMilestoneScheduleDeviation).length;
+  const plannedDeliveryOverdue = plannedEnd.isValid() && plannedEnd.isBefore(today) && progress < 100;
+  const startedLate =
+    actualStart !== null && actualStart.isValid() && plannedStart.isValid() && actualStart.isAfter(plannedStart, "day");
+  const completedLate =
+    actualCompleted !== null &&
+    actualCompleted.isValid() &&
+    plannedEnd.isValid() &&
+    actualCompleted.isAfter(plannedEnd, "day");
+  const hasValidCycle =
+    plannedStart.isValid() && plannedEnd.isValid() && plannedEnd.isAfter(plannedStart, "day");
+  const totalCycleDays = hasValidCycle ? Math.max(1, plannedEnd.diff(plannedStart, "day")) : 0;
+  const expectedProgress = !hasValidCycle || !today.isAfter(plannedStart, "day")
+    ? 0
+    : !today.isBefore(plannedEnd, "day")
+      ? 100
+      : clampScore((today.diff(plannedStart, "day") / totalCycleDays) * 100);
+  const behind = Math.max(0, expectedProgress - progress);
+  const deviationReasons = [
+    overdueTasks.length ? `${overdueTasks.length} 项任务逾期` : "",
+    plannedDeliveryOverdue ? "计划交付日已过但任务未全部完成" : "",
+    behind >= 20 ? `实际进度落后线性计划 ${Math.round(behind)} 个百分点` : "",
+    startedLate ? "实际开始日晚于计划开始日" : "",
+    completedLate ? "实际完成日晚于计划交付日" : "",
+    delayedMilestoneCount ? `${delayedMilestoneCount} 个交付节点发生偏差` : ""
+  ].filter(Boolean);
+
+  if (progress >= 100) {
+    return {
+      healthStatus: "正常",
+      healthReason: "全部关联任务均已完成。"
+    };
   }
 
-  if (milestoneScore !== null) {
-    return clampScore(milestoneScore);
+  if (riskLevel === "高") {
+    deviationReasons.unshift("存在高风险项");
   }
 
-  if (taskScore !== null) {
-    return clampScore(taskScore);
+  if (deviationReasons.length) {
+    return {
+      healthStatus: "已偏离",
+      healthReason: deviationReasons.join("；")
+    };
   }
 
-  return clampScore(project.progress);
+  if (riskLevel === "中" || behind >= 10) {
+    return {
+      healthStatus: "有风险",
+      healthReason: [
+        riskLevel === "中" ? "存在中风险项" : "",
+        behind >= 10 ? `实际进度落后线性计划 ${Math.round(behind)} 个百分点` : ""
+      ].filter(Boolean).join("；")
+    };
+  }
+
+  if (!tasks.length || !hasValidCycle) {
+    return {
+      healthStatus: "待评估",
+      healthReason: !tasks.length
+        ? "暂无关联任务，暂不具备交付进度与延期评估条件。"
+        : "计划开始日、计划结束日无效或未形成有效周期，暂无法计算线性预期进度。"
+    };
+  }
+
+  return {
+    healthStatus: "正常",
+    healthReason: `当前进度 ${progress}%，线性预期进度 ${expectedProgress}%，风险与排期均在正常范围。`
+  };
 }
 
 function calculateProjectHealth({
@@ -1915,9 +2241,11 @@ function calculateProjectHealth({
   health -= overdueTasks.length * 8;
   health -= delayedMilestones.length * 12;
 
-  if (project.status !== "已完成" && dueDate.isBefore(today) && progress < 100) {
+  const isClosed = project.status === "已完成" || project.status === "已归档";
+
+  if (!isClosed && dueDate.isBefore(today) && progress < 100) {
     health -= 18;
-  } else if (project.status !== "已完成" && dueDate.diff(today, "day") <= 7 && progress < 70) {
+  } else if (!isClosed && dueDate.diff(today, "day") <= 7 && progress < 70) {
     health -= 10;
   }
 
@@ -1947,57 +2275,169 @@ function calculateProjectRiskCount({
   const criticalBugs = bugs.filter((bug) => bug.status !== "已关闭" && ["阻塞", "严重"].includes(bug.severity));
   const overdueTasks = tasks.filter((task) => task.stage !== "已完成" && dayjs(task.dueDate).isBefore(today));
   const delayedMilestones = project.milestones.filter((milestone) => milestone.status === "延期");
+  const isClosed = project.status === "已完成" || project.status === "已归档";
   const scheduleRisk =
-    project.status !== "已完成" && dayjs(project.dueDate).isBefore(today) && progress < 100 ? 1 : 0;
+    !isClosed && dayjs(project.dueDate).isBefore(today) && progress < 100 ? 1 : 0;
   const healthRisk = health < 70 ? 1 : 0;
 
   return risks.length + criticalBugs.length + overdueTasks.length + delayedMilestones.length + scheduleRisk + healthRisk;
 }
 
-function deriveProjectStatus(project: Project, progress: number, health: number, riskCount: number): ProjectStatus {
-  if (project.status === "暂停") {
-    return "暂停";
+function deriveProjectStatus(project: Project, progress: number): ProjectStatus {
+  if (project.status === "暂停" || project.status === "已归档" || project.status === "已完成") {
+    return project.status;
   }
 
-  if (progress >= 100 && riskCount === 0) {
+  if (progress >= 100) {
     return "已完成";
-  }
-
-  if (riskCount > 0 || health < 75) {
-    return "有风险";
   }
 
   return "进行中";
 }
 
 function applyProjectMetrics(data: LocalDatabase): LocalDatabase {
-  const tasksByProject = groupRecordsByProject(data.tasks);
-  const bugsByProject = groupRecordsByProject(data.bugs);
-  const risksByProject = groupRecordsByProject(data.risks);
+  const tasks = backfillProjectId(data.tasks, data.projects);
+  const risks = backfillProjectId(data.risks, data.projects);
+  const requirements = backfillProjectId(data.requirements, data.projects);
+  const versionsWithProjectId = backfillProjectId(data.requirementVersions, data.projects);
+  const bugs = backfillBugProjectId(data.bugs, versionsWithProjectId, data.projects);
+  const tasksByProject = groupRecordsByProject(tasks);
+  const bugsByProject = groupRecordsByProject(bugs);
+  const risksByProject = groupRecordsByProject(risks);
   const projects = data.projects.map((project) => {
-    const metricKey = getProjectMetricKey(getWorkspaceId(project), project.name);
-    const tasks = tasksByProject.get(metricKey) ?? [];
-    const bugs = bugsByProject.get(metricKey) ?? [];
-    const risks = risksByProject.get(metricKey) ?? [];
-    const progress = calculateProjectProgress(project, tasks);
-    const health = calculateProjectHealth({ bugs, progress, project, risks, tasks });
-    const riskCount = calculateProjectRiskCount({ bugs, health, progress, project, risks, tasks });
+    const projectTasks = getProjectRecords(tasksByProject, project);
+    const projectBugs = getProjectRecords(bugsByProject, project);
+    const projectRisks = getProjectRecords(risksByProject, project);
+    const progress = calculateTaskCompletionProgress(projectTasks);
+    const riskLevel = deriveProjectRiskLevel(project, projectRisks);
+    const deliveryHealth = deriveDeliveryHealth({
+      milestones: project.milestones,
+      plannedEndDate: project.dueDate,
+      plannedStartDate: project.startDate,
+      progress,
+      riskLevel,
+      tasks: projectTasks
+    });
+    const health = calculateProjectHealth({
+      bugs: projectBugs,
+      progress,
+      project,
+      risks: projectRisks,
+      tasks: projectTasks
+    });
+    const riskCount = calculateProjectRiskCount({
+      bugs: projectBugs,
+      health,
+      progress,
+      project,
+      risks: projectRisks,
+      tasks: projectTasks
+    });
 
     return {
       ...project,
       progress,
       health,
+      riskLevel,
+      ...deliveryHealth,
       riskCount,
-      status: deriveProjectStatus(project, progress, health, riskCount)
+      status: deriveProjectStatus(project, progress)
+    };
+  });
+  const projectById = new Map(projects.map((project) => [project.id, project]));
+  const tasksByVersion = new Map<string, Task[]>();
+  const childVersionIdsByParent = new Map<string, string[]>();
+
+  for (const task of tasks) {
+    if (!task.versionId) {
+      continue;
+    }
+
+    const versionKey = `${getWorkspaceId(task)}:${task.versionId}`;
+    const versionTasks = tasksByVersion.get(versionKey);
+
+    if (versionTasks) {
+      versionTasks.push(task);
+    } else {
+      tasksByVersion.set(versionKey, [task]);
+    }
+  }
+
+  for (const version of versionsWithProjectId) {
+    if (!version.parentVersionId) {
+      continue;
+    }
+
+    const parentKey = `${getWorkspaceId(version)}:${version.parentVersionId}`;
+    childVersionIdsByParent.set(parentKey, [
+      ...(childVersionIdsByParent.get(parentKey) ?? []),
+      version.id
+    ]);
+  }
+
+  const getVersionScopeIds = (version: RequirementVersion) => {
+    const workspaceId = getWorkspaceId(version);
+    const visited = new Set<string>();
+    const pending = [version.id];
+
+    while (pending.length) {
+      const versionId = pending.pop();
+
+      if (!versionId || visited.has(versionId)) {
+        continue;
+      }
+
+      visited.add(versionId);
+      pending.push(...(childVersionIdsByParent.get(`${workspaceId}:${versionId}`) ?? []));
+    }
+
+    return visited;
+  };
+
+  const requirementVersions = versionsWithProjectId.map((version) => {
+    const workspaceId = getWorkspaceId(version);
+    const versionScopeIds = getVersionScopeIds(version);
+    const versionTasks = [...versionScopeIds].flatMap(
+      (versionId) => tasksByVersion.get(`${workspaceId}:${versionId}`) ?? []
+    );
+    const project = version.projectId ? projectById.get(version.projectId) : undefined;
+    const riskLevel = project
+      ? getHighestProjectRiskLevel([project.riskLevel, version.riskLevel])
+      : version.riskLevel;
+    const progress = calculateTaskCompletionProgress(versionTasks);
+    const deliveryHealth = deriveDeliveryHealth({
+      actualCompletedDate: version.actualCompletedDate,
+      actualStartDate: version.actualStartDate,
+      milestones: version.milestones,
+      plannedEndDate: version.releaseDate,
+      plannedStartDate: version.startDate,
+      progress,
+      riskLevel,
+      tasks: versionTasks
+    });
+
+    // 子版本只聚合自身子树，父版本聚合全部后代任务；visited 可阻断历史脏数据中的父子循环。
+    // 这样所有读取入口都与版本详情的子树口径一致，不再出现列表 direct-only、详情 aggregate 的健康度分裂。
+    return {
+      ...version,
+      progress,
+      riskLevel,
+      ...deliveryHealth
     };
   });
 
   return {
     ...data,
+    bugs,
     projects,
+    tasks,
+    risks,
+    requirements,
+    requirementVersions,
     metrics: createMetrics({
       ...data,
-      projects
+      projects,
+      tasks
     })
   };
 }
@@ -2034,6 +2474,17 @@ function findRecord<T extends DashboardEntityType>(
   return data.documents.find((document) => document.id === id) as DashboardEntityMap[T] | undefined;
 }
 
+export async function getDashboardRecordById<T extends DashboardEntityType>(
+  type: T,
+  id: string
+): Promise<DashboardEntityMap[T] | undefined> {
+  // 项目级鉴权与删除审计需要在变更前拿到原记录的 projectId；统一复用 dashboard 只读路径，
+  // 可以同时获得迁移期按项目名补齐的稳定 ID，并保证该 helper 本身不产生任何写入副作用。
+  const data = await readDatabase();
+
+  return findRecord(data, type, id);
+}
+
 function findRequirementVersionInWorkspace(data: LocalDatabase, versionId: string, workspaceId: string) {
   return data.requirementVersions.find(
     (item) => item.id === versionId && getWorkspaceId(item) === workspaceId
@@ -2044,6 +2495,7 @@ function withRequirementVersionProject(data: LocalDatabase, values: Record<strin
   const versionId = asText(values.versionId);
   const version = findRequirementVersionInWorkspace(data, versionId, workspaceId) ?? DEFAULT_REQUIREMENT_VERSION;
   const submittedProject = asText(values.project);
+  const submittedProjectId = asText(values.projectId);
 
   // 任务、需求和 Bug 的项目选择已经在 UI 收敛到版本上下文；服务端仍要用 versionId 二次回填，
   // 因为 API、AI 助手和脚本都可能绕过表单直接提交旧 project/versionName，导致版本大屏和项目视图口径错位。
@@ -2052,12 +2504,14 @@ function withRequirementVersionProject(data: LocalDatabase, values: Record<strin
     ...values,
     versionId: version.id,
     versionName: version.name,
-    project: version.project === "跨项目" && submittedProject ? submittedProject : version.project
+    project: version.project === "跨项目" && submittedProject ? submittedProject : version.project,
+    projectId: version.project === "跨项目" ? submittedProjectId || version.projectId : version.projectId
   };
 }
 
 function withResolvedRequirementVersionProject(values: Record<string, unknown>, version: RequirementVersion) {
   const submittedProject = asText(values.project);
+  const submittedProjectId = asText(values.projectId);
 
   // 轻量任务创建不读取完整版本列表，但版本口径必须和完整路径一致：
   // “跨项目”版本保留调用方项目，明确项目版本强制覆盖，避免项目视图和版本大屏统计分叉。
@@ -2065,7 +2519,8 @@ function withResolvedRequirementVersionProject(values: Record<string, unknown>, 
     ...values,
     versionId: version.id,
     versionName: version.name,
-    project: version.project === "跨项目" && submittedProject ? submittedProject : version.project
+    project: version.project === "跨项目" && submittedProject ? submittedProject : version.project,
+    projectId: version.project === "跨项目" ? submittedProjectId || version.projectId : version.projectId
   };
 }
 
@@ -2101,24 +2556,61 @@ function withRequirementVersionParentProject(data: LocalDatabase, values: Record
     ...values,
     parentVersionId: parentVersion.id,
     parentVersionName: parentVersion.name,
-    project: parentVersion.project
+    project: parentVersion.project,
+    projectId: parentVersion.projectId
   };
+}
+
+function withProjectIdFromName(data: LocalDatabase, values: Record<string, unknown>, workspaceId: string) {
+  const explicitProjectId = asText(values.projectId);
+  const projectName = asText(values.project);
+  const sameNameProjects = data.projects.filter(
+    (project) => (
+      normalizeProjectName(project.name) === normalizeProjectName(projectName)
+      && getWorkspaceId(project) === workspaceId
+    )
+  );
+  const matchedProject = explicitProjectId
+    ? data.projects.find((project) => project.id === explicitProjectId && getWorkspaceId(project) === workspaceId)
+    : selectUniqueProjectNameCandidate(sameNameProjects);
+
+  // 新客户端直接提交稳定 projectId；旧 UI 只提交项目名时仅在工作区内唯一命中才补齐，避免同名项目串数据。
+  return matchedProject
+    ? {
+        ...values,
+        projectId: matchedProject.id,
+        project: matchedProject.name
+      }
+    : explicitProjectId
+      ? {
+          // 关联 ID 只能指向当前工作区内真实项目；无效 ID 不得原样落库。
+          // 项目型实体的 API 会更早返回 4xx，这个兜底主要覆盖 Bug、旧脚本和本地演示数据。
+          ...values,
+          projectId: undefined
+        }
+      : values;
 }
 
 function withRecordVersionScope(data: LocalDatabase, type: DashboardEntityType, values: Record<string, unknown>, workspaceId: string) {
   if (type === "task" || type === "bug" || type === "requirement") {
-    return withRequirementVersionProject(data, values, workspaceId);
+    return withProjectIdFromName(data, withRequirementVersionProject(data, values, workspaceId), workspaceId);
   }
 
   if (type === "requirementVersion") {
-    return withRequirementVersionParentProject(data, values, workspaceId);
+    return withProjectIdFromName(data, withRequirementVersionParentProject(data, values, workspaceId), workspaceId);
+  }
+
+  if (type === "risk") {
+    return withProjectIdFromName(data, values, workspaceId);
   }
 
   return values;
 }
 
 function createMetrics(data: Pick<DashboardData, "projects" | "tasks" | "bugs" | "requirements" | "documents">) {
-  const activeProjects = data.projects.filter((project) => project.status !== "已完成").length;
+  const activeProjects = data.projects.filter(
+    (project) => project.status !== "已完成" && project.status !== "已归档"
+  ).length;
   const deliveryRate = data.projects.length
     ? Math.round(data.projects.reduce((sum, project) => sum + project.progress, 0) / data.projects.length)
     : 0;
@@ -2472,7 +2964,13 @@ export async function getDashboardData(user?: FeishuUser, workspaceId?: string):
   const data = memberResult.data;
   const changed = workspaceResult.changed || memberResult.changed;
   const currentMember = memberResult.currentMember;
-  const scopedData = scopeDataToWorkspace(data, workspaceResult.currentWorkspace.id);
+  const workspaceScopedData = scopeDataToWorkspace(data, workspaceResult.currentWorkspace.id);
+  const visibleIds = await resolveVisibleProjectIds({
+    currentMember,
+    isLocalDemo: !isAuthServiceConfigured(),
+    workspaceId: workspaceResult.currentWorkspace.id
+  });
+  const scopedData = scopeDataToVisibleProjects(workspaceScopedData, visibleIds);
 
   if (changed) {
     // 读取仪表盘时只可能因为当前工作区规范化或登录用户资料同步而变化，不能走全量写库，否则腾讯云 MySQL 公网下会反复 upsert 大量任务导致首屏超时。
@@ -2775,10 +3273,18 @@ export async function createDashboardRecord<T extends DashboardEntityType>(
   } else if (type === "requirement") {
     // 单条需求保存只影响 requirements 当前行；需求 AI 索引由 API route 异步投递，
     // 这里不能再调用全量 writeDatabase，否则会复现公网 MySQL 60 秒事务超时。
-    await upsertDashboardRequirementDatabase(savedRecord as Requirement);
+    await upsertDashboardRequirementDatabase(
+      savedRecord as Requirement,
+      undefined,
+      getAssignmentPermissionActor(data, workspace.id, user)
+    );
   } else if (type === "requirementVersion") {
     // 新建版本只写当前版本行；子版本项目继承和后续记录归一化已经在服务层完成。
-    await upsertDashboardRequirementVersionDatabase(savedRecord as RequirementVersion);
+    await upsertDashboardRequirementVersionDatabase(
+      savedRecord as RequirementVersion,
+      undefined,
+      getAssignmentPermissionActor(data, workspace.id, user)
+    );
   } else {
     await writeDatabase(savedData);
   }
@@ -2883,6 +3389,8 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
   }
 
   const baseValues = {
+    // 旧 UI 尚未展示本轮新增字段；编辑时先铺入原记录，再覆盖用户显式提交值，避免隐藏字段被 normalizer 默认值清空。
+    ...(existingRecord as unknown as Record<string, unknown>),
     ...values,
     workspaceId: getWorkspaceId(existingRecord),
     ...(type === "bug"
@@ -2892,16 +3400,40 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
       : {})
   };
   const scopedValues = withRecordVersionScope(data, type, baseValues, getWorkspaceId(existingRecord));
-  const record = createRecord(type, scopedValues);
+  const record = createRecord(type, scopedValues, existingRecord);
   let typedRecord = {
     ...record,
     id
   } as DashboardEntityMap[T];
+  const projectNameChanged =
+    type === "project" && (existingRecord as Project).name !== (typedRecord as Project).name;
   let updated = false;
 
   if (type === "project") {
-    data.projects = data.projects.map((project) => project.id === id ? (typedRecord as Project) : project);
+    const project = typedRecord as Project;
+
+    data.projects = data.projects.map((item) => item.id === id ? project : item);
     updated = data.projects.some((project) => project.id === id);
+
+    if (updated && projectNameChanged) {
+      // 项目名是展示快照，真实归属必须以 projectId 为准。只级联稳定 ID 命中的记录，
+      // 不再用旧名扫描，因此即使工作区内有同名项目，也不会改到另一个项目的版本、需求、任务、风险或 Bug。
+      data.requirementVersions = data.requirementVersions.map((version) =>
+        version.projectId === project.id ? { ...version, project: project.name } : version
+      );
+      data.requirements = data.requirements.map((requirement) =>
+        requirement.projectId === project.id ? { ...requirement, project: project.name } : requirement
+      );
+      data.tasks = data.tasks.map((task) =>
+        task.projectId === project.id ? { ...task, project: project.name } : task
+      );
+      data.risks = data.risks.map((risk) =>
+        risk.projectId === project.id ? { ...risk, project: project.name } : risk
+      );
+      data.bugs = data.bugs.map((bug) =>
+        bug.projectId === project.id ? { ...bug, project: project.name } : bug
+      );
+    }
   }
 
   if (type === "task") {
@@ -2936,7 +3468,9 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
         : item.parentVersionId === id
           ? {
               ...item,
-              parentVersionName: version.name
+              parentVersionName: version.name,
+              project: version.project,
+              projectId: version.projectId
             }
           : item
     );
@@ -2948,7 +3482,8 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
           ? {
               ...requirement,
               versionName: version.name,
-              project: version.project
+              project: version.project,
+              projectId: version.projectId
             }
           : requirement
       );
@@ -2957,7 +3492,8 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
           ? {
               ...task,
               versionName: version.name,
-              project: version.project === "跨项目" ? task.project : version.project
+              project: version.project === "跨项目" ? task.project : version.project,
+              projectId: version.project === "跨项目" ? task.projectId : version.projectId
             }
           : task
       );
@@ -2966,7 +3502,8 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
           ? {
               ...bug,
               versionName: version.name,
-              project: version.project === "跨项目" ? bug.project : version.project
+              project: version.project === "跨项目" ? bug.project : version.project,
+              projectId: version.project === "跨项目" ? bug.projectId : version.projectId
             }
           : bug
       );
@@ -3019,8 +3556,21 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
   ].filter(Boolean);
 
   if (type === "project") {
-    // 项目编辑不需要整库同步；关联任务/Bug 的项目口径由版本或各自记录控制。
-    await upsertDashboardProjectDatabase(savedRecord as Project);
+    const project = savedRecord as Project;
+
+    if (projectNameChanged) {
+      // 改名时仅同步该 projectId 下的显示快照，比整库重写更轻，也不会按项目名误伤同名记录。
+      await upsertDashboardProjectScopeDatabase({
+        bugs: savedData.bugs.filter((bug) => bug.projectId === project.id),
+        project,
+        requirements: savedData.requirements.filter((requirement) => requirement.projectId === project.id),
+        risks: savedData.risks.filter((risk) => risk.projectId === project.id),
+        tasks: savedData.tasks.filter((task) => task.projectId === project.id),
+        versions: savedData.requirementVersions.filter((version) => version.projectId === project.id)
+      });
+    } else {
+      await upsertDashboardProjectDatabase(project);
+    }
   } else if (type === "task") {
     // 任务看板拖拽会高频调用 PATCH，只更新当前任务一行即可；如果走 writeDatabase 会触发整库同步事务并放大 MySQL 锁等待。
     await updateDashboardTaskDatabase(savedRecord as Task);
@@ -3029,13 +3579,18 @@ export async function updateDashboardRecord<T extends DashboardEntityType>(
     await upsertDashboardBugDatabase(savedRecord as BugReport);
   } else if (type === "requirement") {
     // 需求状态/负责人等编辑不需要重算并回写所有业务表；版本联动已在内存对象中完成，当前需求行单独持久化即可。
-    await upsertDashboardRequirementDatabase(savedRecord as Requirement);
+    await upsertDashboardRequirementDatabase(
+      savedRecord as Requirement,
+      undefined,
+      getAssignmentPermissionActor(data, getWorkspaceId(existingRecord), user)
+    );
   } else if (type === "requirementVersion") {
     const version = savedRecord as RequirementVersion;
 
     // 版本名称或项目变更会影响该版本下的需求、任务和 Bug 展示口径；
     // 只同步这个版本的关联记录，避免一次版本编辑退化成全库长事务。
     await upsertDashboardRequirementVersionScopeDatabase({
+      actor: getAssignmentPermissionActor(data, getWorkspaceId(existingRecord), user),
       bugs: savedData.bugs.filter((bug) => bug.versionId === version.id),
       requirements: savedData.requirements.filter((requirement) => requirement.versionId === version.id),
       tasks: savedData.tasks.filter((task) => task.versionId === version.id),
@@ -3069,15 +3624,73 @@ export async function deleteDashboardRecord<T extends DashboardEntityType>(type:
       throw new Error("未规划需求池是系统兜底版本，不能删除");
     }
 
-    fallbackVersion =
-      data.requirementVersions.find((version) => version.id === DEFAULT_REQUIREMENT_VERSION_ID && getWorkspaceId(version) === recordWorkspaceId) ??
-      data.requirementVersions.find((version) => version.id !== id && getWorkspaceId(version) === recordWorkspaceId);
+    const sourceVersion = existingRecord as RequirementVersion;
+    const referenceCounts = {
+      requirements: data.requirements.filter((requirement) => (
+        getWorkspaceId(requirement) === recordWorkspaceId && requirement.versionId === id
+      )).length,
+      tasks: data.tasks.filter((task) => (
+        getWorkspaceId(task) === recordWorkspaceId && task.versionId === id
+      )).length,
+      bugs: data.bugs.filter((bug) => (
+        getWorkspaceId(bug) === recordWorkspaceId && bug.versionId === id
+      )).length
+    };
+    const needsFallback = requiresRequirementVersionFallback(referenceCounts);
 
-    if (!fallbackVersion) {
-      throw new Error("请至少保留一个需求版本");
+    if (needsFallback) {
+      const neutralProjectScope = sourceVersion.project === "跨项目" || sourceVersion.project === "未关联项目";
+      const sourceProject = sourceVersion.projectId
+        ? data.projects.find((project) => (
+            project.id === sourceVersion.projectId && getWorkspaceId(project) === recordWorkspaceId
+          ))
+        : selectUniqueProjectNameCandidate(data.projects.filter((project) => (
+            getWorkspaceId(project) === recordWorkspaceId
+            && normalizeProjectName(project.name) === normalizeProjectName(sourceVersion.project)
+          )));
+
+      // 有业务引用时必须能证明迁移目标与源版本同项目。真实项目优先比较稳定 ID；
+      // “跨项目/未关联项目”是系统范围标签而不是项目名，允许按该标签保留各记录自身的 projectId。
+      const belongsToSourceProject = (version: RequirementVersion) => {
+        if (sourceVersion.projectId) {
+          return Boolean(sourceProject && version.projectId === sourceProject.id);
+        }
+
+        if (sourceProject) {
+          return version.projectId === sourceProject.id;
+        }
+
+        return neutralProjectScope
+          && !version.projectId
+          && version.project === sourceVersion.project;
+      };
+
+      const systemFallback = data.requirementVersions.find((version) => (
+        version.id === DEFAULT_REQUIREMENT_VERSION_ID
+        && getWorkspaceId(version) === recordWorkspaceId
+        && belongsToSourceProject(version)
+      ));
+      const siblingCandidates = data.requirementVersions.filter((version) => (
+        version.id !== id
+        && version.id !== DEFAULT_REQUIREMENT_VERSION_ID
+        && getWorkspaceId(version) === recordWorkspaceId
+        && belongsToSourceProject(version)
+      ));
+      const automaticFallback = selectAutomaticRequirementVersionFallback(systemFallback, siblingCandidates);
+
+      if (automaticFallback.ambiguous) {
+        // 没有系统兜底版本时不能从多个同项目兄弟版本中任取一个，否则删除结果取决于数组/数据库顺序。
+        throw new Error("当前项目有多个可迁移版本，请先保留唯一迁移目标或将关联记录手动迁移后再删除。");
+      }
+
+      fallbackVersion = automaticFallback.fallback;
+
+      if (!fallbackVersion) {
+        const referenceSummary = `${referenceCounts.requirements} 个需求、${referenceCounts.tasks} 个任务和 ${referenceCounts.bugs} 个 Bug`;
+
+        throw new Error(`当前版本仍关联 ${referenceSummary}，但没有可安全迁移的同项目版本，请先新建同项目版本后再删除。`);
+      }
     }
-
-    const migrationVersion = fallbackVersion;
 
     data.requirementVersions = data.requirementVersions
       .filter((version) => version.id !== id)
@@ -3090,41 +3703,121 @@ export async function deleteDashboardRecord<T extends DashboardEntityType>(type:
             }
           : version
       );
-    data.requirements = data.requirements.map((requirement) =>
-      requirement.versionId === id
-        ? {
-            ...requirement,
-            versionId: migrationVersion.id,
-            versionName: migrationVersion.name,
-            project: migrationVersion.project === "跨项目" ? requirement.project : migrationVersion.project
-          }
-        : requirement
-    );
-    data.tasks = data.tasks.map((task) =>
-      task.versionId === id
-        ? {
-            ...task,
-            versionId: migrationVersion.id,
-            versionName: migrationVersion.name,
-            project: migrationVersion.project === "跨项目" ? task.project : migrationVersion.project
-          }
-        : task
-    );
-    data.bugs = data.bugs.map((bug) =>
-      bug.versionId === id
-        ? {
-            ...bug,
-            versionId: migrationVersion.id,
-            versionName: migrationVersion.name,
-            project: migrationVersion.project === "跨项目" ? bug.project : migrationVersion.project
-          }
-        : bug
-    );
+
+    if (fallbackVersion) {
+      const migrationVersion = fallbackVersion;
+      // 中性版本只承载分组关系，不拥有具体项目；迁移时保留各业务记录自己的项目快照与稳定 ID。
+      const keepsRecordProject = migrationVersion.project === "跨项目" || migrationVersion.project === "未关联项目";
+
+      data.requirements = data.requirements.map((requirement) =>
+        requirement.versionId === id
+          ? {
+              ...requirement,
+              versionId: migrationVersion.id,
+              versionName: migrationVersion.name,
+              project: keepsRecordProject ? requirement.project : migrationVersion.project,
+              projectId: keepsRecordProject ? requirement.projectId : migrationVersion.projectId
+            }
+          : requirement
+      );
+      data.tasks = data.tasks.map((task) =>
+        task.versionId === id
+          ? {
+              ...task,
+              versionId: migrationVersion.id,
+              versionName: migrationVersion.name,
+              project: keepsRecordProject ? task.project : migrationVersion.project,
+              projectId: keepsRecordProject ? task.projectId : migrationVersion.projectId
+            }
+          : task
+      );
+      data.bugs = data.bugs.map((bug) =>
+        bug.versionId === id
+          ? {
+              ...bug,
+              versionId: migrationVersion.id,
+              versionName: migrationVersion.name,
+              project: keepsRecordProject ? bug.project : migrationVersion.project,
+              projectId: keepsRecordProject ? bug.projectId : migrationVersion.projectId
+            }
+          : bug
+      );
+    }
   } else if (type === "requirement") {
+    const requirement = existingRecord as Requirement;
+    const legacyTaskCandidates = data.tasks.filter((task) => (
+      getWorkspaceId(task) === recordWorkspaceId
+      && !task.requirementId
+      && task.requirementTitle === requirement.title
+      && task.versionId === requirement.versionId
+    ));
+    const sameNameProjects = data.projects.filter((project) => (
+      getWorkspaceId(project) === recordWorkspaceId
+      && normalizeProjectName(project.name) === normalizeProjectName(requirement.project)
+    ));
+    const uniqueNameProject = selectUniqueProjectNameCandidate(sameNameProjects);
+    const resolvedRequirementProjectId = requirement.projectId ?? uniqueNameProject?.id;
+    const matchingLegacyTasks = legacyTaskCandidates.filter((task) => (
+      task.projectId
+        ? Boolean(resolvedRequirementProjectId && task.projectId === resolvedRequirementProjectId)
+        : normalizeProjectName(task.project) === normalizeProjectName(requirement.project)
+    ));
+    const hasNameOnlyLegacyTask = matchingLegacyTasks.some((task) => (
+      !task.projectId
+    ));
+
+    if (
+      hasNameOnlyLegacyTask
+      && (!uniqueNameProject || uniqueNameProject.id !== resolvedRequirementProjectId)
+    ) {
+      // 老任务只有“需求标题 + 项目名”快照时，同名项目下无法证明它属于哪条需求；宁可阻止删除等待人工补 ID，
+      // 也不能随机把名称当作稳定归属而漏检关联任务。
+      throw new Error("需求所属项目名称不唯一，无法安全核对历史关联，请先补齐 projectId/requirementId 后再删除。");
+    }
+
+    const relatedTaskCount = data.tasks.filter((task) =>
+      getWorkspaceId(task) === recordWorkspaceId && task.requirementId === requirement.id
+    ).length;
+    const totalRelatedTaskCount = relatedTaskCount + matchingLegacyTasks.length;
+
+    if (totalRelatedTaskCount > 0) {
+      throw new Error(`需求仍关联 ${totalRelatedTaskCount} 个任务，请先迁移或解除任务关联后再删除。`);
+    }
+
     data.requirements = data.requirements.filter((requirement) => requirement.id !== id);
   } else if (type === "document") {
     data.documents = data.documents.filter((document) => document.id !== id);
   } else if (type === "project") {
+    const project = existingRecord as Project;
+    const uniqueNameProject = selectUniqueProjectNameCandidate(data.projects.filter((candidate) => (
+      getWorkspaceId(candidate) === recordWorkspaceId
+      && normalizeProjectName(candidate.name) === normalizeProjectName(project.name)
+    )));
+    const belongsToDeletedProject = (record: { project: string; projectId?: string; workspaceId?: string }) =>
+      getWorkspaceId(record) === recordWorkspaceId && (
+        record.projectId === project.id || (
+          !record.projectId
+          && uniqueNameProject?.id === project.id
+          && record.project === project.name
+        )
+      );
+    const relatedCounts = {
+      versions: data.requirementVersions.filter(belongsToDeletedProject).length,
+      requirements: data.requirements.filter(belongsToDeletedProject).length,
+      tasks: data.tasks.filter(belongsToDeletedProject).length,
+      risks: data.risks.filter(belongsToDeletedProject).length,
+      bugs: data.bugs.filter(belongsToDeletedProject).length
+    };
+    const relatedTotal = Object.values(relatedCounts).reduce((sum, count) => sum + count, 0);
+
+    // Project 与历史业务表仍处在“稳定 ID + 项目名兼容”的迁移阶段，直接级联会误删同名或跨项目记录。
+    // 因此只允许删除空项目集；有交付数据时应先迁移记录或把项目归档，避免产生孤儿版本和任务。
+    if (relatedTotal > 0) {
+      throw new Error(
+        `项目仍包含 ${relatedCounts.versions} 个项目/版本、${relatedCounts.requirements} 个需求、${relatedCounts.tasks} 个任务、${relatedCounts.risks} 个风险和 ${relatedCounts.bugs} 个 Bug，请先迁移关联数据或将项目设为已归档。`
+      );
+    }
+
     data.projects = data.projects.filter((project) => project.id !== id);
   } else if (type === "task") {
     data.tasks = data.tasks.filter((task) => task.id !== id);
@@ -3134,8 +3827,6 @@ export async function deleteDashboardRecord<T extends DashboardEntityType>(type:
     data.risks = data.risks.filter((risk) => risk.id !== id);
   }
 
-  const savedData = applyProjectMetrics(data);
-
   if (type === "task") {
     // 任务删除同样保持单行删除，索引 cleanup 由 API route 后续投递，项目统计读取时派生。
     await deleteDashboardTaskDatabase(id);
@@ -3143,10 +3834,22 @@ export async function deleteDashboardRecord<T extends DashboardEntityType>(type:
     // Bug 删除依赖数据库级联清理附件、流转记录和 AI 修复任务，不再触发全量 dashboard 同步。
     await deleteDashboardBugDatabase(id);
   } else if (type === "requirement") {
-    // 需求删除不需要全量同步任务/Bug/版本；异步知识索引 cleanup 会在 API route 层负责投递。
-    await deleteDashboardRequirementDatabase(id);
-  } else {
-    await writeDatabase(savedData);
+    // 删除前在 Serializable 事务内重新检查任务引用，避免本地快照检查后并发插入新任务形成孤儿。
+    await deleteDashboardRequirementDatabase({ requirementId: id, workspaceId: recordWorkspaceId });
+  } else if (type === "requirementVersion") {
+    // 版本迁移与删除改为作用域事务，不再用旧快照全量同步所有表，避免误删并发创建的无关记录。
+    await deleteDashboardRequirementVersionDatabase({
+      fallbackVersionId: fallbackVersion?.id,
+      versionId: id,
+      workspaceId: recordWorkspaceId
+    });
+  } else if (type === "project") {
+    // 数据库层再次检查当前引用和代码仓库，随后只删除项目本身；治理记录由外键级联清理。
+    await deleteDashboardProjectDatabase({ projectId: id, workspaceId: recordWorkspaceId });
+  } else if (type === "risk") {
+    await deleteDashboardRiskDatabase({ riskId: id, workspaceId: recordWorkspaceId });
+  } else if (type === "document") {
+    await deleteDashboardDocumentDatabase({ documentId: id, workspaceId: recordWorkspaceId });
   }
 
   return {

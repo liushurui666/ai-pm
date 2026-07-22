@@ -3,14 +3,18 @@ import type { UploadFile } from "antd/es/upload/interface";
 import type { BugReport, DashboardMember, Project, Requirement, RequirementVersion, Task, FeishuUser } from "@/types/dashboard";
 import type { DashboardEntityType } from "@/types/records";
 import { createBugAttachmentUploadFile, serializeBugAttachments } from "@/components/project-management-platform/forms/bug-attachments";
+import { cloneDefaultProjectDeliveryLabels, getVersionDeliveryLabelCatalog } from "@/data/project-delivery-labels";
 
 // 新建记录的默认值集中维护，避免每个抽屉入口各自拼装日期和状态。
 export function getCreateInitialValues(type: DashboardEntityType, currentUser?: FeishuUser) {
   if (type === "project") {
     return {
       status: "进行中",
+      startDate: dayjs(),
       progress: 0,
       health: 80,
+      healthStatus: "正常",
+      riskLevel: "低",
       dueDate: dayjs().add(14, "day"),
       team: 1,
       riskCount: 0
@@ -20,9 +24,12 @@ export function getCreateInitialValues(type: DashboardEntityType, currentUser?: 
   if (type === "task") {
     return {
       stage: "待处理",
-      priority: "中",
-      startDate: dayjs(),
-      dueDate: dayjs().add(7, "day")
+      priority: "普通",
+      taskType: "功能任务",
+      storyPoints: 0,
+      estimatedMinutes: 0,
+      startDate: dayjs().startOf("minute"),
+      dueDate: dayjs().add(7, "day").startOf("minute")
     };
   }
 
@@ -42,33 +49,27 @@ export function getCreateInitialValues(type: DashboardEntityType, currentUser?: 
 
   if (type === "requirement") {
     return {
-      priority: "P1",
-      status: "待评审"
+      priority: "普通",
+      status: "待梳理",
+      developerMemberIds: [],
+      startDate: dayjs(),
+      dueDate: dayjs().add(14, "day")
     };
   }
 
   if (type === "requirementVersion") {
     return {
       project: "跨项目",
+      type: "版本",
       status: "规划中",
+      riskLevel: "低",
+      healthStatus: "待评估",
+      progress: 0,
       startDate: dayjs(),
       releaseDate: dayjs().add(30, "day"),
-      milestones: [
-        {
-          title: "版本启动",
-          status: "进行中",
-          dueDate: dayjs(),
-          owner: "",
-          note: "确认版本目标、需求范围和负责人。"
-        },
-        {
-          title: "提测验收",
-          status: "未开始",
-          dueDate: dayjs().add(30, "day"),
-          owner: "",
-          note: "检查需求、任务、Bug 和上线准备。"
-        }
-      ]
+      deliveryLabelCatalog: cloneDefaultProjectDeliveryLabels(),
+      // 节点默认值在版本表单内根据该版本自身的启用标签生成。
+      milestones: []
     };
   }
 
@@ -82,10 +83,12 @@ export function getCreateInitialValues(type: DashboardEntityType, currentUser?: 
 export function getProjectFormValues(project: Project) {
   return {
     ...project,
+    startDate: project.startDate ? dayjs(project.startDate) : undefined,
     dueDate: dayjs(project.dueDate),
     milestones: project.milestones.map((milestone) => ({
       ...milestone,
-      dueDate: dayjs(milestone.dueDate)
+      dueDate: dayjs(milestone.dueDate),
+      actualCompletedDate: milestone.actualCompletedDate ? dayjs(milestone.actualCompletedDate) : undefined
     }))
   };
 }
@@ -108,14 +111,22 @@ export function getBugFormValues(bug: BugReport) {
 }
 
 // 需求版本周期字段回填给 DatePicker，避免表单里混用字符串和日期对象。
-export function getRequirementVersionFormValues(version: RequirementVersion) {
+export function getRequirementVersionFormValues(
+  version: RequirementVersion,
+  legacyProjectDeliveryLabelCatalog?: Project["deliveryLabelCatalog"]
+) {
   return {
     ...version,
+    // 首次编辑 legacy 版本时把项目级目录拷贝进表单，此次保存后即成为版本自有字段。
+    deliveryLabelCatalog: getVersionDeliveryLabelCatalog(version, legacyProjectDeliveryLabelCatalog),
     startDate: dayjs(version.startDate),
     releaseDate: dayjs(version.releaseDate),
+    actualStartDate: version.actualStartDate ? dayjs(version.actualStartDate) : undefined,
+    actualCompletedDate: version.actualCompletedDate ? dayjs(version.actualCompletedDate) : undefined,
     milestones: version.milestones.map((milestone) => ({
       ...milestone,
-      dueDate: dayjs(milestone.dueDate)
+      dueDate: dayjs(milestone.dueDate),
+      actualCompletedDate: milestone.actualCompletedDate ? dayjs(milestone.actualCompletedDate) : undefined
     }))
   };
 }
@@ -124,6 +135,9 @@ export function getRequirementVersionFormValues(version: RequirementVersion) {
 export function getRequirementFormValues(requirement: Requirement) {
   return {
     ...requirement,
+    developerMemberIds: requirement.developerMemberIds ?? [],
+    startDate: requirement.startDate ? dayjs(requirement.startDate) : undefined,
+    dueDate: requirement.dueDate ? dayjs(requirement.dueDate) : undefined,
     aiRisks: JSON.stringify(requirement.aiRisks ?? []),
     aiMissingItems: JSON.stringify(requirement.aiMissingItems ?? []),
     aiFrontendNotes: JSON.stringify(requirement.aiFrontendNotes ?? []),
@@ -159,9 +173,9 @@ export function validateExternalUrl(_: unknown, value?: string) {
 }
 
 // 提交前递归清洗表单值，重点处理 dayjs 对象和 Upload 文件列表。
-function serializeCreateValue(value: unknown, key = ""): unknown {
+function serializeCreateValue(value: unknown, key = "", dateTimeFields = new Set<string>()): unknown {
   if (dayjs.isDayjs(value)) {
-    return value.format(key === "updatedAt" ? "YYYY-MM-DD HH:mm" : "YYYY-MM-DD");
+    return value.format(key === "updatedAt" || dateTimeFields.has(key) ? "YYYY-MM-DD HH:mm" : "YYYY-MM-DD");
   }
 
   if (key === "attachments") {
@@ -169,14 +183,14 @@ function serializeCreateValue(value: unknown, key = ""): unknown {
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) => serializeCreateValue(item, key));
+    return value.map((item) => serializeCreateValue(item, key, dateTimeFields));
   }
 
   if (value && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([childKey, childValue]) => [
         childKey,
-        serializeCreateValue(childValue, childKey)
+        serializeCreateValue(childValue, childKey, dateTimeFields)
       ])
     );
   }
@@ -185,9 +199,14 @@ function serializeCreateValue(value: unknown, key = ""): unknown {
 }
 
 // 记录创建和更新都走同一套序列化，保证 PATCH/POST 数据形态一致。
-export function serializeCreateValues(values: Record<string, unknown>) {
+export function serializeCreateValues(
+  values: Record<string, unknown>,
+  options: { dateTimeFields?: string[] } = {}
+) {
+  const dateTimeFields = new Set(options.dateTimeFields ?? []);
+
   return Object.fromEntries(
-    Object.entries(values).map(([key, value]) => [key, serializeCreateValue(value, key)])
+    Object.entries(values).map(([key, value]) => [key, serializeCreateValue(value, key, dateTimeFields)])
   );
 }
 

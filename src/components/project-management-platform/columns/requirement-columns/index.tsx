@@ -13,11 +13,12 @@ import { getRequirementCompleteness, requirementStatusColor } from "@/lib/requir
 const { Text } = Typography;
 
 type RequirementColumnsOptions = {
-  canDeleteRequirements: boolean;
-  canEditRequirements: boolean;
+  canDeleteRequirements: boolean | ((requirement: Requirement) => boolean);
+  canEditRequirements: boolean | ((requirement: Requirement) => boolean);
   permissionDeniedReason: string;
   onDelete: (requirementId: string) => void | Promise<unknown>;
   onEdit: (requirement: Requirement) => void;
+  onOpenTasks?: (requirement: Requirement) => void;
 };
 
 // 需求列需要权限、链接和质量检查状态，集中生成可以让需求视图保持轻量。
@@ -26,6 +27,7 @@ export function createRequirementColumns({
   canEditRequirements,
   onDelete,
   onEdit,
+  onOpenTasks,
   permissionDeniedReason
 }: RequirementColumnsOptions): ColumnsType<Requirement> {
   return [
@@ -37,11 +39,24 @@ export function createRequirementColumns({
       render: (_, requirement) => (
         <Space orientation="vertical" size={2} className="requirement-title-cell">
           <Tooltip title={requirement.title} placement="topLeft">
-            <span className="requirement-title-tooltip-trigger">
-              <Text className="requirement-title-primary" strong>
-                {requirement.title}
-              </Text>
-            </span>
+            {onOpenTasks ? (
+              <button
+                type="button"
+                className="requirement-title-tooltip-trigger requirement-title-open"
+                aria-label={`查看${requirement.title}的交付任务`}
+                onClick={() => onOpenTasks(requirement)}
+              >
+                <Text className="requirement-title-primary" strong>
+                  {requirement.title}
+                </Text>
+              </button>
+            ) : (
+              <span className="requirement-title-tooltip-trigger">
+                <Text className="requirement-title-primary" strong>
+                  {requirement.title}
+                </Text>
+              </span>
+            )}
           </Tooltip>
           {requirement.aiSummary ? (
             <Tooltip title={requirement.aiSummary} placement="topLeft">
@@ -119,9 +134,17 @@ export function createRequirementColumns({
       title: "操作",
       key: "action",
       width: 130,
-      render: (_, requirement) => (
+      render: (_, requirement) => {
+        const canEditRequirement = typeof canEditRequirements === "function"
+          ? canEditRequirements(requirement)
+          : canEditRequirements;
+        const canDeleteRequirement = typeof canDeleteRequirements === "function"
+          ? canDeleteRequirements(requirement)
+          : canDeleteRequirements;
+
+        return (
         <Space className="requirement-row-actions" size={2} wrap={false}>
-          {canEditRequirements ? (
+          {canEditRequirement ? (
             <Button size="small" type="link" icon={<EditOutlined />} onClick={() => onEdit(requirement)}>
               编辑
             </Button>
@@ -134,7 +157,7 @@ export function createRequirementColumns({
               </span>
             </Tooltip>
           )}
-          {canDeleteRequirements ? (
+          {canDeleteRequirement ? (
             <Popconfirm
               title="删除需求"
               description="删除后不会影响任务和 Bug，但该需求记录会从版本中移除。"
@@ -157,7 +180,8 @@ export function createRequirementColumns({
             </Tooltip>
           )}
         </Space>
-      )
+        );
+      }
     }
   ];
 }

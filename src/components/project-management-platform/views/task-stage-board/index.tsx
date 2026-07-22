@@ -61,6 +61,7 @@ const stageToneClass: Record<TaskStage, string> = {
   待处理: "task-stage-column-pending",
   进行中: "task-stage-column-progress",
   评审中: "task-stage-column-review",
+  验收中: "task-stage-column-acceptance",
   已完成: "task-stage-column-done"
 };
 
@@ -364,6 +365,7 @@ const TaskStageCard = memo(function TaskStageCard({
   dragAttributes,
   dragListeners,
   dragging,
+  editable,
   onEdit,
   setDragHandleRef,
   task
@@ -371,6 +373,7 @@ const TaskStageCard = memo(function TaskStageCard({
   dragAttributes?: DraggableAttributes;
   dragListeners?: DraggableSyntheticListeners;
   dragging?: boolean;
+  editable: boolean;
   onEdit: (task: Task) => void;
   setDragHandleRef?: (element: HTMLElement | null) => void;
   task: Task;
@@ -378,22 +381,26 @@ const TaskStageCard = memo(function TaskStageCard({
   const taskOverdue = getTaskOverdue(task);
 
   return (
-    <div className={`task-stage-card${dragging ? " task-stage-card-dragging" : ""}`}>
+    <div className={`task-stage-card${dragging ? " task-stage-card-dragging" : ""}${editable ? "" : " task-stage-card-readonly"}`}>
       <Flex justify="space-between" align="start" gap={8} className="task-stage-card-head">
         <div className="task-stage-card-title">
-          <span
-            ref={setDragHandleRef}
-            className="task-stage-card-handle"
-            {...dragAttributes}
-            {...dragListeners}
-          >
-            <HolderOutlined />
-          </span>
+          {editable ? (
+            <span
+              ref={setDragHandleRef}
+              className="task-stage-card-handle"
+              {...dragAttributes}
+              {...dragListeners}
+            >
+              <HolderOutlined />
+            </span>
+          ) : <Tag className="task-stage-readonly-tag">只读</Tag>}
           <Text strong>{task.title}</Text>
         </div>
-        <Tooltip title="编辑任务">
-          <Button size="small" type="text" icon={<EditOutlined />} onClick={() => onEdit(task)} />
-        </Tooltip>
+        {editable ? (
+          <Tooltip title="编辑任务">
+            <Button size="small" type="text" icon={<EditOutlined />} onClick={() => onEdit(task)} />
+          </Tooltip>
+        ) : null}
       </Flex>
       <Space wrap size={[6, 6]} className="task-meta-tags">
         <Tag color={priorityColor[task.priority]}>{task.priority}</Tag>
@@ -418,6 +425,7 @@ function areTaskStageCardPropsEqual(
     dragAttributes?: DraggableAttributes;
     dragListeners?: DraggableSyntheticListeners;
     dragging?: boolean;
+    editable: boolean;
     onEdit: (task: Task) => void;
     setDragHandleRef?: (element: HTMLElement | null) => void;
     task: Task;
@@ -426,6 +434,7 @@ function areTaskStageCardPropsEqual(
     dragAttributes?: DraggableAttributes;
     dragListeners?: DraggableSyntheticListeners;
     dragging?: boolean;
+    editable: boolean;
     onEdit: (task: Task) => void;
     setDragHandleRef?: (element: HTMLElement | null) => void;
     task: Task;
@@ -433,6 +442,7 @@ function areTaskStageCardPropsEqual(
 ) {
   return (
     previous.task === next.task &&
+    previous.editable === next.editable &&
     previous.dragging === next.dragging &&
     previous.onEdit === next.onEdit &&
     previous.setDragHandleRef === next.setDragHandleRef &&
@@ -444,9 +454,11 @@ function areTaskStageCardPropsEqual(
 // 同阶段拖拽现在需要“让位”动画，所以卡片重新接入 Sortable；
 // 但 SortableContext 只包当前可见任务，避免全量版本任务都参与测量导致拖动卡顿。
 const SortableTaskCard = memo(function SortableTaskCard({
+  editable,
   onEdit,
   task
 }: {
+  editable: boolean;
   onEdit: (task: Task) => void;
   task: Task;
 }) {
@@ -465,6 +477,7 @@ const SortableTaskCard = memo(function SortableTaskCard({
       type: "task"
     },
     id: task.id,
+    disabled: !editable,
     resizeObserverConfig: disabledResizeObserverConfig,
     transition: sortableTransition
   });
@@ -482,6 +495,7 @@ const SortableTaskCard = memo(function SortableTaskCard({
         dragAttributes={attributes}
         dragListeners={listeners}
         dragging={isDragging}
+        editable={editable}
         setDragHandleRef={setActivatorNodeRef}
         task={task}
         onEdit={onEdit}
@@ -492,11 +506,13 @@ const SortableTaskCard = memo(function SortableTaskCard({
 
 // dnd-kit 阶段看板只负责阶段流转，业务更新交给父容器复用现有记录接口。
 export function TaskStageBoard({
+  canEditTask,
   onlyMine,
   onEdit,
   onStageChange,
   tasks
 }: {
+  canEditTask: (task: Task) => boolean;
   onlyMine: boolean;
   onEdit: (task: Task) => void;
   onStageChange: (task: Task, stage: TaskStage) => Promise<boolean>;
@@ -575,10 +591,16 @@ export function TaskStageBoard({
   }
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
+    const task = taskById.get(String(event.active.id));
+
+    if (!task || !canEditTask(task)) {
+      return;
+    }
+
     lastOverStageRef.current = null;
     setDragStagePreview(null);
     setActiveTaskId(String(event.active.id));
-  }, []);
+  }, [canEditTask, taskById]);
 
   const handleDragOver = useCallback((event: DragOverEvent) => {
     const activeId = String(event.active.id);
@@ -626,7 +648,7 @@ export function TaskStageBoard({
 
     lastOverStageRef.current = null;
 
-    if (!task || !targetStage) {
+    if (!task || !targetStage || !canEditTask(task)) {
       return;
     }
 
@@ -661,7 +683,7 @@ export function TaskStageBoard({
         })
       );
     }
-  }, [dragStagePreview, onStageChange, taskById, tasksByStage, visibleCountByStage]);
+  }, [canEditTask, dragStagePreview, onStageChange, taskById, tasksByStage, visibleCountByStage]);
 
   const handleDragCancel = useCallback(() => {
     lastOverStageRef.current = null;
@@ -709,7 +731,7 @@ export function TaskStageBoard({
               {visibleTasks.map((task, index) => (
                 <Fragment key={task.id}>
                   {previewIndex === index ? <TaskStagePreviewSlot stage={stage} /> : null}
-                  <SortableTaskCard task={task} onEdit={onEdit} />
+                  <SortableTaskCard editable={canEditTask(task)} task={task} onEdit={onEdit} />
                 </Fragment>
               ))}
               {previewIndex === visibleTasks.length ? <TaskStagePreviewSlot stage={stage} /> : null}
@@ -720,7 +742,7 @@ export function TaskStageBoard({
       <DragOverlay dropAnimation={null}>
         {activeTask ? (
           <div className="task-stage-drag-overlay">
-            <TaskStageCard task={activeTask} onEdit={onEdit} dragging />
+            <TaskStageCard editable task={activeTask} onEdit={onEdit} dragging />
           </div>
         ) : null}
       </DragOverlay>

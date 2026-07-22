@@ -103,7 +103,24 @@ export function updateDashboardWithRecordUpdate(data: DashboardData, result: Cre
 
   if (result.type === "project") {
     const project = result.record as Project;
+
     nextData.projects = nextData.projects.map((item) => item.id === project.id ? project : item);
+    // 服务端已在同一事务中级联显示名；前端也只按 projectId 乐观更新，避免静默刷新返回前详情页闪回旧名。
+    nextData.requirementVersions = nextData.requirementVersions.map((version) =>
+      version.projectId === project.id ? { ...version, project: project.name } : version
+    );
+    nextData.requirements = nextData.requirements.map((requirement) =>
+      requirement.projectId === project.id ? { ...requirement, project: project.name } : requirement
+    );
+    nextData.tasks = nextData.tasks.map((task) =>
+      task.projectId === project.id ? { ...task, project: project.name } : task
+    );
+    nextData.risks = nextData.risks.map((risk) =>
+      risk.projectId === project.id ? { ...risk, project: project.name } : risk
+    );
+    nextData.bugs = nextData.bugs.map((bug) =>
+      bug.projectId === project.id ? { ...bug, project: project.name } : bug
+    );
   }
 
   if (result.type === "bug") {
@@ -128,7 +145,8 @@ export function updateDashboardWithRecordUpdate(data: DashboardData, result: Cre
         ? {
             ...requirement,
             versionName: version.name,
-            project: version.project
+            project: version.project,
+            projectId: version.projectId
           }
         : requirement
     );
@@ -137,7 +155,8 @@ export function updateDashboardWithRecordUpdate(data: DashboardData, result: Cre
         ? {
             ...task,
             versionName: version.name,
-            project: version.project === "跨项目" ? task.project : version.project
+            project: version.project === "跨项目" ? task.project : version.project,
+            projectId: version.project === "跨项目" ? task.projectId : version.projectId
           }
         : task
     );
@@ -146,7 +165,8 @@ export function updateDashboardWithRecordUpdate(data: DashboardData, result: Cre
         ? {
             ...bug,
             versionName: version.name,
-            project: version.project === "跨项目" ? bug.project : version.project
+            project: version.project === "跨项目" ? bug.project : version.project,
+            projectId: version.project === "跨项目" ? bug.projectId : version.projectId
           }
         : bug
     );
@@ -216,7 +236,8 @@ export function updateDashboardWithRecordDeletion(data: DashboardData, result: D
               ...requirement,
               versionId: fallbackVersion.id,
               versionName: fallbackVersion.name,
-              project: fallbackVersion.project === "跨项目" ? requirement.project : fallbackVersion.project
+              project: fallbackVersion.project === "跨项目" ? requirement.project : fallbackVersion.project,
+              projectId: fallbackVersion.project === "跨项目" ? requirement.projectId : fallbackVersion.projectId
             }
           : requirement
       );
@@ -226,7 +247,8 @@ export function updateDashboardWithRecordDeletion(data: DashboardData, result: D
               ...task,
               versionId: fallbackVersion.id,
               versionName: fallbackVersion.name,
-              project: fallbackVersion.project === "跨项目" ? task.project : fallbackVersion.project
+              project: fallbackVersion.project === "跨项目" ? task.project : fallbackVersion.project,
+              projectId: fallbackVersion.project === "跨项目" ? task.projectId : fallbackVersion.projectId
             }
           : task
       );
@@ -236,7 +258,8 @@ export function updateDashboardWithRecordDeletion(data: DashboardData, result: D
               ...bug,
               versionId: fallbackVersion.id,
               versionName: fallbackVersion.name,
-              project: fallbackVersion.project === "跨项目" ? bug.project : fallbackVersion.project
+              project: fallbackVersion.project === "跨项目" ? bug.project : fallbackVersion.project,
+              projectId: fallbackVersion.project === "跨项目" ? bug.projectId : fallbackVersion.projectId
             }
           : bug
       );

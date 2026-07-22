@@ -155,8 +155,8 @@ export function BugsView({
   onEdit
 }: {
   bugs: BugReport[];
-  canEditBugs: boolean;
-  canDeleteBugs: boolean;
+  canEditBugs: boolean | ((bug: BugReport) => boolean);
+  canDeleteBugs: boolean | ((bug: BugReport) => boolean);
   currentUser?: FeishuUser;
   editDeniedReason: string;
   permissionDeniedReason: string;
@@ -263,9 +263,13 @@ export function BugsView({
       key: "action",
       width: 100,
       align: "center",
-      render: (_, bug) => (
+      render: (_, bug) => {
+        const canEditBug = typeof canEditBugs === "function" ? canEditBugs(bug) : canEditBugs;
+        const canDeleteBug = typeof canDeleteBugs === "function" ? canDeleteBugs(bug) : canDeleteBugs;
+
+        return (
         <Space size={2} className="bug-row-actions">
-          {canEditBugs ? (
+          {canEditBug ? (
             <Tooltip title="编辑 Bug">
               <Button
                 aria-label="编辑 Bug"
@@ -285,7 +289,7 @@ export function BugsView({
               </span>
             </Tooltip>
           )}
-          {canDeleteBugs ? (
+          {canDeleteBug ? (
             <Popconfirm
               title="删除 Bug"
               description="删除后该 Bug 记录会从当前版本中移除。"
@@ -306,7 +310,8 @@ export function BugsView({
             </Tooltip>
           )}
         </Space>
-      )
+        );
+      }
     }
   ];
 

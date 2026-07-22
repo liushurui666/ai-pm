@@ -37,7 +37,9 @@ type AssistantActionSmokeJob = {
 };
 
 type AssistantActionSmokeCreatedTask = {
+  id: string;
   ownerMemberId: string | null;
+  priority: string;
 };
 
 function createRunLabel() {
@@ -150,6 +152,22 @@ async function cleanupAssistantActionSmoke(runLabel: string) {
       }
     }
   });
+  await prisma.requirementVersion.deleteMany({
+    where: {
+      workspaceId: WORKSPACE_ID,
+      id: {
+        contains: runLabel
+      }
+    }
+  });
+  await prisma.project.deleteMany({
+    where: {
+      workspaceId: WORKSPACE_ID,
+      id: {
+        contains: runLabel
+      }
+    }
+  });
   await prisma.dashboardMember.deleteMany({
     where: {
       workspaceId: WORKSPACE_ID,
@@ -204,9 +222,16 @@ async function createSmokeMembers(runLabel: string) {
   };
 }
 
-async function createSmokeRecords(runLabel: string, sourceMember: Awaited<ReturnType<typeof createSmokeMembers>>["sourceMember"]) {
+async function createSmokeRecords(
+  runLabel: string,
+  sourceMember: Awaited<ReturnType<typeof createSmokeMembers>>["sourceMember"],
+  actorMember: Awaited<ReturnType<typeof createSmokeMembers>>["targetMember"]
+) {
   const prisma = getPrismaClient();
   const now = new Date().toISOString();
+  const projectId = createLocalId("project-action", runLabel);
+  const projectName = `Codex Assistant Action Smoke ${runLabel}`;
+  const versionId = createLocalId("version-action", runLabel);
   const completeTaskId = createLocalId("task-complete", runLabel);
   const assignTaskId = createLocalId("task-assign", runLabel);
   const bugId = createLocalId("bug-close", runLabel);
@@ -216,6 +241,49 @@ async function createSmokeRecords(runLabel: string, sourceMember: Awaited<Return
     ownerEmail: sourceMember.email
   };
 
+  // actor 作为临时项目负责人获得真实项目权限，不依赖工作区粗粒度权限。
+  await prisma.project.create({
+    data: {
+      id: projectId,
+      workspaceId: WORKSPACE_ID,
+      name: projectName,
+      owner: actorMember.name,
+      ownerMemberId: actorMember.id,
+      ownerEmail: actorMember.email,
+      status: "进行中",
+      startDate: "2026-06-24",
+      progress: 0,
+      health: 80,
+      riskLevel: "低",
+      healthStatus: "待评估",
+      dueDate: "2026-06-30",
+      team: 2,
+      riskCount: 0,
+      summary: "AI 助手项目鉴权冒烟，可删除。",
+      deliveryLabelCatalog: toJsonValue([]),
+      milestones: toJsonValue([])
+    }
+  });
+  await prisma.requirementVersion.create({
+    data: {
+      id: versionId,
+      workspaceId: WORKSPACE_ID,
+      name: `助手鉴权版本 ${runLabel}`,
+      project: projectName,
+      projectId,
+      type: "版本",
+      status: "开发中",
+      startDate: "2026-06-24",
+      releaseDate: "2026-06-30",
+      progress: 0,
+      riskLevel: "低",
+      healthStatus: "待评估",
+      goal: "验证 AI 助手任务动作权限边界。",
+      deliveryLabelCatalog: toJsonValue([]),
+      milestones: toJsonValue([])
+    }
+  });
+
   await prisma.projectTask.createMany({
     data: [
       {
@@ -224,10 +292,11 @@ async function createSmokeRecords(runLabel: string, sourceMember: Awaited<Return
         title: `助手动作完成任务 ${runLabel}`,
         stage: "进行中",
         ...ownerFields,
-        project: "Codex Assistant Action Smoke",
-        versionId: "rv-backlog",
-        versionName: "未规划需求池",
-        priority: "中",
+        project: projectName,
+        projectId,
+        versionId,
+        versionName: `助手鉴权版本 ${runLabel}`,
+        priority: "普通",
         startDate: "2026-06-24",
         dueDate: "2026-06-30",
         aiHint: "AI 助手动作冒烟，可删除。"
@@ -238,9 +307,10 @@ async function createSmokeRecords(runLabel: string, sourceMember: Awaited<Return
         title: `助手动作转交任务 ${runLabel}`,
         stage: "待处理",
         ...ownerFields,
-        project: "Codex Assistant Action Smoke",
-        versionId: "rv-backlog",
-        versionName: "未规划需求池",
+        project: projectName,
+        projectId,
+        versionId,
+        versionName: `助手鉴权版本 ${runLabel}`,
         priority: "高",
         startDate: "2026-06-24",
         dueDate: "2026-06-30",
@@ -282,7 +352,10 @@ async function createSmokeRecords(runLabel: string, sourceMember: Awaited<Return
   return {
     assignTaskId,
     bugId,
-    completeTaskId
+    completeTaskId,
+    projectId,
+    projectName,
+    versionId
   };
 }
 
@@ -299,19 +372,22 @@ async function enqueueSmokeJobs({
     createLocalId("task-created", runLabel),
     createLocalId("task-created", runLabel)
   ];
+  // 模拟升级前已进入队列的历史 payload；worker 必须兼容读取，但落库统一写成“普通”。
+  const legacyMiddlePriority = "中" as unknown as AssistantCreateTaskDraft["priority"];
   const createTaskDrafts: AssistantCreateTaskDraft[] = createdTaskIds.map((_, index) => ({
     aiHint: "AI 助手批量创建任务冒烟，可删除。",
     dueDate: "2026-06-30",
     owner: index === 0 ? "我" : targetMember.name,
     ownerEmail: index === 0 ? undefined : targetMember.email,
     ownerMemberId: index === 0 ? undefined : targetMember.id,
-    priority: index === 0 ? "中" : "高",
-    project: "Codex Assistant Action Smoke",
+    priority: index === 0 ? legacyMiddlePriority : "高",
+    project: recordIds.projectName,
+    projectId: recordIds.projectId,
     stage: "待处理",
     startDate: "2026-06-24",
     title: `助手动作创建任务 ${index + 1} ${runLabel}`,
-    versionId: "rv-backlog",
-    versionName: "未规划需求池"
+    versionId: recordIds.versionId,
+    versionName: `助手鉴权版本 ${runLabel}`
   }));
   const requestedBy = targetMember.id;
   const jobs: AssistantActionEnqueueSmokeResult[] = await Promise.all([
@@ -319,6 +395,7 @@ async function enqueueSmokeJobs({
       actionType: "complete_tasks",
       recordIds: [recordIds.completeTaskId],
       requestedBy,
+      requestedByMemberId: targetMember.id,
       scope: `assistant-action-smoke-complete-${runLabel}`,
       targetType: "task",
       workspaceId: WORKSPACE_ID
@@ -327,6 +404,7 @@ async function enqueueSmokeJobs({
       actionType: "close_bugs",
       recordIds: [recordIds.bugId],
       requestedBy,
+      requestedByMemberId: targetMember.id,
       scope: `assistant-action-smoke-close-${runLabel}`,
       targetType: "bug",
       workspaceId: WORKSPACE_ID
@@ -340,6 +418,7 @@ async function enqueueSmokeJobs({
       },
       recordIds: [recordIds.assignTaskId],
       requestedBy,
+      requestedByMemberId: targetMember.id,
       scope: `assistant-action-smoke-assign-${runLabel}`,
       targetType: "task",
       workspaceId: WORKSPACE_ID
@@ -349,6 +428,7 @@ async function enqueueSmokeJobs({
       drafts: createTaskDrafts,
       recordIds: createdTaskIds,
       requestedBy,
+      requestedByMemberId: targetMember.id,
       scope: `assistant-action-smoke-create-${runLabel}`,
       targetType: "task",
       workspaceId: WORKSPACE_ID
@@ -402,7 +482,7 @@ async function verifySmokeResult({
   assertSmoke(jobs.every((job) => job.status === "succeeded"), "AI 助手动作任务未全部成功");
   assertSmoke(jobs.every((job) => job.successCount === job.requestedCount && job.failedCount === 0), "AI 助手动作成功/失败计数异常");
 
-  const [completeTask, assignTask, closedBug, createdTasks, closedBugFlowCount, indexJobCount, notificationJobCount] = await Promise.all([
+  const [completeTask, assignTask, closedBug, createdTasks, closedBugFlowCount, indexJobCount, notificationJobCount, taskActivityCount] = await Promise.all([
     prisma.projectTask.findUnique({
       where: {
         id: recordIds.completeTaskId
@@ -450,6 +530,15 @@ async function verifySmokeResult({
           in: createdTaskIds
         }
       }
+    }),
+    prisma.projectActivity.count({
+      where: {
+        workspaceId: WORKSPACE_ID,
+        entityType: "task",
+        entityId: {
+          in: [recordIds.completeTaskId, recordIds.assignTaskId, ...createdTaskIds]
+        }
+      }
     })
   ]);
 
@@ -464,8 +553,13 @@ async function verifySmokeResult({
 
   assertSmoke(createdTaskSnapshots.length === createdTaskIds.length, "批量创建任务数量不正确");
   assertSmoke(createdTaskSnapshots.every((task) => task.ownerMemberId === targetMember.id), "批量创建任务未解析“我”或目标负责人身份");
+  assertSmoke(
+    createdTaskSnapshots.find((task) => task.id === createdTaskIds[0])?.priority === "普通",
+    "AI 助手 worker 未把历史任务优先级“中”规范写入为“普通”"
+  );
   assertSmoke(notificationJobCount === 0, "无通知渠道测试成员不应产生 Dashboard 通知副作用任务");
   assertSmoke(indexJobCount >= 4, "AI 助手动作未投递足够的索引刷新任务");
+  assertSmoke(taskActivityCount === 4, "create/complete/assign 成功任务未全部写入 ProjectActivity");
 
   const createJob = jobs.find((job) => job.actionType === "create_tasks");
   const createResult = getJsonObject(createJob?.result);
@@ -481,7 +575,8 @@ async function verifySmokeResult({
     })),
     createdTaskCount: createdTaskSnapshots.length,
     indexJobCount,
-    notificationJobCount
+    notificationJobCount,
+    taskActivityCount
   };
 }
 
@@ -511,7 +606,7 @@ async function main() {
 
     markStep("create members");
 
-    const recordIds = await createSmokeRecords(runLabel, members.sourceMember);
+    const recordIds = await createSmokeRecords(runLabel, members.sourceMember, members.targetMember);
 
     markStep("create records");
 

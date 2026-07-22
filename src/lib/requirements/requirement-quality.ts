@@ -1,25 +1,33 @@
 import type { Requirement } from "@/types/dashboard";
 
 export const requirementStatusOptions: Requirement["status"][] = [
+  "待梳理",
+  "梳理中",
   "待评审",
   "评审中",
   "待排期",
   "设计中",
   "开发中",
+  "验收中",
   "待上线",
   "已上线",
+  "已完成",
   "已关闭",
   "已驳回"
 ];
 
 export const requirementStatusColor: Record<Requirement["status"], string> = {
+  待梳理: "default",
+  梳理中: "gold",
   待评审: "default",
   评审中: "gold",
   待排期: "purple",
   设计中: "cyan",
   开发中: "blue",
+  验收中: "cyan",
   待上线: "orange",
   已上线: "green",
+  已完成: "green",
   已关闭: "default",
   已驳回: "red"
 };

@@ -215,7 +215,7 @@ function getTaskResourceHtml(item: ProjectCalendarItem) {
         <span class="project-scheduler-hierarchy-rail project-scheduler-hierarchy-rail-task" aria-hidden="true"></span>
         <div class="project-scheduler-resource-panel project-scheduler-resource-panel-task" data-project-task-id="${escapeHtml(item.id)}" data-project-task-owner="${escapeHtml(owner)}">
           <span class="project-scheduler-task-node" aria-hidden="true"></span>
-          <span class="project-scheduler-row-sort-handle" role="button" aria-label="上下拖动调整任务顺序" title="上下拖动调整任务顺序"></span>
+          ${item.editable ? '<span class="project-scheduler-row-sort-handle" role="button" aria-label="上下拖动调整任务顺序" title="上下拖动调整任务顺序"></span>' : '<span class="project-scheduler-readonly-mark" title="当前任务只读">只读</span>'}
           <div class="project-scheduler-resource-task-copy">
             <div class="project-scheduler-resource-heading">
               <strong>${escapeHtml(item.title)}</strong>
@@ -236,7 +236,7 @@ function getEventHtml(item: ProjectCalendarItem) {
     <div class="project-scheduler-event-content">
       <div class="project-scheduler-event-time">
         <strong>${escapeHtml(rangeText)}</strong>
-        <span>${escapeHtml(item.status)} · ${item.progress}%</span>
+        <span>${escapeHtml(item.status)} · ${item.progress}%${item.editable ? "" : " · 只读"}</span>
       </div>
     </div>
   `;
@@ -278,7 +278,7 @@ function getSchedulerDateRange(items: ProjectCalendarItem[]) {
 }
 
 function getEventResizeAreas(item: ProjectCalendarItem): DayPilot.AreaData[] {
-  if (item.type !== "任务") {
+  if (item.type !== "任务" || !item.editable) {
     return [];
   }
 
@@ -358,11 +358,11 @@ export function createProjectSchedulerModel(
       resource: getTaskResourceId(item),
       text: `${item.type} · ${item.title}`,
       html: getEventHtml(item),
-      toolTip: `拖拽改期，点击编辑｜${item.title}｜${item.versionName || item.project}｜${getRangeText(item)}｜${item.status}｜${item.progress}%`,
+      toolTip: `${item.editable ? "拖拽改期，点击编辑" : "当前任务只读"}｜${item.title}｜${item.versionName || item.project}｜${getRangeText(item)}｜${item.status}｜${item.progress}%`,
       backColor: colors.background,
       barColor: colors.bar,
       borderColor: colors.border,
-      cssClass: `project-scheduler-event project-scheduler-event-${item.riskTone} project-scheduler-event-${typeClassMap[item.type]}`,
+      cssClass: `project-scheduler-event project-scheduler-event-${item.riskTone} project-scheduler-event-${typeClassMap[item.type]}${item.editable ? "" : " project-scheduler-event-readonly"}`,
       areas: getEventResizeAreas(item),
       tags: item
     };

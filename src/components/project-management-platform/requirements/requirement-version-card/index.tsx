@@ -18,9 +18,10 @@ const { Text, Paragraph } = Typography;
 // 版本卡片聚合范围、负责人、子版本和操作入口，避免需求主视图继续变胖。
 export function RequirementVersionCard({
   bugs,
-  canCreateRequirements,
-  canDeleteRequirements,
-  canEditRequirements,
+  canBreakdownVersion,
+  canCreateSubVersion,
+  canDeleteVersion,
+  canEditVersion,
   childVersions,
   permissionDeniedReason,
   requirements,
@@ -33,9 +34,10 @@ export function RequirementVersionCard({
   onSelectVersion
 }: {
   bugs: BugReport[];
-  canCreateRequirements: boolean;
-  canDeleteRequirements: boolean;
-  canEditRequirements: boolean;
+  canBreakdownVersion: boolean;
+  canCreateSubVersion: boolean;
+  canDeleteVersion: boolean;
+  canEditVersion: boolean;
   childVersions: RequirementVersion[];
   permissionDeniedReason: string;
   requirements: Requirement[];
@@ -109,17 +111,17 @@ export function RequirementVersionCard({
         进入版本
       </Button>
       <div className="requirement-version-actions">
-        {canCreateRequirements ? (
+        {canCreateSubVersion ? (
           <Button icon={<PlusOutlined />} onClick={() => onCreateSubVersion(version)}>
             子版本
           </Button>
         ) : null}
-        {canCreateRequirements ? (
+        {canBreakdownVersion ? (
           <Button icon={<PlusOutlined />} onClick={() => onBreakdownVersion(version)}>
             拆任务
           </Button>
         ) : null}
-        {canEditRequirements ? (
+        {canEditVersion ? (
           <Button icon={<EditOutlined />} onClick={() => onEditVersion(version)}>
             编辑
           </Button>
@@ -133,10 +135,10 @@ export function RequirementVersionCard({
           </Tooltip>
         )}
         {version.id !== fallbackRequirementVersionId ? (
-          canDeleteRequirements ? (
+          canDeleteVersion ? (
             <Popconfirm
               title="删除版本"
-              description="删除后，该版本下的需求、任务和 Bug 会迁移到未规划需求池，子版本会提升为一级版本。"
+              description="删除后，关联需求、任务和 Bug 仅会迁移到项目内可唯一确定的兜底版本；无法唯一定位时将拒绝删除，子版本会提升一级。"
               okText="删除"
               cancelText="取消"
               okButtonProps={{ danger: true }}

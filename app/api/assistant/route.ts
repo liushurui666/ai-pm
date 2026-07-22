@@ -1,6 +1,6 @@
 import type { UIMessage } from "ai";
 import { NextRequest, NextResponse } from "next/server";
-import { getDashboardData } from "@/data/local-dashboard";
+import { getDashboardData, getWorkspaceAccessContext } from "@/data/local-dashboard";
 import { createAssistantStreamResult } from "@/lib/ai/assistant-stream";
 import { sanitizeAssistantErrorMessage } from "@/lib/ai/assistant-error-message";
 import { isAiAssistantConfigured } from "@/lib/ai/settings";
@@ -62,6 +62,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const accessContext = await getWorkspaceAccessContext(session?.user, body?.workspaceId);
+    const actorMember = accessContext.currentMember?.status === "active"
+      ? accessContext.currentMember
+      : undefined;
+    const resolvedWorkspaceId = accessContext.currentWorkspace.id;
+
     console.info("[assistant] request accepted", {
       durationMs: Date.now() - startedAt,
       messageCount: messages.length,
@@ -72,12 +78,14 @@ export async function POST(request: NextRequest) {
     const result = await createAssistantStreamResult({
       actionRuntime: {
         // 动作 tool 会复用当前请求的同源 Cookie 调用站内业务 API，确保权限语义和用户手动操作一致。
+        // 队列动作另外只传稳定的成员 ID，不把 Cookie/Token 持久化到 job；worker 会再按该 ID 实时重查项目权限。
+        actorMemberId: actorMember?.id,
         cookieHeader: request.headers.get("cookie") ?? undefined,
         origin: getRequestOriginFromRequest(request),
-        workspaceId: requestedWorkspaceId
+        workspaceId: resolvedWorkspaceId
       },
       // tools 始终交给模型自主选择；只有 tool 真执行时才读取项目数据或知识库，普通寒暄不会预先触发重查询。
-      loadData: () => getDashboardData(session?.user, body?.workspaceId),
+      loadData: () => getDashboardData(session?.user, resolvedWorkspaceId),
       model: body?.model,
       messages
     });

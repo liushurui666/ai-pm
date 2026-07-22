@@ -27,7 +27,7 @@ type WorkbenchViewCase = {
 
 const workbenchViews: WorkbenchViewCase[] = [
   { expectedText: "工作台", name: "overview", view: "overview" },
-  { expectedText: "项目视图", name: "projects", view: "projects" },
+  { expectedText: "项目管理", name: "projects", view: "projects" },
   { expectedText: "版本大屏", name: "version dashboard", view: "versionDashboard" },
   { expectedText: "任务看板", name: "tasks", view: "tasks" },
   { expectedText: "Bug 管理", name: "bugs", view: "bugs" },
@@ -259,6 +259,47 @@ async function verifyAuthenticatedWorkbench(context: BrowserContext) {
   };
 }
 
+async function verifyProjectManagementResponsive(context: BrowserContext) {
+  if (!STORAGE_STATE) {
+    return {
+      skipped: true,
+      reason: "未设置 AI_PM_QA_STORAGE_STATE，已跳过项目管理响应式浏览器冒烟。"
+    };
+  }
+
+  const page = await context.newPage();
+  const consoleMessages = attachConsoleCollector(page);
+  const projectView = workbenchViews.find((item) => item.view === "projects");
+
+  assertSmoke(projectView, "浏览器矩阵缺少项目管理视图。");
+
+  const viewports = [
+    { height: 900, name: "desktop", width: 1440 },
+    { height: 844, name: "mobile", width: 390 }
+  ];
+  const results: Array<Record<string, unknown>> = [];
+
+  for (const viewport of viewports) {
+    await page.setViewportSize({ height: viewport.height, width: viewport.width });
+    await gotoAuthenticatedWorkbenchView(page, projectView);
+
+    const text = await getPageText(page);
+    const overflow = await getHorizontalOverflow(page);
+
+    assertSmoke(text.includes("项目集"), `${viewport.name} 项目管理缺少项目集导航。`);
+    assertSmoke(text.includes("新建项目/版本"), `${viewport.name} 项目管理缺少计划单元入口。`);
+    assertSmoke(text.includes("名称 / 目标"), `${viewport.name} 项目管理缺少交付表。`);
+    assertSmoke(overflow.overflow <= 2, `${viewport.name} 项目管理存在页面级横向溢出：${overflow.overflow}px`);
+
+    results.push({ name: viewport.name, overflow, url: page.url(), viewport });
+  }
+
+  assertSmoke(!consoleMessages.some((message) => message.type === "error"), "项目管理响应式页面存在 console error");
+  await page.close();
+
+  return { consoleMessages, results, skipped: false };
+}
+
 async function main() {
   const browser = await chromium.launch({ headless: HEADLESS });
   const anonymousContext = await browser.newContext();
@@ -276,6 +317,7 @@ async function main() {
     results.push(await runCheck("unauthenticated redirect", () => verifyUnauthenticatedRedirect(anonymousContext)));
     results.push(await runCheck("mobile login", () => verifyMobileLogin(anonymousContext)));
     results.push(await runCheck("authenticated workbench views", () => verifyAuthenticatedWorkbench(authenticatedContext)));
+    results.push(await runCheck("project management responsive", () => verifyProjectManagementResponsive(authenticatedContext)));
   } catch (error) {
     results.push({
       detail: {

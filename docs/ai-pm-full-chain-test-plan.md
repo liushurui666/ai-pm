@@ -2,7 +2,7 @@
 
 状态：执行中  
 负责人：Codex QA  
-最后更新：2026-06-25
+最后更新：2026-07-22
 
 ## 目标
 
@@ -76,9 +76,14 @@
 
 | ID | 场景 | 操作 | 期望结果 | 证据 |
 | --- | --- | --- | --- | --- |
-| PROJ-001 | 项目视图加载 | 打开项目视图 | 甘特/排期数据可见，版本筛选可用 | 浏览器 |
-| PROJ-002 | 项目编辑 | 编辑项目负责人/状态/日期 | 单条记录保存，数据刷新 | API + DB |
-| PROJ-003 | 排期拖拽 | 拖动/调整任务日期 | 保存 task start/due，排序不乱 | 浏览器 + DB |
+| PROJ-001 | 项目管理加载 | 打开项目管理 | 左侧项目集、右侧项目/版本表及真实统计可见 | 浏览器 |
+| PROJ-002 | 项目集编辑 | 编辑编码、负责人、生命周期、风险和计划日期 | 单条记录保存，进度/健康度由任务与周期派生 | API + DB |
+| PROJ-003 | 详情五页签 | 进入项目/版本详情并切换概览、需求、成员与权限、动态、排期 | 数据按项目/版本范围过滤，空态和长内容不溢出 | 浏览器 |
+| PROJ-004 | 交付节点快捷编辑 | 修改节点计划日期和负责人 | milestones 保留历史字段并产生项目动态 | UI + API + DB |
+| PROJ-005 | 项目成员权限 | 添加成员、设置访问级别/职能/需求范围、查看有效权限 | viewer/commenter 只读，自动需求责任不可手工篡改 | UI + API |
+| PROJ-006 | 负责人交接 | 选择新负责人、填写原因并保留原负责人为管理员 | 项目 owner 快照、权限和动态在事务内更新 | API + DB |
+| PROJ-007 | 安全删除 | 尝试删除非空项目集、有关联任务的需求和普通版本 | 项目/需求被保护，版本关联记录迁移到兜底版本 | API + DB |
+| PROJ-008 | 排期拖拽 | 拖动/调整任务日期 | 保存 task start/due，排序不乱 | 浏览器 + DB |
 | VERSION-001 | 新建版本 | 创建普通版本 | 版本出现在需求管理和版本大屏 | API + UI |
 | VERSION-002 | 新建子版本 | 从父版本创建子版本 | 子版本继承父版本项目范围 | API + UI |
 | VERSION-003 | 编辑版本 | 修改名称、状态、负责人、日期 | 版本详情和大屏同步更新 | UI + DB |
@@ -86,7 +91,7 @@
 | VERSION-005 | 版本大屏 | 切换版本、筛选状态/负责人 | KPI、排行、风险分布随版本变化 | 浏览器 |
 | REQ-001 | 新建需求 | 在版本下创建需求 | 需求绑定版本，负责人身份正确 | API + DB |
 | REQ-002 | 编辑需求 | 修改优先级、状态、负责人 | 保存成功，列表更新 | UI |
-| REQ-003 | 删除需求 | 管理员删除需求 | 成功删除并清理索引 source | API + DB |
+| REQ-003 | 删除需求 | 管理员删除空需求或有关联任务的需求 | 空需求删除并清理索引；有关联任务时返回保护提示 | API + DB |
 | REQ-004 | 飞书链接分析 | 填入 doc/wiki 链接分析 | 返回标题/摘要，投递 sync_feishu | API + 队列 |
 | REQ-005 | 文档拆任务 | 选择版本和默认负责人拆任务 | 默认负责人覆盖 AI 识别负责人 | UI + DB |
 
@@ -448,3 +453,19 @@
 - OPS-004：测试 job 设置未来 `nextRunAt`，保证 MySQL fallback inline worker 不会在冒烟期间抢任务真实发送；finally 按 runId 清理测试成员和 side-effect job。
 - 覆盖清单补充：`scripts/full-chain-smoke-suite.ts` 将 notification 纳入 `core/db/all` 分组，`scripts/full-chain-coverage-smoke.ts` 额外检查 `full-chain:notification` package 入口，防止通知回归脚本失联。
 - 本轮执行：`pnpm full-chain:notification` 通过，当前环境 `RESEND_API_KEY` 与 `EMAIL_FROM` 完整，脚本验证飞书/邮箱各 1 条 queued job；`pnpm full-chain:coverage` 通过，登记脚本 15 个；`pnpm full-chain:smoke` 通过 12/12，用时约 139.7s。
+
+### 2026-07-22 One2all PM 对齐冒烟
+
+- 新增 `scripts/full-chain-project-management-smoke.ts` 与 `pnpm full-chain:project-management`，并登记到 `full-chain-smoke-suite.ts` 的 core/static/all 分组。
+- 新增 `scripts/full-chain-project-management-delete-smoke.ts` 与 `pnpm full-chain:project-management-delete`，登记到 suite 的 db/all 分组；需通过 `DATABASE_URL` 指向已完成 Prisma migration 的 MySQL。脚本只创建带随机 ID 的隔离工作区，`finally` 仅按该 workspace ID 级联清理，不读取、改写或清理现有 seed。
+- 新增 `scripts/full-chain-project-management-access-smoke.ts` 与 `pnpm full-chain:project-management-access`，登记到 suite 的 db/all 分组；动态覆盖责任指派入成员、只读升级、plan_unit 隔离、无效成员回滚与可见项目并集。
+- 新增 `scripts/full-chain-project-management-label-smoke.ts` 与 `pnpm full-chain:project-management-label`，登记到 suite 的 db/all 分组；动态覆盖版本标签保存刷新、逐版本隔离、显式空目录、改名/软删除、非法引用拒绝与版本负责人权限。
+- 新增 `scripts/task-requirement-deep-link-smoke.ts` 与 `pnpm full-chain:task-requirement-deep-link`，登记到 suite 的 core/static/all 分组；覆盖任务筛选的 URL/SSR/popstate 回放和跨工作区、不可见目标清理。
+- 新增 `scripts/full-chain-database-connection-smoke.ts` 与 `pnpm full-chain:database-connection`，登记到 suite 的 db/all 分组；以 production 环境验证同进程 Prisma 单例、20 次 Dashboard 交错读取与 MariaDB 物理连接不超过 5 条。
+- PROJ-001～PROJ-008：静态校验 7 个业务模型、34 个迁移字段、2 张治理表、项目集导航、项目/版本表、五个详情页签、5 类表单字段、三类受保护 records 写操作和治理 API 四种 HTTP 方法。
+- 删除一致性契约：数据库冒烟覆盖多迁移目标拒绝、唯一目标原子迁移、无关记录保留、需求稳定 ID/legacy 标题引用保护、同名项目歧义拒绝和代码仓库阻止项目删除。
+- 健康度契约：任务进度只按完成数/总数计算；线性预期进度落后 10/20 个百分点分别进入有风险/已偏离，且旧项目、版本、需求和任务枚举继续兼容。
+- 本轮执行：PM 定向 suite 通过 6/6：项目管理 17/17、需求下钻 12/12、访问控制 14/14、标签目录、删除一致性与覆盖清单全部通过；助手真实数据库动作 4/4、文档拆任务 4/4、个人周报 4/4。
+- 浏览器执行：`pnpm full-chain:browser` 通过 5/5；覆盖未登录回跳、375px 登录页、8 个登录态视图，以及项目管理 1440×900 与 390×844 两种视口，均无根级横向溢出和控制台错误。
+- 连接回归：production 单进程复用同一 PrismaClient，pool 缺省值为 `connectionLimit=5/minimumIdle=1/idleTimeout=60s`；20 次 getter、20 次 Dashboard 交错读取和 20 个并发事务仅观测到 5 条物理连接。独立 50 请求压力（30 API + 20 SSR）全部返回 200，应用连接峰值保持 5。
+- 最终门禁：PM 定向 suite 7/7、`pnpm lint`、`pnpm exec tsc --noEmit --pretty false`、`pnpm build` 与 `git diff --check` 全部通过。

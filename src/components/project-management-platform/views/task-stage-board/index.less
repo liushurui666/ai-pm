@@ -61,6 +61,10 @@
   --task-stage-tone: var(--violet);
 }
 
+.task-stage-column-acceptance {
+  --task-stage-tone: var(--teal);
+}
+
 .task-stage-column-done {
   --task-stage-tone: var(--teal);
 }
@@ -169,6 +173,20 @@
 .task-stage-card-dragging {
   border-color: color-mix(in srgb, var(--brand) 46%, var(--border));
   box-shadow: 0 12px 24px color-mix(in srgb, var(--brand) 14%, transparent);
+}
+
+.task-stage-card-readonly {
+  background: color-mix(in srgb, var(--surface) 88%, var(--surface-subtle));
+  box-shadow: none;
+  opacity: 0.78;
+}
+
+.task-stage-readonly-tag.ant-tag {
+  grid-column: 1;
+  width: 34px;
+  margin: 1px 0 0;
+  padding-inline: 4px;
+  text-align: center;
 }
 
 .task-stage-board-dragging .task-stage-card:not(.task-stage-card-dragging) {

@@ -1,4 +1,5 @@
 import type { DashboardData, Project, TaskStage } from "@/types/dashboard";
+import { cloneDefaultProjectDeliveryLabels } from "@/data/project-delivery-labels";
 import { createWeeklyReportMarkdown, isWeeklyReportRequest } from "@/lib/reports/weekly-report";
 
 export const dashboardData: DashboardData = {
@@ -23,14 +24,19 @@ export const dashboardData: DashboardData = {
     {
       id: "p-001",
       name: "智能项目驾驶舱一期",
+      code: "AIPM-001",
       owner: "林夏",
       status: "进行中",
+      startDate: "2026-05-01",
       progress: 72,
       health: 88,
+      riskLevel: "中",
+      healthStatus: "正常",
       dueDate: "2026-06-18",
       team: 9,
       riskCount: 2,
       summary: "指标体系已完成，AI 风险解释与报表生成进入联调。",
+      deliveryLabelCatalog: cloneDefaultProjectDeliveryLabels(),
       milestones: [
         {
           id: "m-001-1",
@@ -53,14 +59,20 @@ export const dashboardData: DashboardData = {
     {
       id: "p-002",
       name: "企业知识库增强",
+      code: "AIPM-002",
       owner: "周铭",
       status: "有风险",
+      startDate: "2026-05-01",
       progress: 48,
       health: 62,
+      riskLevel: "高",
+      healthStatus: "有风险",
+      healthReason: "解析稳定性和权限过滤仍有高风险项。",
       dueDate: "2026-06-05",
       team: 6,
       riskCount: 4,
       summary: "文档解析质量不稳定，检索召回和权限过滤需要重点跟进。",
+      deliveryLabelCatalog: cloneDefaultProjectDeliveryLabels(),
       milestones: [
         {
           id: "m-002-1",
@@ -83,14 +95,19 @@ export const dashboardData: DashboardData = {
     {
       id: "p-003",
       name: "AI 周报自动化",
+      code: "AIPM-003",
       owner: "许诺",
       status: "进行中",
+      startDate: "2026-05-10",
       progress: 81,
       health: 91,
+      riskLevel: "中",
+      healthStatus: "正常",
       dueDate: "2026-05-29",
       team: 5,
       riskCount: 1,
       summary: "日报聚合、会议待办提取已上线灰度，等待管理层模板确认。",
+      deliveryLabelCatalog: cloneDefaultProjectDeliveryLabels(),
       milestones: [
         {
           id: "m-003-1",
@@ -113,14 +130,20 @@ export const dashboardData: DashboardData = {
     {
       id: "p-004",
       name: "需求智能拆解",
+      code: "AIPM-004",
       owner: "陈澈",
       status: "暂停",
+      startDate: "2026-05-20",
       progress: 35,
       health: 70,
+      riskLevel: "中",
+      healthStatus: "待评估",
+      healthReason: "项目暂停，等待统一任务类型标准后重新评估。",
       dueDate: "2026-07-12",
       team: 7,
       riskCount: 2,
       summary: "暂停等待统一任务类型标准，模型提示词方案已准备。",
+      deliveryLabelCatalog: cloneDefaultProjectDeliveryLabels(),
       milestones: [
         {
           id: "m-004-1",
@@ -148,6 +171,7 @@ export const dashboardData: DashboardData = {
       stage: "进行中",
       owner: "韩越",
       project: "智能项目驾驶舱一期",
+      projectId: "p-001",
       versionId: "rv-1-4",
       versionName: "1.4 项目驾驶舱增强",
       priority: "高",
@@ -161,9 +185,10 @@ export const dashboardData: DashboardData = {
       stage: "评审中",
       owner: "许诺",
       project: "AI 周报自动化",
+      projectId: "p-003",
       versionId: "rv-2026-05-ai",
       versionName: "2026.05 AI 协同版",
-      priority: "中",
+      priority: "普通",
       startDate: "2026-05-15",
       dueDate: "2026-05-20",
       aiHint: "字段稳定后可以复用到月报与复盘报告。"
@@ -174,6 +199,7 @@ export const dashboardData: DashboardData = {
       stage: "待处理",
       owner: "阿齐",
       project: "企业知识库增强",
+      projectId: "p-002",
       versionId: "rv-backlog",
       versionName: "未规划需求池",
       priority: "高",
@@ -187,11 +213,13 @@ export const dashboardData: DashboardData = {
       stage: "已完成",
       owner: "李闻",
       project: "智能项目驾驶舱一期",
+      projectId: "p-001",
       versionId: "rv-1-4",
       versionName: "1.4 项目驾驶舱增强",
       priority: "低",
       startDate: "2026-05-08",
       dueDate: "2026-05-12",
+      completedAt: "2026-05-12",
       aiHint: "组件可以沉淀为全站通用 AI 面板。"
     },
     {
@@ -200,9 +228,10 @@ export const dashboardData: DashboardData = {
       stage: "进行中",
       owner: "陈澈",
       project: "需求智能拆解",
+      projectId: "p-004",
       versionId: "rv-2026-05-ai",
       versionName: "2026.05 AI 协同版",
-      priority: "中",
+      priority: "普通",
       startDate: "2026-05-20",
       dueDate: "2026-05-24",
       aiHint: "建议拆分为用户故事、研发任务、测试用例三类输出。"
@@ -215,6 +244,7 @@ export const dashboardData: DashboardData = {
       status: "修复中",
       severity: "严重",
       project: "需求智能拆解",
+      projectId: "p-004",
       versionId: "rv-2026-05-ai",
       versionName: "2026.05 AI 协同版",
       reporter: "测试同学",
@@ -231,6 +261,7 @@ export const dashboardData: DashboardData = {
       status: "新建",
       severity: "一般",
       project: "智能项目驾驶舱一期",
+      projectId: "p-001",
       versionId: "rv-1-4",
       versionName: "1.4 项目驾驶舱增强",
       reporter: "产品经理",
@@ -249,6 +280,7 @@ export const dashboardData: DashboardData = {
       level: "高",
       owner: "周铭",
       project: "企业知识库增强",
+      projectId: "p-002",
       mitigation: "先限制复杂格式上传，增加失败重试和人工复核入口。"
     },
     {
@@ -257,6 +289,7 @@ export const dashboardData: DashboardData = {
       level: "中",
       owner: "林夏",
       project: "智能项目驾驶舱一期",
+      projectId: "p-001",
       mitigation: "组织 PMO 评审评分权重，冻结一期指标。"
     },
     {
@@ -265,6 +298,7 @@ export const dashboardData: DashboardData = {
       level: "中",
       owner: "许诺",
       project: "AI 周报自动化",
+      projectId: "p-003",
       mitigation: "在生成前加入依赖图扫描，输出遗漏提醒。"
     }
   ],
@@ -275,9 +309,11 @@ export const dashboardData: DashboardData = {
       priority: "P0",
       status: "开发中",
       project: "AI 周报自动化",
+      projectId: "p-003",
       versionId: "rv-2026-05-ai",
       versionName: "2026.05 AI 协同版",
       owner: "林夏",
+      developerMemberIds: [],
       acceptance: "支持按项目、部门、负责人三个维度生成汇报。"
     },
     {
@@ -286,9 +322,11 @@ export const dashboardData: DashboardData = {
       priority: "P1",
       status: "设计中",
       project: "智能项目驾驶舱一期",
+      projectId: "p-001",
       versionId: "rv-1-4",
       versionName: "1.4 项目驾驶舱增强",
       owner: "韩越",
+      developerMemberIds: [],
       acceptance: "至少展示延期概率、关键原因和建议动作。"
     },
     {
@@ -297,9 +335,11 @@ export const dashboardData: DashboardData = {
       priority: "P1",
       status: "评审中",
       project: "需求智能拆解",
+      projectId: "p-004",
       versionId: "rv-2026-05-ai",
       versionName: "2026.05 AI 协同版",
       owner: "许诺",
+      developerMemberIds: [],
       acceptance: "识别待办、负责人、截止时间，允许人工确认后入库。"
     }
   ],
@@ -308,9 +348,14 @@ export const dashboardData: DashboardData = {
       id: "rv-1-4",
       name: "1.4 项目驾驶舱增强",
       project: "智能项目驾驶舱一期",
+      projectId: "p-001",
+      type: "版本",
       status: "进行中",
       startDate: "2026-05-01",
       releaseDate: "2026-06-01",
+      progress: 0,
+      riskLevel: "中",
+      healthStatus: "待评估",
       goal: "集中交付健康度解释、风险聚合和管理层视图，提升项目状态透明度。",
       productOwner: "林夏",
       uiOwner: "韩越",
@@ -319,6 +364,8 @@ export const dashboardData: DashboardData = {
         {
           id: "rv-1-4-m-1",
           title: "需求评审完成",
+          labelId: "delivery-product-review",
+          type: "产品评审",
           status: "已完成",
           dueDate: "2026-05-12",
           owner: "林夏",
@@ -327,6 +374,8 @@ export const dashboardData: DashboardData = {
         {
           id: "rv-1-4-m-2",
           title: "提测验收",
+          labelId: "delivery-business-acceptance",
+          type: "业务验收",
           status: "进行中",
           dueDate: "2026-06-01",
           owner: "韩越",
@@ -340,9 +389,14 @@ export const dashboardData: DashboardData = {
       parentVersionName: "1.4 项目驾驶舱增强",
       name: "1.4.1 移动端验收补丁",
       project: "智能项目驾驶舱一期",
+      projectId: "p-001",
+      type: "版本",
       status: "规划中",
       startDate: "2026-05-20",
       releaseDate: "2026-06-05",
+      progress: 0,
+      riskLevel: "中",
+      healthStatus: "待评估",
       goal: "补齐需求版本页和风险页移动端验收问题，作为 1.4 的子版本独立跟进。",
       productOwner: "林夏",
       uiOwner: "韩越",
@@ -351,6 +405,8 @@ export const dashboardData: DashboardData = {
         {
           id: "rv-1-4-mobile-m-1",
           title: "移动端走查",
+          labelId: "delivery-test-complete",
+          type: "测试完成",
           status: "未开始",
           dueDate: "2026-05-28",
           owner: "韩越",
@@ -362,9 +418,14 @@ export const dashboardData: DashboardData = {
       id: "rv-2026-05-ai",
       name: "2026.05 AI 协同版",
       project: "AI 周报自动化",
+      projectId: "p-003",
+      type: "版本",
       status: "规划中",
       startDate: "2026-05-10",
       releaseDate: "2026-06-15",
+      progress: 0,
+      riskLevel: "中",
+      healthStatus: "待评估",
       goal: "把文档拆解、AI 周报和任务联动纳入一个可验收版本。",
       productOwner: "许诺",
       uiOwner: "许诺",
@@ -373,6 +434,8 @@ export const dashboardData: DashboardData = {
         {
           id: "rv-2026-05-ai-m-1",
           title: "版本启动",
+          labelId: "delivery-product-review",
+          type: "产品评审",
           status: "进行中",
           dueDate: "2026-05-10",
           owner: "许诺",
@@ -381,6 +444,8 @@ export const dashboardData: DashboardData = {
         {
           id: "rv-2026-05-ai-m-2",
           title: "灰度验收",
+          labelId: "delivery-business-acceptance",
+          type: "业务验收",
           status: "未开始",
           dueDate: "2026-06-15",
           owner: "许诺",
@@ -392,14 +457,20 @@ export const dashboardData: DashboardData = {
       id: "rv-backlog",
       name: "未规划需求池",
       project: "跨项目",
+      type: "版本",
       status: "规划中",
       startDate: "2026-05-01",
       releaseDate: "2026-06-30",
+      progress: 0,
+      riskLevel: "低",
+      healthStatus: "待评估",
       goal: "收纳尚未进入明确版本的需求，评审后再绑定到目标版本。",
       milestones: [
         {
           id: "rv-backlog-m-1",
           title: "需求池梳理",
+          labelId: "delivery-product-review",
+          type: "产品评审",
           status: "进行中",
           dueDate: "2026-05-15",
           owner: "",
@@ -438,7 +509,7 @@ export const dashboardData: DashboardData = {
   ]
 };
 
-const stageOrder: TaskStage[] = ["待处理", "进行中", "评审中", "已完成"];
+const stageOrder: TaskStage[] = ["待处理", "进行中", "评审中", "验收中", "已完成"];
 
 export function getTasksByStage(stage: TaskStage) {
   return dashboardData.tasks.filter((task) => task.stage === stage);

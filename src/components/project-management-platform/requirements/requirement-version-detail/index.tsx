@@ -5,7 +5,7 @@ import { Button, Flex, Popconfirm, Progress, Space, Table, Tag, Timeline, Toolti
 import { CalendarOutlined, DeleteOutlined, EditOutlined, NodeIndexOutlined, PlusOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
-import type { BugReport, Requirement, RequirementVersion, Task } from "@/types/dashboard";
+import type { BugReport, ProjectDeliveryLabel, Requirement, RequirementVersion, Task } from "@/types/dashboard";
 import { fallbackRequirementVersionId, milestoneColor } from "@/components/project-management-platform/constants";
 import { TableView } from "@/components/project-management-platform/shared/page-shell";
 import {
@@ -15,20 +15,24 @@ import {
   requirementVersionColor
 } from "@/components/project-management-platform/requirements/version-utils";
 import { RequirementVersionChildren } from "@/components/project-management-platform/requirements/requirement-version-children";
+import { getVersionDeliveryLabelCatalog } from "@/data/project-delivery-labels";
 
 const { Text } = Typography;
 
 // 版本详情页负责单个版本的交付视角，主列表只保留路由和数据分发。
 export function RequirementVersionDetail({
   bugs,
-  canCreateRequirements,
-  canDeleteRequirements,
-  canEditRequirements,
+  canBreakdownVersion,
+  canCreateRequirement,
+  canCreateSubVersion,
+  canDeleteVersion,
+  canEditVersion,
   childVersions,
   columns,
   permissionDeniedReason,
   requirements,
   selectedVersion,
+  legacyProjectDeliveryLabelCatalog,
   tasks,
   onBack,
   onBreakdownVersion,
@@ -39,14 +43,17 @@ export function RequirementVersionDetail({
   onSelectVersion
 }: {
   bugs: BugReport[];
-  canCreateRequirements: boolean;
-  canDeleteRequirements: boolean;
-  canEditRequirements: boolean;
+  canBreakdownVersion: boolean;
+  canCreateRequirement: boolean;
+  canCreateSubVersion: boolean;
+  canDeleteVersion: boolean;
+  canEditVersion: boolean;
   childVersions: RequirementVersion[];
   columns: ColumnsType<Requirement>;
   permissionDeniedReason: string;
   requirements: Requirement[];
   selectedVersion: RequirementVersion;
+  legacyProjectDeliveryLabelCatalog?: ProjectDeliveryLabel[];
   tasks: Task[];
   onBack: () => void;
   onBreakdownVersion: (version: RequirementVersion) => void;
@@ -58,6 +65,10 @@ export function RequirementVersionDetail({
 }) {
   const stats = getVersionStats({ bugs, requirements, tasks, version: selectedVersion });
   const detailColumns = columns.filter((column) => column.key !== "versionName");
+  const deliveryLabelCatalog = getVersionDeliveryLabelCatalog(
+    selectedVersion,
+    legacyProjectDeliveryLabelCatalog
+  );
 
   return (
     <TableView
@@ -67,7 +78,7 @@ export function RequirementVersionDetail({
       extra={
         <Space wrap>
           <Button onClick={onBack}>返回版本</Button>
-          {canEditRequirements ? (
+          {canEditVersion ? (
             <Button icon={<EditOutlined />} onClick={() => onEditVersion(selectedVersion)}>
               编辑版本
             </Button>
@@ -81,10 +92,10 @@ export function RequirementVersionDetail({
             </Tooltip>
           )}
           {selectedVersion.id !== fallbackRequirementVersionId ? (
-            canDeleteRequirements ? (
+            canDeleteVersion ? (
               <Popconfirm
                 title="删除版本"
-                description="删除后，该版本下的需求、任务和 Bug 会迁移到未规划需求池，子版本会提升为一级版本。"
+                description="删除后，关联需求、任务和 Bug 仅会迁移到项目内可唯一确定的兜底版本；无法唯一定位时将拒绝删除，子版本会提升一级。"
                 okText="删除"
                 cancelText="取消"
                 okButtonProps={{ danger: true }}
@@ -104,7 +115,7 @@ export function RequirementVersionDetail({
               </Tooltip>
             )
           ) : null}
-          {canCreateRequirements ? (
+          {canCreateSubVersion ? (
             <Button icon={<PlusOutlined />} onClick={() => onCreateSubVersion(selectedVersion)}>
               添加子版本
             </Button>
@@ -117,7 +128,7 @@ export function RequirementVersionDetail({
               </span>
             </Tooltip>
           )}
-          {canCreateRequirements ? (
+          {canCreateRequirement ? (
             <Button type="primary" icon={<PlusOutlined />} onClick={() => onCreateRequirement(selectedVersion)}>
               绑定需求
             </Button>
@@ -130,7 +141,7 @@ export function RequirementVersionDetail({
               </span>
             </Tooltip>
           )}
-          {canCreateRequirements ? (
+          {canBreakdownVersion ? (
             <Button icon={<PlusOutlined />} onClick={() => onBreakdownVersion(selectedVersion)}>
               拆任务
             </Button>
@@ -152,7 +163,7 @@ export function RequirementVersionDetail({
         emptyText="该版本下暂无子版本"
         onSelectVersion={onSelectVersion}
       />
-      <VersionMilestoneTimeline version={selectedVersion} stats={stats} />
+      <VersionMilestoneTimeline deliveryLabelCatalog={deliveryLabelCatalog} version={selectedVersion} stats={stats} />
       <Table
         className="requirement-detail-table"
         rowKey="id"
@@ -235,15 +246,21 @@ function VersionSummary({
 
 // 版本详情页直接展示创建版本时录入的里程碑，让版本成为真实交付检查点。
 function VersionMilestoneTimeline({
+  deliveryLabelCatalog,
   version,
   stats
 }: {
+  deliveryLabelCatalog: ProjectDeliveryLabel[];
   version: RequirementVersion;
   stats: ReturnType<typeof getVersionStats>;
 }) {
   const milestones = [...stats.milestones].sort(
     (left, right) => dayjs(left.dueDate).valueOf() - dayjs(right.dueDate).valueOf()
   );
+  const currentLabelNames = new Map(
+    deliveryLabelCatalog.filter((label) => label.active && !label.deleted).map((label) => [label.id, label.name])
+  );
+  const catalogById = new Map(deliveryLabelCatalog.map((label) => [label.id, label]));
 
   if (!milestones.length) {
     return null;
@@ -265,6 +282,17 @@ function VersionMilestoneTimeline({
             <Space orientation="vertical" size={4}>
               <Space wrap>
                 <Text strong>{milestone.title}</Text>
+                {milestone.labelId || milestone.type ? (() => {
+                  const currentName = milestone.labelId ? currentLabelNames.get(milestone.labelId) : undefined;
+                  const catalogLabel = milestone.labelId ? catalogById.get(milestone.labelId) : undefined;
+                  const snapshot = milestone.type || "历史标签";
+                  const label = currentName
+                    || (catalogLabel?.deleted || (milestone.labelId && !catalogLabel)
+                      ? `${snapshot}（已删除）`
+                      : catalogLabel && !catalogLabel.active ? `${snapshot}（已停用）` : snapshot);
+
+                  return <Tag>{label}</Tag>;
+                })() : null}
                 <Tag color={milestoneColor[milestone.status]}>{milestone.status}</Tag>
                 <Tag icon={<CalendarOutlined />}>{milestone.dueDate}</Tag>
                 {milestone.owner ? <Tag>{milestone.owner}</Tag> : null}

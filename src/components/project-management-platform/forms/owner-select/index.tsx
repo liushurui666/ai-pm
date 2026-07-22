@@ -66,6 +66,18 @@ export function createOwnerFormFieldsFromMember(member: OwnerSelectableMember) {
   };
 }
 
+function createEmptyOwnerFormFields() {
+  return {
+    ownerMemberId: "",
+    ownerOpenId: "",
+    ownerUnionId: "",
+    ownerUserId: "",
+    ownerEmail: "",
+    ownerAvatarUrl: "",
+    owner: ""
+  };
+}
+
 // 表单值可能为空或非字符串，先收窄类型再进入身份匹配。
 function getOwnerValue(value: unknown) {
   return typeof value === "string" ? value : "";
@@ -146,6 +158,7 @@ export function OwnerSelect({
         rules={required ? [{ required: true, message: "请选择平台成员" }] : undefined}
       >
         <Select
+          allowClear={!required}
           showSearch
           loading={loading}
           disabled={disabled || Boolean(error) || !people.length}
@@ -157,7 +170,9 @@ export function OwnerSelect({
           onChange={(value) => {
             const selectedMember = people.find((member) => member.id === value);
 
-            form.setFieldsValue(selectedMember ? createOwnerFormFieldsFromMember(selectedMember) : {});
+            form.setFieldsValue(
+              selectedMember ? createOwnerFormFieldsFromMember(selectedMember) : createEmptyOwnerFormFields()
+            );
           }}
         />
       </Form.Item>

@@ -11,12 +11,14 @@ import type { OwnerSelectableMember, RequirementVersionOption } from "@/componen
 import { OwnerInline } from "@/components/project-management-platform/shared/owner-inline";
 import { PageTitle } from "@/components/project-management-platform/shared/page-shell";
 import { priorityColor, taskStages } from "@/components/project-management-platform/constants";
+import { taskPriorityOptions } from "@/lib/tasks/priority";
 import { TaskOwnerBoard } from "@/components/project-management-platform/views/task-owner-board";
 import { TaskStageBoard } from "@/components/project-management-platform/views/task-stage-board";
 
 const { Text } = Typography;
 const allTaskVersionValue = "全部";
 const unplannedTaskVersionValue = "__unplanned__";
+const denyTaskEdit = () => false;
 
 function normalizeIdentity(value?: string) {
   return value?.trim().toLowerCase() ?? "";
@@ -73,6 +75,10 @@ export function TasksView({
   currentUser,
   ownerOptions,
   versionOptions,
+  requirementFilter,
+  onClearRequirementFilter,
+  canCreate = false,
+  canEditTask = denyTaskEdit,
   onCreate,
   onEdit,
   onOwnerChange,
@@ -82,6 +88,16 @@ export function TasksView({
   currentUser?: FeishuUser;
   ownerOptions: OwnerSelectableMember[];
   versionOptions: RequirementVersionOption[];
+  requirementFilter?: {
+    id: string;
+    title: string;
+    project?: string;
+    projectId?: string;
+    versionId?: string;
+  };
+  onClearRequirementFilter?: () => void;
+  canCreate?: boolean;
+  canEditTask?: (task: Task) => boolean;
   onCreate: () => void;
   onEdit: (task: Task) => void;
   onOwnerChange: (task: Task, owner: OwnerSelectableMember | null) => Promise<boolean>;
@@ -90,9 +106,25 @@ export function TasksView({
   const [viewMode, setViewMode] = useState<"stage" | "table" | "owner">("stage");
   const [onlyMine, setOnlyMine] = useState(false);
   const [taskVersionFilter, setTaskVersionFilter] = useState(allTaskVersionValue);
+  const requirementScopedTasks = useMemo(
+    () => requirementFilter
+      ? tasks.filter((task) => (
+          task.requirementId === requirementFilter.id
+          || (
+            !task.requirementId
+            && task.requirementTitle === requirementFilter.title
+            && task.versionId === requirementFilter.versionId
+            && (requirementFilter.projectId
+              ? task.projectId === requirementFilter.projectId
+              : task.project === requirementFilter.project)
+          )
+        ))
+      : tasks,
+    [requirementFilter, tasks]
+  );
   const scopedTasks = useMemo(
-    () => (onlyMine ? tasks.filter((task) => isMyTask(task, currentUser)) : tasks),
-    [currentUser, onlyMine, tasks]
+    () => (onlyMine ? requirementScopedTasks.filter((task) => isMyTask(task, currentUser)) : requirementScopedTasks),
+    [currentUser, onlyMine, requirementScopedTasks]
   );
   const taskVersionOptions = useMemo(() => {
     const hasUnplannedTask = scopedTasks.some((task) => !task.versionId);
@@ -118,6 +150,7 @@ export function TasksView({
     return scopedTasks.filter((task) => task.versionId && versionScopeIds.has(task.versionId));
   }, [scopedTasks, taskVersionFilter, versionOptions]);
   const visibleTasks = versionFilteredTasks;
+  const editableTaskCount = visibleTasks.filter(canEditTask).length;
   const taskColumns: ColumnsType<Task> = [
     {
       title: "任务",
@@ -161,7 +194,7 @@ export function TasksView({
       dataIndex: "priority",
       key: "priority",
       width: 100,
-      filters: ["高", "中", "低"].map((priority) => ({ text: priority, value: priority })),
+      filters: taskPriorityOptions.map((priority) => ({ text: priority, value: priority })),
       onFilter: (value, task) => task.priority === value,
       render: (priority: Task["priority"]) => <Tag color={priorityColor[priority]}>{priority}</Tag>
     },
@@ -192,17 +225,15 @@ export function TasksView({
       width: 120,
       render: (ownerOpenId?: string) => <Tag color={ownerOpenId ? "green" : "default"}>{ownerOpenId ? "已关联" : "未关联"}</Tag>
     },
-    {
+    ...(editableTaskCount ? [{
       title: "操作",
       key: "action",
       fixed: "right",
       width: 90,
-      render: (_, task) => (
-        <Button type="link" icon={<EditOutlined />} onClick={() => onEdit(task)}>
-          编辑
-        </Button>
-      )
-    }
+      render: (_, task) => canEditTask(task) ? (
+        <Button type="link" icon={<EditOutlined />} onClick={() => onEdit(task)}>编辑</Button>
+      ) : <Tag>只读</Tag>
+    }] satisfies ColumnsType<Task> : [])
   ];
 
   return (
@@ -213,6 +244,18 @@ export function TasksView({
         subtitle="围绕需求版本拆解和推进交付任务，文档拆解后的执行项会进入对应版本。"
         extra={
           <Space wrap>
+            {requirementFilter ? (
+              <Tag
+                color="blue"
+                closable={Boolean(onClearRequirementFilter)}
+                onClose={(event) => {
+                  event.preventDefault();
+                  onClearRequirementFilter?.();
+                }}
+              >
+                需求：{requirementFilter.title}
+              </Tag>
+            ) : null}
             <Segmented
               value={viewMode}
               onChange={(value) => setViewMode(value as "stage" | "table" | "owner")}
@@ -222,6 +265,11 @@ export function TasksView({
                 { label: "按负责人", value: "owner", icon: <UserOutlined /> }
               ]}
             />
+            <Tooltip title={editableTaskCount ? "只有符合项目与需求职责范围的任务可写" : "请从有职责的项目详情进入，或联系项目管理员授权"}>
+              <Tag color={editableTaskCount ? "processing" : undefined}>
+                {editableTaskCount ? `${editableTaskCount} 项可编辑` : "当前范围只读"}
+              </Tag>
+            </Tooltip>
             <Space className="task-version-filter">
               <Text type="secondary">版本</Text>
               <Select
@@ -238,15 +286,17 @@ export function TasksView({
                 <Switch checked={onlyMine} disabled={!currentUser} onChange={setOnlyMine} />
               </Space>
             </Tooltip>
-            <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>
-              新建任务
-            </Button>
+            {canCreate ? (
+              <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>
+                新建任务
+              </Button>
+            ) : null}
           </Space>
         }
       />
 
       {viewMode === "stage" ? (
-        <TaskStageBoard onlyMine={onlyMine} tasks={visibleTasks} onEdit={onEdit} onStageChange={onStageChange} />
+        <TaskStageBoard canEditTask={canEditTask} onlyMine={onlyMine} tasks={visibleTasks} onEdit={onEdit} onStageChange={onStageChange} />
       ) : viewMode === "table" ? (
         <Card className="pm-table-card">
           {/* 表格模式沿用通用表格容器，保证任务、Bug、成员等长列表的视觉层级一致。 */}
@@ -262,6 +312,7 @@ export function TasksView({
         </Card>
       ) : (
         <TaskOwnerBoard
+          canEditTask={canEditTask}
           emptyText={getTaskEmptyText(onlyMine, taskVersionFilter)}
           ownerOptions={ownerOptions}
           tasks={visibleTasks}
